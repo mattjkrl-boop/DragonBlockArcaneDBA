@@ -1,7 +1,7 @@
 {
 	"required": true,
 	"package": "com.dragonblockarcanedba.mixin",
-	"compatibilityLevel": "JAVA_21",
+	"compatibilityLevel": "JAVA_22",
 	"mixins": [
 		"PlayerEntityMixin",
 		"LivingEntityMixin"

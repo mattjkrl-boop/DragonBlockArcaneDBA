@@ -3,19 +3,17 @@
   "temperature": 0.5,
   "downfall": 0.0,
   "effects": {
-    "fog_color": 16766976,
-    "sky_color": 16766976,
-    "water_color": 4159204,
-    "water_fog_color": 329011
+    "fog_color": 16776960,
+    "sky_color": 16776960,
+    "water_color": 16776960,
+    "water_fog_color": 16776960
   },
   "spawners": {},
   "spawn_costs": {},
-  "carvers": {
-    "air": [
-      "minecraft:cave",
-      "minecraft:canyon"
-    ]
-  },
+  "carvers": [
+    "minecraft:cave",
+    "minecraft:canyon"
+  ],
   "features": [
     [],
     [],

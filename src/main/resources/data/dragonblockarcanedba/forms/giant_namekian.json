@@ -1,0 +1,28 @@
+{
+  "compatibleRaces": [
+    "dragonblockarcanedba:namekian"
+  ],
+  "stage": 1,
+  "statMultipliers": {
+    "strength": 300,
+    "defense": 250,
+    "kiCapacity": 100,
+    "kiControl": 80,
+    "agility": 50
+  },
+  "baseKiDrain": 15.0,
+  "maxMasteryReduction": 0.70,
+  "unlockRequirements": {
+    "minLevel": 80,
+    "minStats": {
+      "strength": 150,
+      "defense": 120,
+      "kiCapacity": 50,
+      "kiControl": 40,
+      "agility": 30
+    }
+  },
+  "modelOverride": null,
+  "auraVisualId": "dragonblockarcanedba:namekian_giant_aura",
+  "transformationSound": "dragonblockarcanedba:transform_generic"
+}

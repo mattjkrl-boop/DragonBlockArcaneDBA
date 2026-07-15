@@ -1,5 +1,13 @@
 {
   "item.dragonblockarcanedba.space_pod": "Space Pod",
   "key.dragonblockarcanedba.open_menu": "Open DBA Menu",
-  "key.categories.misc": "Misc"
+  "key.categories.misc": "Misc",
+  "block.dragonblockarcanedba.yellow_cloud_block": "Yellow Cloud Block",
+  "block.dragonblockarcanedba.namek_grass": "Namekian Grass",
+  "block.dragonblockarcanedba.namek_stone": "Namekian Stone",
+  "block.dragonblockarcanedba.vegeta_grass": "Vegeta Grass",
+  "block.dragonblockarcanedba.vegeta_stone": "Vegeta Stone",
+  "block.dragonblockarcanedba.yardrat_grass": "Yardrat Grass",
+  "block.dragonblockarcanedba.yardrat_stone": "Yardrat Stone",
+  "entity.dragonblockarcanedba.otherworld_guide": "Otherworld Guide"
 }

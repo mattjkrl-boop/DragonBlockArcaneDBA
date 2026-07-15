@@ -15,9 +15,15 @@
     "agility": 10
   },
   "compatibleForms": [
-    "dragonblockarcanedba:super_saiyan_1"
+    "dragonblockarcanedba:super_saiyan_1",
+    "dragonblockarcanedba:super_saiyan_2",
+    "dragonblockarcanedba:super_saiyan_3",
+    "dragonblockarcanedba:super_saiyan_god",
+    "dragonblockarcanedba:super_saiyan_blue",
+    "dragonblockarcanedba:ultra_instinct",
+    "dragonblockarcanedba:kaioken"
   ],
   "modelId": "minecraft:player",
-  "baseTexture": "minecraft:textures/entity/player/wide/steve.png",
-  "soundProfile": "minecraft:entity.player.hurt"
+  "baseTexture": "dragonblockarcanedba:textures/entity/races/saiyan.png",
+  "soundProfile": "dragonblockarcanedba:saiyan_hurt"
 }

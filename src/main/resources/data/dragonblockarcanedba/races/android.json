@@ -1,21 +1,21 @@
 {
   "displayName": "Android",
   "baseStats": {
-    "strength": 16,
-    "defense": 16,
-    "kiCapacity": 20,
-    "kiControl": 20,
-    "agility": 16
-  },
-  "statMultipliers": {
-    "strength": 15,
-    "defense": 15,
+    "strength": 12,
+    "defense": 12,
     "kiCapacity": 0,
     "kiControl": 0,
-    "agility": 15
+    "agility": 12
+  },
+  "statMultipliers": {
+    "strength": 10,
+    "defense": 10,
+    "kiCapacity": 0,
+    "kiControl": 0,
+    "agility": 10
   },
   "compatibleForms": [],
   "modelId": "minecraft:player",
-  "baseTexture": "minecraft:textures/entity/player/wide/steve.png",
+  "baseTexture": "dragonblockarcanedba:textures/entity/races/android.png",
   "soundProfile": "minecraft:entity.player.hurt"
 }

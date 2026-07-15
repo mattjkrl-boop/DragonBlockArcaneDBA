@@ -18,6 +18,15 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        // Register Entity Renderers
+        net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
+            com.dragonblockarcanedba.entity.DbaEntities.OTHERWORLD_GUIDE,
+            com.dragonblockarcanedba.client.render.OtherworldGuideRenderer::new
+        );
+
+        // Load persisted config from disk
+        com.dragonblockarcanedba.client.config.DbaConfig.load();
+        
         // Register keybinding to open character stats GUI
         openMenuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.dragonblockarcanedba.open_menu",
@@ -114,8 +123,28 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 });
             }
         );
-
-        // Register Block Render Layer
-        // (Removed due to missing class in this fabric version)
+        // Register Transform Broadcast receiver (S2C) — for multiplayer aura sync
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.dragonblockarcanedba.network.TransformBroadcastPayload.TYPE,
+            (payload, context) -> {
+                context.client().execute(() -> {
+                    if (context.client().level != null) {
+                        net.minecraft.world.entity.Entity entity = context.client().level.getEntity(payload.entityId());
+                        if (entity instanceof PlayerStatsAccessor accessor) {
+                            String formStr = payload.activeFormId();
+                            if (formStr.isEmpty()) {
+                                accessor.dba$setActiveFormId(null);
+                            } else {
+                                accessor.dba$setActiveFormId(Identifier.parse(formStr));
+                            }
+                            String raceStr = payload.raceId();
+                            if (!raceStr.isEmpty()) {
+                                accessor.dba$setRaceId(Identifier.parse(raceStr));
+                            }
+                        }
+                    }
+                });
+            }
+        );
     }
 }

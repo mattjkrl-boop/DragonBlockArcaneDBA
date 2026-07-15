@@ -1,0 +1,28 @@
+{
+  "compatibleRaces": [
+    "dragonblockarcanedba:arcosian"
+  ],
+  "stage": 4,
+  "statMultipliers": {
+    "strength": 450,
+    "defense": 400,
+    "kiCapacity": 250,
+    "kiControl": 200,
+    "agility": 500
+  },
+  "baseKiDrain": 12.0,
+  "maxMasteryReduction": 0.80,
+  "unlockRequirements": {
+    "minLevel": 150,
+    "minStats": {
+      "strength": 300,
+      "defense": 250,
+      "kiCapacity": 180,
+      "kiControl": 150,
+      "agility": 300
+    }
+  },
+  "modelOverride": null,
+  "auraVisualId": "dragonblockarcanedba:arcosian_final_aura",
+  "transformationSound": "dragonblockarcanedba:transform_generic"
+}

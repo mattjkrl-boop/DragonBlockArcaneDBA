@@ -45,8 +45,8 @@ public class ReviveScreen extends Screen {
         int startX = (this.width - panelWidth) / 2;
         int startY = (this.height - panelHeight) / 2;
 
-        int bgColor = 0xDD1E2024;
-        int borderColor = 0xFFFF7700; // Orange theme for otherworld
+        int bgColor = 0xF0101216;
+        int borderColor = 0xFF00FFCC; // Cyan theme
 
         // Panel Background
         context.fill(startX, startY, startX + panelWidth, startY + panelHeight, bgColor);
@@ -57,9 +57,10 @@ public class ReviveScreen extends Screen {
         context.fill(startX, startY, startX + 2, startY + panelHeight, borderColor);
         context.fill(startX + panelWidth - 2, startY, startX + panelWidth, startY + panelHeight, borderColor);
         
-        context.centeredText(this.font, Component.literal("YOUR JOURNEY IS NOT OVER YET."), this.width / 2, startY + 20, 0xFFFFFFFF);
+        context.centeredText(this.font, Component.literal("YOUR JOURNEY IS NOT OVER YET."), this.width / 2, startY + 20, 0xFF00FFCC);
         context.centeredText(this.font, Component.literal("Do you wish to return to the living world?"), this.width / 2, startY + 35, 0xFFAAAAAA);
         
+        super.extractRenderState(context, mouseX, mouseY, delta);
     }
     
     @Override

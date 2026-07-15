@@ -14,8 +14,12 @@
     "kiControl": 10,
     "agility": 0
   },
-  "compatibleForms": [],
+  "compatibleForms": [
+    "dragonblockarcanedba:giant_namekian",
+    "dragonblockarcanedba:orange_namekian",
+    "dragonblockarcanedba:kaioken"
+  ],
   "modelId": "minecraft:player",
-  "baseTexture": "minecraft:textures/entity/player/slim/alex.png",
-  "soundProfile": "minecraft:entity.player.hurt"
+  "baseTexture": "dragonblockarcanedba:textures/entity/races/namekian.png",
+  "soundProfile": "dragonblockarcanedba:namekian_hurt"
 }

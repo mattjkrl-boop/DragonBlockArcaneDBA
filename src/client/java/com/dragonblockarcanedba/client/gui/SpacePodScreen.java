@@ -46,7 +46,7 @@ public class SpacePodScreen extends Screen {
         
         // Otherworld
         addRenderableWidget(Button.builder(
-            Component.literal("\u2605 The Otherworld (Hell)"),
+            Component.literal("\u2605 The Otherworld"),
             btn -> launchTo("otherworld")
         ).bounds(centerX - buttonWidth / 2, startY + spacing * 3, buttonWidth, buttonHeight).build());
 
@@ -70,14 +70,13 @@ public class SpacePodScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
-        // Draw techy background for the panel
         int panelWidth = 240;
         int panelHeight = 220;
         int startX = (this.width - panelWidth) / 2;
         int startY = (this.height - panelHeight) / 2;
 
-        int bgColor = 0xDD1E2024;
-        int borderColor = 0xFF00DDFF; // Cyan theme for space pod
+        int bgColor = 0xF0101216;
+        int borderColor = 0xFF00FFCC; // Cyan theme
 
         // Panel Background
         context.fill(startX, startY, startX + panelWidth, startY + panelHeight, bgColor);
@@ -89,9 +88,11 @@ public class SpacePodScreen extends Screen {
         context.fill(startX + panelWidth - 2, startY, startX + panelWidth, startY + panelHeight, borderColor);
         
         // Title text
-        context.centeredText(this.font, this.title, this.width / 2, startY + 10, 0xFF00DDFF);
+        context.centeredText(this.font, this.title, this.width / 2, startY + 10, 0xFF00FFCC);
         // Subtitle
         context.centeredText(this.font, Component.literal("Choose your destination:"), this.width / 2, startY + 22, 0xFFAAAAAA);
+
+        super.extractRenderState(context, mouseX, mouseY, delta);
     }
 
     @Override

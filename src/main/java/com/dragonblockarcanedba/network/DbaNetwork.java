@@ -20,6 +20,8 @@ public class DbaNetwork {
         PayloadTypeRegistry.clientboundPlay().register(RaceSelectOpenPayload.TYPE, RaceSelectOpenPayload.CODEC);
         // Revive UI open screen (S2C)
         PayloadTypeRegistry.clientboundPlay().register(ReviveUiOpenPayload.TYPE, ReviveUiOpenPayload.CODEC);
+        // Transform broadcast to nearby players (S2C)
+        PayloadTypeRegistry.clientboundPlay().register(TransformBroadcastPayload.TYPE, TransformBroadcastPayload.CODEC);
 
         // Player actions (C2S)
         PayloadTypeRegistry.serverboundPlay().register(ActionPayload.TYPE, ActionPayload.CODEC);
@@ -74,13 +76,38 @@ public class DbaNetwork {
                         Identifier formId = Identifier.parse(formStr);
                         Form form = DbaRegistries.getForm(formId);
                         if (form != null && form.getCompatibleRaces().contains(accessor.dba$getRaceId())) {
-                            accessor.dba$setActiveFormId(formId);
+                            // Form Unlock Validation
+                            Form.UnlockRequirements reqs = form.getUnlockRequirements();
+                            boolean meetsRequirements = true;
+                            
+                            // Check minimum level
+                            if (accessor.dba$getLevel() < reqs.minLevel()) {
+                                meetsRequirements = false;
+                            }
+                            
+                            // Check minimum stats
+                            if (meetsRequirements) {
+                                com.dragonblockarcanedba.attribute.Attributes minStats = reqs.minStats();
+                                if (accessor.dba$getStrength() < minStats.strength()
+                                    || accessor.dba$getDefense() < minStats.defense()
+                                    || accessor.dba$getSpirit() < minStats.kiCapacity()
+                                    || accessor.dba$getWillpower() < minStats.kiControl()
+                                    || accessor.dba$getDexterity() < minStats.agility()) {
+                                    meetsRequirements = false;
+                                }
+                            }
+                            
+                            if (meetsRequirements) {
+                                accessor.dba$setActiveFormId(formId);
+                            }
                         }
                     }
                     accessor.dba$syncStats();
+                    broadcastTransformState(player);
                 } else if ("untransform".equals(action)) {
                     accessor.dba$setActiveFormId(null);
                     accessor.dba$syncStats();
+                    broadcastTransformState(player);
                 } else if ("select_race".equals(action)) {
                     String raceStr = nbt.getStringOr("race", "");
                     if (!raceStr.isEmpty()) {
@@ -123,5 +150,28 @@ public class DbaNetwork {
 
     public static void sendStatsSync(ServerPlayer player, CompoundTag nbtData) {
         ServerPlayNetworking.send(player, new StatsSyncPayload(nbtData));
+    }
+
+    /**
+     * Broadcasts a player's transformation state to all other players in the same dimension.
+     * Called whenever a player transforms or untransforms.
+     */
+    public static void broadcastTransformState(ServerPlayer player) {
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+        Identifier raceId = accessor.dba$getRaceId();
+        Identifier formId = accessor.dba$getActiveFormId();
+
+        TransformBroadcastPayload payload = new TransformBroadcastPayload(
+            player.getId(),
+            raceId != null ? raceId.toString() : "",
+            formId != null ? formId.toString() : ""
+        );
+
+        // Send to all players in the same level
+        for (ServerPlayer other : ((net.minecraft.server.level.ServerLevel) player.level()).players()) {
+            if (other != player) {
+                ServerPlayNetworking.send(other, payload);
+            }
+        }
     }
 }

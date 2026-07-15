@@ -1,0 +1,36 @@
+{
+  "compatibleRaces": [
+    "dragonblockarcanedba:saiyan",
+    "dragonblockarcanedba:half_saiyan",
+    "dragonblockarcanedba:human",
+    "dragonblockarcanedba:namekian",
+    "dragonblockarcanedba:arcosian",
+    "dragonblockarcanedba:yardrat",
+    "dragonblockarcanedba:majin",
+    "dragonblockarcanedba:bio_android",
+    "dragonblockarcanedba:tuffle"
+  ],
+  "stage": 1,
+  "statMultipliers": {
+    "strength": 250,
+    "defense": 150,
+    "kiCapacity": 80,
+    "kiControl": 80,
+    "agility": 250
+  },
+  "baseKiDrain": 12.0,
+  "maxMasteryReduction": 0.60,
+  "unlockRequirements": {
+    "minLevel": 20,
+    "minStats": {
+      "strength": 40,
+      "defense": 30,
+      "kiCapacity": 30,
+      "kiControl": 25,
+      "agility": 40
+    }
+  },
+  "modelOverride": null,
+  "auraVisualId": "dragonblockarcanedba:kaioken_aura",
+  "transformationSound": "dragonblockarcanedba:transform_generic"
+}

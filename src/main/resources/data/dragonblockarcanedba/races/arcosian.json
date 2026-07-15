@@ -14,8 +14,14 @@
     "kiControl": 10,
     "agility": 15
   },
-  "compatibleForms": [],
+  "compatibleForms": [
+    "dragonblockarcanedba:arcosian_form_2",
+    "dragonblockarcanedba:arcosian_form_3",
+    "dragonblockarcanedba:arcosian_final_form",
+    "dragonblockarcanedba:golden_form",
+    "dragonblockarcanedba:kaioken"
+  ],
   "modelId": "minecraft:player",
-  "baseTexture": "minecraft:textures/entity/player/slim/alex.png",
-  "soundProfile": "minecraft:entity.player.hurt"
+  "baseTexture": "dragonblockarcanedba:textures/entity/races/arcosian.png",
+  "soundProfile": "dragonblockarcanedba:arcosian_hurt"
 }

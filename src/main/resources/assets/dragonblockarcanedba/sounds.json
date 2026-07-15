@@ -1,0 +1,44 @@
+{
+  "transform_generic": {
+    "subtitle": "Transformation",
+    "sounds": [
+      "dragonblockarcanedba:sounds/transform_generic"
+    ]
+  },
+  "arcosian_hurt": {
+    "subtitle": "Arcosian Hurt",
+    "sounds": [
+      "dragonblockarcanedba:sounds/arcosian_hurt"
+    ]
+  },
+  "namekian_hurt": {
+    "subtitle": "Namekian Hurt",
+    "sounds": [
+      "dragonblockarcanedba:sounds/namekian_hurt"
+    ]
+  },
+  "saiyan_hurt": {
+    "subtitle": "Saiyan Hurt",
+    "sounds": [
+      "dragonblockarcanedba:sounds/saiyan_hurt"
+    ]
+  },
+  "space_pod_launch": {
+    "subtitle": "Space Pod Launch",
+    "sounds": [
+      "dragonblockarcanedba:sounds/space_pod_launch"
+    ]
+  },
+  "kamehameha_charge": {
+    "subtitle": "Kamehameha Charge",
+    "sounds": [
+      "dragonblockarcanedba:sounds/kamehameha_charge"
+    ]
+  },
+  "kamehameha_fire": {
+    "subtitle": "Kamehameha Fire",
+    "sounds": [
+      "dragonblockarcanedba:sounds/kamehameha_fire"
+    ]
+  }
+}

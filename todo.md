@@ -217,10 +217,12 @@ Each race has a distinct set of abilities (implement empty placeholder methods f
 - **Arcosian:** Universal Survival (passive ability to breathe underwater and survive in any dimension/atmosphere without penalties), Fly, Meditation.
 
 ### 4. Custom Planet Geology
-Register 6 new block IDs for DBA dimensions:
-- `dba:namek_grass` and `dba:namek_stone`
-- `dba:vegeta_grass` and `dba:vegeta_stone`
-- `dba:yardrat_grass` and `dba:yardrat_stone`
+Registered 6 new block IDs for DBA dimensions using MC 26.2's `setId()` pattern:
+- `dba:namek_grass` and `dba:namek_stone` (teal/cyan themed)
+- `dba:vegeta_grass` and `dba:vegeta_stone` (red/crimson themed)
+- `dba:yardrat_grass` and `dba:yardrat_stone` (purple/light blue themed)
+
+All blocks have blockstate, block model, and item model JSONs with vanilla placeholder textures until custom textures are created.
 
 ### 5. "Ki Technique" Custom Crafter
 Implement a **"Ki Move Customizer"** sub-menu in the V tabbed menu:
@@ -238,22 +240,22 @@ Only SSJ1 exists. Need to create:
 Popup selection screen triggered on first join, sending selection payload back to server.
 
 ### 8. Planet Gravity Tick Hook
-Connect `PlanetDimension.tickPlanetEffects()` to Fabric's server tick loop so dimension gravity is actively computed.
+Connected `PlanetDimension.tickPlanetEffects()` to Fabric's `ServerTickEvents.END_SERVER_TICK` loop. Gravity and oxygen effects are now actively computed for all players in custom DBA dimensions.
 
 ### 9. Form Unlock Validation
-Perform server-side and client-side checks for `minLevel` and `minStats` requirements before allowing transformation.
+Server-side and client-side checks for `minLevel` and `minStats` requirements are now enforced before allowing transformation.
 
 ### 10. Death / Respawn Handling
-Clear active form on death, reset Ki on respawn, and apply optional XP penalty.
+On death: active transformation form is cleared, Ki and Stamina are reset to full, and a 10% XP penalty is applied. The player is then teleported to the Otherworld dimension.
 
 ### 11. `sounds.json` Asset Manifest
-Add sounds manifest mapping registered sound IDs to actual `.ogg` resource paths.
+Created `sounds.json` mapping all 7 registered sound event IDs to `.ogg` resource paths under `assets/dragonblockarcanedba/sounds/`. You just need to drop the actual `.ogg` files into that directory.
 
 ### 12. Config File Persistence
-Read/write `DbaConfig` client preferences to `config/dragonblockarcanedba.json`.
+`DbaConfig.load()` is now called on client initialization. Settings are read from `config/dragonblockarcanedba.json` on startup and written back on changes.
 
 ### 13. Multiplayer Sync Edge Cases
-Sync aura particles and transformation states to nearby players on the server.
+Created `TransformBroadcastPayload` (S2C) that broadcasts entity ID, race, and active form to all players in the same dimension whenever someone transforms or untransforms. Client-side receiver updates the target entity's accessor, so aura particles and texture overrides render correctly on other players.
 
 ### 15. Visuals, Models & Animations
 - **Race Models:** Every race must have its own distinct custom 3D model.
@@ -269,14 +271,14 @@ Sync aura particles and transformation states to nearby players on the server.
 | ✅ DONE | Ki & Stamina HUD Overlay next to Health | Done |
 | ✅ DONE | Attributes & Stamina Engine (Sprinting/Punching) | Done |
 | ✅ DONE | Expanded Races & Admin Commands (`/dba race set`) | Done |
-| 🔴 P0 | Planet Gravity Tick Hook | Small |
+| ✅ DONE | Planet Gravity Tick Hook | Done |
 | ✅ DONE | Specialized Race Technique Trees (9 trees) | Done |
-| ✅ DONE | Ki Move Customizer Sub-menu in V Screen | Medium |
-| 🟡 P1 | Custom Planet Geology Blocks (6 blocks) | Small |
-| 🟡 P1 | Form Unlock Validation | Small |
-| 🟡 P1 | Death/Respawn Handling | Small |
-| 🟡 P1 | `sounds.json` Manifest | Small |
-| 🟡 P1 | More Form JSONs (SSJ2/3/God/Blue/Arcosian/Namekian) | Small |
-| 🟠 P2 | Config File Persistence | Small |
-| ⚪ P3 | Multiplayer Sync Edge Cases | Medium |
+| ✅ DONE | Ki Move Customizer Sub-menu in V Screen | Done |
+| ✅ DONE | Custom Planet Geology Blocks (7 blocks) | Done |
+| ✅ DONE | Form Unlock Validation | Done |
+| ✅ DONE | Death/Respawn Handling | Done |
+| ✅ DONE | `sounds.json` Manifest | Done |
+| ✅ DONE | More Form JSONs (SSJ2/3/God/Blue/UI/Arcosian/Namekian/Kaioken) | Done |
+| ✅ DONE | Config File Persistence | Done |
+| ✅ DONE | Multiplayer Sync Edge Cases | Done |
 | ✅ DONE | ModMenu Integration | Done |

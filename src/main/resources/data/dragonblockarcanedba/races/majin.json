@@ -3,19 +3,21 @@
   "baseStats": {
     "strength": 12,
     "defense": 15,
-    "kiCapacity": 12,
-    "kiControl": 15,
+    "kiCapacity": 8,
+    "kiControl": 8,
     "agility": 10
   },
   "statMultipliers": {
-    "strength": 8,
+    "strength": 10,
     "defense": 15,
-    "kiCapacity": 10,
-    "kiControl": 12,
+    "kiCapacity": 0,
+    "kiControl": 0,
     "agility": 5
   },
-  "compatibleForms": [],
+  "compatibleForms": [
+    "dragonblockarcanedba:kaioken"
+  ],
   "modelId": "minecraft:player",
-  "baseTexture": "minecraft:textures/entity/player/wide/steve.png",
+  "baseTexture": "dragonblockarcanedba:textures/entity/races/majin.png",
   "soundProfile": "minecraft:entity.player.hurt"
 }

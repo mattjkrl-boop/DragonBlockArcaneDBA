@@ -1,21 +1,23 @@
 {
   "displayName": "Tuffle",
   "baseStats": {
-    "strength": 8,
-    "defense": 10,
-    "kiCapacity": 12,
-    "kiControl": 15,
-    "agility": 15
+    "strength": 6,
+    "defense": 6,
+    "kiCapacity": 15,
+    "kiControl": 18,
+    "agility": 8
   },
   "statMultipliers": {
-    "strength": 5,
-    "defense": 8,
+    "strength": 0,
+    "defense": 0,
     "kiCapacity": 10,
-    "kiControl": 15,
-    "agility": 12
+    "kiControl": 20,
+    "agility": 0
   },
-  "compatibleForms": [],
+  "compatibleForms": [
+    "dragonblockarcanedba:kaioken"
+  ],
   "modelId": "minecraft:player",
-  "baseTexture": "minecraft:textures/entity/player/wide/steve.png",
+  "baseTexture": "dragonblockarcanedba:textures/entity/races/tuffle.png",
   "soundProfile": "minecraft:entity.player.hurt"
 }

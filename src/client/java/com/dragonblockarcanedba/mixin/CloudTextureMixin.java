@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 public class CloudTextureMixin {
     private static final Identifier YELLOW_CLOUDS = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/environment/yellow_clouds.png");
 
-    @ModifyArg(method = "renderClouds", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;setShaderTexture(ILnet/minecraft/resources/Identifier;)V"), index = 1)
+    @ModifyArg(method = "renderClouds", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;setShaderTexture(ILnet/minecraft/resources/Identifier;)V"), index = 1, require = 0)
     private Identifier changeCloudTexture(Identifier original) {
         Minecraft client = Minecraft.getInstance();
         if (client.level != null && client.level.dimension().toString().contains("otherworld")) {

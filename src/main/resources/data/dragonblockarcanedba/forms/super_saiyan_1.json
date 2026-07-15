@@ -23,7 +23,7 @@
       "agility": 15
     }
   },
-  "modelOverride": "minecraft:textures/entity/player/wide/steve.png",
+  "modelOverride": null,
   "auraVisualId": "dragonblockarcanedba:super_saiyan_aura",
   "transformationSound": "dragonblockarcanedba:transform_generic"
 }

@@ -89,6 +89,26 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         // Register Death Hook (Otherworld mechanics)
         net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, damageMultiplier) -> {
             if (entity instanceof net.minecraft.server.level.ServerPlayer player) {
+                com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
+                
+                // --- Death / Respawn Handling ---
+                // 1. Clear active transformation form
+                accessor.dba$setActiveFormId(null);
+                
+                // 2. Reset Ki to full
+                accessor.dba$setCurrentKi(com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(player));
+                
+                // 3. Reset Stamina to full
+                accessor.dba$setCurrentStamina(com.dragonblockarcanedba.attribute.PlayerStats.getMaxStamina(player));
+                
+                // 4. Apply 10% XP penalty (lose 10% of current XP, never go below 0)
+                int currentXp = accessor.dba$getXp();
+                int penalty = (int)(currentXp * 0.10);
+                accessor.dba$setXp(Math.max(0, currentXp - penalty));
+                
+                // 5. Sync stats to client
+                accessor.dba$syncStats();
+                
                 // Prevent normal death
                 player.setHealth(player.getMaxHealth());
                 player.removeAllEffects();
@@ -117,12 +137,21 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                                 }
                             }
                         }
-                        // Entrance
+                        // Entrance doorway
                         otherworld.setBlockAndUpdate(pos.offset(0, 0, -3), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
                         otherworld.setBlockAndUpdate(pos.offset(0, 1, -3), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
                         
+                        // Glass Windows for natural light and view outside
+                        otherworld.setBlockAndUpdate(pos.offset(-3, 1, 0), net.minecraft.world.level.block.Blocks.GLASS.defaultBlockState());
+                        otherworld.setBlockAndUpdate(pos.offset(3, 1, 0), net.minecraft.world.level.block.Blocks.GLASS.defaultBlockState());
+                        
                         // Desk
                         otherworld.setBlockAndUpdate(pos.offset(0, 0, 1), net.minecraft.world.level.block.Blocks.SPRUCE_STAIRS.defaultBlockState());
+                        
+                        // Light sources (Lanterns)
+                        otherworld.setBlockAndUpdate(pos.offset(1, 1, 1), net.minecraft.world.level.block.Blocks.LANTERN.defaultBlockState());
+                        otherworld.setBlockAndUpdate(pos.offset(-1, 1, 1), net.minecraft.world.level.block.Blocks.LANTERN.defaultBlockState());
+                        otherworld.setBlockAndUpdate(pos.offset(0, 3, 0), net.minecraft.world.level.block.Blocks.LANTERN.defaultBlockState());
                         
                         // Spawn guide
                         com.dragonblockarcanedba.entity.OtherworldGuideEntity guide = com.dragonblockarcanedba.entity.DbaEntities.OTHERWORLD_GUIDE.create(otherworld, net.minecraft.world.entity.EntitySpawnReason.COMMAND);

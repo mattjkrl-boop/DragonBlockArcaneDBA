@@ -41,8 +41,8 @@ public class DbaHudOverlay implements HudElement {
         // Colors
         int bgColor = 0xAA1E2024;
         
-        // Helper lambda for drawing styled bar
-        java.util.function.Consumer<StyledBar> drawTechBar = (bar) -> {
+        // Helper lambda for drawing styled bar with text
+        java.util.function.BiConsumer<StyledBar, String> drawTechBar = (bar, labelText) -> {
             int fillWidth = (int) (barWidth * bar.percent);
             
             // Background
@@ -62,21 +62,39 @@ public class DbaHudOverlay implements HudElement {
             // Corner accents
             guiGraphics.fill(x - 2, bar.y + 2, x, bar.y + barHeight - 2, bar.borderColor);
             guiGraphics.fill(x + barWidth, bar.y + 2, x + barWidth + 2, bar.y + barHeight - 2, bar.borderColor);
+
+            // Draw status text (e.g. "20 / 20 HP") centered inside/over the bar
+            guiGraphics.centeredText(
+                client.font,
+                Component.literal(labelText),
+                x + barWidth / 2,
+                bar.y,
+                0xFFFFFFFF
+            );
         };
 
         // Draw Health Bar (Red)
         float healthPercent = (float) (Math.max(0, currentHealth) / Math.max(1, maxHealth));
-        drawTechBar.accept(new StyledBar(y, healthPercent, 0xFFFF2222, 0xFFFF5555));
+        drawTechBar.accept(
+            new StyledBar(y, healthPercent, 0xFFFF2222, 0xFFFF5555),
+            (int)Math.ceil(currentHealth) + " / " + (int)maxHealth + " HP"
+        );
 
         // Draw Ki Bar (Blue)
         y += spacing;
         float kiPercent = (float) (Math.max(0, currentKi) / Math.max(1, maxKi));
-        drawTechBar.accept(new StyledBar(y, kiPercent, 0xFF00AAFF, 0xFF55FFFF));
+        drawTechBar.accept(
+            new StyledBar(y, kiPercent, 0xFF00AAFF, 0xFF55FFFF),
+            (int)Math.ceil(currentKi) + " / " + (int)maxKi + " KI"
+        );
 
         // Draw Stamina Bar (Green)
         y += spacing;
         float staminaPercent = (float) (Math.max(0, currentStamina) / Math.max(1, maxStamina));
-        drawTechBar.accept(new StyledBar(y, staminaPercent, 0xFF22FF22, 0xFF55FF55));
+        drawTechBar.accept(
+            new StyledBar(y, staminaPercent, 0xFF22FF22, 0xFF55FF55),
+            (int)Math.ceil(currentStamina) + " / " + (int)maxStamina + " STM"
+        );
     }
     
     private record StyledBar(int y, float percent, int fillColor, int borderColor) {}

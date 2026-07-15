@@ -62,19 +62,19 @@ To make the mod a polished, public-ready release, the following systems need to 
    - **Tuffle:** Fly, Meditation.
    - **Arcosian:** Fly, Meditation. (Universal Survival passive ability is fully completed)
 5. **Custom Geology Blocks:**
-   - Adding custom grass and stone blocks for Namek, Vegeta, and Yardrat dimensions (e.g. crimson grass/iron rock for Vegeta, teal grass/green stone for Namek).
+   - [x] Adding custom grass and stone blocks for Namek, Vegeta, and Yardrat dimensions (e.g. crimson grass/iron rock for Vegeta, teal grass/green stone for Namek). Registered using MC 26.2's `setId()` pattern with vanilla placeholder textures.
 6. **"Ki Technique" Move Customizer:**
    - [x] A sub-menu inside the character panel where players can craft custom moves by choosing: Projectile vs Beam, Charge Time, Size, and Color. The mod automatically calculates the Ki cost based on these custom properties.
 7. **Planet Gravity Tick Loop:**
-   - Activating the gravity and oxygen loops on custom planet dimensions.
+   - [x] Activating the gravity and oxygen loops on custom planet dimensions.
 8. **Form Unlock Checks & Safety:**
-   - Checking stats and levels before letting a player transform.
+   - [x] Checking stats and levels before letting a player transform.
 9. **Death & Respawn Configs:**
-    - Resetting Ki and clearing active transformations on player death.
+    - [x] Resetting Ki and clearing active transformations on player death. 10% XP penalty applied on death.
 10. **sound.json Mapping:**
-    - Sound event configuration linking mod sound calls to actual `.ogg` audio files.
+    - [x] Sound event configuration linking mod sound calls to actual `.ogg` audio files. Created `sounds.json` manifest for all 7 sound events.
 11. **Config File & Client Settings:**
-    - Saving config settings to local folders.
+    - [x] Saving config settings to local folders. `DbaConfig.load()` called on client init, persists to `config/dragonblockarcanedba.json`.
 12. **Custom Race Models & Animations:**
     - Every race gets its own distinct 3D model. 
     - Transformations must have high-quality custom visual effects and unique textures (no simple vanilla-style textures).

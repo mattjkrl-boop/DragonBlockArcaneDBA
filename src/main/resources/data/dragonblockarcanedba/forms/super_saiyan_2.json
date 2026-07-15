@@ -1,0 +1,29 @@
+{
+  "compatibleRaces": [
+    "dragonblockarcanedba:saiyan",
+    "dragonblockarcanedba:half_saiyan"
+  ],
+  "stage": 2,
+  "statMultipliers": {
+    "strength": 300,
+    "defense": 275,
+    "kiCapacity": 150,
+    "kiControl": 125,
+    "agility": 300
+  },
+  "baseKiDrain": 10.0,
+  "maxMasteryReduction": 0.75,
+  "unlockRequirements": {
+    "minLevel": 50,
+    "minStats": {
+      "strength": 100,
+      "defense": 80,
+      "kiCapacity": 75,
+      "kiControl": 60,
+      "agility": 80
+    }
+  },
+  "modelOverride": null,
+  "auraVisualId": "dragonblockarcanedba:super_saiyan_2_aura",
+  "transformationSound": "dragonblockarcanedba:transform_generic"
+}
