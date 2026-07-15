@@ -18,6 +18,8 @@ public class DbaNetwork {
         PayloadTypeRegistry.clientboundPlay().register(SpacePodOpenPayload.TYPE, SpacePodOpenPayload.CODEC);
         // Race Selection open screen (S2C)
         PayloadTypeRegistry.clientboundPlay().register(RaceSelectOpenPayload.TYPE, RaceSelectOpenPayload.CODEC);
+        // Revive UI open screen (S2C)
+        PayloadTypeRegistry.clientboundPlay().register(ReviveUiOpenPayload.TYPE, ReviveUiOpenPayload.CODEC);
 
         // Player actions (C2S)
         PayloadTypeRegistry.serverboundPlay().register(ActionPayload.TYPE, ActionPayload.CODEC);
@@ -98,6 +100,11 @@ public class DbaNetwork {
                         accessor.dba$setVitality(0);
                         accessor.dba$setActiveFormId(null);
                         accessor.dba$syncStats();
+                    }
+                } else if ("revive".equals(action)) {
+                    net.minecraft.server.level.ServerLevel overworld = context.server().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+                    if (overworld != null) {
+                        player.teleportTo(overworld, 0.5, 100, 0.5, java.util.Collections.emptySet(), 0, 0, false);
                     }
                 }
             });

@@ -65,7 +65,12 @@ public class TechniquesTab implements MenuTab {
 
             if (row1 == row2) {
                 // Same row, horizontal line
-                context.fill(n1X + nodeWidth, n1Y + nodeHeight / 2 - 1, n2X, n1Y + nodeHeight / 2 + 1, color);
+                // Draw techy double line
+                context.fill(n1X + nodeWidth, n1Y + nodeHeight / 2 - 2, n2X, n1Y + nodeHeight / 2 - 1, color);
+                context.fill(n1X + nodeWidth, n1Y + nodeHeight / 2 + 1, n2X, n1Y + nodeHeight / 2 + 2, color);
+                if (active) {
+                    context.fill(n1X + nodeWidth, n1Y + nodeHeight / 2 - 1, n2X, n1Y + nodeHeight / 2 + 1, 0x88FF7700); // Glow
+                }
             }
         }
 

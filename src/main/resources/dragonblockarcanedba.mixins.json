@@ -6,6 +6,9 @@
 		"PlayerEntityMixin",
 		"LivingEntityMixin"
 	],
+	"client": [
+		"CloudTextureMixin"
+	],
 	"injectors": {
 		"defaultRequire": 1
 	},

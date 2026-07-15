@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:fill_layer",
+  "config": {
+    "height": 193,
+    "state": {
+      "Name": "dragonblockarcanedba:yellow_cloud_block"
+    }
+  }
+}

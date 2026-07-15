@@ -271,7 +271,7 @@ Sync aura particles and transformation states to nearby players on the server.
 | ✅ DONE | Expanded Races & Admin Commands (`/dba race set`) | Done |
 | 🔴 P0 | Planet Gravity Tick Hook | Small |
 | ✅ DONE | Specialized Race Technique Trees (9 trees) | Done |
-| 🟡 P1 | Ki Move Customizer Sub-menu in V Screen | Medium |
+| ✅ DONE | Ki Move Customizer Sub-menu in V Screen | Medium |
 | 🟡 P1 | Custom Planet Geology Blocks (6 blocks) | Small |
 | 🟡 P1 | Form Unlock Validation | Small |
 | 🟡 P1 | Death/Respawn Handling | Small |

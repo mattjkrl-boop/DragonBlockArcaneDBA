@@ -97,16 +97,25 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             }
         );
 
-        // Register Race Selection screen opener (S2C)
-        ClientPlayNetworking.registerGlobalReceiver(
+        // Register GUI
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(
             com.dragonblockarcanedba.network.RaceSelectOpenPayload.TYPE,
             (payload, context) -> {
                 context.client().execute(() -> {
-                    context.client().setScreenAndShow(
-                        new com.dragonblockarcanedba.client.gui.RaceSelectionScreen()
-                    );
+                    context.client().setScreenAndShow(new com.dragonblockarcanedba.client.gui.RaceSelectionScreen());
                 });
             }
         );
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(
+            com.dragonblockarcanedba.network.ReviveUiOpenPayload.TYPE,
+            (payload, context) -> {
+                context.client().execute(() -> {
+                    context.client().setScreenAndShow(new com.dragonblockarcanedba.client.gui.ReviveScreen());
+                });
+            }
+        );
+
+        // Register Block Render Layer
+        // (Removed due to missing class in this fabric version)
     }
 }

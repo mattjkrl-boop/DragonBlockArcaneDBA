@@ -10,7 +10,7 @@ import java.util.List;
 
 public class DbaMenuScreen extends Screen {
     private final List<MenuTab> tabs = new ArrayList<>();
-    private final String[] tabNames = {"STATS", "FORMS", "TECHS"};
+    private final String[] tabNames = {"STATS", "FORMS", "TECHS", "KI CUSTOMIZER"};
     private int activeTab = 0;
 
     private int x;
@@ -29,6 +29,7 @@ public class DbaMenuScreen extends Screen {
         tabs.add(new StatsTab());
         tabs.add(new FormsTab());
         tabs.add(new TechniquesTab());
+        tabs.add(new KiCustomizerTab());
     }
 
     @Override

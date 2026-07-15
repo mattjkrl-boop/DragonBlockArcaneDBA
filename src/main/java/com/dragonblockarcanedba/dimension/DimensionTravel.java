@@ -27,11 +27,15 @@ public class DimensionTravel {
     public static final ResourceKey<Level> YARDRAT = ResourceKey.create(
         Registries.DIMENSION, DragonBlockArcaneDBA.id("yardrat")
     );
+    public static final ResourceKey<Level> OTHERWORLD = ResourceKey.create(
+        Registries.DIMENSION, DragonBlockArcaneDBA.id("otherworld")
+    );
 
     private static final Map<String, ResourceKey<Level>> DESTINATIONS = Map.of(
         "namek", NAMEK,
         "vegeta", VEGETA,
         "yardrat", YARDRAT,
+        "otherworld", OTHERWORLD,
         "overworld", Level.OVERWORLD
     );
 

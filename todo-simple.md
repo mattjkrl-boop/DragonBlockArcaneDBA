@@ -64,7 +64,7 @@ To make the mod a polished, public-ready release, the following systems need to 
 5. **Custom Geology Blocks:**
    - Adding custom grass and stone blocks for Namek, Vegeta, and Yardrat dimensions (e.g. crimson grass/iron rock for Vegeta, teal grass/green stone for Namek).
 6. **"Ki Technique" Move Customizer:**
-   - A sub-menu inside the character panel where players can craft custom moves by choosing: Projectile vs Beam, Charge Time, Size, and Color. The mod automatically calculates the Ki cost based on these custom properties.
+   - [x] A sub-menu inside the character panel where players can craft custom moves by choosing: Projectile vs Beam, Charge Time, Size, and Color. The mod automatically calculates the Ki cost based on these custom properties.
 7. **Planet Gravity Tick Loop:**
    - Activating the gravity and oxygen loops on custom planet dimensions.
 8. **Form Unlock Checks & Safety:**

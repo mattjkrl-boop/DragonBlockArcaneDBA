@@ -22,37 +22,45 @@ public class SpacePodScreen extends Screen {
         int centerY = this.height / 2;
         int buttonWidth = 200;
         int buttonHeight = 20;
-        int spacing = 28;
+        int spacing = 26;
+        
+        int startY = centerY - 80;
 
         // Planet Namek
         addRenderableWidget(Button.builder(
             Component.literal("\u2605 Planet Namek"),
             btn -> launchTo("namek")
-        ).bounds(centerX - buttonWidth / 2, centerY - spacing * 2, buttonWidth, buttonHeight).build());
+        ).bounds(centerX - buttonWidth / 2, startY, buttonWidth, buttonHeight).build());
 
         // Planet Vegeta
         addRenderableWidget(Button.builder(
             Component.literal("\u2605 Planet Vegeta"),
             btn -> launchTo("vegeta")
-        ).bounds(centerX - buttonWidth / 2, centerY - spacing, buttonWidth, buttonHeight).build());
+        ).bounds(centerX - buttonWidth / 2, startY + spacing, buttonWidth, buttonHeight).build());
 
         // Planet Yardrat
         addRenderableWidget(Button.builder(
             Component.literal("\u2605 Planet Yardrat"),
             btn -> launchTo("yardrat")
-        ).bounds(centerX - buttonWidth / 2, centerY, buttonWidth, buttonHeight).build());
+        ).bounds(centerX - buttonWidth / 2, startY + spacing * 2, buttonWidth, buttonHeight).build());
+        
+        // Otherworld
+        addRenderableWidget(Button.builder(
+            Component.literal("\u2605 The Otherworld (Hell)"),
+            btn -> launchTo("otherworld")
+        ).bounds(centerX - buttonWidth / 2, startY + spacing * 3, buttonWidth, buttonHeight).build());
 
         // Return to Overworld
         addRenderableWidget(Button.builder(
             Component.literal("\u2190 Return to Earth"),
             btn -> launchTo("overworld")
-        ).bounds(centerX - buttonWidth / 2, centerY + spacing + 10, buttonWidth, buttonHeight).build());
+        ).bounds(centerX - buttonWidth / 2, startY + spacing * 4 + 10, buttonWidth, buttonHeight).build());
 
         // Cancel
         addRenderableWidget(Button.builder(
             Component.literal("Cancel"),
             btn -> onClose()
-        ).bounds(centerX - buttonWidth / 2, centerY + spacing * 2 + 20, buttonWidth, buttonHeight).build());
+        ).bounds(centerX - buttonWidth / 2, startY + spacing * 5 + 10, buttonWidth, buttonHeight).build());
     }
 
     private void launchTo(String destination) {
@@ -62,27 +70,28 @@ public class SpacePodScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
-        super.extractRenderState(context, mouseX, mouseY, delta);
+        // Draw techy background for the panel
+        int panelWidth = 240;
+        int panelHeight = 220;
+        int startX = (this.width - panelWidth) / 2;
+        int startY = (this.height - panelHeight) / 2;
 
-        // Draw a dark panel behind the buttons
-        int panelX = this.width / 2 - 120;
-        int panelY = this.height / 2 - 80;
-        int panelW = 240;
-        int panelH = 200;
-        net.minecraft.resources.Identifier bgTex = net.minecraft.resources.Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/gui/menu_background.png");
-        context.blit(bgTex, panelX, panelY, panelW, panelH, 0.0F, 0.0F, (float)panelW, (float)panelH);
+        int bgColor = 0xDD1E2024;
+        int borderColor = 0xFF00DDFF; // Cyan theme for space pod
 
-        // Cyan neon border
-        int borderColor = 0xFF00DDFF;
-        context.fill(panelX, panelY, panelX + panelW, panelY + 1, borderColor);
-        context.fill(panelX, panelY + panelH - 1, panelX + panelW, panelY + panelH, borderColor);
-        context.fill(panelX, panelY, panelX + 1, panelY + panelH, borderColor);
-        context.fill(panelX + panelW - 1, panelY, panelX + panelW, panelY + panelH, borderColor);
-
+        // Panel Background
+        context.fill(startX, startY, startX + panelWidth, startY + panelHeight, bgColor);
+        
+        // Neon Borders
+        context.fill(startX, startY, startX + panelWidth, startY + 2, borderColor);
+        context.fill(startX, startY + panelHeight - 2, startX + panelWidth, startY + panelHeight, borderColor);
+        context.fill(startX, startY, startX + 2, startY + panelHeight, borderColor);
+        context.fill(startX + panelWidth - 2, startY, startX + panelWidth, startY + panelHeight, borderColor);
+        
         // Title text
-        context.centeredText(this.font, this.title, this.width / 2, panelY + 8, 0xFF00DDFF);
+        context.centeredText(this.font, this.title, this.width / 2, startY + 10, 0xFF00DDFF);
         // Subtitle
-        context.centeredText(this.font, Component.literal("Choose your destination:"), this.width / 2, panelY + 22, 0xFFAAAAAA);
+        context.centeredText(this.font, Component.literal("Choose your destination:"), this.width / 2, startY + 22, 0xFFAAAAAA);
     }
 
     @Override

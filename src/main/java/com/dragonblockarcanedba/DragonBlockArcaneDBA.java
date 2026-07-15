@@ -23,8 +23,12 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         // Register Sound Events
         DbaSounds.register();
 
-        // Register Items
+        // Register Items and Blocks
+        com.dragonblockarcanedba.block.DbaBlocks.register();
         DbaItems.register();
+
+        // Register Entities
+        com.dragonblockarcanedba.entity.DbaEntities.register();
 
         // Register Networking
         DbaNetwork.registerCommon();
@@ -80,6 +84,59 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     }
                 }
             }
+        });
+
+        // Register Death Hook (Otherworld mechanics)
+        net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, damageMultiplier) -> {
+            if (entity instanceof net.minecraft.server.level.ServerPlayer player) {
+                // Prevent normal death
+                player.setHealth(player.getMaxHealth());
+                player.removeAllEffects();
+                
+                // Find otherworld
+                net.minecraft.server.level.ServerLevel otherworld = ((net.minecraft.server.level.ServerLevel)entity.level()).getServer().getLevel(
+                    net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, id("otherworld"))
+                );
+                
+                if (otherworld != null) {
+                    int startY = 100;
+                    net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(0, startY, 0);
+                    
+                    // Generate structure if floor isn't planks
+                    net.minecraft.core.BlockPos floor = pos.below();
+                    if (!otherworld.getBlockState(floor).is(net.minecraft.world.level.block.Blocks.OAK_PLANKS)) {
+                        for(int x = -3; x <= 3; x++) {
+                            for(int y = -1; y <= 4; y++) {
+                                for(int z = -3; z <= 3; z++) {
+                                    net.minecraft.core.BlockPos p = pos.offset(x, y, z);
+                                    if (y == -1 || y == 4 || x == -3 || x == 3 || z == -3 || z == 3) {
+                                        otherworld.setBlockAndUpdate(p, net.minecraft.world.level.block.Blocks.OAK_PLANKS.defaultBlockState());
+                                    } else {
+                                        otherworld.setBlockAndUpdate(p, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+                                    }
+                                }
+                            }
+                        }
+                        // Entrance
+                        otherworld.setBlockAndUpdate(pos.offset(0, 0, -3), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+                        otherworld.setBlockAndUpdate(pos.offset(0, 1, -3), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+                        
+                        // Desk
+                        otherworld.setBlockAndUpdate(pos.offset(0, 0, 1), net.minecraft.world.level.block.Blocks.SPRUCE_STAIRS.defaultBlockState());
+                        
+                        // Spawn guide
+                        com.dragonblockarcanedba.entity.OtherworldGuideEntity guide = com.dragonblockarcanedba.entity.DbaEntities.OTHERWORLD_GUIDE.create(otherworld, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+                        if (guide != null) {
+                            guide.setPos(0.5, startY, 2.5);
+                            otherworld.addFreshEntity(guide);
+                        }
+                    }
+                    
+                    player.teleportTo(otherworld, 0.5, startY, -1.5, java.util.Collections.emptySet(), 0, 0, false);
+                }
+                return false; // Cancel death
+            }
+            return true; // Allow normal death for non-players
         });
 
         // Trigger Race Selection on first join

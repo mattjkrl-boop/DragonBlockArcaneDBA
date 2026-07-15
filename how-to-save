@@ -1,0 +1,4 @@
+git add . (. adds everything besides stuff listed in .gitignore)
+git commit -m "commit message" (puts the staged changes in a snapshot in time)
+git push -u origin main (pushes the snapshot to the remote repository, main branch)
+git restore . (reverts all changes since the last commit)

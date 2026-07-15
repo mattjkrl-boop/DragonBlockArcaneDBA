@@ -36,56 +36,48 @@ public class DbaHudOverlay implements HudElement {
 
         int barWidth = 120;
         int barHeight = 8;
-        int spacing = 22; // spacing between bars
-
+        int spacing = 16; // spacing between bars
+        
         // Colors
         int bgColor = 0xAA1E2024;
         
+        // Helper lambda for drawing styled bar
+        java.util.function.Consumer<StyledBar> drawTechBar = (bar) -> {
+            int fillWidth = (int) (barWidth * bar.percent);
+            
+            // Background
+            guiGraphics.fill(x, bar.y, x + barWidth, bar.y + barHeight, bgColor);
+            
+            // Fill
+            if (fillWidth > 0) {
+                guiGraphics.fill(x, bar.y, x + fillWidth, bar.y + barHeight, bar.fillColor);
+            }
+            
+            // Tech Borders
+            guiGraphics.fill(x, bar.y, x + barWidth, bar.y + 1, bar.borderColor); // Top
+            guiGraphics.fill(x, bar.y + barHeight - 1, x + barWidth, bar.y + barHeight, bar.borderColor); // Bottom
+            guiGraphics.fill(x, bar.y, x + 2, bar.y + barHeight, bar.borderColor); // Left
+            guiGraphics.fill(x + barWidth - 2, bar.y, x + barWidth, bar.y + barHeight, bar.borderColor); // Right
+            
+            // Corner accents
+            guiGraphics.fill(x - 2, bar.y + 2, x, bar.y + barHeight - 2, bar.borderColor);
+            guiGraphics.fill(x + barWidth, bar.y + 2, x + barWidth + 2, bar.y + barHeight - 2, bar.borderColor);
+        };
+
         // Draw Health Bar (Red)
         float healthPercent = (float) (Math.max(0, currentHealth) / Math.max(1, maxHealth));
-        int healthFillWidth = (int) (barWidth * healthPercent);
-        
-        String healthText = String.format("HP: %.0f / %.0f", currentHealth, maxHealth);
-        guiGraphics.text(client.font, Component.literal(healthText), x, y, 0xFFFF5555);
-        int barY = y + 10;
-        guiGraphics.fill(x, barY, x + barWidth, barY + barHeight, bgColor);
-        guiGraphics.fill(x, barY, x + healthFillWidth, barY + barHeight, 0xFFFF2222);
-        // Border
-        guiGraphics.fill(x - 1, barY - 1, x + barWidth + 1, barY, 0xFFFF5555);
-        guiGraphics.fill(x - 1, barY + barHeight, x + barWidth + 1, barY + barHeight + 1, 0xFFFF5555);
-        guiGraphics.fill(x - 1, barY, x, barY + barHeight, 0xFFFF5555);
-        guiGraphics.fill(x + barWidth, barY, x + barWidth + 1, barY + barHeight, 0xFFFF5555);
+        drawTechBar.accept(new StyledBar(y, healthPercent, 0xFFFF2222, 0xFFFF5555));
 
         // Draw Ki Bar (Blue)
         y += spacing;
         float kiPercent = (float) (Math.max(0, currentKi) / Math.max(1, maxKi));
-        int kiFillWidth = (int) (barWidth * kiPercent);
-        
-        String kiText = String.format("KI: %.0f / %.0f", currentKi, maxKi);
-        guiGraphics.text(client.font, Component.literal(kiText), x, y, 0xFF55FFFF);
-        barY = y + 10;
-        guiGraphics.fill(x, barY, x + barWidth, barY + barHeight, bgColor);
-        guiGraphics.fill(x, barY, x + kiFillWidth, barY + barHeight, 0xFF00AAFF);
-        // Border
-        guiGraphics.fill(x - 1, barY - 1, x + barWidth + 1, barY, 0xFF55FFFF);
-        guiGraphics.fill(x - 1, barY + barHeight, x + barWidth + 1, barY + barHeight + 1, 0xFF55FFFF);
-        guiGraphics.fill(x - 1, barY, x, barY + barHeight, 0xFF55FFFF);
-        guiGraphics.fill(x + barWidth, barY, x + barWidth + 1, barY + barHeight, 0xFF55FFFF);
+        drawTechBar.accept(new StyledBar(y, kiPercent, 0xFF00AAFF, 0xFF55FFFF));
 
         // Draw Stamina Bar (Green)
         y += spacing;
         float staminaPercent = (float) (Math.max(0, currentStamina) / Math.max(1, maxStamina));
-        int staminaFillWidth = (int) (barWidth * staminaPercent);
-
-        String staminaText = String.format("SP: %.0f / %.0f", currentStamina, maxStamina);
-        guiGraphics.text(client.font, Component.literal(staminaText), x, y, 0xFF55FF55);
-        barY = y + 10;
-        guiGraphics.fill(x, barY, x + barWidth, barY + barHeight, bgColor);
-        guiGraphics.fill(x, barY, x + staminaFillWidth, barY + barHeight, 0xFF22FF22);
-        // Border
-        guiGraphics.fill(x - 1, barY - 1, x + barWidth + 1, barY, 0xFF55FF55);
-        guiGraphics.fill(x - 1, barY + barHeight, x + barWidth + 1, barY + barHeight + 1, 0xFF55FF55);
-        guiGraphics.fill(x - 1, barY, x, barY + barHeight, 0xFF55FF55);
-        guiGraphics.fill(x + barWidth, barY, x + barWidth + 1, barY + barHeight, 0xFF55FF55);
+        drawTechBar.accept(new StyledBar(y, staminaPercent, 0xFF22FF22, 0xFF55FF55));
     }
+    
+    private record StyledBar(int y, float percent, int fillColor, int borderColor) {}
 }

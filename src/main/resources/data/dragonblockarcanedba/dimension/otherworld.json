@@ -1,0 +1,11 @@
+{
+  "type": "dragonblockarcanedba:otherworld",
+  "generator": {
+    "type": "minecraft:noise",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "dragonblockarcanedba:otherworld"
+    },
+    "settings": "minecraft:overworld"
+  }
+}
