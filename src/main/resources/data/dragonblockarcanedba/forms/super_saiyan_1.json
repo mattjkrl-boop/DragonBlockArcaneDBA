@@ -1,0 +1,29 @@
+{
+  "compatibleRaces": [
+    "dragonblockarcanedba:saiyan",
+    "dragonblockarcanedba:half_saiyan"
+  ],
+  "stage": 1,
+  "statMultipliers": {
+    "strength": 200,
+    "defense": 200,
+    "kiCapacity": 100,
+    "kiControl": 100,
+    "agility": 200
+  },
+  "baseKiDrain": 5.0,
+  "maxMasteryReduction": 0.80,
+  "unlockRequirements": {
+    "minLevel": 5,
+    "minStats": {
+      "strength": 20,
+      "defense": 15,
+      "kiCapacity": 15,
+      "kiControl": 10,
+      "agility": 15
+    }
+  },
+  "modelOverride": "minecraft:textures/entity/player/wide/steve.png",
+  "auraVisualId": "dragonblockarcanedba:super_saiyan_aura",
+  "transformationSound": "dragonblockarcanedba:transform_generic"
+}

@@ -1,0 +1,14 @@
+{
+	"required": true,
+	"package": "com.dragonblockarcanedba.client.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"PlayerEntityRendererMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

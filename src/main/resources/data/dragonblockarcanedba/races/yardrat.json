@@ -1,0 +1,21 @@
+{
+  "displayName": "Yardrat",
+  "baseStats": {
+    "strength": 6,
+    "defense": 8,
+    "kiCapacity": 15,
+    "kiControl": 15,
+    "agility": 12
+  },
+  "statMultipliers": {
+    "strength": 0,
+    "defense": 0,
+    "kiCapacity": 10,
+    "kiControl": 15,
+    "agility": 10
+  },
+  "compatibleForms": [],
+  "modelId": "minecraft:player",
+  "baseTexture": "minecraft:textures/entity/player/slim/alex.png",
+  "soundProfile": "minecraft:entity.player.hurt"
+}

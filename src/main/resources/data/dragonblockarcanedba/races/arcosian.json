@@ -1,0 +1,21 @@
+{
+  "displayName": "Arcosian",
+  "baseStats": {
+    "strength": 10,
+    "defense": 8,
+    "kiCapacity": 12,
+    "kiControl": 12,
+    "agility": 15
+  },
+  "statMultipliers": {
+    "strength": 5,
+    "defense": 0,
+    "kiCapacity": 5,
+    "kiControl": 10,
+    "agility": 15
+  },
+  "compatibleForms": [],
+  "modelId": "minecraft:player",
+  "baseTexture": "minecraft:textures/entity/player/slim/alex.png",
+  "soundProfile": "minecraft:entity.player.hurt"
+}

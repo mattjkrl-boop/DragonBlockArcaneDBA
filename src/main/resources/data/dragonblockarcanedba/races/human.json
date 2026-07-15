@@ -1,0 +1,21 @@
+{
+  "displayName": "Human",
+  "baseStats": {
+    "strength": 10,
+    "defense": 10,
+    "kiCapacity": 10,
+    "kiControl": 15,
+    "agility": 10
+  },
+  "statMultipliers": {
+    "strength": 0,
+    "defense": 0,
+    "kiCapacity": 0,
+    "kiControl": 10,
+    "agility": 5
+  },
+  "compatibleForms": [],
+  "modelId": "minecraft:player",
+  "baseTexture": "minecraft:textures/entity/player/slim/alex.png",
+  "soundProfile": "minecraft:entity.player.hurt"
+}

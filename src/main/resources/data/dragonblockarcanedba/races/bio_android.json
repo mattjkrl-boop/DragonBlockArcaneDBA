@@ -1,0 +1,21 @@
+{
+  "displayName": "Bio-Android",
+  "baseStats": {
+    "strength": 14,
+    "defense": 12,
+    "kiCapacity": 12,
+    "kiControl": 12,
+    "agility": 12
+  },
+  "statMultipliers": {
+    "strength": 12,
+    "defense": 10,
+    "kiCapacity": 10,
+    "kiControl": 8,
+    "agility": 10
+  },
+  "compatibleForms": [],
+  "modelId": "minecraft:player",
+  "baseTexture": "minecraft:textures/entity/player/wide/steve.png",
+  "soundProfile": "minecraft:entity.player.hurt"
+}

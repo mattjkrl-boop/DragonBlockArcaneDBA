@@ -1,0 +1,21 @@
+{
+  "displayName": "Neo-Tuffle",
+  "baseStats": {
+    "strength": 18,
+    "defense": 18,
+    "kiCapacity": 18,
+    "kiControl": 18,
+    "agility": 18
+  },
+  "statMultipliers": {
+    "strength": 15,
+    "defense": 15,
+    "kiCapacity": 15,
+    "kiControl": 15,
+    "agility": 15
+  },
+  "compatibleForms": [],
+  "modelId": "minecraft:player",
+  "baseTexture": "minecraft:textures/entity/player/wide/steve.png",
+  "soundProfile": "minecraft:entity.player.hurt"
+}

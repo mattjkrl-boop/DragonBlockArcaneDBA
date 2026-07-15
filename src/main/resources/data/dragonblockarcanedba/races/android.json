@@ -1,0 +1,21 @@
+{
+  "displayName": "Android",
+  "baseStats": {
+    "strength": 16,
+    "defense": 16,
+    "kiCapacity": 20,
+    "kiControl": 20,
+    "agility": 16
+  },
+  "statMultipliers": {
+    "strength": 15,
+    "defense": 15,
+    "kiCapacity": 0,
+    "kiControl": 0,
+    "agility": 15
+  },
+  "compatibleForms": [],
+  "modelId": "minecraft:player",
+  "baseTexture": "minecraft:textures/entity/player/wide/steve.png",
+  "soundProfile": "minecraft:entity.player.hurt"
+}

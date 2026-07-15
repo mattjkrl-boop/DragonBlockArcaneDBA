@@ -1,0 +1,21 @@
+{
+  "displayName": "Majin",
+  "baseStats": {
+    "strength": 12,
+    "defense": 15,
+    "kiCapacity": 12,
+    "kiControl": 15,
+    "agility": 10
+  },
+  "statMultipliers": {
+    "strength": 8,
+    "defense": 15,
+    "kiCapacity": 10,
+    "kiControl": 12,
+    "agility": 5
+  },
+  "compatibleForms": [],
+  "modelId": "minecraft:player",
+  "baseTexture": "minecraft:textures/entity/player/wide/steve.png",
+  "soundProfile": "minecraft:entity.player.hurt"
+}

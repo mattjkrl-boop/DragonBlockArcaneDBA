@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"id": "dragonblockarcanedba",
+	"version": "${version}",
+	"name": "Dragon Block Arcane DBA",
+	"description": "A comprehensive Dragon Ball themed mod for Fabric, covering races, attributes, Ki energy, and dynamic transformations.",
+	"authors": [
+		"Matt",
+		"Carter"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/"
+	},
+	"license": "Proprietary",
+	"icon": "assets/dragonblockarcanedba/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.dragonblockarcanedba.DragonBlockArcaneDBA"
+		],
+		"client": [
+			"com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient"
+		]
+	},
+	"mixins": [
+		"dragonblockarcanedba.mixins.json",
+		{
+			"config": "dragonblockarcanedba.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

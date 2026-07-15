@@ -1,0 +1,23 @@
+{
+  "displayName": "Half-Saiyan",
+  "baseStats": {
+    "strength": 12,
+    "defense": 10,
+    "kiCapacity": 15,
+    "kiControl": 12,
+    "agility": 10
+  },
+  "statMultipliers": {
+    "strength": 10,
+    "defense": 5,
+    "kiCapacity": 15,
+    "kiControl": 5,
+    "agility": 8
+  },
+  "compatibleForms": [
+    "dragonblockarcanedba:super_saiyan_1"
+  ],
+  "modelId": "minecraft:player",
+  "baseTexture": "minecraft:textures/entity/player/wide/steve.png",
+  "soundProfile": "minecraft:entity.player.hurt"
+}

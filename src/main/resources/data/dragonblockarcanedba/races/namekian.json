@@ -1,0 +1,21 @@
+{
+  "displayName": "Namekian",
+  "baseStats": {
+    "strength": 8,
+    "defense": 15,
+    "kiCapacity": 12,
+    "kiControl": 12,
+    "agility": 8
+  },
+  "statMultipliers": {
+    "strength": 0,
+    "defense": 15,
+    "kiCapacity": 10,
+    "kiControl": 10,
+    "agility": 0
+  },
+  "compatibleForms": [],
+  "modelId": "minecraft:player",
+  "baseTexture": "minecraft:textures/entity/player/slim/alex.png",
+  "soundProfile": "minecraft:entity.player.hurt"
+}
