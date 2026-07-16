@@ -40,6 +40,7 @@ replay_*.log
 *.jfr
 *.class
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 *.log
 *.txt
 
