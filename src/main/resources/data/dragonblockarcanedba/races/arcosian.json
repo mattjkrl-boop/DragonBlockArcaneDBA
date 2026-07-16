@@ -21,7 +21,7 @@
     "dragonblockarcanedba:golden_form",
     "dragonblockarcanedba:kaioken"
   ],
-  "modelId": "minecraft:player",
+  "modelId": "dragonblockarcanedba:arcosian",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/arcosian.png",
   "soundProfile": "dragonblockarcanedba:arcosian_hurt"
 }

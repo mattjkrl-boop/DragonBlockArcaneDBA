@@ -12,6 +12,10 @@ repositories {
 		name = "Modrinth"
 		url = "https://api.modrinth.com/maven"
 	}
+	maven {
+		name = "GeckoLib"
+		url = "https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/"
+	}
 }
 
 loom {
@@ -39,6 +43,9 @@ dependencies {
 	// Fabric API
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 	clientImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// GeckoLib for custom entity models and animations (from Modrinth)
+	implementation "maven.modrinth:geckolib:${project.geckolib_version}"
 
 	// ModMenu for configuration screen from Modrinth
 	clientCompileOnly "maven.modrinth:modmenu:20.0.1"

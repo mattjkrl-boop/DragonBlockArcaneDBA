@@ -25,6 +25,10 @@ public class PlayerEntityRendererMixin {
 
     @Inject(method = "getTextureLocation(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;)Lnet/minecraft/resources/Identifier;", at = @At("HEAD"), cancellable = true)
     private void dba$getTextureLocation(AvatarRenderState state, CallbackInfoReturnable<Identifier> cir) {
+        // If GeckoLib is handling the player model rendering, skip this vanilla texture override.
+        // GeckoLib resolves textures through DbaPlayerModel.getTextureResource() instead.
+        // This mixin is kept as a fallback for cases where GeckoLib isn't rendering
+        // (e.g., if GeckoLib fails to load or for other mods that check player texture).
         var level = Minecraft.getInstance().level;
         if (level != null) {
             net.minecraft.world.entity.Entity entity = level.getEntity(state.id);

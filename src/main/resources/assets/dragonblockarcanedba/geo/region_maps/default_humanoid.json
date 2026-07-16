@@ -1,0 +1,17 @@
+{
+  "defaultRegion": "body",
+  "body": [
+    "head", "body", "torso", "chest",
+    "left_arm", "right_arm", "left_leg", "right_leg",
+    "arm", "leg", "hand", "foot", "neck", "face"
+  ],
+  "hair": [
+    "hair", "hair_front", "hair_back", "hair_side", "hair_top",
+    "bangs", "ponytail", "eyebrow"
+  ],
+  "avoid": [
+    "tail", "wing", "wings", "antenna", "horn", "horns",
+    "armor", "clothing", "clothes", "eyes", "eye", "aura",
+    "accessory", "belt", "boots", "gloves", "scouter"
+  ]
+}

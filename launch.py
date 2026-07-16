@@ -80,6 +80,55 @@ def download_modmenu():
         print("Continuing without ModMenu. You can install it manually in 'run/mods/'.")
 
 
+def download_geckolib():
+    """Download GeckoLib from Modrinth into the run/mods directory if not already present."""
+    mods_dir = os.path.join("run", "mods")
+    os.makedirs(mods_dir, exist_ok=True)
+
+    # Check if any geckolib jar is already downloaded
+    for file in os.listdir(mods_dir):
+        if file.lower().startswith("geckolib") and file.endswith(".jar"):
+            print(f"GeckoLib already present: {file}")
+            return
+
+    print("GeckoLib not found. Downloading via Modrinth API...")
+    url = "https://api.modrinth.com/v2/project/geckolib/version?loaders=%5B%22fabric%22%5D"
+    headers = {"User-Agent": "DBA-Launcher/1.0"}
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as response:
+            versions = json.loads(response.read().decode())
+
+        # Try to find a version matching minecraft 26.2
+        selected_version = None
+        for v in versions:
+            if "26.2" in v.get("game_versions", []):
+                selected_version = v
+                break
+
+        # Fallback to latest
+        if not selected_version and versions:
+            selected_version = versions[0]
+
+        if not selected_version:
+            print("Warning: Could not resolve a compatible GeckoLib version. Continuing without it.")
+            return
+
+        file_info = selected_version["files"][0]
+        download_url = file_info["url"]
+        filename = file_info["filename"]
+        dest_file = os.path.join(mods_dir, filename)
+
+        print(f"Downloading GeckoLib {selected_version['version_number']}...")
+        urllib.request.urlretrieve(download_url, dest_file)
+        print(f"Downloaded: {dest_file}")
+
+    except Exception as e:
+        print(f"Warning: GeckoLib download failed: {e}")
+        print("Continuing without GeckoLib. You can install it manually in 'run/mods/'.")
+
+
 def nuke_caches():
     """Delete stale Gradle/Loom caches to force a clean resolve."""
     for folder in [".gradle", ".fabric"]:
@@ -99,6 +148,7 @@ def launch_client():
 
     verify_java()
     download_modmenu()
+    download_geckolib()
 
     gradlew = "gradlew.bat" if os.name == "nt" else "./gradlew"
     if not os.path.exists(gradlew.replace("./", "")):

@@ -24,5 +24,7 @@
   },
   "modelOverride": null,
   "auraVisualId": "dragonblockarcanedba:orange_namekian_aura",
-  "transformationSound": "dragonblockarcanedba:transform_generic"
+  "transformationSound": "dragonblockarcanedba:transform_generic",
+  "hairColorOverride": null,
+  "skinColorOverride": "#FF8C00"
 }

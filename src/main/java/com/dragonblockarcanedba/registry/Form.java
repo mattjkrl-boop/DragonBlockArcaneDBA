@@ -22,9 +22,14 @@ public class Form {
     private final Identifier auraVisualId;
     private final Identifier transformationSound;
 
+    // Color overrides for transformations (hex strings like "#FFD700" or null for no override)
+    private final String hairColorOverride;
+    private final String skinColorOverride;
+
     public Form(Identifier id, List<Identifier> compatibleRaces, int stage, Attributes statMultipliers,
                 double baseKiDrain, double maxMasteryReduction, UnlockRequirements unlockRequirements,
-                Identifier modelOverride, Identifier auraVisualId, Identifier transformationSound) {
+                Identifier modelOverride, Identifier auraVisualId, Identifier transformationSound,
+                String hairColorOverride, String skinColorOverride) {
         this.id = id;
         this.compatibleRaces = compatibleRaces;
         this.stage = stage;
@@ -35,6 +40,8 @@ public class Form {
         this.modelOverride = modelOverride;
         this.auraVisualId = auraVisualId;
         this.transformationSound = transformationSound;
+        this.hairColorOverride = hairColorOverride;
+        this.skinColorOverride = skinColorOverride;
     }
 
     public Identifier getId() { return id; }
@@ -47,6 +54,10 @@ public class Form {
     public Identifier getModelOverride() { return modelOverride; }
     public Identifier getAuraVisualId() { return auraVisualId; }
     public Identifier getTransformationSound() { return transformationSound; }
+    /** Hair color override hex string (e.g. "#FFD700" for SSJ gold), or null for no override */
+    public String getHairColorOverride() { return hairColorOverride; }
+    /** Skin color override hex string, or null for no override */
+    public String getSkinColorOverride() { return skinColorOverride; }
 
     public record UnlockRequirements(
         int minLevel,
@@ -89,7 +100,16 @@ public class Form {
         Identifier auraVisualId = Identifier.parse(json.get("auraVisualId").getAsString());
         Identifier transformationSound = Identifier.parse(json.get("transformationSound").getAsString());
 
+        // Color overrides for transformations (optional, null = no override)
+        String hairColorOverride = json.has("hairColorOverride") && !json.get("hairColorOverride").isJsonNull()
+            ? json.get("hairColorOverride").getAsString()
+            : null;
+        String skinColorOverride = json.has("skinColorOverride") && !json.get("skinColorOverride").isJsonNull()
+            ? json.get("skinColorOverride").getAsString()
+            : null;
+
         return new Form(id, compatibleRaces, stage, statMultipliers, baseKiDrain, maxMasteryReduction, 
-                        unlockRequirements, modelOverride, auraVisualId, transformationSound);
+                        unlockRequirements, modelOverride, auraVisualId, transformationSound,
+                        hairColorOverride, skinColorOverride);
     }
 }

@@ -17,7 +17,7 @@
   "compatibleForms": [
     "dragonblockarcanedba:kaioken"
   ],
-  "modelId": "minecraft:player",
+  "modelId": "dragonblockarcanedba:bio_android",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/bio_android.png",
   "soundProfile": "minecraft:entity.player.hurt"
 }

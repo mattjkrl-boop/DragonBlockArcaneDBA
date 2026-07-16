@@ -25,5 +25,7 @@
   },
   "modelOverride": null,
   "auraVisualId": "dragonblockarcanedba:super_saiyan_2_aura",
-  "transformationSound": "dragonblockarcanedba:transform_generic"
+  "transformationSound": "dragonblockarcanedba:transform_generic",
+  "hairColorOverride": "#FFD700",
+  "skinColorOverride": null
 }

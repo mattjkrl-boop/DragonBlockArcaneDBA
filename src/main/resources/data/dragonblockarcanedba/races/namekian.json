@@ -19,7 +19,7 @@
     "dragonblockarcanedba:orange_namekian",
     "dragonblockarcanedba:kaioken"
   ],
-  "modelId": "minecraft:player",
+  "modelId": "dragonblockarcanedba:namekian",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/namekian.png",
   "soundProfile": "dragonblockarcanedba:namekian_hurt"
 }

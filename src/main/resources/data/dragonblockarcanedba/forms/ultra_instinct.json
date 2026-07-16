@@ -25,5 +25,7 @@
   },
   "modelOverride": null,
   "auraVisualId": "dragonblockarcanedba:ultra_instinct_aura",
-  "transformationSound": "dragonblockarcanedba:transform_generic"
+  "transformationSound": "dragonblockarcanedba:transform_generic",
+  "hairColorOverride": "#C8C8DC",
+  "skinColorOverride": null
 }

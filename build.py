@@ -43,6 +43,7 @@ def nuke_caches():
 def run_build(clean=True):
     print("=========================================")
     print("Building Dragon Block Arcane DBA Mod Jar")
+    print("  (Requires GeckoLib 5.5.3 at runtime)")
     print("=========================================")
 
     verify_java()

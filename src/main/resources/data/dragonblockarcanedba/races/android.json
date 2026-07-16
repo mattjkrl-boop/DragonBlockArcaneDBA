@@ -15,7 +15,7 @@
     "agility": 10
   },
   "compatibleForms": [],
-  "modelId": "minecraft:player",
+  "modelId": "dragonblockarcanedba:android",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/android.png",
   "soundProfile": "minecraft:entity.player.hurt"
 }

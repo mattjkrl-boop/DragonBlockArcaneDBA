@@ -17,7 +17,7 @@
   "compatibleForms": [
     "dragonblockarcanedba:kaioken"
   ],
-  "modelId": "minecraft:player",
+  "modelId": "dragonblockarcanedba:neo_tuffle",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/neo_tuffle.png",
   "soundProfile": "minecraft:entity.player.hurt"
 }

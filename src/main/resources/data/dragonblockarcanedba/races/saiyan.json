@@ -23,7 +23,7 @@
     "dragonblockarcanedba:ultra_instinct",
     "dragonblockarcanedba:kaioken"
   ],
-  "modelId": "minecraft:player",
+  "modelId": "dragonblockarcanedba:saiyan",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/saiyan.png",
   "soundProfile": "dragonblockarcanedba:saiyan_hurt"
 }

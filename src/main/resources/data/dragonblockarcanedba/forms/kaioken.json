@@ -32,5 +32,7 @@
   },
   "modelOverride": null,
   "auraVisualId": "dragonblockarcanedba:kaioken_aura",
-  "transformationSound": "dragonblockarcanedba:transform_generic"
+  "transformationSound": "dragonblockarcanedba:transform_generic",
+  "hairColorOverride": null,
+  "skinColorOverride": "#FF3030"
 }
