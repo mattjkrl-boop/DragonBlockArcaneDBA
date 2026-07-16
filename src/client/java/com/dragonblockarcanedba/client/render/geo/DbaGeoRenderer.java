@@ -7,6 +7,7 @@ import com.geckolib.renderer.GeoReplacedEntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.resources.Identifier;
+import com.geckolib.constant.dataticket.DataTicket;
 import net.minecraft.world.entity.player.Player;
 
 /**
@@ -22,10 +23,26 @@ import net.minecraft.world.entity.player.Player;
  */
 public class DbaGeoRenderer extends GeoReplacedEntityRenderer<DbaPlayerAnimatable, Player, AvatarRenderState> {
 
+    public static final DataTicket<Identifier> RACE_ID_TICKET = DataTicket.create("dba_race_id", Identifier.class);
+    public static final DataTicket<Identifier> FORM_ID_TICKET = DataTicket.create("dba_form_id", Identifier.class);
+    public static final DataTicket<String> SKIN_COLOR_TICKET = DataTicket.create("dba_skin_color", String.class);
+    public static final DataTicket<String> HAIR_COLOR_TICKET = DataTicket.create("dba_hair_color", String.class);
+
     private static final DbaPlayerAnimatable ANIMATABLE = new DbaPlayerAnimatable();
 
     public DbaGeoRenderer(EntityRendererProvider.Context context) {
         super(context, new DbaPlayerModel(), ANIMATABLE);
+    }
+
+    @Override
+    public void extractRenderState(Player entity, AvatarRenderState state, float partialTick) {
+        super.extractRenderState(entity, state, partialTick);
+        if (entity instanceof PlayerStatsAccessor accessor) {
+            state.addGeckolibData(RACE_ID_TICKET, accessor.dba$getRaceId());
+            state.addGeckolibData(FORM_ID_TICKET, accessor.dba$getActiveFormId());
+            state.addGeckolibData(SKIN_COLOR_TICKET, accessor.dba$getSkinColor());
+            state.addGeckolibData(HAIR_COLOR_TICKET, accessor.dba$getHairColor());
+        }
     }
 
     /**

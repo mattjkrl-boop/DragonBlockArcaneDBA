@@ -32,20 +32,53 @@ public class DbaPlayerModel extends GeoModel<DbaPlayerAnimatable> {
 
     @Override
     public Identifier getModelResource(GeoRenderState renderState) {
-        // For now, use default humanoid model for all races until custom models are imported
-        // When race-specific models exist, this will resolve per-race:
-        //   DragonBlockArcaneDBA.id("geo/" + raceKey + ".geo.json")
+        Identifier raceId = renderState.getOrDefaultGeckolibData(DbaGeoRenderer.RACE_ID_TICKET, Identifier.fromNamespaceAndPath("dragonblockarcanedba", "human"));
+        String raceKey = raceId.getPath();
+
+        Identifier raceModel = DragonBlockArcaneDBA.id("geo/" + raceKey + ".geo.json");
+        if (resourceExists(raceModel)) {
+            return raceModel;
+        }
         return DragonBlockArcaneDBA.id("geo/" + FALLBACK_RACE + ".geo.json");
     }
 
     @Override
     public Identifier getTextureResource(GeoRenderState renderState) {
-        // Default race texture — will be tinted by the renderer
+        Identifier raceId = renderState.getOrDefaultGeckolibData(DbaGeoRenderer.RACE_ID_TICKET, Identifier.fromNamespaceAndPath("dragonblockarcanedba", "human"));
+        Identifier formId = renderState.getGeckolibData(DbaGeoRenderer.FORM_ID_TICKET);
+        String raceKey = raceId.getPath();
+
+        // 1. Check form override texture first if transformed
+        if (formId != null) {
+            var form = DbaRegistries.getForm(formId);
+            if (form != null && form.getModelOverride() != null) {
+                return form.getModelOverride();
+            }
+        }
+
+        // 2. Check if a race-specific texture exists
+        Identifier raceTexture = DragonBlockArcaneDBA.id("textures/entity/races/" + raceKey + ".png");
+        if (resourceExists(raceTexture)) {
+            return raceTexture;
+        }
+
+        // 3. Fallback to default
         return DragonBlockArcaneDBA.id("textures/entity/races/" + FALLBACK_RACE + ".png");
     }
 
     @Override
     public Identifier getAnimationResource(DbaPlayerAnimatable animatable) {
+        // Returns the single default_humanoid.animation.json which contains
+        // animations for all entities/races
         return DragonBlockArcaneDBA.id("animations/" + FALLBACK_RACE + ".animation.json");
+    }
+
+    private boolean resourceExists(Identifier id) {
+        try {
+            var resource = Minecraft.getInstance().getResourceManager().getResource(id);
+            return resource.isPresent();
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

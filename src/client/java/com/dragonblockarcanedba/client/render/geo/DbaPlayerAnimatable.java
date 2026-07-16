@@ -35,24 +35,57 @@ public class DbaPlayerAnimatable implements GeoReplacedEntity {
     private static final RawAnimation TRANSFORM = RawAnimation.begin().thenPlay("animation.dba.transform");
     private static final RawAnimation FLY = RawAnimation.begin().thenLoop("animation.dba.fly");
 
+    private static final java.util.Map<String, RawAnimation> ANIMATION_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static RawAnimation getAnimation(String racePrefix, String actionName, boolean loop) {
+        String key = racePrefix + ":" + actionName + ":" + loop;
+        return ANIMATION_CACHE.computeIfAbsent(key, k -> {
+            String animPath = "animation." + racePrefix + "." + actionName;
+            return loop ? RawAnimation.begin().thenLoop(animPath) : RawAnimation.begin().thenPlay(animPath);
+        });
+    }
+
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
         // Movement controller — handles idle and walking loops
         controllers.add(new AnimationController<>( "movement", 5, state -> {
-            if (state.isMoving()) {
-                state.setAnimation(WALK);
-            } else {
-                state.setAnimation(IDLE);
-            }
+            net.minecraft.resources.Identifier raceId = state.getDataOrDefault(DbaGeoRenderer.RACE_ID_TICKET, net.minecraft.resources.Identifier.fromNamespaceAndPath("dragonblockarcanedba", "human"));
+            String raceKey = raceId.getPath();
+
+            // Check if a custom model exists on disk for this race
+            boolean hasCustomModel = false;
+            try {
+                var modelId = DragonBlockArcaneDBA.id("geo/" + raceKey + ".geo.json");
+                hasCustomModel = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(modelId).isPresent();
+            } catch (Exception ignored) {}
+
+            String prefix = hasCustomModel ? raceKey : "dba";
+            String action = state.isMoving() ? "walk" : "idle";
+
+            state.setAnimation(getAnimation(prefix, action, true));
             return PlayState.CONTINUE;
         }));
 
-        // Action controller — handles attack and transformation one-shots via triggerableAnim
-        controllers.add(new AnimationController<DbaPlayerAnimatable>("actions", 5, state -> PlayState.STOP)
-            .triggerableAnim("attack", ATTACK)
-            .triggerableAnim("transform", TRANSFORM)
-            .triggerableAnim("fly", FLY)
-            .receiveTriggeredAnimations());
+        // Action controller — handles attack, transform and fly one-shots
+        controllers.add(new AnimationController<DbaPlayerAnimatable>("actions", 5, state -> {
+            net.minecraft.resources.Identifier raceId = state.getDataOrDefault(DbaGeoRenderer.RACE_ID_TICKET, net.minecraft.resources.Identifier.fromNamespaceAndPath("dragonblockarcanedba", "human"));
+            String raceKey = raceId.getPath();
+
+            boolean hasCustomModel = false;
+            try {
+                var modelId = DragonBlockArcaneDBA.id("geo/" + raceKey + ".geo.json");
+                hasCustomModel = net.minecraft.client.Minecraft.getInstance().getResourceManager().getResource(modelId).isPresent();
+            } catch (Exception ignored) {}
+
+            String prefix = hasCustomModel ? raceKey : "dba";
+
+            // Configure dynamic triggerable animations
+            state.controller().triggerableAnim("attack", getAnimation(prefix, "attack", false));
+            state.controller().triggerableAnim("transform", getAnimation(prefix, "transform", false));
+            state.controller().triggerableAnim("fly", getAnimation(prefix, "fly", true));
+
+            return PlayState.STOP;
+        }).receiveTriggeredAnimations());
     }
 
     @Override

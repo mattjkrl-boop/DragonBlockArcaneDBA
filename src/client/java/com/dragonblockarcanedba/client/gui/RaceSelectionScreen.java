@@ -28,18 +28,7 @@ public class RaceSelectionScreen extends Screen {
     private RgbSliderWidget hairRedSlider, hairGreenSlider, hairBlueSlider;
     
     private float spinAngle = 0f;
-
-    private static final List<RaceOption> RACES = List.of(
-        new RaceOption("Saiyan", "dragonblockarcanedba:saiyan"),
-        new RaceOption("Human", "dragonblockarcanedba:human"),
-        new RaceOption("Namekian", "dragonblockarcanedba:namekian"),
-        new RaceOption("Arcosian", "dragonblockarcanedba:arcosian"),
-        new RaceOption("Half-Saiyan", "dragonblockarcanedba:half_saiyan"),
-        new RaceOption("Yardrat", "dragonblockarcanedba:yardrat"),
-        new RaceOption("Majin", "dragonblockarcanedba:majin"),
-        new RaceOption("Bio-Android", "dragonblockarcanedba:bio_android"),
-        new RaceOption("Tuffle", "dragonblockarcanedba:tuffle")
-    );
+    private int scrollOffset = 0;
 
     public RaceSelectionScreen() {
         super(Component.literal("Character Creation"));
@@ -70,22 +59,62 @@ public class RaceSelectionScreen extends Screen {
         int spacingY = 22;
 
         if (currentState == State.RACE_SELECT) {
-            // Middle Column: Race Buttons
-            int startY = (this.height - (RACES.size() * spacingY)) / 2;
-            if (startY < 10) startY = 10; // safety
+            // Middle Column: Dynamically load all registered races from DbaRegistries
+            var racesList = new java.util.ArrayList<>(com.dragonblockarcanedba.registry.DbaRegistries.getRaces().values());
+            
+            // Calculate how many buttons can fit vertically
+            int startY = 40;
+            int maxVisible = (this.height - 80) / spacingY;
+            if (maxVisible <= 0) maxVisible = 1;
 
-            for (int i = 0; i < RACES.size(); i++) {
-                RaceOption race = RACES.get(i);
+            int maxScroll = Math.max(0, racesList.size() - maxVisible);
+            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset));
+
+            // Up scroll button if needed
+            if (scrollOffset > 0) {
+                int x = midStartX + (midColWidth - btnWidth) / 2;
+                addRenderableWidget(Button.builder(
+                    Component.literal("▲"),
+                    btn -> {
+                        scrollOffset = Math.max(0, scrollOffset - 1);
+                        init();
+                    }
+                ).bounds(x, startY - 18, btnWidth, 14).build());
+            }
+
+            for (int i = 0; i < Math.min(maxVisible, racesList.size()); i++) {
+                int raceIndex = i + scrollOffset;
+                if (raceIndex >= racesList.size()) break;
+                Race race = racesList.get(raceIndex);
                 int x = midStartX + (midColWidth - btnWidth) / 2;
                 int y = startY + i * spacingY;
 
+                // Highlight selected race button
+                boolean isSelected = race.getId().toString().equals(selectedRace);
+                Component btnText = isSelected 
+                    ? Component.literal("> " + race.getDisplayName() + " <") 
+                    : Component.literal(race.getDisplayName());
+
                 addRenderableWidget(Button.builder(
-                    Component.literal(race.name),
+                    btnText,
                     btn -> {
-                        selectedRace = race.id;
-                        init(); // Refresh to show confirm button if needed
+                        selectedRace = race.getId().toString();
+                        init(); // Refresh to show confirm button and details
                     }
                 ).bounds(x, y, btnWidth, btnHeight).build());
+            }
+
+            // Down scroll button if needed
+            if (scrollOffset < maxScroll) {
+                int x = midStartX + (midColWidth - btnWidth) / 2;
+                int y = startY + Math.min(maxVisible, racesList.size()) * spacingY;
+                addRenderableWidget(Button.builder(
+                    Component.literal("▼"),
+                    btn -> {
+                        scrollOffset = Math.min(maxScroll, scrollOffset + 1);
+                        init();
+                    }
+                ).bounds(x, y - 2, btnWidth, 14).build());
             }
 
             // Right Column: Confirm Button
@@ -238,6 +267,22 @@ public class RaceSelectionScreen extends Screen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (currentState == State.RACE_SELECT) {
+            int spacingY = 22;
+            int maxVisible = (this.height - 80) / spacingY;
+            int totalRaces = com.dragonblockarcanedba.registry.DbaRegistries.getRaces().size();
+            if (totalRaces > maxVisible) {
+                int maxScroll = totalRaces - maxVisible;
+                scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) Math.signum(verticalAmount)));
+                init();
+                return true;
+            }
+        }
+        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+    }
+
+    @Override
     public void tick() {
         super.tick();
         spinAngle += 2.0f;
@@ -322,14 +367,10 @@ public class RaceSelectionScreen extends Screen {
 
         if (currentState == State.RACE_SELECT) {
             if (!selectedRace.isEmpty()) {
-                String friendlyName = "";
-                for (RaceOption r : RACES) {
-                    if (r.id.equals(selectedRace)) friendlyName = r.name;
-                }
-                context.text(this.font, Component.literal(friendlyName + " Race Details"), panelX + 12, panelY + 12, 0xFF00FFCC, false);
-                
                 Race raceObj = com.dragonblockarcanedba.registry.DbaRegistries.getRace(net.minecraft.resources.Identifier.parse(selectedRace));
                 if (raceObj != null) {
+                    context.text(this.font, Component.literal(raceObj.getDisplayName() + " Race Details"), panelX + 12, panelY + 12, 0xFF00FFCC, false);
+                    
                     var bs = raceObj.getBaseStats();
                     var sm = raceObj.getStatMultipliers();
                     context.text(this.font, Component.literal("• Strength: Base " + bs.strength() + " (+" + sm.strength() + "%)"), panelX + 15, panelY + 38, 0xFFFFFFFF, false);
@@ -380,7 +421,6 @@ public class RaceSelectionScreen extends Screen {
         super.extractRenderState(context, mouseX, mouseY, delta);
     }
 
-    private record RaceOption(String name, String id) {}
     private record PresetColor(String name, int r, int g, int b) {}
 
     private class RgbSliderWidget extends net.minecraft.client.gui.components.AbstractSliderButton {
