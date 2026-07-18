@@ -44,6 +44,15 @@ public class RaceSelectionScreen extends Screen {
         return true;
     }
 
+    private java.util.List<Race> getSelectableRaces() {
+        var list = new java.util.ArrayList<>(com.dragonblockarcanedba.registry.DbaRegistries.getRaces().values());
+        list.removeIf(race -> {
+            String path = race.getId().getPath();
+            return "neo_tuffle".equals(path) || "android".equals(path);
+        });
+        return list;
+    }
+
     @Override
     protected void init() {
         this.clearWidgets();
@@ -60,7 +69,7 @@ public class RaceSelectionScreen extends Screen {
 
         if (currentState == State.RACE_SELECT) {
             // Middle Column: Dynamically load all registered races from DbaRegistries
-            var racesList = new java.util.ArrayList<>(com.dragonblockarcanedba.registry.DbaRegistries.getRaces().values());
+            var racesList = getSelectableRaces();
             
             // Calculate how many buttons can fit vertically
             int startY = 40;
@@ -271,7 +280,7 @@ public class RaceSelectionScreen extends Screen {
         if (currentState == State.RACE_SELECT) {
             int spacingY = 22;
             int maxVisible = (this.height - 80) / spacingY;
-            int totalRaces = com.dragonblockarcanedba.registry.DbaRegistries.getRaces().size();
+            int totalRaces = getSelectableRaces().size();
             if (totalRaces > maxVisible) {
                 int maxScroll = totalRaces - maxVisible;
                 scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) Math.signum(verticalAmount)));
