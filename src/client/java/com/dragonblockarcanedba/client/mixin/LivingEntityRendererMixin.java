@@ -28,7 +28,7 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
         net.minecraft.client.player.LocalPlayer localPlayer = net.minecraft.client.Minecraft.getInstance().player;
         if (localPlayer != null) {
             com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) localPlayer;
-            hasKiSense = accessor.dba$isTechniqueActive("kisense");
+            hasKiSense = accessor.dba$isTechniqueActive("ki_sense");
         }
         
         if (hasKiSense && entity.distanceTo(localPlayer) <= 15.0f && entity.isAlive() && !entity.isInvisible()) {

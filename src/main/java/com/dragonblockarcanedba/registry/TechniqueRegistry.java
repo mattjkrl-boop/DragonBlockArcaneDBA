@@ -29,9 +29,6 @@ public class TechniqueRegistry {
         return RACE_TECHNIQUES.getOrDefault(raceId.toString(), List.of());
     }
 
-    /**
-     * Gets a technique by its ID across all races.
-     */
     public static Technique getTechnique(Identifier id) {
         if (id == null) return null;
         String searchId = id.getPath();
@@ -43,5 +40,20 @@ public class TechniqueRegistry {
             }
         }
         return null;
+    }
+
+    /**
+     * Gets all unique techniques across all races.
+     */
+    public static List<Technique> getAllTechniques() {
+        List<Technique> all = new ArrayList<>();
+        for (List<Technique> list : RACE_TECHNIQUES.values()) {
+            for (Technique t : list) {
+                if (!all.contains(t)) {
+                    all.add(t);
+                }
+            }
+        }
+        return all;
     }
 }

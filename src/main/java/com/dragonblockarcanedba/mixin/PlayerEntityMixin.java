@@ -151,15 +151,18 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         
         dbaUnlockedTechniques.clear();
         ValueInput techUnlockedIn = dbaIn.childOrEmpty("unlockedTechniques");
-        // We just read "kisense" for now since we don't have a registry of techniques yet
-        if (techUnlockedIn.getBooleanOr("kisense", false)) {
-            dbaUnlockedTechniques.put("kisense", true);
+        for (com.dragonblockarcanedba.registry.Technique tech : com.dragonblockarcanedba.registry.TechniqueRegistry.getAllTechniques()) {
+            if (techUnlockedIn.getBooleanOr(tech.id(), false)) {
+                dbaUnlockedTechniques.put(tech.id(), true);
+            }
         }
 
         dbaActiveTechniques.clear();
         ValueInput techActiveIn = dbaIn.childOrEmpty("activeTechniques");
-        if (techActiveIn.getBooleanOr("kisense", false)) {
-            dbaActiveTechniques.put("kisense", true);
+        for (com.dragonblockarcanedba.registry.Technique tech : com.dragonblockarcanedba.registry.TechniqueRegistry.getAllTechniques()) {
+            if (techActiveIn.getBooleanOr(tech.id(), false)) {
+                dbaActiveTechniques.put(tech.id(), true);
+            }
         }
 
         ValueInput equipIn = dbaIn.childOrEmpty("equippedTechniques");
@@ -208,7 +211,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         }
         
         // Active Technique drains
-        if (dba$isTechniqueActive("kisense")) {
+        if (dba$isTechniqueActive("ki_sense")) {
             // Drain 1 Ki per second (0.05 per tick)
             kiChange -= (1.0 / 20.0);
         }
@@ -223,8 +226,8 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
                 dba$setActiveFormId(null);
                 dba$syncStats();
             }
-            if (dba$isTechniqueActive("kisense")) {
-                dba$setTechniqueActive("kisense", false);
+            if (dba$isTechniqueActive("ki_sense")) {
+                dba$setTechniqueActive("ki_sense", false);
                 dba$syncStats();
             }
         }
