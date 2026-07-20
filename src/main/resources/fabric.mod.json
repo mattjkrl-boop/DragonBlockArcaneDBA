@@ -12,7 +12,6 @@
 		"homepage": "https://fabricmc.net/"
 	},
 	"license": "Proprietary",
-	"icon": "assets/dragonblockarcanedba/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
@@ -20,6 +19,9 @@
 		],
 		"client": [
 			"com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient"
+		],
+		"modmenu": [
+			"com.dragonblockarcanedba.client.config.ModMenuIntegration"
 		]
 	},
 	"mixins": [

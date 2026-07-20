@@ -177,58 +177,6 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             }
         });
 
-        // Award Custom level XP to players on mob kills
-        net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            if (source.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
-                int xp = getMobXpReward(entity);
-                if (xp > 0) {
-                    com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
-                    accessor.dba$addXp(xp);
-                    accessor.dba$syncStats();
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§a+" + xp + " DBA XP"), true);
-                }
-            }
-        });
-    }
-
-    private static int getMobXpReward(net.minecraft.world.entity.LivingEntity entity) {
-        String path = net.minecraft.world.entity.EntityType.getKey(entity.getType()).getPath();
-        java.util.Random rand = new java.util.Random();
-        
-        switch (path) {
-            case "allay": return rand.nextInt(50) + 1;
-            case "armadillo": return rand.nextInt(20) + 1;
-            case "axolotl": return rand.nextInt(50) + 1;
-            case "bat": return rand.nextInt(50) + 1;
-            case "camel": return rand.nextInt(20) + 1;
-            case "cat": return rand.nextInt(10) + 1;
-            case "chicken": return rand.nextInt(5) + 1;
-            case "cod": return rand.nextInt(30) + 1;
-            case "cow": return rand.nextInt(5) + 1;
-            case "donkey": return rand.nextInt(5) + 1;
-            case "fox": return rand.nextInt(5) + 1;
-            case "frog": return rand.nextInt(5) + 1;
-            case "glow_squid": return rand.nextInt(50) + 1;
-            case "horse": return rand.nextInt(5) + 1;
-            case "mooshroom": return rand.nextInt(50) + 1;
-            case "mule": return rand.nextInt(5) + 1;
-            case "ocelot": return rand.nextInt(5) + 1;
-            case "parrot": return rand.nextInt(5) + 1;
-            case "pig": return rand.nextInt(5) + 1;
-            case "rabbit": return rand.nextInt(5) + 1;
-            case "salmon": return rand.nextInt(50) + 1;
-            case "sheep": return rand.nextInt(5) + 1;
-            case "sniffer": return rand.nextInt(100) + 1;
-            case "snow_golem": return rand.nextInt(3) + 1;
-            case "squid": return rand.nextInt(30) + 1;
-            case "strider": return rand.nextInt(25) + 1;
-            case "tadpole": return rand.nextInt(5) + 1;
-            case "tropical_fish": return rand.nextInt(50) + 1;
-            case "turtle": return rand.nextInt(5) + 1;
-            case "villager": return rand.nextInt(5) + 1;
-            case "wandering_trader": return rand.nextInt(25) + 1;
-            default: return 0;
-        }
     }
 
     public static Identifier id(String path) {
