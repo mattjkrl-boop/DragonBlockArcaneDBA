@@ -34,7 +34,7 @@ public class StatsTab implements MenuTab {
                 nbt.putString("action", "upgrade");
                 nbt.putString("stat", statName);
                 ClientPlayNetworking.send(new ActionPayload(nbt));
-            }).bounds(startX + 180, btnY - 4, 18, 18).build();
+            }).bounds(startX + 280, btnY - 4, 18, 18).build();
             
             upgradeButtons[i] = btn;
             parent.addTabWidget(btn);
@@ -60,7 +60,7 @@ public class StatsTab implements MenuTab {
         
         context.text(client.font, Component.literal(levelText), startX + 15, startY + 30, 0xFFFFFFFF);
         context.text(client.font, Component.literal(xpText), startX + 100, startY + 30, 0xFFFFFFFF);
-        context.text(client.font, Component.literal(apText), startX + 210, startY + 30, 0xFFFFFFFF);
+        context.text(client.font, Component.literal(apText), startX + 260, startY + 30, 0xFFFFFFFF);
 
         // Separator line
         context.fill(startX + 15, startY + 45, startX + parent.getBgWidth() - 15, startY + 46, 0xFF55FF88);
@@ -100,7 +100,7 @@ public class StatsTab implements MenuTab {
         double maxKi = PlayerStats.getMaxKi(client.player);
         double curKi = accessor.dba$getCurrentKi();
         String kiString = String.format("Ki: %.1f / %.1f", curKi, maxKi);
-        context.text(client.font, Component.literal(kiString), startX + 15, startY + 165, 0xFF55FFFF);
+        context.text(client.font, Component.literal(kiString), startX + 15, startY + 190, 0xFF55FFFF);
     }
 
     @Override

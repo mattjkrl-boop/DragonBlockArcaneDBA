@@ -57,9 +57,9 @@ public class RaceSelectionScreen extends Screen {
     protected void init() {
         this.clearWidgets();
         
-        int leftColWidth = this.width * 2 / 5;
-        int midColWidth = this.width * 1 / 5;
-        int rightColWidth = this.width * 2 / 5;
+        int midColWidth = 100;
+        int rightColWidth = Math.max(190, this.width * 2 / 5);
+        int leftColWidth = this.width - midColWidth - rightColWidth;
         int midStartX = leftColWidth;
         int rightStartX = leftColWidth + midColWidth;
 
@@ -305,9 +305,9 @@ public class RaceSelectionScreen extends Screen {
         // Draw background before widgets
         context.fill(0, 0, this.width, this.height, 0xF0101216);
 
-        int leftColWidth = this.width * 2 / 5;
-        int midColWidth = this.width * 1 / 5;
-        int rightColWidth = this.width * 2 / 5;
+        int midColWidth = 100;
+        int rightColWidth = Math.max(190, this.width * 2 / 5);
+        int leftColWidth = this.width - midColWidth - rightColWidth;
         int midStartX = leftColWidth;
         int rightStartX = leftColWidth + midColWidth;
 
@@ -389,15 +389,16 @@ public class RaceSelectionScreen extends Screen {
                     context.text(this.font, Component.literal("• Agility: Base " + bs.agility() + " (+" + sm.agility() + "%)"), panelX + 15, panelY + 86, 0xFFFFFFFF, false);
                 }
                 context.text(this.font, Component.literal("Unique Traits:"), panelX + 12, panelY + 110, 0xFF00FFCC, false);
-                context.text(this.font, Component.literal("Race-specific forms & power scaling"), panelX + 15, panelY + 124, 0xFFAAAAAA, false);
-                context.text(this.font, Component.literal("unlocked through combat mastery."), panelX + 15, panelY + 136, 0xFFAAAAAA, false);
+                context.text(this.font, Component.literal("Race-specific forms &"), panelX + 15, panelY + 124, 0xFFAAAAAA, false);
+                context.text(this.font, Component.literal("power scaling unlocked"), panelX + 15, panelY + 136, 0xFFAAAAAA, false);
+                context.text(this.font, Component.literal("through combat mastery."), panelX + 15, panelY + 148, 0xFFAAAAAA, false);
             } else {
                 context.centeredText(this.font, Component.literal("Select a race to view details"), panelX + panelW / 2, panelY + panelH / 2, 0xFFAAAAAA);
             }
         } else if (currentState == State.CUSTOMIZATION) {
             int startSliderY = panelY + 45;
             if ("Skin".equals(customizationTab)) {
-                context.text(this.font, Component.literal("SKIN TINCTURE PICKER"), panelX + 12, panelY + 10, 0xFF00FFCC, false);
+                context.text(this.font, Component.literal("SKIN COLOR"), panelX + 12, panelY + 10, 0xFF00FFCC, false);
                 String skinHex = String.format("#%02X%02X%02X", skinR, skinG, skinB);
                 context.text(this.font, Component.literal("Active Hex: " + skinHex), panelX + 12, panelY + 24, 0xFFAAAAAA, false);
 
@@ -411,7 +412,7 @@ public class RaceSelectionScreen extends Screen {
 
                 context.text(this.font, Component.literal("Preset Palette:"), panelX + 12, startSliderY + 70, 0xFF00FFCC, false);
             } else if ("Hair".equals(customizationTab)) {
-                context.text(this.font, Component.literal("FOLLICLE COLOR PICKER"), panelX + 12, panelY + 10, 0xFF00FFCC, false);
+                context.text(this.font, Component.literal("HAIR COLOR"), panelX + 12, panelY + 10, 0xFF00FFCC, false);
                 String hairHex = String.format("#%02X%02X%02X", hairR, hairG, hairB);
                 context.text(this.font, Component.literal("Active Hex: " + hairHex), panelX + 12, panelY + 24, 0xFFAAAAAA, false);
 

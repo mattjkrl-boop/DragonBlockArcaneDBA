@@ -45,7 +45,7 @@ public class FormsTab implements MenuTab {
                     CompoundTag nbt = new CompoundTag();
                     nbt.putString("action", "untransform");
                     ClientPlayNetworking.send(new ActionPayload(nbt));
-                }).bounds(startX + 160, lineY - 2, 60, 20).build());
+                }).bounds(startX + 260, lineY - 2, 60, 20).build());
             } else if (activeForm == null) {
                 // Transform button
                 parent.addTabWidget(Button.builder(Component.literal("Transform"), btn -> {
@@ -53,7 +53,7 @@ public class FormsTab implements MenuTab {
                     nbt.putString("action", "transform");
                     nbt.putString("form", form.getId().toString());
                     ClientPlayNetworking.send(new ActionPayload(nbt));
-                }).bounds(startX + 160, lineY - 2, 60, 20).build());
+                }).bounds(startX + 260, lineY - 2, 60, 20).build());
             }
         }
     }

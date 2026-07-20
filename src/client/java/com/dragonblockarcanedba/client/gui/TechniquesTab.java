@@ -60,17 +60,17 @@ public class TechniquesTab implements MenuTab {
         Identifier raceId = accessor.dba$getRaceId();
         List<Technique> tree = TechniqueRegistry.getTechniquesForRace(raceId);
 
-        // Equip Slots in bottom-right corner
-        int slotsY = startY + parent.getBgHeight() - slotHeight - 10;
+        // Equip Slots in top-right corner
+        int slotsY = startY + 10;
         int slotsStartX = startX + parent.getBgWidth() - (3 * (slotWidth + 10));
         
         // --- RENDER CLIPPED TREE VIEW ---
-        int clipStartY = startY + 25;
-        int clipEndY = slotsY - 5;
+        int clipStartY = startY + 55;
+        int clipEndY = startY + 140;
         context.enableScissor(startX, clipStartY, startX + parent.getBgWidth(), clipEndY);
         
         float treeOriginX = startX + 15 + (float)scrollX;
-        float treeOriginY = startY + 35 + (float)scrollY;
+        float treeOriginY = startY + 65 + (float)scrollY;
         
         for (int i = 0; i < tree.size(); i++) {
             Technique tech = tree.get(i);
@@ -89,11 +89,11 @@ public class TechniquesTab implements MenuTab {
         // --------------------------------
 
         // Overlays outside clipping region
-        context.text(client.font, Component.literal("Technique Advancement Tree (Drag to pan, Scroll to zoom)"), startX + 15, startY + 10, 0xFFFFAA00);
+        context.text(client.font, Component.literal("Technique Tree (Drag/Scroll)"), startX + 15, startY + 10, 0xFFFFAA00);
 
         // Selected Technique Details Panel (Bottom Left)
         int panelX = startX + 10;
-        int panelY = startY + parent.getBgHeight() - 55;
+        int panelY = startY + 145;
         if (selectedTech != null) {
             context.text(client.font, Component.literal("Selected: " + selectedTech.name()), panelX, panelY, 0xFFFFFFFF);
             context.text(client.font, Component.literal("Req Lvl: " + selectedTech.unlockLevel()), panelX, panelY + 12, 0xFFFFAA00);
@@ -113,7 +113,11 @@ public class TechniquesTab implements MenuTab {
             }
             
             String desc = selectedTech.description();
-            context.text(client.font, Component.literal(desc), panelX, panelY + 30, 0xFFAAAAAA);
+            String[] lines = desc.split("\\. ");
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i] + (i < lines.length - 1 ? "." : "");
+                context.text(client.font, Component.literal(line), panelX, panelY + 30 + (i * 12), 0xFFAAAAAA);
+            }
         }
 
         // Equip Slots (F7, F8, F9 dynamically named)
@@ -192,7 +196,7 @@ public class TechniquesTab implements MenuTab {
         int startY = parent.getY();
 
         // 1. Check Equip Slots (top layer)
-        int slotsY = startY + parent.getBgHeight() - slotHeight - 10;
+        int slotsY = startY + 10;
         int slotsStartX = startX + parent.getBgWidth() - (3 * (slotWidth + 10));
         for (int i = 0; i < 3; i++) {
             int sx = slotsStartX + (i * (slotWidth + 10));
@@ -209,7 +213,7 @@ public class TechniquesTab implements MenuTab {
 
         // 2. Check Unlock Button
         int panelX = startX + 10;
-        int panelY = startY + parent.getBgHeight() - 55;
+        int panelY = startY + 145;
         if (selectedTech != null && !accessor.dba$hasTechnique(selectedTech.id())) {
             int btnX = panelX + 100;
             int btnY = panelY;
@@ -226,7 +230,7 @@ public class TechniquesTab implements MenuTab {
         List<Technique> tree = TechniqueRegistry.getTechniquesForRace(raceId);
         
         float treeOriginX = startX + 15 + (float)scrollX;
-        float treeOriginY = startY + 35 + (float)scrollY;
+        float treeOriginY = startY + 65 + (float)scrollY;
 
         for (int i = 0; i < tree.size(); i++) {
             int nx = i * 80;

@@ -16,11 +16,11 @@ public class DbaMenuScreen extends Screen {
     private int x;
     private int y;
     // Dimensions for the main content area (tabs stick out to the left)
-    private final int bgWidth = 260;
-    private final int bgHeight = 180;
+    private final int bgWidth = 340;
+    private final int bgHeight = 215;
     
     // Tab dimensions
-    private final int tabWidth = 70;
+    private final int tabWidth = 95;
     private final int tabHeight = 35;
     private final int tabSpacing = 5;
 
@@ -84,14 +84,10 @@ public class DbaMenuScreen extends Screen {
             context.fill(tabX, tabY, tabX + tabWidth, tabY + tabHeight, currentTabBg);
             
             // Tab borders
-            context.fill(tabX, tabY, tabX + tabWidth, tabY + borderThick, borderColor); // Top
-            context.fill(tabX, tabY + tabHeight - borderThick, tabX + tabWidth, tabY + tabHeight, borderColor); // Bottom
+            context.fill(tabX, tabY, tabX + tabWidth + borderThick, tabY + borderThick, borderColor); // Top
+            context.fill(tabX, tabY + tabHeight - borderThick, tabX + tabWidth + borderThick, tabY + tabHeight, borderColor); // Bottom
             context.fill(tabX, tabY, tabX + borderThick, tabY + tabHeight, borderColor); // Left
-            
-            if (!isActive) {
-                // If inactive, draw right border so it's a closed box
-                context.fill(tabX + tabWidth - borderThick, tabY, tabX + tabWidth, tabY + tabHeight, borderColor);
-            }
+
             
             // Tab text (centered)
             Minecraft client = Minecraft.getInstance();

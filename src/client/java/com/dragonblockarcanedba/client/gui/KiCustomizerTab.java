@@ -93,7 +93,7 @@ public class KiCustomizerTab implements MenuTab {
         context.text(client.font, Component.literal("Ki Technique Customizer"), startX + 15, startY + 15, 0xFF55FF88);
 
         // Render preview area on the right
-        int previewX = startX + 130;
+        int previewX = startX + 160;
         int previewY = startY + 35;
         
         context.text(client.font, Component.literal("Technique Summary:"), previewX, previewY, 0xFFFFFFFF);
@@ -104,7 +104,7 @@ public class KiCustomizerTab implements MenuTab {
         context.text(client.font, Component.literal(String.format("Calculated Ki Cost: %.1f", cost)), previewX, previewY + 45, 0xFF55FFFF);
         
         // Decorative border for preview area
-        context.fill(previewX - 5, previewY - 5, previewX + 120, previewY + 65, 0x44111111);
+        context.fill(previewX - 5, previewY - 5, previewX + 160, previewY + 65, 0x44111111);
         context.fill(previewX - 5, previewY - 5, previewX - 4, previewY + 65, 0xFF55FF88);
     }
 
