@@ -15,6 +15,9 @@ import org.lwjgl.glfw.GLFW;
 
 public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     public static KeyMapping openMenuKey;
+    public static KeyMapping techSlot1Key;
+    public static KeyMapping techSlot2Key;
+    public static KeyMapping techSlot3Key;
 
     @Override
     public void onInitializeClient() {
@@ -41,6 +44,24 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             GLFW.GLFW_KEY_V,
             KeyMapping.Category.MISC
         ));
+        techSlot1Key = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+            "key.dragonblockarcanedba.tech_slot_1",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_F7,
+            KeyMapping.Category.MISC
+        ));
+        techSlot2Key = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+            "key.dragonblockarcanedba.tech_slot_2",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_F8,
+            KeyMapping.Category.MISC
+        ));
+        techSlot3Key = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+            "key.dragonblockarcanedba.tech_slot_3",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_F9,
+            KeyMapping.Category.MISC
+        ));
 
         // Register HUD Overlay and remove vanilla health bar
         net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.removeElement(net.minecraft.resources.Identifier.parse("minecraft:health_bar"));
@@ -51,6 +72,15 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 if (client.player != null) {
                     client.setScreenAndShow(new DbaMenuScreen());
                 }
+            }
+            while (techSlot1Key.consumeClick()) {
+                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SToggleTechniquePayload(0));
+            }
+            while (techSlot2Key.consumeClick()) {
+                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SToggleTechniquePayload(1));
+            }
+            while (techSlot3Key.consumeClick()) {
+                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SToggleTechniquePayload(2));
             }
             if (client.level != null) {
                 for (net.minecraft.world.entity.player.Player player : client.level.players()) {
@@ -96,6 +126,21 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     CompoundTag mastery = nbt.getCompoundOrEmpty("mastery");
                     for (String key : mastery.keySet()) {
                         accessor.dba$setFormMastery(Identifier.parse(key), mastery.getDoubleOr(key, 0.0));
+                    }
+                    
+                    CompoundTag techUnlocked = nbt.getCompoundOrEmpty("unlockedTechniques");
+                    for (String key : techUnlocked.keySet()) {
+                        accessor.dba$setTechniqueUnlocked(key, techUnlocked.getBooleanOr(key, false));
+                    }
+                    
+                    CompoundTag techActive = nbt.getCompoundOrEmpty("activeTechniques");
+                    for (String key : techActive.keySet()) {
+                        accessor.dba$setTechniqueActive(key, techActive.getBooleanOr(key, false));
+                    }
+
+                    CompoundTag equipNbt = nbt.getCompoundOrEmpty("equippedTechniques");
+                    for (int i = 0; i < 3; i++) {
+                        accessor.dba$setEquippedTechnique(i, equipNbt.getStringOr("slot" + i, ""));
                     }
                 }
             });

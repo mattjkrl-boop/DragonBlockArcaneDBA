@@ -57,6 +57,15 @@ public interface PlayerStatsAccessor {
     double dba$getFormMastery(Identifier formId);
     void dba$setFormMastery(Identifier formId, double mastery);
     void dba$addFormMastery(Identifier formId, double amount);
+
+    boolean dba$hasTechnique(String technique);
+    void dba$setTechniqueUnlocked(String technique, boolean unlocked);
+
+    boolean dba$isTechniqueActive(String technique);
+    void dba$setTechniqueActive(String technique, boolean active);
+
+    String dba$getEquippedTechnique(int slot);
+    void dba$setEquippedTechnique(int slot, String technique);
     
     void dba$syncStats();
 }

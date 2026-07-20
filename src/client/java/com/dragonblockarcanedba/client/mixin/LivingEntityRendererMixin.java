@@ -23,7 +23,15 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
         }
 
         // Add health bars on all alive, visible living entities (mobs)
-        if (entity.isAlive() && !entity.isInvisible()) {
+        // Requires Ki Sense technique and distance <= 15 blocks
+        boolean hasKiSense = false;
+        net.minecraft.client.player.LocalPlayer localPlayer = net.minecraft.client.Minecraft.getInstance().player;
+        if (localPlayer != null) {
+            com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) localPlayer;
+            hasKiSense = accessor.dba$isTechniqueActive("kisense");
+        }
+        
+        if (hasKiSense && entity.distanceTo(localPlayer) <= 15.0f && entity.isAlive() && !entity.isInvisible()) {
             float health = entity.getHealth();
             float maxHealth = entity.getMaxHealth();
 

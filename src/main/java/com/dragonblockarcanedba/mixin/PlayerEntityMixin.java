@@ -49,6 +49,13 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     private final Map<String, Double> dbaFormMasteryMap = new HashMap<>();
     @Unique
     private final Map<String, Integer> dbaFormMasteryXpMap = new HashMap<>();
+    
+    @Unique
+    private final Map<String, Boolean> dbaUnlockedTechniques = new HashMap<>();
+    @Unique
+    private final Map<String, Boolean> dbaActiveTechniques = new HashMap<>();
+    @Unique
+    private final String[] dbaEquippedTechniques = new String[]{"", "", ""};
 
     // ==================== SAVE / LOAD (ValueOutput / ValueInput) ====================
 
@@ -77,6 +84,17 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
 
         ValueOutput masteryXpOut = dbaOut.child("masteryXp");
         dbaFormMasteryXpMap.forEach(masteryXpOut::putInt);
+
+        ValueOutput techUnlockedOut = dbaOut.child("unlockedTechniques");
+        dbaUnlockedTechniques.forEach(techUnlockedOut::putBoolean);
+        
+        ValueOutput techActiveOut = dbaOut.child("activeTechniques");
+        dbaActiveTechniques.forEach(techActiveOut::putBoolean);
+
+        ValueOutput equipOut = dbaOut.child("equippedTechniques");
+        for (int i = 0; i < 3; i++) {
+            equipOut.putString("slot" + i, dbaEquippedTechniques[i]);
+        }
     }
 
     @Inject(method = "readAdditionalSaveData", at = @At("TAIL"))
@@ -130,6 +148,24 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
                 dbaFormMasteryXpMap.put(formId.toString(), val);
             }
         }
+        
+        dbaUnlockedTechniques.clear();
+        ValueInput techUnlockedIn = dbaIn.childOrEmpty("unlockedTechniques");
+        // We just read "kisense" for now since we don't have a registry of techniques yet
+        if (techUnlockedIn.getBooleanOr("kisense", false)) {
+            dbaUnlockedTechniques.put("kisense", true);
+        }
+
+        dbaActiveTechniques.clear();
+        ValueInput techActiveIn = dbaIn.childOrEmpty("activeTechniques");
+        if (techActiveIn.getBooleanOr("kisense", false)) {
+            dbaActiveTechniques.put("kisense", true);
+        }
+
+        ValueInput equipIn = dbaIn.childOrEmpty("equippedTechniques");
+        for (int i = 0; i < 3; i++) {
+            dbaEquippedTechniques[i] = equipIn.getStringOr("slot" + i, "");
+        }
     }
 
     // ==================== TICK ====================
@@ -170,15 +206,27 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
                 kiChange -= (actualDrain / 20.0);
             }
         }
+        
+        // Active Technique drains
+        if (dba$isTechniqueActive("kisense")) {
+            // Drain 1 Ki per second (0.05 per tick)
+            kiChange -= (1.0 / 20.0);
+        }
 
         if (kiChange != 0.0) {
             dba$addKi(kiChange);
         }
 
         // Revert transformation if Ki drops to 0
-        if (dbaCurrentKi <= 0.0 && dbaActiveFormId != null) {
-            dba$setActiveFormId(null);
-            dba$syncStats();
+        if (dbaCurrentKi <= 0.0) {
+            if (dbaActiveFormId != null) {
+                dba$setActiveFormId(null);
+                dba$syncStats();
+            }
+            if (dba$isTechniqueActive("kisense")) {
+                dba$setTechniqueActive("kisense", false);
+                dba$syncStats();
+            }
         }
 
         // Periodic sync to client
@@ -454,6 +502,46 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         }
         dbaFormMasteryXpMap.put(key, xp);
     }
+    
+    @Unique
+    @Override
+    public boolean dba$hasTechnique(String technique) {
+        return dbaUnlockedTechniques.getOrDefault(technique, false);
+    }
+
+    @Unique
+    @Override
+    public void dba$setTechniqueUnlocked(String technique, boolean unlocked) {
+        dbaUnlockedTechniques.put(technique, unlocked);
+    }
+
+    @Unique
+    @Override
+    public boolean dba$isTechniqueActive(String technique) {
+        return dbaActiveTechniques.getOrDefault(technique, false);
+    }
+
+    @Unique
+    @Override
+    public void dba$setTechniqueActive(String technique, boolean active) {
+        if (active && dbaCurrentKi <= 0) return; // Cannot activate if 0 Ki
+        dbaActiveTechniques.put(technique, active);
+    }
+
+    @Unique
+    @Override
+    public String dba$getEquippedTechnique(int slot) {
+        if (slot >= 0 && slot < 3) return dbaEquippedTechniques[slot];
+        return "";
+    }
+
+    @Unique
+    @Override
+    public void dba$setEquippedTechnique(int slot, String technique) {
+        if (slot >= 0 && slot < 3) {
+            dbaEquippedTechniques[slot] = technique != null ? technique : "";
+        }
+    }
 
     // ==================== NETWORK SYNC ====================
 
@@ -489,6 +577,20 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         CompoundTag masteryXpNbt = new CompoundTag();
         dbaFormMasteryXpMap.forEach(masteryXpNbt::putInt);
         dbaNbt.put("masteryXp", masteryXpNbt);
+        
+        CompoundTag techUnlockedNbt = new CompoundTag();
+        dbaUnlockedTechniques.forEach(techUnlockedNbt::putBoolean);
+        dbaNbt.put("unlockedTechniques", techUnlockedNbt);
+
+        CompoundTag techActiveNbt = new CompoundTag();
+        dbaActiveTechniques.forEach(techActiveNbt::putBoolean);
+        dbaNbt.put("activeTechniques", techActiveNbt);
+
+        CompoundTag equipNbt = new CompoundTag();
+        for (int i = 0; i < 3; i++) {
+            equipNbt.putString("slot" + i, dbaEquippedTechniques[i]);
+        }
+        dbaNbt.put("equippedTechniques", equipNbt);
 
         return dbaNbt;
     }

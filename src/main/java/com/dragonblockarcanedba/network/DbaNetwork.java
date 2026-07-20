@@ -27,6 +27,11 @@ public class DbaNetwork {
         PayloadTypeRegistry.serverboundPlay().register(ActionPayload.TYPE, ActionPayload.CODEC);
         // Space Pod launch (C2S)
         PayloadTypeRegistry.serverboundPlay().register(SpacePodLaunchPayload.TYPE, SpacePodLaunchPayload.CODEC);
+        
+        // Techniques (C2S)
+        PayloadTypeRegistry.serverboundPlay().register(C2SUnlockTechniquePayload.ID, C2SUnlockTechniquePayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(C2SEquipTechniquePayload.ID, C2SEquipTechniquePayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(C2SToggleTechniquePayload.ID, C2SToggleTechniquePayload.CODEC);
     }
 
     public static void registerServer() {
@@ -146,6 +151,52 @@ public class DbaNetwork {
 
             context.server().execute(() -> {
                 DimensionTravel.travelTo(player, destination);
+            });
+        });
+
+        // Handle Technique Unlocking
+        ServerPlayNetworking.registerGlobalReceiver(C2SUnlockTechniquePayload.ID, (payload, context) -> {
+            ServerPlayer player = context.player();
+            String techniqueId = payload.techniqueId();
+            context.server().execute(() -> {
+                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+                com.dragonblockarcanedba.registry.Technique tech = com.dragonblockarcanedba.registry.TechniqueRegistry.getTechnique(Identifier.tryParse(techniqueId));
+                if (tech != null && !accessor.dba$hasTechnique(techniqueId)) {
+                    if (accessor.dba$getStatPoints() >= tech.apCost() && accessor.dba$getLevel() >= tech.unlockLevel()) {
+                        accessor.dba$setStatPoints(accessor.dba$getStatPoints() - tech.apCost());
+                        accessor.dba$setTechniqueUnlocked(techniqueId, true);
+                        accessor.dba$syncStats();
+                    }
+                }
+            });
+        });
+
+        // Handle Technique Equipping
+        ServerPlayNetworking.registerGlobalReceiver(C2SEquipTechniquePayload.ID, (payload, context) -> {
+            ServerPlayer player = context.player();
+            int slot = payload.slot();
+            String techniqueId = payload.techniqueId();
+            context.server().execute(() -> {
+                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+                if (accessor.dba$hasTechnique(techniqueId) || techniqueId.isEmpty()) {
+                    accessor.dba$setEquippedTechnique(slot, techniqueId);
+                    accessor.dba$syncStats();
+                }
+            });
+        });
+
+        // Handle Technique Toggling (from Keybinds)
+        ServerPlayNetworking.registerGlobalReceiver(C2SToggleTechniquePayload.ID, (payload, context) -> {
+            ServerPlayer player = context.player();
+            int slot = payload.slot();
+            context.server().execute(() -> {
+                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+                String tech = accessor.dba$getEquippedTechnique(slot);
+                if (tech != null && !tech.isEmpty() && accessor.dba$hasTechnique(tech)) {
+                    boolean isActive = accessor.dba$isTechniqueActive(tech);
+                    accessor.dba$setTechniqueActive(tech, !isActive);
+                    accessor.dba$syncStats();
+                }
             });
         });
     }
