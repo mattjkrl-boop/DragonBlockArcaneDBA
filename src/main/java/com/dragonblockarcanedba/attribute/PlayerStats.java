@@ -139,11 +139,19 @@ public class PlayerStats {
     }
 
     public static int getXpToNextLevel(int currentLevel) {
-        return (int) (100 * Math.pow(currentLevel, 1.5));
+        return (int) (100 * Math.pow(currentLevel, 1.1));
+    }
+
+    public static int getUpgradeCost(int currentUpgradeLevel) {
+        if (currentUpgradeLevel <= 30) {
+            return (int) Math.ceil(5.0 * Math.pow(1.082636, currentUpgradeLevel - 1));
+        } else {
+            return (int) Math.ceil(50.0 * Math.pow(1.041318, currentUpgradeLevel - 30));
+        }
     }
 
     public static int getFormMasteryXpToNextLevel(int currentMasteryLevel) {
-        return (int) (100 * Math.pow(currentMasteryLevel, 1.5));
+        return (int) (100 * Math.pow(currentMasteryLevel, 1.1));
     }
 
     public static double getDamageMultiplier(Player player) {

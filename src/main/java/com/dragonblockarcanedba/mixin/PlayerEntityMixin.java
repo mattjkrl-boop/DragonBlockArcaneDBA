@@ -288,7 +288,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         while (this.dbaXp >= req) {
             this.dbaXp -= req;
             dbaLevel++;
-            dbaAp += 5; // Gain 5 attribute points on level up
+            dbaAp += 3; // Gain 3 attribute points on level up
             req = PlayerStats.getXpToNextLevel(dbaLevel);
         }
         dba$syncStats();

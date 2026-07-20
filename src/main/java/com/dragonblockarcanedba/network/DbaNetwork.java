@@ -41,32 +41,34 @@ public class DbaNetwork {
                 if ("upgrade".equals(action)) {
                     String stat = nbt.getStringOr("stat", "");
                     int ap = accessor.dba$getStatPoints();
-                    if (ap > 0) {
-                        boolean upgraded = false;
-                        switch (stat) {
-                            case "strength" -> {
-                                if (accessor.dba$getStrength() < 5000) { accessor.dba$setStrength(accessor.dba$getStrength() + 1); upgraded = true; }
+                    
+                    int curLvl = 0;
+                    switch (stat) {
+                        case "strength" -> curLvl = accessor.dba$getStrength();
+                        case "dexterity" -> curLvl = accessor.dba$getDexterity();
+                        case "defense" -> curLvl = accessor.dba$getDefense();
+                        case "willpower" -> curLvl = accessor.dba$getWillpower();
+                        case "spirit" -> curLvl = accessor.dba$getSpirit();
+                        case "vitality" -> curLvl = accessor.dba$getVitality();
+                    }
+                    
+                    if (curLvl < 5000) {
+                        int cost = com.dragonblockarcanedba.attribute.PlayerStats.getUpgradeCost(curLvl);
+                        int milestone = (curLvl / 5) * 5;
+                        int reqLvl = milestone * 2;
+                        
+                        if (ap >= cost && accessor.dba$getLevel() >= reqLvl) {
+                            switch (stat) {
+                                case "strength" -> accessor.dba$setStrength(curLvl + 1);
+                                case "dexterity" -> accessor.dba$setDexterity(curLvl + 1);
+                                case "defense" -> accessor.dba$setDefense(curLvl + 1);
+                                case "willpower" -> accessor.dba$setWillpower(curLvl + 1);
+                                case "spirit" -> accessor.dba$setSpirit(curLvl + 1);
+                                case "vitality" -> accessor.dba$setVitality(curLvl + 1);
                             }
-                            case "dexterity" -> {
-                                if (accessor.dba$getDexterity() < 5000) { accessor.dba$setDexterity(accessor.dba$getDexterity() + 1); upgraded = true; }
-                            }
-                            case "defense" -> {
-                                if (accessor.dba$getDefense() < 5000) { accessor.dba$setDefense(accessor.dba$getDefense() + 1); upgraded = true; }
-                            }
-                            case "willpower" -> {
-                                if (accessor.dba$getWillpower() < 5000) { accessor.dba$setWillpower(accessor.dba$getWillpower() + 1); upgraded = true; }
-                            }
-                            case "spirit" -> {
-                                if (accessor.dba$getSpirit() < 5000) { accessor.dba$setSpirit(accessor.dba$getSpirit() + 1); upgraded = true; }
-                            }
-                            case "vitality" -> {
-                                if (accessor.dba$getVitality() < 5000) { accessor.dba$setVitality(accessor.dba$getVitality() + 1); upgraded = true; }
-                            }
+                            accessor.dba$setStatPoints(ap - cost);
+                            accessor.dba$syncStats();
                         }
-                        if (upgraded) {
-                            accessor.dba$setStatPoints(ap - 1);
-                        }
-                        accessor.dba$syncStats();
                     }
                 } else if ("transform".equals(action)) {
                     String formStr = nbt.getStringOr("form", "");

@@ -15,6 +15,7 @@ public class StatsTab implements MenuTab {
     private DbaMenuScreen parent;
     private final String[] stats = {"strength", "dexterity", "defense", "willpower", "spirit", "vitality"};
     private final String[] statDisplayNames = {"Strength", "Dexterity", "Defense", "Willpower", "Spirit", "Vitality"};
+    private final Button[] upgradeButtons = new Button[6];
 
     @Override
     public void init(DbaMenuScreen screen) {
@@ -22,23 +23,21 @@ public class StatsTab implements MenuTab {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null) return;
 
-        PlayerStatsAccessor accessor = (PlayerStatsAccessor) client.player;
-        int ap = accessor.dba$getStatPoints();
-
         int startX = parent.getX();
         int startY = parent.getY();
 
-        if (ap > 0) {
-            for (int i = 0; i < stats.length; i++) {
-                final String statName = stats[i];
-                int btnY = startY + 60 + i * 22;
-                parent.addTabWidget(Button.builder(Component.literal("+"), btn -> {
-                    CompoundTag nbt = new CompoundTag();
-                    nbt.putString("action", "upgrade");
-                    nbt.putString("stat", statName);
-                    ClientPlayNetworking.send(new ActionPayload(nbt));
-                }).bounds(startX + 180, btnY - 4, 18, 18).build());
-            }
+        for (int i = 0; i < stats.length; i++) {
+            final String statName = stats[i];
+            int btnY = startY + 55 + i * 22;
+            Button btn = Button.builder(Component.literal("+"), b -> {
+                CompoundTag nbt = new CompoundTag();
+                nbt.putString("action", "upgrade");
+                nbt.putString("stat", statName);
+                ClientPlayNetworking.send(new ActionPayload(nbt));
+            }).bounds(startX + 180, btnY - 4, 18, 18).build();
+            
+            upgradeButtons[i] = btn;
+            parent.addTabWidget(btn);
         }
     }
 
@@ -80,9 +79,21 @@ public class StatsTab implements MenuTab {
                 case "vitality" -> currentLevel = accessor.dba$getVitality();
             }
             double effectiveValue = PlayerStats.getEffectiveStat(client.player, statName);
+            
+            int apCost = PlayerStats.getUpgradeCost(currentLevel);
+            int milestone = (currentLevel / 5) * 5;
+            int reqLvl = milestone * 2;
+            boolean canAfford = accessor.dba$getStatPoints() >= apCost;
+            boolean levelMet = accessor.dba$getLevel() >= reqLvl;
+            
+            if (upgradeButtons[i] != null) {
+                upgradeButtons[i].active = canAfford && levelMet;
+            }
 
-            String statString = String.format("%s: Lvl %d (%.1f)", displayName, currentLevel, effectiveValue);
-            context.text(client.font, Component.literal(statString), startX + 15, startY + 55 + i * 18, 0xFFFFFFFF);
+            int textColor = levelMet ? 0xFFFFFFFF : 0xFFFF5555;
+            String reqString = !levelMet ? " (Req Lvl " + reqLvl + ")" : "";
+            String statString = String.format("%s: Lvl %d - Cost: %d AP%s", displayName, currentLevel, apCost, reqString);
+            context.text(client.font, Component.literal(statString), startX + 15, startY + 55 + i * 22, textColor);
         }
 
         // Draw active Ki pool (optional, keeping it at the bottom)

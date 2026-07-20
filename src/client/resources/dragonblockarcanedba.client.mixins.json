@@ -3,7 +3,8 @@
 	"package": "com.dragonblockarcanedba.client.mixin",
 	"compatibilityLevel": "JAVA_22",
 	"client": [
-		"PlayerEntityRendererMixin"
+		"PlayerEntityRendererMixin",
+		"LivingEntityRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
