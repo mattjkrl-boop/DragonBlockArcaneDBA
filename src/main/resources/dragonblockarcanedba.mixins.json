@@ -5,7 +5,8 @@
 	"mixins": [
 		"PlayerEntityMixin",
 		"LivingEntityMixin",
-		"FoodDataMixin"
+		"FoodDataMixin",
+		"WindChargeMixin"
 	],
 	"client": [
 		"CloudTextureMixin"

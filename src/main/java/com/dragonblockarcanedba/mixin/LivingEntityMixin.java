@@ -14,7 +14,35 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 
 @Mixin(LivingEntity.class)
-public abstract class LivingEntityMixin {
+public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util.DbaAttackerTracker {
+
+    @org.spongepowered.asm.mixin.Unique
+    private final java.util.Map<net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect>, Player> dba$effectInflictors = new java.util.HashMap<>();
+
+    @Override
+    public Player dba$getEffectInflictor(net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect> effect) {
+        return this.dba$effectInflictors.get(effect);
+    }
+
+    @Inject(method = "addEffect(Lnet/minecraft/world/effect/MobEffectInstance;Lnet/minecraft/world/entity/Entity;)Z", at = @At("HEAD"))
+    private void dba$onAddEffect(net.minecraft.world.effect.MobEffectInstance effectInstance, net.minecraft.world.entity.Entity source, CallbackInfoReturnable<Boolean> cir) {
+        Player inflictor = null;
+        if (source instanceof Player player) {
+            inflictor = player;
+        } else if (source instanceof net.minecraft.world.entity.projectile.Projectile proj && proj.getOwner() instanceof Player player) {
+            inflictor = player;
+        } else {
+            LivingEntity entity = (LivingEntity) (Object) this;
+            net.minecraft.world.entity.Entity killer = entity.getKillCredit();
+            if (killer instanceof Player player) {
+                inflictor = player;
+            }
+        }
+        
+        if (inflictor != null) {
+            this.dba$effectInflictors.put(effectInstance.getEffect(), inflictor);
+        }
+    }
 
     @ModifyVariable(method = "hurtServer", at = @At("HEAD"), argsOnly = true, ordinal = 0)
     private float dba$modifyIncomingDamage(float amount, net.minecraft.server.level.ServerLevel level, DamageSource source) {
@@ -46,7 +74,22 @@ public abstract class LivingEntityMixin {
             return;
         }
 
-        if (damageSource.getEntity() instanceof net.minecraft.server.level.ServerPlayer player) {
+        net.minecraft.world.entity.Entity killer = damageSource.getEntity();
+        if (killer == null || !(killer instanceof net.minecraft.server.level.ServerPlayer)) {
+            killer = entity.getKillCredit();
+        }
+
+        if (killer == null || !(killer instanceof net.minecraft.server.level.ServerPlayer)) {
+            for (net.minecraft.world.effect.MobEffectInstance instance : entity.getActiveEffects()) {
+                Player inflictor = this.dba$effectInflictors.get(instance.getEffect());
+                if (inflictor instanceof net.minecraft.server.level.ServerPlayer) {
+                    killer = inflictor;
+                    break;
+                }
+            }
+        }
+
+        if (killer instanceof net.minecraft.server.level.ServerPlayer player) {
             double maxHealth = 0.0;
             if (entity.getAttribute(Attributes.MAX_HEALTH) != null) {
                 maxHealth = entity.getAttributeValue(Attributes.MAX_HEALTH);

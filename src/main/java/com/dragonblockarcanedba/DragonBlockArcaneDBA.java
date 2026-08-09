@@ -5,6 +5,7 @@ import com.dragonblockarcanedba.registry.FormLoader;
 import com.dragonblockarcanedba.registry.RaceLoader;
 import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.network.DbaNetwork;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.minecraft.resources.Identifier;
@@ -26,6 +27,7 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         // Register Items and Blocks
         com.dragonblockarcanedba.block.DbaBlocks.register();
         DbaItems.register();
+        DbaEffects.register();
 
         // Register Entities
         com.dragonblockarcanedba.entity.DbaEntities.register();
@@ -47,7 +49,14 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         // Register creative tab modification using new Fabric 26.2 API
         net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents.modifyOutputEvent(
             net.minecraft.world.item.CreativeModeTabs.TOOLS_AND_UTILITIES
-        ).register(output -> output.accept(DbaItems.SPACE_POD));
+        ).register(output -> {
+            output.accept(DbaItems.SPACE_POD);
+            output.accept(DbaItems.BRONZE_COIN);
+            output.accept(DbaItems.BANSHO_FAN);
+            output.accept(DbaItems.DBA_ORB);
+            output.accept(DbaItems.KI_SHARD);
+            output.accept(DbaItems.RECOVERY_CAPSULE);
+        });
 
         // Register Commands
         net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
