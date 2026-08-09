@@ -47,16 +47,7 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         );
 
         // Register creative tab modification using new Fabric 26.2 API
-        net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents.modifyOutputEvent(
-            net.minecraft.world.item.CreativeModeTabs.TOOLS_AND_UTILITIES
-        ).register(output -> {
-            output.accept(DbaItems.SPACE_POD);
-            output.accept(DbaItems.BRONZE_COIN);
-            output.accept(DbaItems.BANSHO_FAN);
-            output.accept(DbaItems.DBA_ORB);
-            output.accept(DbaItems.KI_SHARD);
-            output.accept(DbaItems.RECOVERY_CAPSULE);
-        });
+        // Moved items to custom tab in DbaItems.java
 
         // Register Commands
         net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
