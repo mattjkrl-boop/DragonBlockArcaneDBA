@@ -135,9 +135,9 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
 
     // ========== Time Reversal System (Whis Staff) ==========
 
-    /** Rolling buffer of the last 100 positions (5 seconds at 20 TPS). Most recent first. */
+    /** Rolling buffer of the last 400 positions (20 seconds at 20 TPS). Most recent first. */
     @Unique
-    private final Deque<Vec3> dba$positionHistory = new ArrayDeque<>(100);
+    private final Deque<Vec3> dba$positionHistory = new ArrayDeque<>(400);
 
     /** Whether this entity is currently having its movement reversed. */
     @Unique
@@ -149,7 +149,7 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
 
     @Override
     public void dba$pushPosition(Vec3 pos) {
-        if (dba$positionHistory.size() >= 100) {
+        if (dba$positionHistory.size() >= 400) {
             dba$positionHistory.removeLast();
         }
         dba$positionHistory.addFirst(pos);
