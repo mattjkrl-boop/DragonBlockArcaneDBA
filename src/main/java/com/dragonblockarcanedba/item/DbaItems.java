@@ -91,8 +91,8 @@ public class DbaItems {
     public static final ResourceKey<Item> GOLD_KI_SHARD_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("gold_ki_shard")
     );
-    public static final ResourceKey<Item> PURPLE_SCYTHE_KEY = ResourceKey.create(
-        Registries.ITEM, DragonBlockArcaneDBA.id("purple_scythe")
+    public static final ResourceKey<Item> SICKLE_OF_SORROW_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("sickle_of_sorrow")
     );
     public static final ResourceKey<Item> TIME_COIN_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("time_coin")
@@ -177,8 +177,8 @@ public class DbaItems {
     public static final Item GOLD_COIN = new Item(
         new Item.Properties().setId(GOLD_COIN_KEY)
     );
-    public static final Item SPIRIT_SWORD = new Item(
-        new Item.Properties().setId(SPIRIT_SWORD_KEY)
+    public static final Item SPIRIT_SWORD = new SpiritSwordItem(
+        new Item.Properties().setId(SPIRIT_SWORD_KEY).durability(1500).enchantable(10)
     );
     public static final Item BLUE_ORB_1 = new Item(
         new Item.Properties().setId(BLUE_ORB_1_KEY)
@@ -204,8 +204,8 @@ public class DbaItems {
     public static final Item GOLD_KI_SHARD = new Item(
         new Item.Properties().setId(GOLD_KI_SHARD_KEY)
     );
-    public static final Item PURPLE_SCYTHE = new Item(
-        new Item.Properties().setId(PURPLE_SCYTHE_KEY)
+    public static final Item SICKLE_OF_SORROW = new SickleOfSorrowItem(
+        new Item.Properties().setId(SICKLE_OF_SORROW_KEY).durability(1500).enchantable(10)
     );
     public static final Item TIME_COIN = new Item(
         new Item.Properties().setId(TIME_COIN_KEY)
@@ -222,8 +222,8 @@ public class DbaItems {
     public static final Item RED_FRUIT = new Item(
         new Item.Properties().setId(RED_FRUIT_KEY)
     );
-    public static final Item WHIS_STAFF = new Item(
-        new Item.Properties().setId(WHIS_STAFF_KEY)
+    public static final Item WHIS_STAFF = new WhisStaffItem(
+        new Item.Properties().setId(WHIS_STAFF_KEY).durability(1500).enchantable(10)
     );
     public static final Item PURPLE_ORB_LARGE = new Item(
         new Item.Properties().setId(PURPLE_ORB_LARGE_KEY)
@@ -268,7 +268,7 @@ public class DbaItems {
             output.accept(XP_AURA);
             output.accept(DNA_HELIX);
             output.accept(GOLD_KI_SHARD);
-            output.accept(PURPLE_SCYTHE);
+            output.accept(SICKLE_OF_SORROW);
             output.accept(TIME_COIN);
             output.accept(RED_CROWN);
             output.accept(BLUE_CROWN);
@@ -308,7 +308,7 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, XP_AURA_KEY, XP_AURA);
         Registry.register(BuiltInRegistries.ITEM, DNA_HELIX_KEY, DNA_HELIX);
         Registry.register(BuiltInRegistries.ITEM, GOLD_KI_SHARD_KEY, GOLD_KI_SHARD);
-        Registry.register(BuiltInRegistries.ITEM, PURPLE_SCYTHE_KEY, PURPLE_SCYTHE);
+        Registry.register(BuiltInRegistries.ITEM, SICKLE_OF_SORROW_KEY, SICKLE_OF_SORROW);
         Registry.register(BuiltInRegistries.ITEM, TIME_COIN_KEY, TIME_COIN);
         Registry.register(BuiltInRegistries.ITEM, RED_CROWN_KEY, RED_CROWN);
         Registry.register(BuiltInRegistries.ITEM, BLUE_CROWN_KEY, BLUE_CROWN);

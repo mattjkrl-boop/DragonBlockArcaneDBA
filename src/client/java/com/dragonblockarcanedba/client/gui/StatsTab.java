@@ -78,7 +78,6 @@ public class StatsTab implements MenuTab {
                 case "spirit" -> currentLevel = accessor.dba$getSpirit();
                 case "vitality" -> currentLevel = accessor.dba$getVitality();
             }
-            double effectiveValue = PlayerStats.getEffectiveStat(client.player, statName);
             
             int apCost = PlayerStats.getUpgradeCost(currentLevel);
             int milestone = (currentLevel / 5) * 5;

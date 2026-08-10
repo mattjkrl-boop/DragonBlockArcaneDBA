@@ -9,7 +9,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
 
 import com.dragonblockarcanedba.registry.Race;
-import java.util.List;
 
 public class RaceSelectionScreen extends Screen {
     private enum State {
@@ -308,7 +307,6 @@ public class RaceSelectionScreen extends Screen {
         int midColWidth = 100;
         int rightColWidth = Math.max(190, this.width * 2 / 5);
         int leftColWidth = this.width - midColWidth - rightColWidth;
-        int midStartX = leftColWidth;
         int rightStartX = leftColWidth + midColWidth;
 
         int borderColor = 0xFF00FFCC;

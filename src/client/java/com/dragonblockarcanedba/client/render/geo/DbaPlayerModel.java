@@ -1,9 +1,7 @@
 package com.dragonblockarcanedba.client.render.geo;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.registry.DbaRegistries;
-import com.dragonblockarcanedba.registry.Race;
 import com.geckolib.model.GeoModel;
 import com.geckolib.renderer.base.GeoRenderState;
 import net.minecraft.client.Minecraft;

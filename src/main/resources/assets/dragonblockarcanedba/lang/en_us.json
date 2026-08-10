@@ -25,7 +25,7 @@
   "item.dragonblockarcanedba.xp_aura": "XP Aura",
   "item.dragonblockarcanedba.dna_helix": "DNA Helix",
   "item.dragonblockarcanedba.gold_ki_shard": "Gold Ki Shard",
-  "item.dragonblockarcanedba.purple_scythe": "Purple Scythe",
+  "item.dragonblockarcanedba.sickle_of_sorrow": "Sickle Of Sorrow",
   "item.dragonblockarcanedba.time_coin": "Time Coin",
   "item.dragonblockarcanedba.red_crown": "Red Crown",
   "item.dragonblockarcanedba.blue_crown": "Blue Crown",
@@ -46,5 +46,6 @@
   "block.dragonblockarcanedba.vegeta_stone": "Vegeta Stone",
   "block.dragonblockarcanedba.yardrat_grass": "Yardrat Grass",
   "block.dragonblockarcanedba.yardrat_stone": "Yardrat Stone",
-  "entity.dragonblockarcanedba.otherworld_guide": "Otherworld Guide"
+  "entity.dragonblockarcanedba.otherworld_guide": "Otherworld Guide",
+  "effect.dragonblockarcanedba.melting": "Melting"
 }

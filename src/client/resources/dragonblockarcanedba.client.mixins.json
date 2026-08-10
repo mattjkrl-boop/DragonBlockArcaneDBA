@@ -4,7 +4,8 @@
 	"compatibilityLevel": "JAVA_22",
 	"client": [
 		"PlayerEntityRendererMixin",
-		"LivingEntityRendererMixin"
+		"LivingEntityRendererMixin",
+		"MeltingOverlayMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
