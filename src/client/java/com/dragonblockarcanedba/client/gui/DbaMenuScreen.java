@@ -15,14 +15,14 @@ public class DbaMenuScreen extends Screen {
 
     private int x;
     private int y;
-    // Dimensions for the main content area (tabs stick out to the left)
-    private final int bgWidth = 340;
-    private final int bgHeight = 215;
+    // Dimensions for the overall window
+    private final int bgWidth = 370;
+    private final int bgHeight = 230;
     
-    // Tab dimensions
-    private final int tabWidth = 95;
+    // Sidebar dimensions
+    private final int sidebarWidth = 100;
     private final int tabHeight = 35;
-    private final int tabSpacing = 5;
+    private final int tabSpacing = 2;
 
     public DbaMenuScreen() {
         super(Component.literal("Dragon Block Arcane Menu"));
@@ -34,8 +34,8 @@ public class DbaMenuScreen extends Screen {
 
     @Override
     protected void init() {
-        // Center the main frame slightly to the right so tabs fit on screen
-        this.x = (this.width - bgWidth) / 2 + (tabWidth / 2);
+        // Center the main frame on screen
+        this.x = (this.width - bgWidth) / 2;
         this.y = (this.height - bgHeight) / 2;
 
         this.clearWidgets();
@@ -55,6 +55,9 @@ public class DbaMenuScreen extends Screen {
     public int getY() { return y; }
     public int getBgWidth() { return bgWidth; }
     public int getBgHeight() { return bgHeight; }
+    public int getSidebarWidth() { return sidebarWidth; }
+    public int getContentX() { return x + sidebarWidth; }
+    public int getContentWidth() { return bgWidth - sidebarWidth; }
 
     public <T extends net.minecraft.client.gui.components.events.GuiEventListener & net.minecraft.client.gui.components.Renderable & net.minecraft.client.gui.narration.NarratableEntry> T addTabWidget(T widget) {
         return this.addRenderableWidget(widget);
@@ -64,49 +67,54 @@ public class DbaMenuScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         super.extractRenderState(context, mouseX, mouseY, delta);
 
-        int bgColor = 0xEE1E2024; // Dark gray, slight transparency
-        int borderColor = 0xFF55FF88; // Neon mint green
+        int sidebarBg = 0xEE11151A; // Dark blue/gray
+        int contentBg = 0xEE1A1C20; // Slightly lighter sleek gray
+        int borderColor = 0xAA55FF88; // Sleek mint green accent
         int borderThick = 2;
 
-        // Draw main content frame background
-        context.fill(x, y, x + bgWidth, y + bgHeight, bgColor);
+        // Draw sidebar background
+        context.fill(x, y, x + sidebarWidth, y + bgHeight, sidebarBg);
+        // Draw content background
+        context.fill(x + sidebarWidth, y, x + bgWidth, y + bgHeight, contentBg);
 
         // Draw Tabs
         for (int i = 0; i < tabs.size(); i++) {
-            int tabX = x - tabWidth;
-            int tabY = y + 10 + i * (tabHeight + tabSpacing);
+            int tabX = x;
+            int tabY = y + 20 + i * (tabHeight + tabSpacing);
             
             boolean isActive = (i == activeTab);
-            int currentTabBg = isActive ? bgColor : 0xEE111111;
-            int textCol = isActive ? 0xFFFFFFFF : 0xFFAAAAAA;
-
-            // Tab background
-            context.fill(tabX, tabY, tabX + tabWidth, tabY + tabHeight, currentTabBg);
+            boolean isHovered = (mouseX >= tabX && mouseX <= tabX + sidebarWidth && mouseY >= tabY && mouseY <= tabY + tabHeight);
             
-            // Tab borders
-            context.fill(tabX, tabY, tabX + tabWidth + borderThick, tabY + borderThick, borderColor); // Top
-            context.fill(tabX, tabY + tabHeight - borderThick, tabX + tabWidth + borderThick, tabY + tabHeight, borderColor); // Bottom
-            context.fill(tabX, tabY, tabX + borderThick, tabY + tabHeight, borderColor); // Left
+            int textCol = isActive ? 0xFF55FF88 : (isHovered ? 0xFFFFFFFF : 0xFFAAAAAA);
 
+            if (isActive) {
+                // Active highlight background
+                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x2255FF88);
+                // Active left accent line
+                context.fill(tabX, tabY, tabX + 3, tabY + tabHeight, 0xFF55FF88);
+            } else if (isHovered) {
+                // Hover highlight background
+                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x11FFFFFF);
+                // Hover accent line
+                context.fill(tabX, tabY, tabX + 3, tabY + tabHeight, 0x66FFFFFF);
+            }
             
-            // Tab text (centered)
+            // Tab text (left-aligned with padding)
             Minecraft client = Minecraft.getInstance();
-            int textWidth = client.font.width(tabNames[i]);
-            context.text(client.font, tabNames[i], tabX + (tabWidth - textWidth) / 2, tabY + (tabHeight - 8) / 2, textCol, false);
+            context.text(client.font, tabNames[i], tabX + 15, tabY + (tabHeight - 8) / 2, textCol, false);
         }
 
-        // Main frame borders (skipping segments where the active tab connects)
+        // Main frame borders
         // Top border
         context.fill(x, y, x + bgWidth, y + borderThick, borderColor);
         // Bottom border
         context.fill(x, y + bgHeight - borderThick, x + bgWidth, y + bgHeight, borderColor);
         // Right border
         context.fill(x + bgWidth - borderThick, y, x + bgWidth, y + bgHeight, borderColor);
-        
-        // Left border logic (leave gap for active tab)
-        int activeTabY = y + 10 + activeTab * (tabHeight + tabSpacing);
-        context.fill(x, y, x + borderThick, activeTabY, borderColor); // Above active tab
-        context.fill(x, activeTabY + tabHeight, x + borderThick, y + bgHeight, borderColor); // Below active tab
+        // Left border
+        context.fill(x, y, x + borderThick, y + bgHeight, borderColor);
+        // Divider line between sidebar and content
+        context.fill(x + sidebarWidth - 1, y, x + sidebarWidth, y + bgHeight, 0x4455FF88);
 
         // Delegate content rendering to active tab
         tabs.get(activeTab).render(context, mouseX, mouseY, delta);
@@ -114,13 +122,14 @@ public class DbaMenuScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isRepeat) {
-        // Check for tab clicks
         double mouseX = event.x();
         double mouseY = event.y();
+        
+        // Check for tab clicks
         for (int i = 0; i < tabs.size(); i++) {
-            int tabX = x - tabWidth;
-            int tabY = y + 10 + i * (tabHeight + tabSpacing);
-            if (mouseX >= tabX && mouseX <= tabX + tabWidth && mouseY >= tabY && mouseY <= tabY + tabHeight) {
+            int tabX = x;
+            int tabY = y + 20 + i * (tabHeight + tabSpacing);
+            if (mouseX >= tabX && mouseX <= tabX + sidebarWidth && mouseY >= tabY && mouseY <= tabY + tabHeight) {
                 selectTab(i);
                 return true;
             }
