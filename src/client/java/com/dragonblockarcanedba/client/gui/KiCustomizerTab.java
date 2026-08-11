@@ -1,5 +1,8 @@
 package com.dragonblockarcanedba.client.gui;
 
+import com.dragonblockarcanedba.ki.KiTechniqueType;
+import com.dragonblockarcanedba.network.C2SKiTechniqueSavePayload;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -8,80 +11,107 @@ import net.minecraft.network.chat.Component;
 
 public class KiCustomizerTab implements MenuTab {
     private DbaMenuScreen parent;
-    
-    private final String[] types = {"Projectile", "Beam"};
-    private final String[] sizes = {"Small", "Medium", "Large", "Massive"};
-    private final String[] chargeTimes = {"Instant", "Short", "Medium", "Long"};
-    private final String[] colors = {"Red", "Blue", "Green", "Yellow", "Purple"};
+
+    private final KiTechniqueType[] types = KiTechniqueType.values();
+    private final int[] colors = {
+        0xFF00AAFF, // Blue
+        0xFFFF2222, // Red
+        0xFF22FF22, // Green
+        0xFFEEEE22, // Yellow
+        0xFFAA22FF, // Purple
+        0xFFFFFFFF  // White
+    };
+    private final String[] colorNames = {"Blue", "Red", "Green", "Yellow", "Purple", "White"};
 
     private int typeIdx = 0;
-    private int sizeIdx = 1;
-    private int chargeIdx = 1;
-    private int colorIdx = 1;
+    private int percentUsed = 50;
+    private int colorIdx = 0;
+    private boolean isBarrage = false;
+    private int targetSlot = 0; // 0, 1, 2 for F7, F8, F9
 
     @Override
     public void init(DbaMenuScreen screen) {
         this.parent = screen;
-        
+
         int startX = parent.getX() + 15;
         int startY = parent.getY() + 35;
-        int btnWidth = 100;
+        int btnWidth = 140;
         int btnHeight = 20;
         int spacing = 24;
 
         // Type Button
         parent.addTabWidget(Button.builder(
-            Component.literal("Type: " + types[typeIdx]),
+            Component.literal("Type: " + types[typeIdx].displayName()),
             btn -> {
                 typeIdx = (typeIdx + 1) % types.length;
+                if (types[typeIdx] != KiTechniqueType.BLAST) {
+                    isBarrage = false;
+                }
                 parent.init();
             }
         ).bounds(startX, startY, btnWidth, btnHeight).build());
 
-        // Size Button
+        // Ki Percent +/- Buttons
+        int pY = startY + spacing;
         parent.addTabWidget(Button.builder(
-            Component.literal("Size: " + sizes[sizeIdx]),
+            Component.literal("-"),
             btn -> {
-                sizeIdx = (sizeIdx + 1) % sizes.length;
+                percentUsed = Math.max(1, percentUsed - 5);
                 parent.init();
             }
-        ).bounds(startX, startY + spacing, btnWidth, btnHeight).build());
-
-        // Charge Time Button
+        ).bounds(startX, pY, 20, btnHeight).build());
+        
         parent.addTabWidget(Button.builder(
-            Component.literal("Charge: " + chargeTimes[chargeIdx]),
+            Component.literal("+"),
             btn -> {
-                chargeIdx = (chargeIdx + 1) % chargeTimes.length;
+                percentUsed = Math.min(100, percentUsed + 5);
                 parent.init();
             }
-        ).bounds(startX, startY + spacing * 2, btnWidth, btnHeight).build());
+        ).bounds(startX + 120, pY, 20, btnHeight).build());
 
         // Color Button
         parent.addTabWidget(Button.builder(
-            Component.literal("Color: " + colors[colorIdx]),
+            Component.literal("Color: " + colorNames[colorIdx]),
             btn -> {
                 colorIdx = (colorIdx + 1) % colors.length;
                 parent.init();
             }
-        ).bounds(startX, startY + spacing * 3, btnWidth, btnHeight).build());
-        
-        // Craft Button
-        parent.addTabWidget(Button.builder(
-            Component.literal("Craft Technique"),
-            btn -> {
-                // Future integration point for technique crafting payload
-                System.out.println("Crafted: " + types[typeIdx] + " " + sizes[sizeIdx] + " " + chargeTimes[chargeIdx] + " " + colors[colorIdx]);
-            }
-        ).bounds(startX, startY + spacing * 4 + 10, 150, 20).build());
-    }
+        ).bounds(startX, startY + spacing * 2, btnWidth, btnHeight).build());
 
-    private double calculateKiCost() {
-        double base = 10.0;
-        double typeMult = typeIdx == 1 ? 2.5 : 1.0; // Beam vs Projectile
-        double[] sizeMults = {1.0, 1.5, 2.5, 4.0};
-        double[] chargeMults = {1.5, 1.0, 0.75, 0.5}; // Longer charge = cheaper
-        
-        return base * typeMult * sizeMults[sizeIdx] * chargeMults[chargeIdx];
+        // Barrage Toggle (only for Blast)
+        if (types[typeIdx] == KiTechniqueType.BLAST) {
+            parent.addTabWidget(Button.builder(
+                Component.literal("Mode: " + (isBarrage ? "Barrage" : "Single")),
+                btn -> {
+                    isBarrage = !isBarrage;
+                    parent.init();
+                }
+            ).bounds(startX, startY + spacing * 3, btnWidth, btnHeight).build());
+        }
+
+        // Slot Selector
+        int sY = startY + spacing * 4;
+        parent.addTabWidget(Button.builder(
+            Component.literal("Equip Slot: " + (targetSlot + 1) + " (F" + (targetSlot + 7) + ")"),
+            btn -> {
+                targetSlot = (targetSlot + 1) % 3;
+                parent.init();
+            }
+        ).bounds(startX, sY, btnWidth, btnHeight).build());
+
+        // Save Button
+        parent.addTabWidget(Button.builder(
+            Component.literal("Save Technique"),
+            btn -> {
+                ClientPlayNetworking.send(new C2SKiTechniqueSavePayload(
+                    targetSlot,
+                    types[typeIdx].name(),
+                    percentUsed,
+                    colors[colorIdx],
+                    isBarrage
+                ));
+            }
+        ).bounds(startX, sY + spacing + 10, btnWidth, btnHeight).build());
     }
 
     @Override
@@ -90,22 +120,34 @@ public class KiCustomizerTab implements MenuTab {
         int startX = parent.getX();
         int startY = parent.getY();
 
-        context.text(client.font, Component.literal("Ki Technique Customizer"), startX + 15, startY + 15, 0xFF55FF88);
+        context.text(client.font, Component.literal("Ki Customizer"), startX + 15, startY + 15, 0xFF55FF88);
 
-        // Render preview area on the right
-        int previewX = startX + 160;
+        // Render percent value between - and +
+        context.centeredText(client.font, Component.literal(percentUsed + "% Ki"), startX + 85, startY + 35 + 24 + 6, 0xFFFFFF);
+
+        // Preview Area
+        int previewX = startX + 170;
         int previewY = startY + 35;
+
+        context.text(client.font, Component.literal("Technique Summary"), previewX, previewY, 0xFFFFFFFF);
         
-        context.text(client.font, Component.literal("Technique Summary:"), previewX, previewY, 0xFFFFFFFF);
-        context.text(client.font, Component.literal("- " + sizes[sizeIdx] + " " + colors[colorIdx] + " " + types[typeIdx]), previewX, previewY + 15, 0xFFAAAAAA);
-        context.text(client.font, Component.literal("- Charge: " + chargeTimes[chargeIdx]), previewX, previewY + 25, 0xFFAAAAAA);
+        String displayName = types[typeIdx].displayName();
+        if (types[typeIdx] == KiTechniqueType.BLAST && isBarrage) {
+            displayName = "Ki Barrage";
+        }
         
-        double cost = calculateKiCost();
-        context.text(client.font, Component.literal(String.format("Calculated Ki Cost: %.1f", cost)), previewX, previewY + 45, 0xFF55FFFF);
+        context.text(client.font, Component.literal(displayName), previewX, previewY + 20, colors[colorIdx]);
         
-        // Decorative border for preview area
-        context.fill(previewX - 5, previewY - 5, previewX + 160, previewY + 65, 0x44111111);
-        context.fill(previewX - 5, previewY - 5, previewX - 4, previewY + 65, 0xFF55FF88);
+        if (types[typeIdx] == KiTechniqueType.EXPLOSION) {
+            context.text(client.font, Component.literal("Cost: 100% of current Ki"), previewX, previewY + 35, 0xFFFF5555);
+            context.text(client.font, Component.literal("Warning: Damages self!"), previewX, previewY + 50, 0xFFFF2222);
+        } else {
+            context.text(client.font, Component.literal("Cost: " + percentUsed + "% of current Ki"), previewX, previewY + 35, 0xFF55FFFF);
+        }
+
+        // Preview box border
+        context.fill(previewX - 5, previewY - 5, previewX + 160, previewY + 80, 0x44111111);
+        context.fill(previewX - 5, previewY - 5, previewX - 4, previewY + 80, colors[colorIdx]);
     }
 
     @Override

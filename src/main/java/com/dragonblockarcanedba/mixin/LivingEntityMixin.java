@@ -53,12 +53,28 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
         }
     }
 
-    // ========== Damage Mitigation ==========
+    // ========== Whis Staff Auto-Dodge (50% chance to negate damage) ==========
+    // ========== + Damage Mitigation ==========
 
     @ModifyVariable(method = "hurtServer", at = @At("HEAD"), argsOnly = true, ordinal = 0)
     private float dba$modifyIncomingDamage(float amount, net.minecraft.server.level.ServerLevel level, DamageSource source) {
         if ((Object) this instanceof Player player) {
-            // Mitigate damage if it does not bypass armor (like magic, void, fire etc)
+            // Whis Staff Auto-Dodge: 50% chance to negate ALL incoming damage while held
+            if (player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
+                if (level.getRandom().nextFloat() < 0.50f) {
+                    // Dodged! Show white particle burst to indicate the dodge
+                    level.sendParticles(
+                        new net.minecraft.core.particles.DustParticleOptions(0xFFFFFF, 1.5F),
+                        player.getX(), player.getY() + player.getBbHeight() * 0.5, player.getZ(),
+                        10, 0.3, 0.5, 0.3, 0.1
+                    );
+                    // Give brief invulnerability frames (10 ticks = 0.5 seconds)
+                    player.invulnerableTime = Math.max(player.invulnerableTime, 10);
+                    return 0.0f; // Negate all damage
+                }
+            }
+
+            // Standard damage mitigation if not dodged (defense-based)
             if (!source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_ARMOR)) {
                 double multiplier = PlayerStats.getDamageMultiplier(player);
                 return (float) (amount * multiplier);

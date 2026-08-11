@@ -2,6 +2,8 @@ package com.dragonblockarcanedba.mixin;
 
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.ki.KiTechnique;
+import com.dragonblockarcanedba.ki.KiTechniqueType;
 import com.dragonblockarcanedba.network.DbaNetwork;
 import com.dragonblockarcanedba.registry.DbaRegistries;
 import com.dragonblockarcanedba.registry.Form;
@@ -56,6 +58,10 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     private final Map<String, Boolean> dbaActiveTechniques = new HashMap<>();
     @Unique
     private final String[] dbaEquippedTechniques = new String[]{"", "", ""};
+    @Unique
+    private final KiTechnique[] dbaKiTechniqueSlots = new KiTechnique[]{
+        KiTechnique.EMPTY, KiTechnique.EMPTY, KiTechnique.EMPTY
+    };
 
     // ==================== SAVE / LOAD (ValueOutput / ValueInput) ====================
 
@@ -94,6 +100,16 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         ValueOutput equipOut = dbaOut.child("equippedTechniques");
         for (int i = 0; i < 3; i++) {
             equipOut.putString("slot" + i, dbaEquippedTechniques[i]);
+        }
+
+        ValueOutput kiTechOut = dbaOut.child("kiTechniqueSlots");
+        for (int i = 0; i < 3; i++) {
+            if (!dbaKiTechniqueSlots[i].isEmpty) {
+                kiTechOut.putString("slot" + i + "_type", dbaKiTechniqueSlots[i].type.name());
+                kiTechOut.putInt("slot" + i + "_pct", dbaKiTechniqueSlots[i].usedPercent);
+                kiTechOut.putInt("slot" + i + "_color", dbaKiTechniqueSlots[i].color);
+                kiTechOut.putBoolean("slot" + i + "_barrage", dbaKiTechniqueSlots[i].isBarrage);
+            }
         }
     }
 
@@ -168,6 +184,19 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         ValueInput equipIn = dbaIn.childOrEmpty("equippedTechniques");
         for (int i = 0; i < 3; i++) {
             dbaEquippedTechniques[i] = equipIn.getStringOr("slot" + i, "");
+        }
+
+        ValueInput kiTechIn = dbaIn.childOrEmpty("kiTechniqueSlots");
+        for (int i = 0; i < 3; i++) {
+            String type = kiTechIn.getStringOr("slot" + i + "_type", "");
+            if (!type.isEmpty()) {
+                int pct = kiTechIn.getIntOr("slot" + i + "_pct", 50);
+                int color = kiTechIn.getIntOr("slot" + i + "_color", 0xFF00AAFF);
+                boolean barrage = kiTechIn.getBooleanOr("slot" + i + "_barrage", false);
+                dbaKiTechniqueSlots[i] = new KiTechnique(KiTechniqueType.fromString(type), pct, color, barrage);
+            } else {
+                dbaKiTechniqueSlots[i] = KiTechnique.EMPTY;
+            }
         }
     }
 
@@ -595,6 +624,19 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         }
         dbaNbt.put("equippedTechniques", equipNbt);
 
+        CompoundTag kiTechNbt = new CompoundTag();
+        for (int i = 0; i < 3; i++) {
+            if (!dbaKiTechniqueSlots[i].isEmpty) {
+                kiTechNbt.putString("slot" + i + "_type", dbaKiTechniqueSlots[i].type.name());
+                kiTechNbt.putInt("slot" + i + "_pct", dbaKiTechniqueSlots[i].usedPercent);
+                kiTechNbt.putInt("slot" + i + "_color", dbaKiTechniqueSlots[i].color);
+                kiTechNbt.putBoolean("slot" + i + "_barrage", dbaKiTechniqueSlots[i].isBarrage);
+            } else {
+                kiTechNbt.putBoolean("slot" + i + "_empty", true);
+            }
+        }
+        dbaNbt.put("kiTechniqueSlots", kiTechNbt);
+
         return dbaNbt;
     }
 
@@ -609,6 +651,21 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         if (player instanceof ServerPlayer serverPlayer) {
             CompoundTag syncData = dba$toSyncNbt();
             DbaNetwork.sendStatsSync(serverPlayer, syncData);
+        }
+    }
+
+    @Unique
+    @Override
+    public KiTechnique dba$getKiTechniqueSlot(int slot) {
+        if (slot >= 0 && slot < 3) return dbaKiTechniqueSlots[slot];
+        return KiTechnique.EMPTY;
+    }
+
+    @Unique
+    @Override
+    public void dba$setKiTechniqueSlot(int slot, KiTechnique tech) {
+        if (slot >= 0 && slot < 3) {
+            dbaKiTechniqueSlots[slot] = tech != null ? tech : KiTechnique.EMPTY;
         }
     }
 }

@@ -74,13 +74,13 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 }
             }
             while (techSlot1Key.consumeClick()) {
-                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SToggleTechniquePayload(0));
+                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(0));
             }
             while (techSlot2Key.consumeClick()) {
-                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SToggleTechniquePayload(1));
+                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(1));
             }
             while (techSlot3Key.consumeClick()) {
-                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SToggleTechniquePayload(2));
+                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(2));
             }
             if (client.level != null) {
                 for (net.minecraft.world.entity.player.Player player : client.level.players()) {
@@ -114,6 +114,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             case "defense" -> accessor.dba$setDefense(val);
                             case "willpower" -> accessor.dba$setWillpower(val);
                             case "spirit" -> accessor.dba$setSpirit(val);
+                            case "vitality" -> accessor.dba$setVitality(val);
                         }
                     }
 
@@ -141,6 +142,22 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     CompoundTag equipNbt = nbt.getCompoundOrEmpty("equippedTechniques");
                     for (int i = 0; i < 3; i++) {
                         accessor.dba$setEquippedTechnique(i, equipNbt.getStringOr("slot" + i, ""));
+                    }
+                    
+                    CompoundTag kiTechNbt = nbt.getCompoundOrEmpty("kiTechniqueSlots");
+                    for (int i = 0; i < 3; i++) {
+                        if (kiTechNbt.getBooleanOr("slot" + i + "_empty", false)) {
+                            accessor.dba$setKiTechniqueSlot(i, com.dragonblockarcanedba.ki.KiTechnique.EMPTY);
+                        } else {
+                            String typeStr = kiTechNbt.getStringOr("slot" + i + "_type", "");
+                            if (!typeStr.isEmpty()) {
+                                com.dragonblockarcanedba.ki.KiTechniqueType type = com.dragonblockarcanedba.ki.KiTechniqueType.fromString(typeStr);
+                                int pct = kiTechNbt.getIntOr("slot" + i + "_pct", 50);
+                                int color = kiTechNbt.getIntOr("slot" + i + "_color", 0xFF00AAFF);
+                                boolean barrage = kiTechNbt.getBooleanOr("slot" + i + "_barrage", false);
+                                accessor.dba$setKiTechniqueSlot(i, new com.dragonblockarcanedba.ki.KiTechnique(type, pct, color, barrage));
+                            }
+                        }
                     }
                 }
             });

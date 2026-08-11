@@ -170,7 +170,7 @@ public class DbaItems {
         new Item.Properties().setId(BRONZE_COIN_KEY)
     );
     public static final Item BANSHO_FAN = new BanshoFanItem(
-        new Item.Properties().setId(BANSHO_FAN_KEY)
+        new Item.Properties().setId(BANSHO_FAN_KEY).stacksTo(1)
     );
     public static final Item DBA_ORB = new Item(
         new Item.Properties().setId(DBA_ORB_KEY)
@@ -216,7 +216,7 @@ public class DbaItems {
         new Item.Properties().setId(GOLD_COIN_KEY)
     );
     public static final Item SPIRIT_SWORD = new SpiritSwordItem(
-        new Item.Properties().setId(SPIRIT_SWORD_KEY).durability(1500).enchantable(10)
+        new Item.Properties().setId(SPIRIT_SWORD_KEY).stacksTo(1)
     );
     public static final Item BLUE_ORB_1 = new Item(
         new Item.Properties().setId(BLUE_ORB_1_KEY)
@@ -243,7 +243,7 @@ public class DbaItems {
         new Item.Properties().setId(GOLD_KI_SHARD_KEY)
     );
     public static final Item SICKLE_OF_SORROW = new SickleOfSorrowItem(
-        new Item.Properties().setId(SICKLE_OF_SORROW_KEY).durability(1500).enchantable(10)
+        new Item.Properties().setId(SICKLE_OF_SORROW_KEY).stacksTo(1)
     );
     public static final Item TIME_COIN = new Item(
         new Item.Properties().setId(TIME_COIN_KEY)
@@ -261,7 +261,7 @@ public class DbaItems {
         new Item.Properties().setId(RED_FRUIT_KEY)
     );
     public static final Item WHIS_STAFF = new WhisStaffItem(
-        new Item.Properties().setId(WHIS_STAFF_KEY).durability(1500).enchantable(10)
+        new Item.Properties().setId(WHIS_STAFF_KEY).stacksTo(1)
     );
     public static final Item PURPLE_ORB_LARGE = new Item(
         new Item.Properties().setId(PURPLE_ORB_LARGE_KEY)

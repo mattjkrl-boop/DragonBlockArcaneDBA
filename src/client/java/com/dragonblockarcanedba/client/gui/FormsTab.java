@@ -39,6 +39,18 @@ public class FormsTab implements MenuTab {
             Form form = compatible.get(i);
             int lineY = startY + 35 + i * 36;
             
+            com.dragonblockarcanedba.registry.Form.UnlockRequirements req = form.getUnlockRequirements();
+            boolean levelMet = accessor.dba$getLevel() >= req.minLevel();
+            boolean statsMet = true;
+            if (req.minStats() != null) {
+                if (accessor.dba$getStrength() < req.minStats().strength()) statsMet = false;
+                if (accessor.dba$getDexterity() < req.minStats().agility()) statsMet = false;
+                if (accessor.dba$getDefense() < req.minStats().defense()) statsMet = false;
+                if (accessor.dba$getWillpower() < req.minStats().kiControl()) statsMet = false;
+                if (accessor.dba$getSpirit() < req.minStats().kiCapacity()) statsMet = false;
+            }
+            boolean unlocked = levelMet && statsMet;
+            
             if (activeForm != null && activeForm.equals(form.getId())) {
                 // Revert button
                 parent.addTabWidget(Button.builder(Component.literal("Revert"), btn -> {
@@ -48,12 +60,14 @@ public class FormsTab implements MenuTab {
                 }).bounds(startX + 260, lineY - 2, 60, 20).build());
             } else if (activeForm == null) {
                 // Transform button
-                parent.addTabWidget(Button.builder(Component.literal("Transform"), btn -> {
+                Button btn = Button.builder(Component.literal("Transform"), b -> {
                     CompoundTag nbt = new CompoundTag();
                     nbt.putString("action", "transform");
                     nbt.putString("form", form.getId().toString());
                     ClientPlayNetworking.send(new ActionPayload(nbt));
-                }).bounds(startX + 260, lineY - 2, 60, 20).build());
+                }).bounds(startX + 260, lineY - 2, 60, 20).build();
+                btn.active = unlocked;
+                parent.addTabWidget(btn);
             }
         }
     }
@@ -84,9 +98,27 @@ public class FormsTab implements MenuTab {
             int lineY = startY + 35 + i * 36;
             double mastery = accessor.dba$getFormMastery(form.getId());
             
+            com.dragonblockarcanedba.registry.Form.UnlockRequirements req = form.getUnlockRequirements();
+            boolean levelMet = accessor.dba$getLevel() >= req.minLevel();
+            boolean statsMet = true;
+            if (req.minStats() != null) {
+                if (accessor.dba$getStrength() < req.minStats().strength()) statsMet = false;
+                if (accessor.dba$getDexterity() < req.minStats().agility()) statsMet = false;
+                if (accessor.dba$getDefense() < req.minStats().defense()) statsMet = false;
+                if (accessor.dba$getWillpower() < req.minStats().kiControl()) statsMet = false;
+                if (accessor.dba$getSpirit() < req.minStats().kiCapacity()) statsMet = false;
+            }
+            boolean unlocked = levelMet && statsMet;
+            
             // Format form name nicely
             String formName = form.getId().getPath().replace("_", " ").toUpperCase();
-            context.text(client.font, Component.literal(formName), startX + 15, lineY, 0xFFFFFFFF);
+            int titleColor = unlocked ? 0xFFFFFFFF : 0xFF888888;
+            context.text(client.font, Component.literal(formName), startX + 15, lineY, titleColor);
+
+            if (!unlocked) {
+                String reqStr = "Req: Lvl " + form.getUnlockRequirements().minLevel() + " + Stats";
+                context.text(client.font, Component.literal(reqStr), startX + 150, lineY, 0xFFFF5555);
+            }
 
             // Mastery calculation
             String masteryText = String.format("Mastery: %.1f%%", mastery);

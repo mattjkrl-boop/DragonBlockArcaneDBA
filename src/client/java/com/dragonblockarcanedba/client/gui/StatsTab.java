@@ -34,7 +34,7 @@ public class StatsTab implements MenuTab {
                 nbt.putString("action", "upgrade");
                 nbt.putString("stat", statName);
                 ClientPlayNetworking.send(new ActionPayload(nbt));
-            }).bounds(startX + 280, btnY - 4, 18, 18).build();
+            }).bounds(startX + 300, btnY - 4, 18, 18).build();
             
             upgradeButtons[i] = btn;
             parent.addTabWidget(btn);
@@ -89,10 +89,29 @@ public class StatsTab implements MenuTab {
                 upgradeButtons[i].active = canAfford && levelMet;
             }
 
+            int y = startY + 55 + i * 22;
+            
+            // Draw progress bar
+            int barWidth = 120;
+            int barHeight = 16;
+            int barX = startX + 140;
+            float progress = Math.min(1.0f, (float)currentLevel / 5000f);
+            
+            context.fill(barX, y - 4, barX + barWidth, y + barHeight - 4, 0x44FFFFFF);
+            context.fill(barX, y - 4, barX + (int)(barWidth * progress), y + barHeight - 4, 0xAA55FF55);
+            
             int textColor = levelMet ? 0xFFFFFFFF : 0xFFFF5555;
             String reqString = !levelMet ? " (Req Lvl " + reqLvl + ")" : "";
-            String statString = String.format("%s: Lvl %d - Cost: %d AP%s", displayName, currentLevel, apCost, reqString);
-            context.text(client.font, Component.literal(statString), startX + 15, startY + 55 + i * 22, textColor);
+            
+            // Display stat name + current
+            context.text(client.font, Component.literal(displayName + ": "), startX + 15, y, 0xFFFFFFFF);
+            
+            // Display level
+            String statString = String.format("Lvl %d", currentLevel);
+            context.text(client.font, Component.literal(statString), barX + 4, y, 0xFFFFFFFF);
+            
+            // Display AP cost and Req level
+            context.text(client.font, Component.literal("Cost: " + apCost + " AP" + reqString), startX + 265, y - 10, textColor);
         }
 
         // Draw active Ki pool (optional, keeping it at the bottom)

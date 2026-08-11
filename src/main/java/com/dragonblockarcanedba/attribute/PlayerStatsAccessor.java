@@ -1,5 +1,6 @@
 package com.dragonblockarcanedba.attribute;
 
+import com.dragonblockarcanedba.ki.KiTechnique;
 import net.minecraft.resources.Identifier;
 
 public interface PlayerStatsAccessor {
@@ -68,4 +69,7 @@ public interface PlayerStatsAccessor {
     void dba$setEquippedTechnique(int slot, String technique);
     
     void dba$syncStats();
+
+    KiTechnique dba$getKiTechniqueSlot(int slot);
+    void dba$setKiTechniqueSlot(int slot, KiTechnique tech);
 }

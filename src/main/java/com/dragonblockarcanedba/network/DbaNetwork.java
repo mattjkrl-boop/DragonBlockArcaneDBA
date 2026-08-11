@@ -7,6 +7,9 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.ki.KiTechnique;
+import com.dragonblockarcanedba.ki.KiTechniqueType;
+import com.dragonblockarcanedba.ki.KiTechniqueHandler;
 import com.dragonblockarcanedba.registry.DbaRegistries;
 import com.dragonblockarcanedba.registry.Form;
 
@@ -32,6 +35,10 @@ public class DbaNetwork {
         PayloadTypeRegistry.serverboundPlay().register(C2SUnlockTechniquePayload.ID, C2SUnlockTechniquePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(C2SEquipTechniquePayload.ID, C2SEquipTechniquePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(C2SToggleTechniquePayload.ID, C2SToggleTechniquePayload.CODEC);
+
+        // Ki Technique payloads (C2S)
+        PayloadTypeRegistry.serverboundPlay().register(C2SKiTechniqueSavePayload.ID, C2SKiTechniqueSavePayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(C2SKiTechniqueFirePayload.ID, C2SKiTechniqueFirePayload.CODEC);
     }
 
     public static void registerServer() {
@@ -197,6 +204,33 @@ public class DbaNetwork {
                     accessor.dba$setTechniqueActive(tech, !isActive);
                     accessor.dba$syncStats();
                 }
+            });
+        });
+
+        // Handle Ki Technique Save (from Ki Customizer Tab)
+        ServerPlayNetworking.registerGlobalReceiver(C2SKiTechniqueSavePayload.ID, (payload, context) -> {
+            ServerPlayer player = context.player();
+            context.server().execute(() -> {
+                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+                int slot = payload.slot();
+                if (slot >= 0 && slot < 3) {
+                    KiTechniqueType type = KiTechniqueType.fromString(payload.techType());
+                    int pct = Math.max(1, Math.min(100, payload.usedPercent()));
+                    KiTechnique kiTech = new KiTechnique(type, pct, payload.color(), payload.isBarrage());
+                    accessor.dba$setKiTechniqueSlot(slot, kiTech);
+                    accessor.dba$syncStats();
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "\u00a7aSaved \u00a7b" + kiTech.displayName() + "\u00a7a to slot " + (slot + 1)
+                    ), true);
+                }
+            });
+        });
+
+        // Handle Ki Technique Fire (from Keybinds F7/F8/F9)
+        ServerPlayNetworking.registerGlobalReceiver(C2SKiTechniqueFirePayload.ID, (payload, context) -> {
+            ServerPlayer player = context.player();
+            context.server().execute(() -> {
+                KiTechniqueHandler.fire(player, payload.slot());
             });
         });
     }

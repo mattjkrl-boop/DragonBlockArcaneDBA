@@ -10,11 +10,10 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 
 /**
- * Custom "Melting" status effect with 5 levels.
+ * Custom "Melting" status effect — Late-game percentage-based DoT.
  * 
- * Damage ticks slow down as the entity's health decreases (they "melt" slower
- * as they weaken, but will still die). Higher levels divide the tick interval,
- * killing much faster.
+ * Damage scales with the target's max health (1% per tick at dynamic intervals),
+ * making it devastating against high-HP bosses and players.
  * 
  * Formula:
  *   healthRatio = currentHealth / maxHealth  (1.0 at full, 0.0 at dead)
@@ -22,27 +21,36 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
  *   levelDivisor = amplifier + 1
  *   tickInterval = max(4, floor(20 * slowFactor / levelDivisor))
  * 
- * Also applies via attribute modifiers:
- *   - Movement speed: -15% per level
- *   - Attack speed:   -15% per level (mining fatigue feel)
+ * Attribute modifiers per level:
+ *   - Movement speed: -20% per level
+ *   - Attack speed:   -20% per level
+ *   - Max health:     -5% per level (targets weaken as they melt)
  */
 public class MeltingEffect extends MobEffect {
     public MeltingEffect() {
         super(MobEffectCategory.HARMFUL, 0x800080); // Dark purple color
 
-        // Slowness: -15% movement speed per level (amplifier+1 is auto-multiplied)
+        // Slowness: -20% movement speed per level (amplifier+1 is auto-multiplied)
         this.addAttributeModifier(
             Attributes.MOVEMENT_SPEED,
             DragonBlockArcaneDBA.id("effect.melting.speed"),
-            -0.15,
+            -0.20,
             AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
         );
 
-        // Mining Fatigue feel: -15% attack speed per level
+        // Mining Fatigue feel: -20% attack speed per level
         this.addAttributeModifier(
             Attributes.ATTACK_SPEED,
             DragonBlockArcaneDBA.id("effect.melting.attack_speed"),
-            -0.15,
+            -0.20,
+            AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
+        );
+
+        // Max health reduction: -5% per level (targets get weaker the longer they melt)
+        this.addAttributeModifier(
+            Attributes.MAX_HEALTH,
+            DragonBlockArcaneDBA.id("effect.melting.max_health"),
+            -0.05,
             AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
         );
     }
@@ -64,7 +72,12 @@ public class MeltingEffect extends MobEffect {
         int tickInterval = Math.max(4, (int) (20.0f * slowFactor / levelDivisor));
 
         if (entity.tickCount % tickInterval == 0) {
-            entity.hurtServer(level, level.damageSources().magic(), 1.0F);
+            // Deal 1% of target's max health as magic damage per tick
+            // This ensures Melting is devastating against high-HP targets (500k HP = 5000 dmg/tick)
+            float percentDamage = entity.getMaxHealth() * 0.01f;
+            // Minimum 2.0 damage so it still works on low-HP entities
+            float damage = Math.max(2.0f, percentDamage);
+            entity.hurtServer(level, level.damageSources().magic(), damage);
         }
 
         // --- Purple particle "fire" effect (every 3 ticks to avoid spam) ---

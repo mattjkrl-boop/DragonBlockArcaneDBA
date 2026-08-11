@@ -8,6 +8,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.network.chat.Component;
+import com.dragonblockarcanedba.ki.KiTechnique;
 
 public class DbaHudOverlay implements HudElement {
     
@@ -74,7 +75,7 @@ public class DbaHudOverlay implements HudElement {
         };
 
         // Draw Health Bar (Red)
-        float healthPercent = (float) (Math.max(0, currentHealth) / Math.max(1, maxHealth));
+        float healthPercent = Math.min(1.0f, (float) (Math.max(0, currentHealth) / Math.max(1, maxHealth)));
         drawTechBar.accept(
             new StyledBar(y, healthPercent, 0xFFFF2222, 0xFFFF5555),
             (int)Math.ceil(currentHealth) + " / " + (int)maxHealth + " HP"
@@ -82,7 +83,7 @@ public class DbaHudOverlay implements HudElement {
 
         // Draw Ki Bar (Blue)
         y += spacing;
-        float kiPercent = (float) (Math.max(0, currentKi) / Math.max(1, maxKi));
+        float kiPercent = Math.min(1.0f, (float) (Math.max(0, currentKi) / Math.max(1, maxKi)));
         drawTechBar.accept(
             new StyledBar(y, kiPercent, 0xFF00AAFF, 0xFF55FFFF),
             (int)Math.ceil(currentKi) + " / " + (int)maxKi + " KI"
@@ -90,11 +91,43 @@ public class DbaHudOverlay implements HudElement {
 
         // Draw Stamina Bar (Green)
         y += spacing;
-        float staminaPercent = (float) (Math.max(0, currentStamina) / Math.max(1, maxStamina));
+        float staminaPercent = Math.min(1.0f, (float) (Math.max(0, currentStamina) / Math.max(1, maxStamina)));
         drawTechBar.accept(
             new StyledBar(y, staminaPercent, 0xFF22FF22, 0xFF55FF55),
             (int)Math.ceil(currentStamina) + " / " + (int)maxStamina + " STM"
         );
+
+        // Draw Active Form
+        y += spacing + 4;
+        net.minecraft.resources.Identifier formId = accessor.dba$getActiveFormId();
+        if (formId != null) {
+            String formName = formId.getPath().replace("_", " ").toUpperCase();
+            double mastery = accessor.dba$getFormMastery(formId);
+            String masteryText = String.format("%.1f%%", mastery);
+            guiGraphics.text(client.font, net.minecraft.network.chat.Component.literal("\u00A7e" + formName + " \u00A77(" + masteryText + ")"), x, y, 0xFFFFFF);
+        }
+
+        // Draw Ki Technique Slots (F7/F8/F9) at Bottom Left
+        int screenHeight = client.getWindow().getGuiScaledHeight();
+        int slotY = screenHeight - 60;
+        
+        guiGraphics.text(client.font, net.minecraft.network.chat.Component.literal("\u00A7lKi Techniques"), x, slotY - 12, 0x55FFFF);
+        for (int i = 0; i < 3; i++) {
+            KiTechnique tech = accessor.dba$getKiTechniqueSlot(i);
+            int currentY = slotY + (i * 14);
+            
+            String keyBind = "F" + (7 + i);
+            String text = "\u00A77[" + keyBind + "] ";
+            
+            if (tech.isEmpty) {
+                text += "\u00A78(Empty)";
+            } else {
+                int cost = (int) (maxKi * (tech.usedPercent / 100.0));
+                String colorPrefix = (currentKi >= cost) ? "\u00A7a" : "\u00A7c";
+                text += "\u00A7b" + tech.displayName() + " " + colorPrefix + "[" + cost + " Ki]";
+            }
+            guiGraphics.text(client.font, net.minecraft.network.chat.Component.literal(text), x, currentY, 0xFFFFFF);
+        }
     }
     
     private record StyledBar(int y, float percent, int fillColor, int borderColor) {}
