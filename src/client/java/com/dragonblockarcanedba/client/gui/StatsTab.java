@@ -6,7 +6,6 @@ import com.dragonblockarcanedba.network.ActionPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -15,33 +14,10 @@ public class StatsTab implements MenuTab {
     private DbaMenuScreen parent;
     private final String[] stats = {"strength", "dexterity", "defense", "willpower", "spirit", "vitality"};
     private final String[] statDisplayNames = {"Strength", "Dexterity", "Defense", "Willpower", "Spirit", "Vitality"};
-    private final Button[] upgradeButtons = new Button[6];
 
     @Override
     public void init(DbaMenuScreen screen) {
         this.parent = screen;
-        Minecraft client = Minecraft.getInstance();
-        if (client.player == null) return;
-
-        int startX = parent.getContentX();
-        int startY = parent.getY();
-        
-        // Upgrade buttons positioned to the right of the content area
-        int btnX = startX + parent.getContentWidth() - 30;
-
-        for (int i = 0; i < stats.length; i++) {
-            final String statName = stats[i];
-            int btnY = startY + 55 + i * 24;
-            Button btn = Button.builder(Component.literal("+"), b -> {
-                CompoundTag nbt = new CompoundTag();
-                nbt.putString("action", "upgrade");
-                nbt.putString("stat", statName);
-                ClientPlayNetworking.send(new ActionPayload(nbt));
-            }).bounds(btnX, btnY - 4, 18, 18).build();
-            
-            upgradeButtons[i] = btn;
-            parent.addTabWidget(btn);
-        }
     }
 
     @Override
@@ -55,7 +31,23 @@ public class StatsTab implements MenuTab {
         int width = parent.getContentWidth();
 
         // Title
-        context.text(client.font, Component.literal("Character Stats"), startX + 15, startY + 15, 0xFF55FF88);
+        String raceName = accessor.dba$getRaceId().getPath();
+        // Capitalize race name
+        if (raceName.length() > 0) {
+            String[] words = raceName.split("-");
+            StringBuilder formattedRace = new StringBuilder();
+            for (String word : words) {
+                if (word.length() > 0) {
+                    formattedRace.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1)).append("-");
+                }
+            }
+            if (formattedRace.length() > 0) {
+                formattedRace.setLength(formattedRace.length() - 1);
+            }
+            context.text(client.font, Component.literal("Character Stats (" + formattedRace.toString() + ")"), startX + 15, startY + 15, 0xFF55FF88);
+        } else {
+            context.text(client.font, Component.literal("Character Stats"), startX + 15, startY + 15, 0xFF55FF88);
+        }
 
         // General progress info
         String levelText = "Level: " + accessor.dba$getLevel();
@@ -70,6 +62,8 @@ public class StatsTab implements MenuTab {
         context.fill(startX + 10, startY + 45, startX + width - 10, startY + 46, 0x44FFFFFF);
 
         // Draw Stats list
+        int btnX = startX + width - 30;
+
         for (int i = 0; i < stats.length; i++) {
             String statName = stats[i];
             String displayName = statDisplayNames[i];
@@ -83,15 +77,16 @@ public class StatsTab implements MenuTab {
                 case "vitality" -> currentLevel = accessor.dba$getVitality();
             }
             
-            int apCost = PlayerStats.getUpgradeCost(currentLevel);
-            int milestone = (currentLevel / 5) * 5;
+            String raceId = accessor.dba$getRaceId().getPath();
+            int currentUpgrades = accessor.dba$getStatUpgradeCount(statName);
+            int apCost = PlayerStats.getUpgradeCost(raceId, statName, currentUpgrades);
+            int gain = PlayerStats.getStatGain(raceId, statName);
+            
+            int milestone = (currentUpgrades / 5) * 5;
             int reqLvl = milestone * 2;
             boolean canAfford = accessor.dba$getStatPoints() >= apCost;
             boolean levelMet = accessor.dba$getLevel() >= reqLvl;
-            
-            if (upgradeButtons[i] != null) {
-                upgradeButtons[i].active = canAfford && levelMet;
-            }
+            boolean canUpgrade = canAfford && levelMet;
 
             int y = startY + 55 + i * 24;
             
@@ -99,7 +94,8 @@ public class StatsTab implements MenuTab {
             int barWidth = 90;
             int barHeight = 8;
             int barX = startX + 90;
-            float progress = Math.min(1.0f, (float)currentLevel / 5000f); // 5000 is arbitrary max for display purposes
+            float progress = (currentUpgrades % 10) / 10.0f; // loop every 10 upgrades
+            if (currentUpgrades > 0 && currentUpgrades % 10 == 0) progress = 1.0f;
             
             // Background of bar
             context.fill(barX, y, barX + barWidth, y + barHeight, 0x44000000);
@@ -117,12 +113,37 @@ public class StatsTab implements MenuTab {
             // Display stat name + current
             context.text(client.font, Component.literal(displayName), startX + 15, y, 0xFFFFFFFF);
             
-            // Display level centered in bar (if it fits) or next to it
-            String statString = String.format("Lvl %d", currentLevel);
+            // Display raw stat + gain
+            String statString = String.format("%d (+%d)", currentLevel, gain);
             context.text(client.font, Component.literal(statString), barX + barWidth + 10, y, 0xFFFFFFFF);
             
             // Display AP cost and Req level below the bar
-            context.text(client.font, Component.literal("Cost: " + apCost + " AP" + reqString), barX, y + 10, textColor);
+            String apString = (apCost > 9000) ? "Cost: MAX" : "Cost: " + apCost + " AP";
+            context.text(client.font, Component.literal(apString + reqString), barX, y + 10, textColor);
+            
+            // Custom Upgrade Button
+            int btnY = y - 4;
+            int btnW = 18;
+            int btnH = 18;
+            boolean hoverBtn = (mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH);
+            
+            if (canUpgrade) {
+                context.fill(btnX, btnY, btnX + btnW, btnY + btnH, hoverBtn ? 0xAA55FF88 : 0x55113322);
+                context.fill(btnX, btnY, btnX + btnW, btnY + 1, 0xFF55FF88); // Top
+                context.fill(btnX, btnY + btnH - 1, btnX + btnW, btnY + btnH, 0xFF55FF88); // Bottom
+                context.fill(btnX, btnY, btnX + 1, btnY + btnH, 0xFF55FF88); // Left
+                context.fill(btnX + btnW - 1, btnY, btnX + btnW, btnY + btnH, 0xFF55FF88); // Right
+                
+                context.centeredText(client.font, Component.literal("+"), btnX + btnW/2, btnY + 5, hoverBtn ? 0xFFFFFFFF : 0xFF55FF88);
+            } else {
+                context.fill(btnX, btnY, btnX + btnW, btnY + btnH, 0x44111111);
+                context.fill(btnX, btnY, btnX + btnW, btnY + 1, 0x44FFFFFF);
+                context.fill(btnX, btnY + btnH - 1, btnX + btnW, btnY + btnH, 0x44FFFFFF);
+                context.fill(btnX, btnY, btnX + 1, btnY + btnH, 0x44FFFFFF);
+                context.fill(btnX + btnW - 1, btnY, btnX + btnW, btnY + btnH, 0x44FFFFFF);
+                
+                context.centeredText(client.font, Component.literal("+"), btnX + btnW/2, btnY + 5, 0xFF555555);
+            }
         }
 
         // Draw active Ki pool at the very bottom
@@ -138,6 +159,55 @@ public class StatsTab implements MenuTab {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isRepeat) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) return false;
+
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) client.player;
+        int startX = parent.getContentX();
+        int startY = parent.getY();
+        int width = parent.getContentWidth();
+        
+        double mouseX = event.x();
+        double mouseY = event.y();
+        
+        int btnX = startX + width - 30;
+
+        for (int i = 0; i < stats.length; i++) {
+            String statName = stats[i];
+            int currentLevel = 0;
+            switch (statName) {
+                case "strength" -> currentLevel = accessor.dba$getStrength();
+                case "dexterity" -> currentLevel = accessor.dba$getDexterity();
+                case "defense" -> currentLevel = accessor.dba$getDefense();
+                case "willpower" -> currentLevel = accessor.dba$getWillpower();
+                case "spirit" -> currentLevel = accessor.dba$getSpirit();
+                case "vitality" -> currentLevel = accessor.dba$getVitality();
+            }
+            
+            String raceId = accessor.dba$getRaceId().getPath();
+            int currentUpgrades = accessor.dba$getStatUpgradeCount(statName);
+            int apCost = PlayerStats.getUpgradeCost(raceId, statName, currentUpgrades);
+            int milestone = (currentUpgrades / 5) * 5;
+            int reqLvl = milestone * 2;
+            boolean canAfford = accessor.dba$getStatPoints() >= apCost;
+            boolean levelMet = accessor.dba$getLevel() >= reqLvl;
+            boolean canUpgrade = canAfford && levelMet && apCost <= 9000;
+
+            int y = startY + 55 + i * 24;
+            int btnY = y - 4;
+            int btnW = 18;
+            int btnH = 18;
+            
+            if (mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH) {
+                if (canUpgrade) {
+                    CompoundTag nbt = new CompoundTag();
+                    nbt.putString("action", "upgrade");
+                    nbt.putString("stat", statName);
+                    ClientPlayNetworking.send(new ActionPayload(nbt));
+                    return true;
+                }
+            }
+        }
         return false;
     }
 }
