@@ -170,6 +170,18 @@ public class DbaBlocks {
             .requiresCorrectToolForDrops()
     );
 
+    public static final ResourceKey<Block> SENZU_PLANT_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("senzu_plant")
+    );
+    public static final Block SENZU_PLANT = new SenzuPlantBlock(
+        BlockBehaviour.Properties.of()
+            .setId(SENZU_PLANT_KEY)
+            .noCollision()
+            .randomTicks()
+            .instabreak()
+            .sound(SoundType.CROP)
+    );
+
     // --- Registration helpers ---
     private static void registerBlock(ResourceKey<Block> key, Block block) {
         Registry.register(BuiltInRegistries.BLOCK, key, block);
@@ -195,5 +207,7 @@ public class DbaBlocks {
         registerBlock(BAUXITE_ORE_KEY, BAUXITE_ORE);
         registerBlock(TIN_ORE_KEY, TIN_ORE);
         registerBlock(SILVER_ORE_KEY, SILVER_ORE);
+
+        Registry.register(BuiltInRegistries.BLOCK, SENZU_PLANT_KEY, SENZU_PLANT);
     }
 }

@@ -26,6 +26,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.entity.DbaEntities.OTHERWORLD_GUIDE,
             com.dragonblockarcanedba.client.render.OtherworldGuideRenderer::new
         );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.FLYING_NIMBUS,
+            com.dragonblockarcanedba.client.render.FlyingNimbusRenderer::new
+        );
 
         // Register GeckoLib replaced player renderer
         // This replaces vanilla Steve/Alex with race-specific GeckoLib models

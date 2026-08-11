@@ -6,6 +6,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.food.FoodProperties;
@@ -129,6 +130,12 @@ public class DbaItems {
     public static final ResourceKey<Item> SENZU_BEAN_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("senzu_bean")
     );
+    public static final ResourceKey<Item> SENZU_SPROUT_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("senzu_sprout")
+    );
+    public static final ResourceKey<Item> FLYING_NIMBUS_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("flying_nimbus")
+    );
     public static final ResourceKey<Item> SILVER_ZENI_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("silver_zeni")
     );
@@ -161,6 +168,9 @@ public class DbaItems {
     );
     public static final ResourceKey<Item> STEEL_INGOT_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("steel_ingot")
+    );
+    public static final ResourceKey<Item> SPIRIT_CRYSTAL_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("spirit_crystal")
     );
 
     public static final Item SPACE_POD = new SpacePodItem(
@@ -278,6 +288,13 @@ public class DbaItems {
     public static final Item SENZU_BEAN = new SenzuBeanItem(
         new Item.Properties().setId(SENZU_BEAN_KEY)
     );
+    public static final Item SENZU_SPROUT = new BlockItem(
+        com.dragonblockarcanedba.block.DbaBlocks.SENZU_PLANT,
+        new Item.Properties().setId(SENZU_SPROUT_KEY)
+    );
+    public static final Item FLYING_NIMBUS = new FlyingNimbusItem(
+        new Item.Properties().setId(FLYING_NIMBUS_KEY).stacksTo(1)
+    );
     public static final Item SILVER_ZENI = new Item(
         new Item.Properties().setId(SILVER_ZENI_KEY)
     );
@@ -312,6 +329,9 @@ public class DbaItems {
     );
     public static final Item STEEL_INGOT = new Item(
         new Item.Properties().setId(STEEL_INGOT_KEY)
+    );
+    public static final Item SPIRIT_CRYSTAL = new Item(
+        new Item.Properties().setId(SPIRIT_CRYSTAL_KEY)
     );
 
     public static final CreativeModeTab DBA_TAB = CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
@@ -356,6 +376,8 @@ public class DbaItems {
             output.accept(RED_TICKETS);
             output.accept(DBA_LOGO);
             output.accept(SENZU_BEAN);
+            output.accept(SENZU_SPROUT);
+            output.accept(FLYING_NIMBUS);
             output.accept(SILVER_ZENI);
             output.accept(BLOOD_RUBY);
             output.accept(GAMMET);
@@ -367,6 +389,7 @@ public class DbaItems {
             output.accept(TIN_INGOT);
             output.accept(SILVER_INGOT);
             output.accept(STEEL_INGOT);
+            output.accept(SPIRIT_CRYSTAL);
             output.accept(com.dragonblockarcanedba.block.DbaBlocks.KATCHIN_ORE);
             output.accept(com.dragonblockarcanedba.block.DbaBlocks.DRAGSTONE_ORE);
             output.accept(com.dragonblockarcanedba.block.DbaBlocks.AETHERIUM_ORE);
@@ -415,6 +438,8 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, RED_TICKETS_KEY, RED_TICKETS);
         Registry.register(BuiltInRegistries.ITEM, DBA_LOGO_KEY, DBA_LOGO);
         Registry.register(BuiltInRegistries.ITEM, SENZU_BEAN_KEY, SENZU_BEAN);
+        Registry.register(BuiltInRegistries.ITEM, SENZU_SPROUT_KEY, SENZU_SPROUT);
+        Registry.register(BuiltInRegistries.ITEM, FLYING_NIMBUS_KEY, FLYING_NIMBUS);
         Registry.register(BuiltInRegistries.ITEM, SILVER_ZENI_KEY, SILVER_ZENI);
         Registry.register(BuiltInRegistries.ITEM, BLOOD_RUBY_KEY, BLOOD_RUBY);
         Registry.register(BuiltInRegistries.ITEM, GAMMET_KEY, GAMMET);
@@ -426,6 +451,7 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, TIN_INGOT_KEY, TIN_INGOT);
         Registry.register(BuiltInRegistries.ITEM, SILVER_INGOT_KEY, SILVER_INGOT);
         Registry.register(BuiltInRegistries.ITEM, STEEL_INGOT_KEY, STEEL_INGOT);
+        Registry.register(BuiltInRegistries.ITEM, SPIRIT_CRYSTAL_KEY, SPIRIT_CRYSTAL);
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, DBA_TAB_KEY, DBA_TAB);
         DragonBlockArcaneDBA.LOGGER.info("Registered DBA items");
     }

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cross",
+  "textures": {
+    "cross": "dragonblockarcanedba:block/senzu_plant_stage2"
+  }
+}

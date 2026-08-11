@@ -21,7 +21,16 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 @Mixin(LivingEntity.class)
-public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util.DbaAttackerTracker, TimeTracker {
+public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util.DbaAttackerTracker, TimeTracker, com.dragonblockarcanedba.util.DbaLivingEntityInput {
+
+    @org.spongepowered.asm.mixin.Shadow
+    protected float xxa;
+
+    @org.spongepowered.asm.mixin.Shadow
+    protected float zza;
+
+    @org.spongepowered.asm.mixin.Shadow
+    protected boolean jumping;
 
     // ========== Effect Inflictor Tracking ==========
 
@@ -223,6 +232,21 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
             // Normal operation: record position history
             dba$pushPosition(self.position());
         }
+    }
+
+    @Override
+    public float dba$getXxa() {
+        return this.xxa;
+    }
+
+    @Override
+    public float dba$getZza() {
+        return this.zza;
+    }
+
+    @Override
+    public boolean dba$isJumping() {
+        return this.jumping;
     }
 }
 
