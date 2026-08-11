@@ -12,6 +12,11 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.fabricmc.fabric.api.biome.v1.BiomeModifications;
+import net.fabricmc.fabric.api.biome.v1.BiomeSelectors;
+import net.minecraft.world.level.levelgen.GenerationStep;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.registries.Registries;
 
 public class DragonBlockArcaneDBA implements ModInitializer {
     public static final String MOD_ID = "dragonblockarcanedba";
@@ -28,6 +33,43 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         com.dragonblockarcanedba.block.DbaBlocks.register();
         DbaItems.register();
         DbaEffects.register();
+
+        // Worldgen
+        BiomeModifications.addFeature(
+            BiomeSelectors.foundInOverworld(),
+            GenerationStep.Decoration.UNDERGROUND_ORES,
+            ResourceKey.create(Registries.PLACED_FEATURE, id("katchin_ore"))
+        );
+
+        BiomeModifications.addFeature(
+            BiomeSelectors.foundInOverworld(),
+            GenerationStep.Decoration.UNDERGROUND_ORES,
+            ResourceKey.create(Registries.PLACED_FEATURE, id("dragstone_ore"))
+        );
+
+        BiomeModifications.addFeature(
+            BiomeSelectors.foundInOverworld(),
+            GenerationStep.Decoration.UNDERGROUND_ORES,
+            ResourceKey.create(Registries.PLACED_FEATURE, id("aetherium_ore"))
+        );
+
+        BiomeModifications.addFeature(
+            BiomeSelectors.foundInOverworld(),
+            GenerationStep.Decoration.UNDERGROUND_ORES,
+            ResourceKey.create(Registries.PLACED_FEATURE, id("bauxite_ore"))
+        );
+
+        BiomeModifications.addFeature(
+            BiomeSelectors.foundInOverworld(),
+            GenerationStep.Decoration.UNDERGROUND_ORES,
+            ResourceKey.create(Registries.PLACED_FEATURE, id("tin_ore"))
+        );
+
+        BiomeModifications.addFeature(
+            BiomeSelectors.foundInOverworld(),
+            GenerationStep.Decoration.UNDERGROUND_ORES,
+            ResourceKey.create(Registries.PLACED_FEATURE, id("silver_ore"))
+        );
 
         // Register Entities
         com.dragonblockarcanedba.entity.DbaEntities.register();

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "dragonblockarcanedba:block/tin_ore"
+  }
+}

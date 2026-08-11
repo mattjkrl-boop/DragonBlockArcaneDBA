@@ -8,6 +8,8 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.item.Items;
 
 public class DbaItems {
     public static final ResourceKey<Item> SPACE_POD_KEY = ResourceKey.create(
@@ -124,6 +126,42 @@ public class DbaItems {
     public static final ResourceKey<Item> DBA_LOGO_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("dba_logo")
     );
+    public static final ResourceKey<Item> SENZU_BEAN_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("senzu_bean")
+    );
+    public static final ResourceKey<Item> SILVER_ZENI_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("silver_zeni")
+    );
+    public static final ResourceKey<Item> BLOOD_RUBY_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("blood_ruby")
+    );
+    public static final ResourceKey<Item> GAMMET_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("gammet")
+    );
+    public static final ResourceKey<Item> DINO_MEAT_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("dino_meat")
+    );
+    public static final ResourceKey<Item> KATCHIN_SHARD_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("katchin_shard")
+    );
+    public static final ResourceKey<Item> DRAGSTONE_INGOT_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("dragstone_ingot")
+    );
+    public static final ResourceKey<Item> AETHERIUM_INGOT_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("aetherium_ingot")
+    );
+    public static final ResourceKey<Item> BAUXITE_INGOT_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("bauxite_ingot")
+    );
+    public static final ResourceKey<Item> TIN_INGOT_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("tin_ingot")
+    );
+    public static final ResourceKey<Item> SILVER_INGOT_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("silver_ingot")
+    );
+    public static final ResourceKey<Item> STEEL_INGOT_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("steel_ingot")
+    );
 
     public static final Item SPACE_POD = new SpacePodItem(
         new Item.Properties().setId(SPACE_POD_KEY).stacksTo(1)
@@ -237,6 +275,44 @@ public class DbaItems {
     public static final Item DBA_LOGO = new Item(
         new Item.Properties().setId(DBA_LOGO_KEY)
     );
+    public static final Item SENZU_BEAN = new SenzuBeanItem(
+        new Item.Properties().setId(SENZU_BEAN_KEY)
+    );
+    public static final Item SILVER_ZENI = new Item(
+        new Item.Properties().setId(SILVER_ZENI_KEY)
+    );
+    public static final Item BLOOD_RUBY = new Item(
+        new Item.Properties().setId(BLOOD_RUBY_KEY)
+    );
+    public static final Item GAMMET = new Item(
+        new Item.Properties().setId(GAMMET_KEY)
+    );
+    public static final Item DINO_MEAT = new DinoMeatItem(
+        new Item.Properties().setId(DINO_MEAT_KEY).food(
+            new FoodProperties.Builder().nutrition(6).saturationModifier(0.5f).build()
+        )
+    );
+    public static final Item KATCHIN_SHARD = new Item(
+        new Item.Properties().setId(KATCHIN_SHARD_KEY)
+    );
+    public static final Item DRAGSTONE_INGOT = new Item(
+        new Item.Properties().setId(DRAGSTONE_INGOT_KEY)
+    );
+    public static final Item AETHERIUM_INGOT = new Item(
+        new Item.Properties().setId(AETHERIUM_INGOT_KEY)
+    );
+    public static final Item BAUXITE_INGOT = new Item(
+        new Item.Properties().setId(BAUXITE_INGOT_KEY)
+    );
+    public static final Item TIN_INGOT = new Item(
+        new Item.Properties().setId(TIN_INGOT_KEY)
+    );
+    public static final Item SILVER_INGOT = new Item(
+        new Item.Properties().setId(SILVER_INGOT_KEY)
+    );
+    public static final Item STEEL_INGOT = new Item(
+        new Item.Properties().setId(STEEL_INGOT_KEY)
+    );
 
     public static final CreativeModeTab DBA_TAB = CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
         .title(Component.translatable("itemGroup.dragonblockarcanedba.dba_items"))
@@ -278,6 +354,25 @@ public class DbaItems {
             output.accept(PURPLE_ORB_LARGE);
             output.accept(PURPLE_ORB_SMALL);
             output.accept(RED_TICKETS);
+            output.accept(DBA_LOGO);
+            output.accept(SENZU_BEAN);
+            output.accept(SILVER_ZENI);
+            output.accept(BLOOD_RUBY);
+            output.accept(GAMMET);
+            output.accept(DINO_MEAT);
+            output.accept(KATCHIN_SHARD);
+            output.accept(DRAGSTONE_INGOT);
+            output.accept(AETHERIUM_INGOT);
+            output.accept(BAUXITE_INGOT);
+            output.accept(TIN_INGOT);
+            output.accept(SILVER_INGOT);
+            output.accept(STEEL_INGOT);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.KATCHIN_ORE);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.DRAGSTONE_ORE);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.AETHERIUM_ORE);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.BAUXITE_ORE);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.TIN_ORE);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.SILVER_ORE);
         })
         .build();
 
@@ -319,6 +414,18 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, PURPLE_ORB_SMALL_KEY, PURPLE_ORB_SMALL);
         Registry.register(BuiltInRegistries.ITEM, RED_TICKETS_KEY, RED_TICKETS);
         Registry.register(BuiltInRegistries.ITEM, DBA_LOGO_KEY, DBA_LOGO);
+        Registry.register(BuiltInRegistries.ITEM, SENZU_BEAN_KEY, SENZU_BEAN);
+        Registry.register(BuiltInRegistries.ITEM, SILVER_ZENI_KEY, SILVER_ZENI);
+        Registry.register(BuiltInRegistries.ITEM, BLOOD_RUBY_KEY, BLOOD_RUBY);
+        Registry.register(BuiltInRegistries.ITEM, GAMMET_KEY, GAMMET);
+        Registry.register(BuiltInRegistries.ITEM, DINO_MEAT_KEY, DINO_MEAT);
+        Registry.register(BuiltInRegistries.ITEM, KATCHIN_SHARD_KEY, KATCHIN_SHARD);
+        Registry.register(BuiltInRegistries.ITEM, DRAGSTONE_INGOT_KEY, DRAGSTONE_INGOT);
+        Registry.register(BuiltInRegistries.ITEM, AETHERIUM_INGOT_KEY, AETHERIUM_INGOT);
+        Registry.register(BuiltInRegistries.ITEM, BAUXITE_INGOT_KEY, BAUXITE_INGOT);
+        Registry.register(BuiltInRegistries.ITEM, TIN_INGOT_KEY, TIN_INGOT);
+        Registry.register(BuiltInRegistries.ITEM, SILVER_INGOT_KEY, SILVER_INGOT);
+        Registry.register(BuiltInRegistries.ITEM, STEEL_INGOT_KEY, STEEL_INGOT);
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, DBA_TAB_KEY, DBA_TAB);
         DragonBlockArcaneDBA.LOGGER.info("Registered DBA items");
     }

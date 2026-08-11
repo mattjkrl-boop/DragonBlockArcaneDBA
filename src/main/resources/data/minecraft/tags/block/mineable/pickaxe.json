@@ -1,0 +1,11 @@
+{
+  "replace": false,
+  "values": [
+    "dragonblockarcanedba:katchin_ore",
+    "dragonblockarcanedba:dragstone_ore",
+    "dragonblockarcanedba:aetherium_ore",
+    "dragonblockarcanedba:bauxite_ore",
+    "dragonblockarcanedba:tin_ore",
+    "dragonblockarcanedba:silver_ore"
+  ]
+}

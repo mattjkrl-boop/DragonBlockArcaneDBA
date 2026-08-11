@@ -50,6 +50,78 @@ public class DbaBlocks {
             .requiresCorrectToolForDrops()
     );
 
+    public static final ResourceKey<Block> KATCHIN_ORE_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("katchin_ore")
+    );
+    public static final Block KATCHIN_ORE = new Block(
+        BlockBehaviour.Properties.of()
+            .setId(KATCHIN_ORE_KEY)
+            .mapColor(MapColor.COLOR_GRAY)
+            .strength(50.0f, 1200.0f) // Extreme strength (Obsidian level)
+            .sound(SoundType.STONE)
+            .requiresCorrectToolForDrops()
+    );
+
+    public static final ResourceKey<Block> DRAGSTONE_ORE_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("dragstone_ore")
+    );
+    public static final Block DRAGSTONE_ORE = new Block(
+        BlockBehaviour.Properties.of()
+            .setId(DRAGSTONE_ORE_KEY)
+            .mapColor(MapColor.COLOR_RED)
+            .strength(3.0f, 3.0f)
+            .sound(SoundType.STONE)
+            .requiresCorrectToolForDrops()
+    );
+
+    public static final ResourceKey<Block> AETHERIUM_ORE_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("aetherium_ore")
+    );
+    public static final Block AETHERIUM_ORE = new Block(
+        BlockBehaviour.Properties.of()
+            .setId(AETHERIUM_ORE_KEY)
+            .mapColor(MapColor.COLOR_PURPLE)
+            .strength(3.0f, 3.0f)
+            .sound(SoundType.STONE)
+            .requiresCorrectToolForDrops()
+    );
+
+    public static final ResourceKey<Block> BAUXITE_ORE_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("bauxite_ore")
+    );
+    public static final Block BAUXITE_ORE = new Block(
+        BlockBehaviour.Properties.of()
+            .setId(BAUXITE_ORE_KEY)
+            .mapColor(MapColor.COLOR_BROWN)
+            .strength(3.0f, 3.0f)
+            .sound(SoundType.STONE)
+            .requiresCorrectToolForDrops()
+    );
+
+    public static final ResourceKey<Block> TIN_ORE_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("tin_ore")
+    );
+    public static final Block TIN_ORE = new Block(
+        BlockBehaviour.Properties.of()
+            .setId(TIN_ORE_KEY)
+            .mapColor(MapColor.COLOR_LIGHT_GRAY)
+            .strength(3.0f, 3.0f)
+            .sound(SoundType.STONE)
+            .requiresCorrectToolForDrops()
+    );
+
+    public static final ResourceKey<Block> SILVER_ORE_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("silver_ore")
+    );
+    public static final Block SILVER_ORE = new Block(
+        BlockBehaviour.Properties.of()
+            .setId(SILVER_ORE_KEY)
+            .mapColor(MapColor.COLOR_LIGHT_GRAY)
+            .strength(3.0f, 3.0f)
+            .sound(SoundType.STONE)
+            .requiresCorrectToolForDrops()
+    );
+
     // --- Planet Vegeta ---
     public static final ResourceKey<Block> VEGETA_GRASS_KEY = ResourceKey.create(
         Registries.BLOCK, DragonBlockArcaneDBA.id("vegeta_grass")
@@ -117,5 +189,11 @@ public class DbaBlocks {
         registerBlock(VEGETA_STONE_KEY, VEGETA_STONE);
         registerBlock(YARDRAT_GRASS_KEY, YARDRAT_GRASS);
         registerBlock(YARDRAT_STONE_KEY, YARDRAT_STONE);
+        registerBlock(KATCHIN_ORE_KEY, KATCHIN_ORE);
+        registerBlock(DRAGSTONE_ORE_KEY, DRAGSTONE_ORE);
+        registerBlock(AETHERIUM_ORE_KEY, AETHERIUM_ORE);
+        registerBlock(BAUXITE_ORE_KEY, BAUXITE_ORE);
+        registerBlock(TIN_ORE_KEY, TIN_ORE);
+        registerBlock(SILVER_ORE_KEY, SILVER_ORE);
     }
 }
