@@ -62,6 +62,20 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     private final KiTechnique[] dbaKiTechniqueSlots = new KiTechnique[]{
         KiTechnique.EMPTY, KiTechnique.EMPTY, KiTechnique.EMPTY
     };
+    @Unique
+    private final Map<String, Integer> dbaStatUpgradesMap = new HashMap<>();
+
+    @Unique
+    @Override
+    public int dba$getStatUpgradeCount(String stat) {
+        return dbaStatUpgradesMap.getOrDefault(stat, 0);
+    }
+
+    @Unique
+    @Override
+    public void dba$setStatUpgradeCount(String stat, int count) {
+        dbaStatUpgradesMap.put(stat, count);
+    }
 
     // ==================== SAVE / LOAD (ValueOutput / ValueInput) ====================
 
@@ -80,6 +94,9 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
 
         ValueOutput statsOut = dbaOut.child("stats");
         dbaStatsMap.forEach(statsOut::putInt);
+
+        ValueOutput statUpgradesOut = dbaOut.child("statUpgrades");
+        dbaStatUpgradesMap.forEach(statUpgradesOut::putInt);
 
         if (dbaActiveFormId != null) {
             dbaOut.putString("activeFormId", dbaActiveFormId.toString());
@@ -137,6 +154,15 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
                 } else {
                     dbaStatsMap.put(stat, val);
                 }
+            }
+        }
+
+        dbaStatUpgradesMap.clear();
+        ValueInput statUpgradesIn = dbaIn.childOrEmpty("statUpgrades");
+        for (String stat : new String[]{"strength", "dexterity", "defense", "willpower", "spirit", "vitality"}) {
+            int val = statUpgradesIn.getIntOr(stat, 0);
+            if (val != 0) {
+                dbaStatUpgradesMap.put(stat, val);
             }
         }
 
@@ -395,7 +421,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     @Override
     public void dba$setStrength(int value) {
-        dbaStatsMap.put("strength", Math.min(value, 5000));
+        dbaStatsMap.put("strength", value);
     }
 
     @Unique
@@ -407,7 +433,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     @Override
     public void dba$setDexterity(int value) {
-        dbaStatsMap.put("dexterity", Math.min(value, 5000));
+        dbaStatsMap.put("dexterity", value);
     }
 
     @Unique
@@ -419,7 +445,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     @Override
     public void dba$setDefense(int value) {
-        dbaStatsMap.put("defense", Math.min(value, 5000));
+        dbaStatsMap.put("defense", value);
     }
 
     @Unique
@@ -431,7 +457,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     @Override
     public void dba$setWillpower(int value) {
-        dbaStatsMap.put("willpower", Math.min(value, 5000));
+        dbaStatsMap.put("willpower", value);
     }
     
     @Unique
@@ -443,7 +469,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     @Override
     public void dba$setSpirit(int value) {
-        dbaStatsMap.put("spirit", Math.min(value, 5000));
+        dbaStatsMap.put("spirit", value);
     }
 
     @Unique
@@ -455,20 +481,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     @Override
     public void dba$setVitality(int value) {
-        value = Math.min(value, 5000);
         dbaStatsMap.put("vitality", value);
-        // Sync Max Health when vitality changes
-        Player player = (Player) (Object) this;
-        if (!player.level().isClientSide()) {
-            net.minecraft.world.entity.ai.attributes.AttributeInstance healthAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
-            if (healthAttr != null) {
-                // Base health 20 + vitality scaling
-                healthAttr.setBaseValue(20.0 + (value * 2.0)); 
-                if (player.getHealth() > player.getMaxHealth()) {
-                    player.setHealth(player.getMaxHealth());
-                }
-            }
-        }
     }
     
     @Unique
@@ -598,6 +611,10 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         dbaStatsMap.forEach(statsNbt::putInt);
         dbaNbt.put("stats", statsNbt);
 
+        CompoundTag statUpgradesNbt = new CompoundTag();
+        dbaStatUpgradesMap.forEach(statUpgradesNbt::putInt);
+        dbaNbt.put("statUpgrades", statUpgradesNbt);
+
         if (dbaActiveFormId != null) {
             dbaNbt.putString("activeFormId", dbaActiveFormId.toString());
         }
@@ -641,12 +658,44 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     }
 
     @Unique
+    private void dba$updateAttributes() {
+        Player player = (Player) (Object) this;
+        if (!player.level().isClientSide()) {
+            double effectiveVitality = PlayerStats.getEffectiveStat(player, "vitality");
+            net.minecraft.world.entity.ai.attributes.AttributeInstance healthAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+            if (healthAttr != null) {
+                double newBaseMax = 20.0 + (effectiveVitality * 20.0);
+                if (healthAttr.getBaseValue() != newBaseMax) {
+                    healthAttr.setBaseValue(newBaseMax);
+                }
+                if (player.getHealth() > player.getMaxHealth()) {
+                    player.setHealth(player.getMaxHealth());
+                }
+            }
+
+            double effectiveStrength = PlayerStats.getEffectiveStat(player, "strength");
+            net.minecraft.world.entity.ai.attributes.AttributeInstance damageAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+            if (damageAttr != null) {
+                damageAttr.setBaseValue(1.0 + (effectiveStrength * 0.5));
+            }
+
+            double effectiveDex = PlayerStats.getEffectiveStat(player, "dexterity");
+            net.minecraft.world.entity.ai.attributes.AttributeInstance speedAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
+            if (speedAttr != null) {
+                speedAttr.setBaseValue(0.1 + (effectiveDex * 0.001));
+            }
+        }
+    }
+
+    @Unique
     @Override
     public void dba$syncStats() {
         Player player = (Player) (Object) this;
         if (player.level().isClientSide()) {
             return;
         }
+
+        dba$updateAttributes();
 
         if (player instanceof ServerPlayer serverPlayer) {
             CompoundTag syncData = dba$toSyncNbt();

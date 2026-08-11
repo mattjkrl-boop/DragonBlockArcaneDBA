@@ -64,20 +64,27 @@ public class DbaNetwork {
                         case "vitality" -> curLvl = accessor.dba$getVitality();
                     }
                     
-                    if (curLvl < 5000) {
-                        int cost = com.dragonblockarcanedba.attribute.PlayerStats.getUpgradeCost(curLvl);
-                        int milestone = (curLvl / 5) * 5;
+                    if (curLvl < 500000000) { // arbitrary high limit
+                        String raceId = accessor.dba$getRaceId().getPath();
+                        int currentUpgrades = accessor.dba$getStatUpgradeCount(stat);
+                        int cost = com.dragonblockarcanedba.attribute.PlayerStats.getUpgradeCost(raceId, stat, currentUpgrades);
+                        int gain = com.dragonblockarcanedba.attribute.PlayerStats.getStatGain(raceId, stat);
+                        
+                        // Milestone checking can be based on upgrades now. 
+                        // e.g. you need Level = upgradeCount * 2
+                        int milestone = (currentUpgrades / 5) * 5;
                         int reqLvl = milestone * 2;
                         
                         if (ap >= cost && accessor.dba$getLevel() >= reqLvl) {
                             switch (stat) {
-                                case "strength" -> accessor.dba$setStrength(curLvl + 1);
-                                case "dexterity" -> accessor.dba$setDexterity(curLvl + 1);
-                                case "defense" -> accessor.dba$setDefense(curLvl + 1);
-                                case "willpower" -> accessor.dba$setWillpower(curLvl + 1);
-                                case "spirit" -> accessor.dba$setSpirit(curLvl + 1);
-                                case "vitality" -> accessor.dba$setVitality(curLvl + 1);
+                                case "strength" -> accessor.dba$setStrength(curLvl + gain);
+                                case "dexterity" -> accessor.dba$setDexterity(curLvl + gain);
+                                case "defense" -> accessor.dba$setDefense(curLvl + gain);
+                                case "willpower" -> accessor.dba$setWillpower(curLvl + gain);
+                                case "spirit" -> accessor.dba$setSpirit(curLvl + gain);
+                                case "vitality" -> accessor.dba$setVitality(curLvl + gain);
                             }
+                            accessor.dba$setStatUpgradeCount(stat, currentUpgrades + 1);
                             accessor.dba$setStatPoints(ap - cost);
                             accessor.dba$syncStats();
                         }

@@ -48,6 +48,9 @@ public interface PlayerStatsAccessor {
     int dba$getVitality();
     void dba$setVitality(int value);
     
+    int dba$getStatUpgradeCount(String stat);
+    void dba$setStatUpgradeCount(String stat, int count);
+
     double dba$getCurrentStamina();
     void dba$setCurrentStamina(double stamina);
     void dba$addStamina(double amount);

@@ -122,6 +122,12 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                         }
                     }
 
+                    CompoundTag statUpgrades = nbt.getCompoundOrEmpty("statUpgrades");
+                    for (String key : statUpgrades.keySet()) {
+                        int val = statUpgrades.getIntOr(key, 0);
+                        accessor.dba$setStatUpgradeCount(key, val);
+                    }
+
                     if (nbt.contains("activeFormId")) {
                         accessor.dba$setActiveFormId(Identifier.parse(nbt.getStringOr("activeFormId", "")));
                     } else {
