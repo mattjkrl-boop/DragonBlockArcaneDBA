@@ -136,6 +136,9 @@ public class DbaItems {
     public static final ResourceKey<Item> FLYING_NIMBUS_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("flying_nimbus")
     );
+    public static final ResourceKey<Item> EARTH_DRAGON_BALL_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("earth_dragon_ball")
+    );
     public static final ResourceKey<Item> SILVER_ZENI_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("silver_zeni")
     );
@@ -295,6 +298,9 @@ public class DbaItems {
     public static final Item FLYING_NIMBUS = new FlyingNimbusItem(
         new Item.Properties().setId(FLYING_NIMBUS_KEY).stacksTo(1)
     );
+    public static final Item EARTH_DRAGON_BALL = new Item(
+        new Item.Properties().setId(EARTH_DRAGON_BALL_KEY).stacksTo(1)
+    );
     public static final Item SILVER_ZENI = new Item(
         new Item.Properties().setId(SILVER_ZENI_KEY)
     );
@@ -378,6 +384,7 @@ public class DbaItems {
             output.accept(SENZU_BEAN);
             output.accept(SENZU_SPROUT);
             output.accept(FLYING_NIMBUS);
+            output.accept(EARTH_DRAGON_BALL);
             output.accept(SILVER_ZENI);
             output.accept(BLOOD_RUBY);
             output.accept(GAMMET);
@@ -440,6 +447,7 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, SENZU_BEAN_KEY, SENZU_BEAN);
         Registry.register(BuiltInRegistries.ITEM, SENZU_SPROUT_KEY, SENZU_SPROUT);
         Registry.register(BuiltInRegistries.ITEM, FLYING_NIMBUS_KEY, FLYING_NIMBUS);
+        Registry.register(BuiltInRegistries.ITEM, EARTH_DRAGON_BALL_KEY, EARTH_DRAGON_BALL);
         Registry.register(BuiltInRegistries.ITEM, SILVER_ZENI_KEY, SILVER_ZENI);
         Registry.register(BuiltInRegistries.ITEM, BLOOD_RUBY_KEY, BLOOD_RUBY);
         Registry.register(BuiltInRegistries.ITEM, GAMMET_KEY, GAMMET);
