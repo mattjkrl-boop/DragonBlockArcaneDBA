@@ -90,12 +90,14 @@ public class StatsTab implements MenuTab {
 
             int y = startY + 55 + i * 24;
             
-            // Draw progress bar
+            // Draw progress bar based on AP affordability
             int barWidth = 90;
             int barHeight = 8;
             int barX = startX + 90;
-            float progress = (currentUpgrades % 10) / 10.0f; // loop every 10 upgrades
-            if (currentUpgrades > 0 && currentUpgrades % 10 == 0) progress = 1.0f;
+            
+            float progress = (float) accessor.dba$getStatPoints() / (float) apCost;
+            if (progress > 1.0f) progress = 1.0f;
+            if (Float.isNaN(progress) || Float.isInfinite(progress)) progress = 0.0f;
             
             // Background of bar
             context.fill(barX, y, barX + barWidth, y + barHeight, 0x44000000);
@@ -118,7 +120,13 @@ public class StatsTab implements MenuTab {
             context.text(client.font, Component.literal(statString), barX + barWidth + 10, y, 0xFFFFFFFF);
             
             // Display AP cost and Req level below the bar
-            String apString = (apCost > 9000) ? "Cost: MAX" : "Cost: " + apCost + " AP";
+            // Display the AP cost (format nicely if it's very large)
+            String apString = "Cost: " + apCost + " AP";
+            if (apCost >= 1000000) {
+                apString = "Cost: " + (apCost / 1000000) + "M AP";
+            } else if (apCost >= 10000) {
+                apString = "Cost: " + (apCost / 1000) + "k AP";
+            }
             context.text(client.font, Component.literal(apString + reqString), barX, y + 10, textColor);
             
             // Custom Upgrade Button

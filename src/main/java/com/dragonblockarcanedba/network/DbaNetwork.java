@@ -146,7 +146,23 @@ public class DbaNetwork {
                         accessor.dba$setWillpower(0);
                         accessor.dba$setSpirit(0);
                         accessor.dba$setVitality(0);
+                        
+                        // Clear upgrade counts
+                        for (String stat : new String[]{"strength", "dexterity", "defense", "willpower", "spirit", "vitality"}) {
+                            accessor.dba$setStatUpgradeCount(stat, 0);
+                        }
+                        
                         accessor.dba$setActiveFormId(null);
+                        
+                        // Sync stats first to update the player's Max Health attribute based on their new race
+                        accessor.dba$syncStats();
+                        
+                        // Heal to max stats on creation
+                        accessor.dba$setCurrentKi(com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(player));
+                        accessor.dba$setCurrentStamina(com.dragonblockarcanedba.attribute.PlayerStats.getMaxStamina(player));
+                        player.setHealth(player.getMaxHealth());
+                        
+                        // Sync stats again so the client receives the filled Ki and Stamina bars
                         accessor.dba$syncStats();
                     }
                 } else if ("revive".equals(action)) {

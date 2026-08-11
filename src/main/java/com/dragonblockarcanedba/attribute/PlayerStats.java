@@ -241,61 +241,76 @@ public class PlayerStats {
 
     public static int getUpgradeCost(String raceId, String statName, int upgradeCount) {
         int x = upgradeCount;
+        double cost = 5.0;
         
         switch (raceId.toLowerCase().replace("dragonblockarcanedba:", "")) {
             case "saiyan": 
                 // Exponential: 5 * (1.1 ^ x)
-                return (int) Math.ceil(5.0 * Math.pow(1.10, x));
+                cost = 5.0 * Math.pow(1.10, x);
+                break;
                 
             case "half-saiyan":
                 // Spiky: Cost fluctuates. Base curve is lower exponential, but spikes every 10 levels.
                 double baseSpiky = 5.0 * Math.pow(1.08, x);
-                if (x % 10 == 9) return (int) Math.ceil(baseSpiky * 3.0);
-                return (int) Math.ceil(baseSpiky);
+                if (x % 10 == 9) cost = baseSpiky * 3.0;
+                else cost = baseSpiky;
+                break;
                 
             case "human":
-                // Logarithmic: Starts at 5, scales incredibly slowly early, then hits a wall.
-                if (x > 40) return 500; // Hit a severe plateau
-                return (int) Math.ceil(5.0 + (15.0 * Math.log(x + 1)));
+                // Logarithmic: Starts at 5, scales incredibly slowly early.
+                cost = 5.0 + (15.0 * Math.log(x + 1));
+                break;
                 
             case "namekian":
                 // Linear: Steady growth
-                return 5 + (x * 2);
+                cost = 5 + (x * 2);
+                break;
                 
             case "arcosian":
                 // Flatline: 5 for a long time, then skyrockets.
-                if (x <= 15) return 5;
-                return (int) Math.ceil(50.0 * Math.pow(1.5, (x - 15)));
+                if (x <= 15) cost = 5.0;
+                else cost = 50.0 * Math.pow(1.5, (x - 15));
+                break;
                 
             case "bio-android":
                 // Stepped: Jumps every 10 levels.
                 int step = x / 10;
-                if (step == 0) return 5;
-                if (step == 1) return 15;
-                if (step == 2) return 30;
-                if (step == 3) return 60;
-                return 100 + (step * 50);
+                if (step == 0) cost = 5.0;
+                else if (step == 1) cost = 15.0;
+                else if (step == 2) cost = 30.0;
+                else if (step == 3) cost = 60.0;
+                else cost = 100 + (step * 50);
+                break;
                 
             case "majin":
                 // Late Bloomer: High early AP costs, drops mid-game, then stabilizes.
-                if (x <= 10) return 20 - x; // 20 -> 10
-                if (x <= 20) return 10;
-                return (int) Math.ceil(10.0 * Math.pow(1.05, x - 20));
+                if (x <= 10) cost = 20 - x; // 20 -> 10
+                else if (x <= 20) cost = 10.0;
+                else cost = 10.0 * Math.pow(1.05, x - 20);
+                break;
                 
             case "yardrat":
-                // Utility Focused: Physical stats hard-cap very quickly.
-                if ((statName.equals("strength") || statName.equals("defense")) && x >= 10) {
-                    return 9999;
-                }
-                return (int) Math.ceil(5.0 * Math.pow(1.06, x));
+                // Utility Focused: Original curve kept, no hard caps.
+                cost = 5.0 * Math.pow(1.06, x);
+                break;
                 
             case "tuffle":
                 // Reverse Exponential: Starts insanely expensive, gets progressively cheaper.
-                int cost = (int) Math.ceil(100.0 * Math.pow(0.95, x));
-                return Math.max(5, cost);
+                cost = 100.0 * Math.pow(0.95, x);
+                cost = Math.max(5.0, cost);
+                break;
+                
+            default:
+                cost = 5.0 * Math.pow(1.08, x);
+                break;
         }
         
-        return (int) Math.ceil(5.0 * Math.pow(1.08, x));
+        // Prevent overflow issues at extremely high levels by capping at 1 billion AP per upgrade
+        if (cost > 1_000_000_000.0 || Double.isInfinite(cost) || Double.isNaN(cost)) {
+            return 1_000_000_000;
+        }
+        
+        return (int) Math.ceil(cost);
     }
 
     public static int getFormMasteryXpToNextLevel(int currentMasteryLevel) {

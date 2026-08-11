@@ -384,6 +384,15 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Override
     public void dba$setXp(int xp) {
         this.dbaXp = xp;
+        // Process level ups if set XP is higher than requirement
+        int req = PlayerStats.getXpToNextLevel(dbaLevel);
+        while (this.dbaXp >= req) {
+            this.dbaXp -= req;
+            dbaLevel++;
+            dbaAp += 3; // Gain 3 attribute points on level up
+            req = PlayerStats.getXpToNextLevel(dbaLevel);
+        }
+        dba$syncStats();
     }
 
     @Unique
