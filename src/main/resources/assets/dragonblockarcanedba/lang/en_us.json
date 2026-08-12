@@ -76,5 +76,7 @@
   "block.dragonblockarcanedba.yardrat_stone": "Yardrat Stone",
   "entity.dragonblockarcanedba.otherworld_guide": "Otherworld Guide",
   "effect.dragonblockarcanedba.melting": "Melting",
-  "item.dragonblockarcanedba.earth_dragon_ball": "Earth Dragon Ball"
+  "item.dragonblockarcanedba.earth_dragon_ball": "Earth Dragon Ball",
+  "block.dragonblockarcanedba.earth_dragon_ball": "Earth Dragon Ball",
+  "entity.dragonblockarcanedba.shenron": "Shenron"
 }

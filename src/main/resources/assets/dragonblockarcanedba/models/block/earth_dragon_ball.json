@@ -1,0 +1,22 @@
+{
+  "ambientocclusion": true,
+  "render_type": "minecraft:translucent",
+  "textures": {
+    "particle": "dragonblockarcanedba:block/earth_dragon_ball",
+    "all": "dragonblockarcanedba:block/earth_dragon_ball"
+  },
+  "elements": [
+    {
+      "from": [ 4, 0, 4 ],
+      "to": [ 12, 8, 12 ],
+      "faces": {
+        "down":  { "uv": [ 4, 4, 12, 12 ], "texture": "#all", "cullface": "down" },
+        "up":    { "uv": [ 4, 4, 12, 12 ], "texture": "#all" },
+        "north": { "uv": [ 4, 8, 12, 16 ], "texture": "#all" },
+        "south": { "uv": [ 4, 8, 12, 16 ], "texture": "#all" },
+        "west":  { "uv": [ 4, 8, 12, 16 ], "texture": "#all" },
+        "east":  { "uv": [ 4, 8, 12, 16 ], "texture": "#all" }
+      }
+    }
+  ]
+}

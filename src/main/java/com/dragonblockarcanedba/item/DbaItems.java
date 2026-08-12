@@ -298,7 +298,8 @@ public class DbaItems {
     public static final Item FLYING_NIMBUS = new FlyingNimbusItem(
         new Item.Properties().setId(FLYING_NIMBUS_KEY).stacksTo(1)
     );
-    public static final Item EARTH_DRAGON_BALL = new Item(
+    public static final Item EARTH_DRAGON_BALL = new BlockItem(
+        com.dragonblockarcanedba.block.DbaBlocks.EARTH_DRAGON_BALL,
         new Item.Properties().setId(EARTH_DRAGON_BALL_KEY).stacksTo(1)
     );
     public static final Item SILVER_ZENI = new Item(

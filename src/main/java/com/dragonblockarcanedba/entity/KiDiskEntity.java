@@ -6,18 +6,12 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.entity.LivingEntity;
-import com.geckolib.animatable.GeoEntity;
-import com.geckolib.animatable.instance.AnimatableInstanceCache;
-import com.geckolib.animatable.manager.AnimatableManager;
-import com.geckolib.util.GeckoLibUtil;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.core.particles.DustParticleOptions;
 
-public class KiDiskEntity extends ThrowableProjectile implements GeoEntity {
-    private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
-    
+public class KiDiskEntity extends ThrowableProjectile {
     private static final EntityDataAccessor<Integer> COLOR = SynchedEntityData.defineId(KiDiskEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(KiDiskEntity.class, EntityDataSerializers.FLOAT);
 
@@ -36,15 +30,6 @@ public class KiDiskEntity extends ThrowableProjectile implements GeoEntity {
 
     public void setDamage(float damage) { this.entityData.set(DAMAGE, damage); }
     public float getDamage() { return this.entityData.get(DAMAGE); }
-
-    @Override
-    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
-    }
-
-    @Override
-    public AnimatableInstanceCache getAnimatableInstanceCache() {
-        return this.cache;
-    }
 
     @Override
     public void tick() {

@@ -24,6 +24,7 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("flying_nimbus")))
     );
 
+<<<<<<< HEAD
     public static final EntityType<KiBlastEntity> KI_BLAST = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("ki_blast"),
@@ -82,11 +83,20 @@ public class DbaEntities {
                     .clientTrackingRange(10)
                     .updateInterval(1)
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ki_explosion")))
+=======
+    public static final EntityType<ShenronEntity> SHENRON = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("shenron"),
+            EntityType.Builder.of(ShenronEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 6.0f)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("shenron")))
+>>>>>>> 7613d14c24af613177fdfc9dafbb5d77f135e625
     );
 
     public static void register() {
         DragonBlockArcaneDBA.LOGGER.info("Registering Entities for " + DragonBlockArcaneDBA.MOD_ID);
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(OTHERWORLD_GUIDE, OtherworldGuideEntity.createMobAttributes());
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(FLYING_NIMBUS, FlyingNimbusEntity.createAttributes());
+        net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(SHENRON, ShenronEntity.createAttributes());
     }
 }
