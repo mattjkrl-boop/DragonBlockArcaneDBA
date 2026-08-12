@@ -14,8 +14,8 @@ public class KiBeamEntity extends Projectile {
     private static final EntityDataAccessor<Float> LENGTH = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> OWNER_ID = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.INT);
 
-    public KiBeamEntity(EntityType<?> entityType, Level level) {
-        super((EntityType<? extends Projectile>) entityType, level);
+    public KiBeamEntity(EntityType<? extends Projectile> entityType, Level level) {
+        super(entityType, level);
     }
 
     public KiBeamEntity(Level level, Entity owner, float length, int color) {

@@ -16,8 +16,6 @@ import net.minecraft.world.phys.Vec3;
 
 public class ShenronEntity extends Mob {
     private boolean wishGranted = false;
-    private double spawnX, spawnY, spawnZ;
-    private float animationTicks = 0.0F;
 
     public ShenronEntity(EntityType<? extends Mob> entityType, Level level) {
         super(entityType, level);

@@ -8,12 +8,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.resources.Identifier;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 
@@ -25,6 +23,7 @@ import java.util.Set;
 @Mixin(AvatarRenderer.class)
 public abstract class PlayerEntityRendererMixin {
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
     @Inject(method = "<init>", at = @At("RETURN"))
     private void dba$init(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
         ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.TrailingTailLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));

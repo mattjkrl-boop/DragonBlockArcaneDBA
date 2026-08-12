@@ -1,6 +1,5 @@
 package com.dragonblockarcanedba.ki;
 
-import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
@@ -68,6 +67,7 @@ public class KiTechniqueHandler {
                 case SPIRAL_BEAM, BEAM -> fireBeam(player, level, damage, tech.color, tech.type == KiTechniqueType.SPIRAL_BEAM);
                 case DISK -> fireDisk(player, level, damage, tech.color);
                 case LASER -> fireLaser(player, level, damage, tech.color);
+                case EXPLOSION -> {}
             }
 
             player.sendSystemMessage(Component.literal("§b" + tech.type.displayName() + " §7— §a" + (int) damage + " dmg §7(used " + (int) usedKi + " Ki)"), true);
@@ -238,19 +238,6 @@ public class KiTechniqueHandler {
     }
 
     // =========== Helpers ===========
-
-    private static void spawnColoredParticles(ServerLevel level, Vec3 pos, int argb, int count) {
-        float r = ((argb >> 16) & 0xFF) / 255.0f;
-        float g = ((argb >> 8) & 0xFF) / 255.0f;
-        float b = (argb & 0xFF) / 255.0f;
-        // Pack RGB into a single int for DustParticleOptions (MC 26.2 uses int color)
-        int packedColor = (0xFF << 24) | ((int)(r * 255) << 16) | ((int)(g * 255) << 8) | (int)(b * 255);
-        level.sendParticles(
-            new DustParticleOptions(packedColor, 1.0F),
-            pos.x, pos.y, pos.z,
-            count, 0.1, 0.1, 0.1, 0.01
-        );
-    }
 
     private static List<LivingEntity> getEntitiesAt(ServerLevel level, ServerPlayer caster, Vec3 pos, double radius) {
         AABB box = new AABB(pos.x - radius, pos.y - radius, pos.z - radius,

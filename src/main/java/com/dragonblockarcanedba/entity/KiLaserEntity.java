@@ -17,8 +17,8 @@ public class KiLaserEntity extends Projectile {
     private static final EntityDataAccessor<Integer> OWNER_ID =
             SynchedEntityData.defineId(KiLaserEntity.class, EntityDataSerializers.INT);
 
-    public KiLaserEntity(EntityType<?> entityType, Level level) {
-        super((EntityType<? extends Projectile>) entityType, level);
+    public KiLaserEntity(EntityType<? extends Projectile> entityType, Level level) {
+        super(entityType, level);
     }
 
     public KiLaserEntity(Level level, Entity owner, float length, int color) {

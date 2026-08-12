@@ -271,7 +271,6 @@ public class TechniquesTab implements MenuTab {
         }
 
         // 2. Check Unlock Button
-        int panelX = startX + 10;
         int panelY = startY + 145;
         if (selectedTech != null && !accessor.dba$hasTechnique(selectedTech.id())) {
             int btnX = startX + width - 110;

@@ -182,15 +182,6 @@ public class StatsTab implements MenuTab {
 
         for (int i = 0; i < stats.length; i++) {
             String statName = stats[i];
-            int currentLevel = 0;
-            switch (statName) {
-                case "strength" -> currentLevel = accessor.dba$getStrength();
-                case "dexterity" -> currentLevel = accessor.dba$getDexterity();
-                case "defense" -> currentLevel = accessor.dba$getDefense();
-                case "willpower" -> currentLevel = accessor.dba$getWillpower();
-                case "spirit" -> currentLevel = accessor.dba$getSpirit();
-                case "vitality" -> currentLevel = accessor.dba$getVitality();
-            }
             
             String raceId = accessor.dba$getRaceId().getPath();
             int currentUpgrades = accessor.dba$getStatUpgradeCount(statName);

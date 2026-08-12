@@ -17,8 +17,8 @@ public class KiSpiralBeamEntity extends Projectile {
     private static final EntityDataAccessor<Integer> OWNER_ID =
             SynchedEntityData.defineId(KiSpiralBeamEntity.class, EntityDataSerializers.INT);
 
-    public KiSpiralBeamEntity(EntityType<?> entityType, Level level) {
-        super((EntityType<? extends Projectile>) entityType, level);
+    public KiSpiralBeamEntity(EntityType<? extends Projectile> entityType, Level level) {
+        super(entityType, level);
     }
 
     public KiSpiralBeamEntity(Level level, Entity owner, float length, int color) {
