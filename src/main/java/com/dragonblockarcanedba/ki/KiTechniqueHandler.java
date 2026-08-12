@@ -78,49 +78,36 @@ public class KiTechniqueHandler {
 
     // =========== BLAST: single projectile along look direction ===========
     private static void fireBlast(ServerPlayer player, ServerLevel level, double damage, int color) {
+        com.dragonblockarcanedba.entity.KiBlastEntity blast = new com.dragonblockarcanedba.entity.KiBlastEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_BLAST, level);
+        blast.setOwner(player);
+        blast.setPos(player.getX(), player.getEyeY() - 0.1, player.getZ());
+        blast.setColor(color);
+        blast.setDamage((float) damage);
+        
         Vec3 look = player.getLookAngle();
-        Vec3 start = player.getEyePosition();
-
-        // Raycast 50 blocks
-        for (int i = 1; i <= 50; i++) {
-            Vec3 pos = start.add(look.scale(i));
-            spawnColoredParticles(level, pos, color, 3);
-            List<LivingEntity> hit = getEntitiesAt(level, player, pos, 1.5);
-            if (!hit.isEmpty()) {
-                for (LivingEntity target : hit) {
-                    target.hurtServer(level, player.damageSources().indirectMagic(player, player), (float) damage);
-                }
-                // Explosion particles at impact
-                spawnColoredParticles(level, pos, color, 20);
-                return;
-            }
-        }
+        blast.shoot(look.x, look.y, look.z, 2.0f, 0.0f);
+        level.addFreshEntity(blast);
     }
 
     // =========== BARRAGE: 8 smaller blasts with spread ===========
     private static void fireBarrage(ServerPlayer player, ServerLevel level, double damage, int color) {
         double perShot = damage / 8.0;
         Vec3 look = player.getLookAngle();
-        Vec3 start = player.getEyePosition();
 
         for (int s = 0; s < 8; s++) {
+            com.dragonblockarcanedba.entity.KiBlastEntity blast = new com.dragonblockarcanedba.entity.KiBlastEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_BLAST, level);
+            blast.setOwner(player);
+            blast.setPos(player.getX(), player.getEyeY() - 0.1, player.getZ());
+            blast.setColor(color);
+            blast.setDamage((float) perShot);
+            
             // Add slight random spread
             double spreadX = (level.getRandom().nextDouble() - 0.5) * 0.15;
             double spreadY = (level.getRandom().nextDouble() - 0.5) * 0.15;
             Vec3 dir = look.add(spreadX, spreadY, 0).normalize();
-
-            for (int i = 1; i <= 40; i++) {
-                Vec3 pos = start.add(dir.scale(i));
-                if (i % 3 == 0) spawnColoredParticles(level, pos, color, 1);
-                List<LivingEntity> hit = getEntitiesAt(level, player, pos, 1.0);
-                if (!hit.isEmpty()) {
-                    for (LivingEntity target : hit) {
-                        target.hurtServer(level, player.damageSources().indirectMagic(player, player), (float) perShot);
-                    }
-                    spawnColoredParticles(level, pos, color, 5);
-                    break;
-                }
-            }
+            
+            blast.shoot(dir.x, dir.y, dir.z, 2.0f, 0.0f);
+            level.addFreshEntity(blast);
         }
     }
 
@@ -129,76 +116,77 @@ public class KiTechniqueHandler {
         Vec3 look = player.getLookAngle();
         Vec3 start = player.getEyePosition();
         double range = 60;
-        double damagePerBlock = damage / range;
-
+        
+        // Raycast to find true length
+        double hitLength = range;
         for (int i = 1; i <= (int) range; i++) {
             Vec3 pos = start.add(look.scale(i));
-
-            // Spiral effect: offset particles in a helix
-            if (spiral) {
-                double angle = i * 0.5;
-                double offX = Math.cos(angle) * 0.5;
-                double offY = Math.sin(angle) * 0.5;
-                spawnColoredParticles(level, pos.add(offX, offY, 0), color, 2);
-            } else {
-                spawnColoredParticles(level, pos, color, 2);
-            }
-
             List<LivingEntity> hit = getEntitiesAt(level, player, pos, 1.5);
-            for (LivingEntity target : hit) {
-                target.hurtServer(level, player.damageSources().indirectMagic(player, player), (float) (damagePerBlock * 5));
+            if (!hit.isEmpty()) {
+                hitLength = i;
+                for (LivingEntity target : hit) {
+                    target.hurtServer(level, player.damageSources().indirectMagic(player, player), (float) damage);
+                }
+                break;
             }
+        }
+
+        if (spiral) {
+            com.dragonblockarcanedba.entity.KiSpiralBeamEntity beam = new com.dragonblockarcanedba.entity.KiSpiralBeamEntity(level, player, (float) hitLength, color);
+            level.addFreshEntity(beam);
+        } else {
+            com.dragonblockarcanedba.entity.KiBeamEntity beam = new com.dragonblockarcanedba.entity.KiBeamEntity(level, player, (float) hitLength, color);
+            level.addFreshEntity(beam);
         }
     }
 
     // =========== DISK: horizontal disk that travels forward ===========
     private static void fireDisk(ServerPlayer player, ServerLevel level, double damage, int color) {
+        com.dragonblockarcanedba.entity.KiDiskEntity disk = new com.dragonblockarcanedba.entity.KiDiskEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_DISK, level);
+        disk.setOwner(player);
+        // Start above head
+        disk.setPos(player.getX(), player.getY() + player.getBbHeight() + 1.0, player.getZ());
+        disk.setColor(color);
+        disk.setDamage((float) damage);
+        
         Vec3 look = player.getLookAngle().multiply(1, 0, 1).normalize(); // Horizontal only
         if (look.length() < 0.1) look = new Vec3(1, 0, 0);
-        Vec3 start = player.position().add(0, player.getBbHeight() + 1.5, 0);
-
-        for (int i = 1; i <= 60; i++) {
-            Vec3 pos = start.add(look.scale(i));
-            // Disk particles: ring shape
-            for (int r = 0; r < 8; r++) {
-                double angle = r * Math.PI / 4.0;
-                Vec3 offset = new Vec3(Math.cos(angle) * 1.2, 0, Math.sin(angle) * 1.2);
-                spawnColoredParticles(level, pos.add(offset), color, 1);
-            }
-
-            List<LivingEntity> hit = getEntitiesAt(level, player, pos, 2.0);
-            if (!hit.isEmpty()) {
-                for (LivingEntity target : hit) {
-                    target.hurtServer(level, player.damageSources().indirectMagic(player, player), (float) damage);
-                }
-                spawnColoredParticles(level, pos, color, 30);
-                return;
-            }
-        }
+        
+        disk.shoot(look.x, look.y, look.z, 1.5f, 0.0f);
+        level.addFreshEntity(disk);
     }
 
     // =========== LASER: twin rapid eye beams ===========
     private static void fireLaser(ServerPlayer player, ServerLevel level, double damage, int color) {
         Vec3 look = player.getLookAngle();
         Vec3 eyePos = player.getEyePosition();
-        // Two parallel beams offset slightly
+        // Two parallel beams offset slightly from the eyes
         Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize().scale(0.15);
 
         double perBeam = damage / 2.0;
+        double range = 45;
+        
         for (Vec3 offset : new Vec3[]{right, right.scale(-1)}) {
             Vec3 start = eyePos.add(offset);
-            for (int i = 1; i <= 45; i++) {
+            
+            // Raycast for length
+            double hitLength = range;
+            for (int i = 1; i <= (int) range; i++) {
                 Vec3 pos = start.add(look.scale(i));
-                if (i % 2 == 0) spawnColoredParticles(level, pos, color, 1);
                 List<LivingEntity> hit = getEntitiesAt(level, player, pos, 1.0);
                 if (!hit.isEmpty()) {
+                    hitLength = i;
                     for (LivingEntity target : hit) {
                         target.hurtServer(level, player.damageSources().indirectMagic(player, player), (float) perBeam);
                     }
-                    spawnColoredParticles(level, pos, color, 10);
                     break;
                 }
             }
+            
+            com.dragonblockarcanedba.entity.KiLaserEntity laser = new com.dragonblockarcanedba.entity.KiLaserEntity(level, player, (float) hitLength, color);
+            // Override position since it comes from the eyes offset
+            laser.setPos(start.x, start.y, start.z);
+            level.addFreshEntity(laser);
         }
     }
 
@@ -236,16 +224,12 @@ public class KiTechniqueHandler {
         // Self damage
         player.hurtServer(level, player.damageSources().magic(), (float) selfDamage);
 
-        // Massive explosion particles
-        for (int r = 0; r < (int) radius; r++) {
-            for (int a = 0; a < 16; a++) {
-                double angle = a * Math.PI / 8.0;
-                double px = player.getX() + Math.cos(angle) * r;
-                double py = player.getY() + player.getBbHeight() * 0.5;
-                double pz = player.getZ() + Math.sin(angle) * r;
-                spawnColoredParticles(level, new Vec3(px, py, pz), color, 3);
-            }
-        }
+        // Spawn visual explosion entity
+        com.dragonblockarcanedba.entity.KiExplosionEntity explosion = new com.dragonblockarcanedba.entity.KiExplosionEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_EXPLOSION, level);
+        explosion.setPos(player.getX(), player.getY() + player.getBbHeight() * 0.5, player.getZ());
+        explosion.setColor(color);
+        explosion.setRadius((float) radius);
+        level.addFreshEntity(explosion);
 
         player.sendSystemMessage(
             Component.literal("§4§lKI EXPLOSION! §7— §c" + (int) totalDamage + " dmg §7(radius " + (int) radius + ") §4Self: " + (int) selfDamage),

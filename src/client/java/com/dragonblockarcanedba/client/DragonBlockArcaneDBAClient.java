@@ -30,6 +30,30 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.entity.DbaEntities.FLYING_NIMBUS,
             com.dragonblockarcanedba.client.render.FlyingNimbusRenderer::new
         );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.KI_BLAST,
+            com.dragonblockarcanedba.client.render.ki.KiBlastRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.KI_BEAM,
+            com.dragonblockarcanedba.client.render.ki.KiBeamRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.KI_DISK,
+            com.dragonblockarcanedba.client.render.ki.KiDiskRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.KI_LASER,
+            com.dragonblockarcanedba.client.render.ki.KiLaserRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.KI_SPIRAL_BEAM,
+            com.dragonblockarcanedba.client.render.ki.KiSpiralBeamRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.KI_EXPLOSION,
+            com.dragonblockarcanedba.client.render.ki.KiExplosionRenderer::new
+        );
 
         // Register GeckoLib replaced player renderer
         // This replaces vanilla Steve/Alex with race-specific GeckoLib models
