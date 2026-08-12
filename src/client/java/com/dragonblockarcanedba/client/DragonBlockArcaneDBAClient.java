@@ -35,7 +35,6 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.FlyingNimbusRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
-<<<<<<< HEAD
             com.dragonblockarcanedba.entity.DbaEntities.KI_BLAST,
             com.dragonblockarcanedba.client.render.ki.KiBlastRenderer::new
         );
@@ -58,7 +57,8 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.KI_EXPLOSION,
             com.dragonblockarcanedba.client.render.ki.KiExplosionRenderer::new
-=======
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.SHENRON,
             com.dragonblockarcanedba.client.render.ShenronRenderer::new
         );
@@ -66,7 +66,6 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         // Register model layers
         net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry.registerModelLayer(
             SHENRON_MODEL_LAYER, com.dragonblockarcanedba.client.model.ShenronModel::createBodyLayer
->>>>>>> 7613d14c24af613177fdfc9dafbb5d77f135e625
         );
 
         // Register GeckoLib replaced player renderer

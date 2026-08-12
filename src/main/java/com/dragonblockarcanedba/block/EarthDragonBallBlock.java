@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -55,11 +56,23 @@ public class EarthDragonBallBlock extends Block {
                 level.destroyBlock(ballPositions.get(i), false);
             }
             
-            // Spawn Shenron at pos (floating 4 blocks above the ground)
+            // Spawn Shenron at pos (exactly on the ground)
             if (level instanceof ServerLevel serverLevel) {
-                BlockPos spawnPos = pos.above(4);
+                BlockPos spawnPos = pos;
                 ShenronEntity shenron = DbaEntities.SHENRON.create(serverLevel, null, spawnPos, EntitySpawnReason.EVENT, false, false);
                 if (shenron != null) {
+                    // Face the nearest player
+                    Player closestPlayer = serverLevel.getNearestPlayer(pos.getX(), pos.getY(), pos.getZ(), 64.0, false);
+                    if (closestPlayer != null) {
+                        double dX = closestPlayer.getX() - shenron.getX();
+                        double dZ = closestPlayer.getZ() - shenron.getZ();
+                        float yaw = (float) (Math.atan2(dZ, dX) * (180 / Math.PI)) - 90.0F;
+                        shenron.setYRot(yaw);
+                        shenron.yRotO = yaw;
+                        shenron.yBodyRot = yaw;
+                        shenron.yHeadRot = yaw;
+                    }
+
                     serverLevel.addFreshEntity(shenron);
                     
                     // Summon lightning

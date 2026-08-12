@@ -24,13 +24,6 @@ public class ShenronRenderer extends MobRenderer<ShenronEntity, ShenronRenderer.
     public void extractRenderState(ShenronEntity entity, ShenronRenderState state, float partialTicks) {
         super.extractRenderState(entity, state, partialTicks);
         state.ageInTicks = entity.tickCount + partialTicks;
-        state.ringBufferIndex = entity.ringBufferIndex;
-        for (int i = 0; i < 64; i++) {
-            state.positions[i][0] = entity.positions[i][0];
-            state.positions[i][1] = entity.positions[i][1];
-            state.positions[i][2] = entity.positions[i][2];
-        }
-        state.speed = (float) Math.sqrt((entity.getX() - entity.xo) * (entity.getX() - entity.xo) + (entity.getZ() - entity.zo) * (entity.getZ() - entity.zo));
     }
 
     @Override
@@ -40,24 +33,5 @@ public class ShenronRenderer extends MobRenderer<ShenronEntity, ShenronRenderer.
 
     public static class ShenronRenderState extends LivingEntityRenderState {
         public float ageInTicks;
-        public float speed;
-        public int ringBufferIndex;
-        public final double[][] positions = new double[64][3];
-
-        public double[] getLatencyPos(int bufferOffset, float partialTicks) {
-            partialTicks = 1.0F - partialTicks;
-            int targetIndex = this.ringBufferIndex - bufferOffset & 63;
-            int prevIndex = this.ringBufferIndex - bufferOffset - 1 & 63;
-            double[] currentPos = new double[3];
-            double rotDiff = this.positions[targetIndex][0] - this.positions[prevIndex][0];
-
-            rotDiff = net.minecraft.util.Mth.wrapDegrees(rotDiff);
-            
-            currentPos[0] = this.positions[prevIndex][0] + rotDiff * (double)partialTicks;
-            currentPos[1] = this.positions[prevIndex][1] + (this.positions[targetIndex][1] - this.positions[prevIndex][1]) * (double)partialTicks;
-            currentPos[2] = this.positions[prevIndex][2] + (this.positions[targetIndex][2] - this.positions[prevIndex][2]) * (double)partialTicks;
-            
-            return currentPos;
-        }
     }
 }

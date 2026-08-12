@@ -16,10 +16,6 @@ import net.minecraft.world.phys.Vec3;
 
 public class ShenronEntity extends Mob {
     private boolean wishGranted = false;
-
-    // Kinematic Positional Tracking Ring Buffer (X=Yaw, Y=Y-height, Z=Pitch)
-    public final double[][] positions = new double[64][3];
-    public int ringBufferIndex = -1;
     private double spawnX, spawnY, spawnZ;
     private float animationTicks = 0.0F;
 
@@ -36,45 +32,7 @@ public class ShenronEntity extends Mob {
 
     @Override
     public void tick() {
-        if (this.animationTicks == 0.0F) {
-            this.spawnX = this.getX();
-            this.spawnY = this.getY();
-            this.spawnZ = this.getZ();
-        }
-        this.animationTicks += 1.0F;
-
-        // Move in a slow, elegant circle around the spawn position
-        float angle = this.animationTicks * 0.02F;
-        double targetX = this.spawnX + Math.sin(angle) * 12.0;
-        double targetZ = this.spawnZ + (Math.cos(angle) - 1.0) * 12.0;
-        double targetY = this.spawnY + Math.sin(this.animationTicks * 0.05F) * 2.0;
-
-        double dx = targetX - this.getX();
-        double dz = targetZ - this.getZ();
-        float targetYaw = (float)(Math.atan2(dx, dz) * (180.0 / Math.PI));
-        
-        this.setYRot(targetYaw);
-        this.setPos(targetX, targetY, targetZ);
-
         super.tick();
-
-        // Update the ring buffer with the head's current position every tick
-        if (this.ringBufferIndex < 0) {
-            // First tick initialization
-            for (int i = 0; i < this.positions.length; ++i) {
-                this.positions[i][0] = this.getYRot();
-                this.positions[i][1] = this.getY();
-                this.positions[i][2] = this.getXRot();
-            }
-        }
-
-        if (++this.ringBufferIndex == this.positions.length) {
-            this.ringBufferIndex = 0;
-        }
-
-        this.positions[this.ringBufferIndex][0] = this.getYRot();
-        this.positions[this.ringBufferIndex][1] = this.getY();
-        this.positions[this.ringBufferIndex][2] = this.getXRot();
     }
 
     @Override
