@@ -1,14 +1,22 @@
 package com.dragonblockarcanedba.client.gui;
 
+import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.network.ActionPayload;
+import com.dragonblockarcanedba.registry.DbaRegistries;
+import com.dragonblockarcanedba.registry.Race;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
 
-import com.dragonblockarcanedba.registry.Race;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.IntConsumer;
 
 public class RaceSelectionScreen extends Screen {
     private enum State {
@@ -17,17 +25,28 @@ public class RaceSelectionScreen extends Screen {
     }
 
     private State currentState = State.RACE_SELECT;
+
     private String selectedRace = "";
     private String customizationTab = "Skin";
-    
-    private int skinR = 255, skinG = 204, skinB = 153;
-    private int hairR = 15, hairG = 15, hairB = 15;
-    
-    private RgbSliderWidget skinRedSlider, skinGreenSlider, skinBlueSlider;
-    private RgbSliderWidget hairRedSlider, hairGreenSlider, hairBlueSlider;
-    
-    private float spinAngle = 0f;
-    private int scrollOffset = 0;
+
+    private int skinR = 255;
+    private int skinG = 204;
+    private int skinB = 153;
+
+    private int hairR = 15;
+    private int hairG = 15;
+    private int hairB = 15;
+
+    private RgbSliderWidget skinRedSlider;
+    private RgbSliderWidget skinGreenSlider;
+    private RgbSliderWidget skinBlueSlider;
+
+    private RgbSliderWidget hairRedSlider;
+    private RgbSliderWidget hairGreenSlider;
+    private RgbSliderWidget hairBlueSlider;
+
+    private float spinAngle;
+    private int scrollOffset;
 
     public RaceSelectionScreen() {
         super(Component.literal("Character Creation"));
@@ -43,386 +62,601 @@ public class RaceSelectionScreen extends Screen {
         return true;
     }
 
-    private java.util.List<Race> getSelectableRaces() {
-        var list = new java.util.ArrayList<>(com.dragonblockarcanedba.registry.DbaRegistries.getRaces().values());
-        list.removeIf(race -> {
+    private List<Race> getSelectableRaces() {
+        List<Race> races = new ArrayList<>(
+                DbaRegistries.getRaces().values()
+        );
+
+        races.removeIf(race -> {
             String path = race.getId().getPath();
             return "neo_tuffle".equals(path) || "android".equals(path);
         });
-        return list;
+
+        return races;
     }
 
     @Override
     protected void init() {
         this.clearWidgets();
-        
-        int midColWidth = 100;
-        int rightColWidth = Math.max(190, this.width * 2 / 5);
-        int leftColWidth = this.width - midColWidth - rightColWidth;
+
+        this.skinRedSlider = null;
+        this.skinGreenSlider = null;
+        this.skinBlueSlider = null;
+
+        this.hairRedSlider = null;
+        this.hairGreenSlider = null;
+        this.hairBlueSlider = null;
+
+        int leftColWidth = Math.max(100, this.width / 3);
+        int midColWidth = Math.min(120, this.width / 4);
         int midStartX = leftColWidth;
         int rightStartX = leftColWidth + midColWidth;
+        int rightColWidth = Math.max(140, this.width - rightStartX);
 
-        int btnWidth = 80;
+        int btnWidth = Math.min(100, midColWidth - 10);
         int btnHeight = 20;
-        int spacingY = 22;
 
         if (currentState == State.RACE_SELECT) {
-            // Middle Column: Dynamically load all registered races from DbaRegistries
-            var racesList = getSelectableRaces();
-            
-            // Calculate how many buttons can fit vertically
-            int startY = 40;
-            int maxVisible = (this.height - 80) / spacingY;
-            if (maxVisible <= 0) maxVisible = 1;
-
-            int maxScroll = Math.max(0, racesList.size() - maxVisible);
-            scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset));
-
-            // Up scroll button if needed
-            if (scrollOffset > 0) {
-                int x = midStartX + (midColWidth - btnWidth) / 2;
-                addRenderableWidget(Button.builder(
-                    Component.literal("▲"),
-                    btn -> {
-                        scrollOffset = Math.max(0, scrollOffset - 1);
-                        init();
-                    }
-                ).bounds(x, startY - 18, btnWidth, 14).build());
-            }
-
-            for (int i = 0; i < Math.min(maxVisible, racesList.size()); i++) {
-                int raceIndex = i + scrollOffset;
-                if (raceIndex >= racesList.size()) break;
-                Race race = racesList.get(raceIndex);
-                int x = midStartX + (midColWidth - btnWidth) / 2;
-                int y = startY + i * spacingY;
-
-                // Highlight selected race button
-                boolean isSelected = race.getId().toString().equals(selectedRace);
-                Component btnText = isSelected 
-                    ? Component.literal("> " + race.getDisplayName() + " <") 
-                    : Component.literal(race.getDisplayName());
-
-                addRenderableWidget(Button.builder(
-                    btnText,
-                    btn -> {
-                        selectedRace = race.getId().toString();
-                        init(); // Refresh to show confirm button and details
-                    }
-                ).bounds(x, y, btnWidth, btnHeight).build());
-            }
-
-            // Down scroll button if needed
-            if (scrollOffset < maxScroll) {
-                int x = midStartX + (midColWidth - btnWidth) / 2;
-                int y = startY + Math.min(maxVisible, racesList.size()) * spacingY;
-                addRenderableWidget(Button.builder(
-                    Component.literal("▼"),
-                    btn -> {
-                        scrollOffset = Math.min(maxScroll, scrollOffset + 1);
-                        init();
-                    }
-                ).bounds(x, y - 2, btnWidth, 14).build());
-            }
-
-            // Right Column: Confirm Button
-            if (!selectedRace.isEmpty()) {
-                addRenderableWidget(Button.builder(
-                    Component.literal("CONFIRM"),
-                    btn -> {
-                        currentState = State.CUSTOMIZATION;
-                        init();
-                    }
-                ).bounds(rightStartX + rightColWidth - btnWidth - 20, this.height - 40, btnWidth, 20).build());
-            }
-
-        } else if (currentState == State.CUSTOMIZATION) {
-            // Middle Column: Customization Tabs
-            String[] tabs = {"Skin", "Hair"};
-            int startY = (this.height - (tabs.length * spacingY)) / 2;
-            for (int i = 0; i < tabs.length; i++) {
-                String tab = tabs[i];
-                int x = midStartX + (midColWidth - btnWidth) / 2;
-                int y = startY + i * spacingY;
-
-                addRenderableWidget(Button.builder(
-                    Component.literal(tab),
-                    btn -> {
-                        customizationTab = tab;
-                        init();
-                    }
-                ).bounds(x, y, btnWidth, btnHeight).build());
-            }
-
-            // Right Column: Interactive Color Sliders & Preset Swatches
-            int sliderX = rightStartX + 20;
-            int sliderW = rightColWidth - 40;
-            int panelY = 40;
-            int startSliderY = panelY + 45; // Start below header
-
-            if ("Skin".equals(customizationTab)) {
-                // Red, Green, Blue sliders for Skin
-                skinRedSlider = new RgbSliderWidget(sliderX, startSliderY, sliderW, 18, "Red", skinR, val -> skinR = val);
-                skinGreenSlider = new RgbSliderWidget(sliderX, startSliderY + 22, sliderW, 18, "Green", skinG, val -> skinG = val);
-                skinBlueSlider = new RgbSliderWidget(sliderX, startSliderY + 44, sliderW, 18, "Blue", skinB, val -> skinB = val);
-
-                addRenderableWidget(skinRedSlider);
-                addRenderableWidget(skinGreenSlider);
-                addRenderableWidget(skinBlueSlider);
-
-                // Quick Preset Swatches for Skin (2 rows of 3 buttons for optimal readability)
-                PresetColor[] skinPresets = {
-                    new PresetColor("Light", 255, 204, 153),
-                    new PresetColor("Tan", 210, 180, 140),
-                    new PresetColor("Dark", 141, 85, 36),
-                    new PresetColor("Namek", 85, 255, 120),
-                    new PresetColor("Majin", 255, 140, 200),
-                    new PresetColor("Arcosian", 230, 230, 250)
-                };
-
-                int swatchStartY = startSliderY + 86; // Positioned below "Preset Palette:" label
-                int cols = 3;
-                int swatchW = (sliderW - (cols - 1) * 4) / cols;
-                int swatchH = 18;
-
-                for (int i = 0; i < skinPresets.length; i++) {
-                    PresetColor p = skinPresets[i];
-                    int row = i / cols;
-                    int col = i % cols;
-                    int bx = sliderX + col * (swatchW + 4);
-                    int by = swatchStartY + row * (swatchH + 4);
-
-                    addRenderableWidget(Button.builder(
-                        Component.literal(p.name),
-                        btn -> {
-                            skinR = p.r; skinG = p.g; skinB = p.b;
-                            skinRedSlider.setIntValue(p.r);
-                            skinGreenSlider.setIntValue(p.g);
-                            skinBlueSlider.setIntValue(p.b);
-                        }
-                    ).bounds(bx, by, swatchW, swatchH).build());
-                }
-
-            } else if ("Hair".equals(customizationTab)) {
-                // Red, Green, Blue sliders for Hair
-                hairRedSlider = new RgbSliderWidget(sliderX, startSliderY, sliderW, 18, "Red", hairR, val -> hairR = val);
-                hairGreenSlider = new RgbSliderWidget(sliderX, startSliderY + 22, sliderW, 18, "Green", hairG, val -> hairG = val);
-                hairBlueSlider = new RgbSliderWidget(sliderX, startSliderY + 44, sliderW, 18, "Blue", hairB, val -> hairB = val);
-
-                addRenderableWidget(hairRedSlider);
-                addRenderableWidget(hairGreenSlider);
-                addRenderableWidget(hairBlueSlider);
-
-                // Quick Preset Swatches for Hair (2 rows of 3 buttons)
-                PresetColor[] hairPresets = {
-                    new PresetColor("Black", 15, 15, 15),
-                    new PresetColor("Gold", 255, 215, 0),
-                    new PresetColor("Brown", 80, 45, 20),
-                    new PresetColor("Red", 200, 30, 30),
-                    new PresetColor("Blue", 30, 180, 255),
-                    new PresetColor("White", 240, 240, 240)
-                };
-
-                int swatchStartY = startSliderY + 86;
-                int cols = 3;
-                int swatchW = (sliderW - (cols - 1) * 4) / cols;
-                int swatchH = 18;
-
-                for (int i = 0; i < hairPresets.length; i++) {
-                    PresetColor p = hairPresets[i];
-                    int row = i / cols;
-                    int col = i % cols;
-                    int bx = sliderX + col * (swatchW + 4);
-                    int by = swatchStartY + row * (swatchH + 4);
-
-                    addRenderableWidget(Button.builder(
-                        Component.literal(p.name),
-                        btn -> {
-                            hairR = p.r; hairG = p.g; hairB = p.b;
-                            hairRedSlider.setIntValue(p.r);
-                            hairGreenSlider.setIntValue(p.g);
-                            hairBlueSlider.setIntValue(p.b);
-                        }
-                    ).bounds(bx, by, swatchW, swatchH).build());
-                }
-            }
-
-            // Right Column: Back and Confirm Buttons
-            addRenderableWidget(Button.builder(
-                Component.literal("BACK"),
-                btn -> {
-                    currentState = State.RACE_SELECT;
-                    init();
-                }
-            ).bounds(rightStartX + rightColWidth - btnWidth * 2 - 30, this.height - 40, btnWidth, 20).build());
-
-            addRenderableWidget(Button.builder(
-                Component.literal("CONFIRM"),
-                btn -> {
-                    String skinHex = String.format("#%02X%02X%02X", skinR, skinG, skinB);
-                    String hairHex = String.format("#%02X%02X%02X", hairR, hairG, hairB);
-
-                    CompoundTag data = new CompoundTag();
-                    data.putString("action", "select_race");
-                    data.putString("race", selectedRace);
-                    data.putString("skin_color", skinHex);
-                    data.putString("hair_color", hairHex);
-                    ClientPlayNetworking.send(new ActionPayload(data));
-                    this.onClose();
-                }
-            ).bounds(rightStartX + rightColWidth - btnWidth - 20, this.height - 40, btnWidth, 20).build());
+            initRaceSelection(
+                    midStartX,
+                    midColWidth,
+                    rightStartX,
+                    rightColWidth,
+                    btnWidth,
+                    btnHeight
+            );
+        } else {
+            initCustomization(
+                    midStartX,
+                    midColWidth,
+                    rightStartX,
+                    rightColWidth,
+                    btnWidth,
+                    btnHeight
+            );
         }
     }
 
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (currentState == State.RACE_SELECT) {
-            int spacingY = 22;
-            int maxVisible = (this.height - 80) / spacingY;
-            int totalRaces = getSelectableRaces().size();
-            if (totalRaces > maxVisible) {
-                int maxScroll = totalRaces - maxVisible;
-                scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset - (int) Math.signum(verticalAmount)));
-                init();
-                return true;
-            }
+    private void initRaceSelection(
+            int midStartX,
+            int midColWidth,
+            int rightStartX,
+            int rightColWidth,
+            int btnWidth,
+            int btnHeight
+    ) {
+        List<Race> races = getSelectableRaces();
+
+        int spacingY = 22;
+        int startY = 32;
+
+        int maxVisible = Math.max(
+                1,
+                (this.height - 80) / spacingY
+        );
+
+        int maxScroll = Math.max(
+                0,
+                races.size() - maxVisible
+        );
+
+        scrollOffset = Math.max(
+                0,
+                Math.min(scrollOffset, maxScroll)
+        );
+
+        int buttonX = midStartX + (midColWidth - btnWidth) / 2;
+
+        if (scrollOffset > 0) {
+            addRenderableWidget(
+                    Button.builder(
+                            Component.literal("▲"),
+                            button -> {
+                                scrollOffset--;
+                                init();
+                            }
+                    ).bounds(
+                            buttonX,
+                            startY - 18,
+                            btnWidth,
+                            14
+                    ).build()
+            );
         }
-        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+
+        int visibleCount = Math.min(
+                maxVisible,
+                races.size()
+        );
+
+        for (int i = 0; i < visibleCount; i++) {
+            int raceIndex = i + scrollOffset;
+
+            if (raceIndex >= races.size()) {
+                break;
+            }
+
+            Race race = races.get(raceIndex);
+
+            boolean selected = race.getId()
+                    .toString()
+                    .equals(selectedRace);
+
+            Component label = Component.literal(
+                    selected
+                            ? "> " + race.getDisplayName() + " <"
+                            : race.getDisplayName()
+            );
+
+            addRenderableWidget(
+                    Button.builder(
+                            label,
+                            button -> {
+                                selectedRace = race.getId().toString();
+                                init();
+                            }
+                    ).bounds(
+                            buttonX,
+                            startY + i * spacingY,
+                            btnWidth,
+                            btnHeight
+                    ).build()
+            );
+        }
+
+        if (scrollOffset < maxScroll) {
+            int y = startY + visibleCount * spacingY;
+
+            addRenderableWidget(
+                    Button.builder(
+                            Component.literal("▼"),
+                            button -> {
+                                scrollOffset++;
+                                init();
+                            }
+                    ).bounds(
+                            buttonX,
+                            y,
+                            btnWidth,
+                            14
+                    ).build()
+            );
+        }
+
+        if (!selectedRace.isEmpty()) {
+            int confirmBtnW = Math.min(100, rightColWidth - 20);
+            addRenderableWidget(
+                    Button.builder(
+                            Component.literal("CUSTOMIZE"),
+                            button -> {
+                                currentState = State.CUSTOMIZATION;
+                                customizationTab = "Skin";
+                                init();
+                            }
+                    ).bounds(
+                            rightStartX + rightColWidth - confirmBtnW - 10,
+                            this.height - 28,
+                            confirmBtnW,
+                            btnHeight
+                    ).build()
+            );
+        }
+    }
+
+    private void initCustomization(
+            int midStartX,
+            int midColWidth,
+            int rightStartX,
+            int rightColWidth,
+            int btnWidth,
+            int btnHeight
+    ) {
+        int tabWidth = Math.min(90, midColWidth - 10);
+        int tabX = midStartX + (midColWidth - tabWidth) / 2;
+
+        addRenderableWidget(
+                Button.builder(
+                        Component.literal(
+                                "Skin".equals(customizationTab)
+                                        ? "[ SKIN ]"
+                                        : "Skin"
+                        ),
+                        button -> {
+                            customizationTab = "Skin";
+                            init();
+                        }
+                ).bounds(
+                        tabX,
+                        this.height / 2 - 28,
+                        tabWidth,
+                        btnHeight
+                ).build()
+        );
+
+        addRenderableWidget(
+                Button.builder(
+                        Component.literal(
+                                "Hair".equals(customizationTab)
+                                        ? "[ HAIR ]"
+                                        : "Hair"
+                        ),
+                        button -> {
+                            customizationTab = "Hair";
+                            init();
+                        }
+                ).bounds(
+                        tabX,
+                        this.height / 2,
+                        tabWidth,
+                        btnHeight
+                ).build()
+        );
+
+        int panelX = rightStartX + 5;
+        int panelW = rightColWidth - 10;
+
+        int sliderX = panelX + 8;
+        int sliderW = panelW - 16;
+
+        int sliderY = 40;
+
+        if ("Skin".equals(customizationTab)) {
+            skinRedSlider = new RgbSliderWidget(
+                    sliderX,
+                    sliderY,
+                    sliderW,
+                    18,
+                    "Red",
+                    skinR,
+                    value -> skinR = value
+            );
+
+            skinGreenSlider = new RgbSliderWidget(
+                    sliderX,
+                    sliderY + 22,
+                    sliderW,
+                    18,
+                    "Green",
+                    skinG,
+                    value -> skinG = value
+            );
+
+            skinBlueSlider = new RgbSliderWidget(
+                    sliderX,
+                    sliderY + 44,
+                    sliderW,
+                    18,
+                    "Blue",
+                    skinB,
+                    value -> skinB = value
+            );
+
+            addRenderableWidget(skinRedSlider);
+            addRenderableWidget(skinGreenSlider);
+            addRenderableWidget(skinBlueSlider);
+
+            addSkinPresetButtons(
+                    sliderX,
+                    sliderY + 70,
+                    sliderW
+            );
+        } else {
+            hairRedSlider = new RgbSliderWidget(
+                    sliderX,
+                    sliderY,
+                    sliderW,
+                    18,
+                    "Red",
+                    hairR,
+                    value -> hairR = value
+            );
+
+            hairGreenSlider = new RgbSliderWidget(
+                    sliderX,
+                    sliderY + 22,
+                    sliderW,
+                    18,
+                    "Green",
+                    hairG,
+                    value -> hairG = value
+            );
+
+            hairBlueSlider = new RgbSliderWidget(
+                    sliderX,
+                    sliderY + 44,
+                    sliderW,
+                    18,
+                    "Blue",
+                    hairB,
+                    value -> hairB = value
+            );
+
+            addRenderableWidget(hairRedSlider);
+            addRenderableWidget(hairGreenSlider);
+            addRenderableWidget(hairBlueSlider);
+
+            addHairPresetButtons(
+                    sliderX,
+                    sliderY + 70,
+                    sliderW
+            );
+        }
+
+        int bottomY = this.height - 28;
+        int actionBtnW = Math.min(80, (rightColWidth - 25) / 2);
+
+        addRenderableWidget(
+                Button.builder(
+                        Component.literal("BACK"),
+                        button -> {
+                            currentState = State.RACE_SELECT;
+                            init();
+                        }
+                ).bounds(
+                        rightStartX + 5,
+                        bottomY,
+                        actionBtnW,
+                        btnHeight
+                ).build()
+        );
+
+        addRenderableWidget(
+                Button.builder(
+                        Component.literal("CONFIRM"),
+                        button -> confirmCharacter()
+                ).bounds(
+                        rightStartX + rightColWidth - actionBtnW - 5,
+                        bottomY,
+                        actionBtnW,
+                        btnHeight
+                ).build()
+        );
+    }
+
+    private void addSkinPresetButtons(
+            int x,
+            int y,
+            int width
+    ) {
+        PresetColor[] presets = {
+                new PresetColor("Light", 255, 204, 153),
+                new PresetColor("Tan", 210, 180, 140),
+                new PresetColor("Dark", 141, 85, 36),
+                new PresetColor("Namek", 85, 255, 120),
+                new PresetColor("Majin", 255, 140, 200),
+                new PresetColor("Arcosian", 230, 230, 250)
+        };
+
+        addPresetGrid(
+                presets,
+                x,
+                y,
+                width,
+                (preset) -> {
+                    skinR = preset.r;
+                    skinG = preset.g;
+                    skinB = preset.b;
+
+                    if (skinRedSlider != null) skinRedSlider.setIntValue(skinR);
+                    if (skinGreenSlider != null) skinGreenSlider.setIntValue(skinG);
+                    if (skinBlueSlider != null) skinBlueSlider.setIntValue(skinB);
+                }
+        );
+    }
+
+    private void addHairPresetButtons(
+            int x,
+            int y,
+            int width
+    ) {
+        PresetColor[] presets = {
+                new PresetColor("Black", 15, 15, 15),
+                new PresetColor("Gold", 255, 215, 0),
+                new PresetColor("Brown", 80, 45, 20),
+                new PresetColor("Red", 200, 30, 30),
+                new PresetColor("Blue", 30, 180, 255),
+                new PresetColor("White", 240, 240, 240)
+        };
+
+        addPresetGrid(
+                presets,
+                x,
+                y,
+                width,
+                (preset) -> {
+                    hairR = preset.r;
+                    hairG = preset.g;
+                    hairB = preset.b;
+
+                    if (hairRedSlider != null) hairRedSlider.setIntValue(hairR);
+                    if (hairGreenSlider != null) hairGreenSlider.setIntValue(hairG);
+                    if (hairBlueSlider != null) hairBlueSlider.setIntValue(hairB);
+                }
+        );
+    }
+
+    private void addPresetGrid(
+            PresetColor[] presets,
+            int x,
+            int y,
+            int width,
+            java.util.function.Consumer<PresetColor> consumer
+    ) {
+        int columns = 3;
+        int gap = 3;
+        int buttonWidth = (width - gap * (columns - 1)) / columns;
+        int buttonHeight = 16;
+
+        for (int i = 0; i < presets.length; i++) {
+            PresetColor preset = presets[i];
+            int row = i / columns;
+            int column = i % columns;
+            int bx = x + column * (buttonWidth + gap);
+            int by = y + row * (buttonHeight + gap);
+
+            addRenderableWidget(
+                    Button.builder(
+                            Component.literal(preset.name),
+                            button -> consumer.accept(preset)
+                    ).bounds(
+                            bx,
+                            by,
+                            buttonWidth,
+                            buttonHeight
+                    ).build()
+            );
+        }
+    }
+
+    private void confirmCharacter() {
+        if (selectedRace.isEmpty()) {
+            return;
+        }
+
+        String skinHex = rgbToHex(skinR, skinG, skinB);
+        String hairHex = rgbToHex(hairR, hairG, hairB);
+
+        CompoundTag data = new CompoundTag();
+        data.putString("action", "select_race");
+        data.putString("race", selectedRace);
+        data.putString("skin_color", skinHex);
+        data.putString("hair_color", hairHex);
+
+        ClientPlayNetworking.send(new ActionPayload(data));
+        this.onClose();
+    }
+
+    private static String rgbToHex(int r, int g, int b) {
+        return String.format("#%02X%02X%02X", r, g, b);
+    }
+
+    @Override
+    public boolean mouseScrolled(
+            double mouseX,
+            double mouseY,
+            double horizontalAmount,
+            double verticalAmount
+    ) {
+        if (currentState != State.RACE_SELECT) {
+            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        }
+
+        int spacingY = 22;
+        int maxVisible = Math.max(1, (this.height - 80) / spacingY);
+        int totalRaces = getSelectableRaces().size();
+
+        if (totalRaces <= maxVisible) {
+            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        }
+
+        int maxScroll = totalRaces - maxVisible;
+
+        if (verticalAmount > 0) {
+            scrollOffset--;
+        } else if (verticalAmount < 0) {
+            scrollOffset++;
+        }
+
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+        init();
+        return true;
     }
 
     @Override
     public void tick() {
         super.tick();
-        spinAngle += 2.0f;
-        if (spinAngle >= 360f) {
-            spinAngle -= 360f;
+        spinAngle += 2.0F;
+        if (spinAngle >= 360.0F) {
+            spinAngle -= 360.0F;
         }
     }
 
     @Override
-    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
-        // Draw background before widgets
+    public void extractRenderState(
+            GuiGraphicsExtractor context,
+            int mouseX,
+            int mouseY,
+            float delta
+    ) {
         context.fill(0, 0, this.width, this.height, 0xF0101216);
 
-        int midColWidth = 100;
-        int rightColWidth = Math.max(190, this.width * 2 / 5);
-        int leftColWidth = this.width - midColWidth - rightColWidth;
+        int leftColWidth = Math.max(100, this.width / 3);
+        int midColWidth = Math.min(120, this.width / 4);
         int rightStartX = leftColWidth + midColWidth;
+        int rightColWidth = Math.max(140, this.width - rightStartX);
 
         int borderColor = 0xFF00FFCC;
 
-        // Draw top header bar
         context.fill(0, 0, this.width, 20, 0xFF0A0C0E);
         context.fill(0, 20, this.width, 22, borderColor);
-        
-        String headerTitle = currentState == State.RACE_SELECT ? "RACE SELECTION" : "CHARACTER CUSTOMIZATION";
-        context.centeredText(this.font, Component.literal(headerTitle), this.width / 2, 6, 0xFFFFFFFF);
 
-        // Left Column: 3D Player Model Preview Platform
-        int previewX = leftColWidth / 2;
-        int previewY = this.height / 2;
-        context.centeredText(this.font, Component.literal("3D CHARACTER PREVIEW"), previewX, previewY - 85, 0xFF00FFCC);
+        String title = currentState == State.RACE_SELECT ? "RACE SELECTION" : "CHARACTER CUSTOMIZATION";
+        context.centeredText(this.font, Component.literal(title), this.width / 2, 6, 0xFFFFFFFF);
 
-        // Circular glow platform under player
-        context.fill(previewX - 45, previewY + 68, previewX + 45, previewY + 70, 0xFF00FFCC);
-        context.fill(previewX - 35, previewY + 70, previewX + 35, previewY + 72, 0xAA00FFCC);
-
-        var localPlayer = net.minecraft.client.Minecraft.getInstance().player;
-        if (localPlayer != null) {
-            float savedYRot = localPlayer.getYRot();
-            float savedYBodyRot = localPlayer.yBodyRot;
-            float savedYHeadRot = localPlayer.yHeadRot;
-            float savedXRot = localPlayer.getXRot();
-
-            // Set spinning rotation
-            localPlayer.setYRot(spinAngle);
-            localPlayer.yBodyRot = spinAngle;
-            localPlayer.yHeadRot = spinAngle;
-            localPlayer.setXRot(0f);
-
-            int scale = 40;
-            net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(
-                context,
-                previewX - 40, previewY - 60,
-                previewX + 40, previewY + 70,
-                scale,
-                0f,
-                (float)mouseX, (float)mouseY,
-                localPlayer
-            );
-
-            // Restore player angles
-            localPlayer.setYRot(savedYRot);
-            localPlayer.yBodyRot = savedYBodyRot;
-            localPlayer.yHeadRot = savedYHeadRot;
-            localPlayer.setXRot(savedXRot);
-        }
-
-        // Right Column: Details Panel Background
-        int panelMargin = 10;
+        int panelMargin = 5;
         int panelX = rightStartX + panelMargin;
-        int panelY = 40;
+        int panelY = 26;
         int panelW = rightColWidth - panelMargin * 2;
-        int panelH = this.height - 90; // leave room for buttons at bottom
-        
-        // Panel Background and border
+        int panelH = this.height - 58;
+
         context.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xF0181B22);
         context.fill(panelX, panelY, panelX + panelW, panelY + 2, borderColor);
         context.fill(panelX, panelY + panelH - 2, panelX + panelW, panelY + panelH, borderColor);
         context.fill(panelX, panelY, panelX + 2, panelY + panelH, borderColor);
         context.fill(panelX + panelW - 2, panelY, panelX + panelW, panelY + panelH, borderColor);
 
-        if (currentState == State.RACE_SELECT) {
-            if (!selectedRace.isEmpty()) {
-                Race raceObj = com.dragonblockarcanedba.registry.DbaRegistries.getRace(net.minecraft.resources.Identifier.parse(selectedRace));
-                if (raceObj != null) {
-                    context.text(this.font, Component.literal(raceObj.getDisplayName() + " Race Details"), panelX + 12, panelY + 12, 0xFF00FFCC, false);
-                    
-                    var bs = raceObj.getBaseStats();
-                    var sm = raceObj.getStatMultipliers();
-                    context.text(this.font, Component.literal("• Strength: Base " + bs.strength() + " (+" + sm.strength() + "%)"), panelX + 15, panelY + 38, 0xFFFFFFFF, false);
-                    context.text(this.font, Component.literal("• Defense: Base " + bs.defense() + " (+" + sm.defense() + "%)"), panelX + 15, panelY + 50, 0xFFFFFFFF, false);
-                    context.text(this.font, Component.literal("• Ki Capacity: Base " + bs.kiCapacity() + " (+" + sm.kiCapacity() + "%)"), panelX + 15, panelY + 62, 0xFFFFFFFF, false);
-                    context.text(this.font, Component.literal("• Ki Control: Base " + bs.kiControl() + " (+" + sm.kiControl() + "%)"), panelX + 15, panelY + 74, 0xFFFFFFFF, false);
-                    context.text(this.font, Component.literal("• Agility: Base " + bs.agility() + " (+" + sm.agility() + "%)"), panelX + 15, panelY + 86, 0xFFFFFFFF, false);
+        int previewX = leftColWidth / 2;
+        int previewY = this.height / 2;
+
+        var localPlayer = Minecraft.getInstance().player;
+        if (localPlayer != null) {
+            float savedYRot = localPlayer.getYRot();
+            float savedYBodyRot = localPlayer.yBodyRot;
+            float savedYHeadRot = localPlayer.yHeadRot;
+            float savedXRot = localPlayer.getXRot();
+
+            Identifier savedRace = null;
+            String savedSkin = null;
+            String savedHair = null;
+            PlayerStatsAccessor accessor = null;
+            if (localPlayer instanceof PlayerStatsAccessor acc) {
+                accessor = acc;
+                savedRace = acc.dba$getRaceId();
+                savedSkin = acc.dba$getSkinColor();
+                savedHair = acc.dba$getHairColor();
+                if (selectedRace != null && !selectedRace.isEmpty()) {
+                    acc.dba$setRaceId(Identifier.parse(selectedRace));
                 }
-                context.text(this.font, Component.literal("Unique Traits:"), panelX + 12, panelY + 110, 0xFF00FFCC, false);
-                context.text(this.font, Component.literal("Race-specific forms &"), panelX + 15, panelY + 124, 0xFFAAAAAA, false);
-                context.text(this.font, Component.literal("power scaling unlocked"), panelX + 15, panelY + 136, 0xFFAAAAAA, false);
-                context.text(this.font, Component.literal("through combat mastery."), panelX + 15, panelY + 148, 0xFFAAAAAA, false);
-            } else {
-                context.centeredText(this.font, Component.literal("Select a race to view details"), panelX + panelW / 2, panelY + panelH / 2, 0xFFAAAAAA);
+                String skinHex = rgbToHex(skinR, skinG, skinB);
+                String hairHex = rgbToHex(hairR, hairG, hairB);
+                acc.dba$setSkinColor(skinHex);
+                acc.dba$setHairColor(hairHex);
             }
-        } else if (currentState == State.CUSTOMIZATION) {
-            int startSliderY = panelY + 45;
-            if ("Skin".equals(customizationTab)) {
-                context.text(this.font, Component.literal("SKIN COLOR"), panelX + 12, panelY + 10, 0xFF00FFCC, false);
-                String skinHex = String.format("#%02X%02X%02X", skinR, skinG, skinB);
-                context.text(this.font, Component.literal("Active Hex: " + skinHex), panelX + 12, panelY + 24, 0xFFAAAAAA, false);
 
-                // Draw Color Preview Swatch Box on right side of header
-                int argb = 0xFF000000 | (skinR << 16) | (skinG << 8) | skinB;
-                context.fill(panelX + panelW - 44, panelY + 8, panelX + panelW - 10, panelY + 40, argb);
-                context.fill(panelX + panelW - 44, panelY + 8, panelX + panelW - 10, panelY + 9, borderColor);
-                context.fill(panelX + panelW - 44, panelY + 39, panelX + panelW - 10, panelY + 40, borderColor);
-                context.fill(panelX + panelW - 44, panelY + 8, panelX + panelW - 43, panelY + 40, borderColor);
-                context.fill(panelX + panelW - 11, panelY + 8, panelX + panelW - 10, panelY + 40, borderColor);
+            localPlayer.setYRot(spinAngle);
+            localPlayer.yBodyRot = spinAngle;
+            localPlayer.yHeadRot = spinAngle;
+            localPlayer.setXRot(0f);
 
-                context.text(this.font, Component.literal("Preset Palette:"), panelX + 12, startSliderY + 70, 0xFF00FFCC, false);
-            } else if ("Hair".equals(customizationTab)) {
-                context.text(this.font, Component.literal("HAIR COLOR"), panelX + 12, panelY + 10, 0xFF00FFCC, false);
-                String hairHex = String.format("#%02X%02X%02X", hairR, hairG, hairB);
-                context.text(this.font, Component.literal("Active Hex: " + hairHex), panelX + 12, panelY + 24, 0xFFAAAAAA, false);
+            int scale = Math.min(40, this.height / 5);
+            net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(
+                    context,
+                    previewX - 40, previewY - 60,
+                    previewX + 40, previewY + 70,
+                    scale,
+                    0f,
+                    (float) mouseX, (float) mouseY,
+                    localPlayer
+            );
 
-                // Draw Color Preview Swatch Box on right side of header
-                int argb = 0xFF000000 | (hairR << 16) | (hairG << 8) | hairB;
-                context.fill(panelX + panelW - 44, panelY + 8, panelX + panelW - 10, panelY + 40, argb);
-                context.fill(panelX + panelW - 44, panelY + 8, panelX + panelW - 10, panelY + 9, borderColor);
-                context.fill(panelX + panelW - 44, panelY + 39, panelX + panelW - 10, panelY + 40, borderColor);
-                context.fill(panelX + panelW - 44, panelY + 8, panelX + panelW - 43, panelY + 40, borderColor);
-                context.fill(panelX + panelW - 11, panelY + 8, panelX + panelW - 10, panelY + 40, borderColor);
-
-                context.text(this.font, Component.literal("Preset Palette:"), panelX + 12, startSliderY + 70, 0xFF00FFCC, false);
+            localPlayer.setYRot(savedYRot);
+            localPlayer.yBodyRot = savedYBodyRot;
+            localPlayer.yHeadRot = savedYHeadRot;
+            localPlayer.setXRot(savedXRot);
+            if (accessor != null) {
+                accessor.dba$setRaceId(savedRace);
+                accessor.dba$setSkinColor(savedSkin);
+                accessor.dba$setHairColor(savedHair);
             }
         }
 
@@ -431,12 +665,27 @@ public class RaceSelectionScreen extends Screen {
 
     private record PresetColor(String name, int r, int g, int b) {}
 
-    private class RgbSliderWidget extends net.minecraft.client.gui.components.AbstractSliderButton {
+    private class RgbSliderWidget extends AbstractSliderButton {
         private final String prefix;
-        private final java.util.function.IntConsumer onChanged;
+        private final IntConsumer onChanged;
 
-        public RgbSliderWidget(int x, int y, int width, int height, String prefix, int initialVal, java.util.function.IntConsumer onChanged) {
-            super(x, y, width, height, Component.literal(prefix + ": " + initialVal), initialVal / 255.0);
+        public RgbSliderWidget(
+                int x,
+                int y,
+                int width,
+                int height,
+                String prefix,
+                int initialVal,
+                IntConsumer onChanged
+        ) {
+            super(
+                    x,
+                    y,
+                    width,
+                    height,
+                    Component.literal(prefix + ": " + initialVal),
+                    initialVal / 255.0
+            );
             this.prefix = prefix;
             this.onChanged = onChanged;
             updateMessage();

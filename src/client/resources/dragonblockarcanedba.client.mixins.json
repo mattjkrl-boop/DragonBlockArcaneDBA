@@ -5,7 +5,9 @@
 	"client": [
 		"PlayerEntityRendererMixin",
 		"LivingEntityRendererMixin",
-		"MeltingOverlayMixin"
+		"LivingEntityRendererInvoker",
+		"MeltingOverlayMixin",
+		"AvatarRenderStateMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

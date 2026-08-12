@@ -24,6 +24,7 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("flying_nimbus")))
     );
 
+
     public static final EntityType<KiBlastEntity> KI_BLAST = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("ki_blast"),
@@ -90,6 +91,7 @@ public class DbaEntities {
             EntityType.Builder.of(ShenronEntity::new, MobCategory.MISC)
                     .sized(3.0f, 6.0f)
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("shenron")))
+
     );
 
     public static void register() {

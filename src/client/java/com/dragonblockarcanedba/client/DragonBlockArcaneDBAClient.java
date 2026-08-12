@@ -35,6 +35,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.FlyingNimbusRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
+
             com.dragonblockarcanedba.entity.DbaEntities.KI_BLAST,
             com.dragonblockarcanedba.client.render.ki.KiBlastRenderer::new
         );
@@ -66,14 +67,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         // Register model layers
         net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry.registerModelLayer(
             SHENRON_MODEL_LAYER, com.dragonblockarcanedba.client.model.ShenronModel::createBodyLayer
+
         );
 
-        // Register GeckoLib replaced player renderer
-        // This replaces vanilla Steve/Alex with race-specific GeckoLib models
-        net.minecraft.client.renderer.entity.EntityRenderers.register(
-            net.minecraft.world.entity.EntityTypes.PLAYER,
-            com.dragonblockarcanedba.client.render.geo.DbaGeoRenderer::new
-        );
+
 
         // Load persisted config from disk
         com.dragonblockarcanedba.client.config.DbaConfig.load();
