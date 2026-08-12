@@ -183,6 +183,18 @@ public class DbaItems {
     public static final ResourceKey<Item> SPIRIT_CRYSTAL_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("spirit_crystal")
     );
+    public static final ResourceKey<Item> HOLLOWS_EDGE_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("hollows_edge")
+    );
+    public static final ResourceKey<Item> DIMENSIONAL_SWORD_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("dimensional_sword")
+    );
+    public static final ResourceKey<Item> POWER_POLE_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("power_pole")
+    );
+    public static final ResourceKey<Item> DEVIL_TRIDENT_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("devil_trident")
+    );
 
     public static final Item SPACE_POD = new SpacePodItem(
         new Item.Properties().setId(SPACE_POD_KEY).stacksTo(1)
@@ -359,6 +371,18 @@ public class DbaItems {
     public static final Item SPIRIT_CRYSTAL = new Item(
         new Item.Properties().setId(SPIRIT_CRYSTAL_KEY)
     );
+    public static final Item HOLLOWS_EDGE = new HollowsEdgeItem(
+        new Item.Properties().setId(HOLLOWS_EDGE_KEY).stacksTo(1)
+    );
+    public static final Item DIMENSIONAL_SWORD = new DimensionalSwordItem(
+        new Item.Properties().setId(DIMENSIONAL_SWORD_KEY).stacksTo(1)
+    );
+    public static final Item POWER_POLE = new PowerPoleItem(
+        new Item.Properties().setId(POWER_POLE_KEY).stacksTo(1)
+    );
+    public static final Item DEVIL_TRIDENT = new DevilTridentItem(
+        new Item.Properties().setId(DEVIL_TRIDENT_KEY).stacksTo(1)
+    );
 
     public static final CreativeModeTab DBA_TAB = CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
         .title(Component.translatable("itemGroup.dragonblockarcanedba.dba_items"))
@@ -367,6 +391,10 @@ public class DbaItems {
             // === WEAPONS & TOOLS ===
             output.accept(SPIRIT_SWORD);
             output.accept(SICKLE_OF_SORROW);
+            output.accept(HOLLOWS_EDGE);
+            output.accept(DIMENSIONAL_SWORD);
+            output.accept(POWER_POLE);
+            output.accept(DEVIL_TRIDENT);
             output.accept(BANSHO_FAN);
             output.accept(WHIS_STAFF);
 
@@ -514,6 +542,10 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, SILVER_INGOT_KEY, SILVER_INGOT);
         Registry.register(BuiltInRegistries.ITEM, STEEL_INGOT_KEY, STEEL_INGOT);
         Registry.register(BuiltInRegistries.ITEM, SPIRIT_CRYSTAL_KEY, SPIRIT_CRYSTAL);
+        Registry.register(BuiltInRegistries.ITEM, HOLLOWS_EDGE_KEY, HOLLOWS_EDGE);
+        Registry.register(BuiltInRegistries.ITEM, DIMENSIONAL_SWORD_KEY, DIMENSIONAL_SWORD);
+        Registry.register(BuiltInRegistries.ITEM, POWER_POLE_KEY, POWER_POLE);
+        Registry.register(BuiltInRegistries.ITEM, DEVIL_TRIDENT_KEY, DEVIL_TRIDENT);
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, DBA_TAB_KEY, DBA_TAB);
         DragonBlockArcaneDBA.LOGGER.info("Registered DBA items");
     }
