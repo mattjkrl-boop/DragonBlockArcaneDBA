@@ -1,1 +1,11 @@
-{"parent": "minecraft:item/generated", "textures": {"layer0": "dragonblockarcanedba:item/earth_dragon_ball"}}
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "dragonblockarcanedba:item/earth_dragon_ball"
+  },
+  "display": {
+    "gui": {
+      "scale": [0.6, 0.6, 0.6]
+    }
+  }
+}

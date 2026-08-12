@@ -25,6 +25,11 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        net.minecraft.client.gui.screens.MenuScreens.register(
+            com.dragonblockarcanedba.inventory.DbaMenus.GRAVITY_TRAINING,
+            com.dragonblockarcanedba.client.gui.GravityTrainingScreen::new
+        );
+
         // Register Entity Renderers
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.OTHERWORLD_GUIDE,

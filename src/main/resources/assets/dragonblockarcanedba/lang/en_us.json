@@ -78,5 +78,10 @@
   "effect.dragonblockarcanedba.melting": "Melting",
   "item.dragonblockarcanedba.earth_dragon_ball": "Earth Dragon Ball",
   "block.dragonblockarcanedba.earth_dragon_ball": "Earth Dragon Ball",
+  "item.dragonblockarcanedba.namekian_dragon_ball": "Namekian Dragon Ball",
+  "block.dragonblockarcanedba.namekian_dragon_ball": "Namekian Dragon Ball",
+  "item.dragonblockarcanedba.dragon_radar": "Dragon Radar",
+  "block.dragonblockarcanedba.gravity_training_block": "Gravity Training Block",
+  "item.dragonblockarcanedba.gravity_training_block": "Gravity Training Block",
   "entity.dragonblockarcanedba.shenron": "Shenron"
 }

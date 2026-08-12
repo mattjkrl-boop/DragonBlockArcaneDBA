@@ -43,6 +43,9 @@ public class DbaNetwork {
         // Ki Technique payloads (C2S)
         PayloadTypeRegistry.serverboundPlay().register(C2SKiTechniqueSavePayload.ID, C2SKiTechniqueSavePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(C2SKiTechniqueFirePayload.ID, C2SKiTechniqueFirePayload.CODEC);
+
+        // Gravity Block (C2S)
+        PayloadTypeRegistry.serverboundPlay().register(C2SSetGravityPayload.TYPE, C2SSetGravityPayload.CODEC);
     }
 
     public static void registerServer() {
@@ -272,6 +275,14 @@ public class DbaNetwork {
                     if (player.distanceToSqr(shenron) < 256.0) {
                         shenron.grantWish(player, wishType);
                     }
+                }
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(C2SSetGravityPayload.TYPE, (payload, context) -> {
+            context.server().execute(() -> {
+                if (context.player().containerMenu instanceof com.dragonblockarcanedba.inventory.GravityTrainingMenu menu) {
+                    menu.updateGravity(payload.gravity());
                 }
             });
         });

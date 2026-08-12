@@ -1,0 +1,22 @@
+{
+  "ambientocclusion": true,
+  "render_type": "minecraft:translucent",
+  "textures": {
+    "particle": "dragonblockarcanedba:block/namekian_dragon_ball",
+    "all": "dragonblockarcanedba:block/namekian_dragon_ball"
+  },
+  "elements": [
+    {
+      "from": [ 2, 0, 2 ],
+      "to": [ 14, 12, 14 ],
+      "faces": {
+        "down":  { "uv": [ 4, 4, 12, 12 ], "texture": "#all", "cullface": "down" },
+        "up":    { "uv": [ 4, 4, 12, 12 ], "texture": "#all" },
+        "north": { "uv": [ 4, 8, 12, 16 ], "texture": "#all" },
+        "south": { "uv": [ 4, 8, 12, 16 ], "texture": "#all" },
+        "west":  { "uv": [ 4, 8, 12, 16 ], "texture": "#all" },
+        "east":  { "uv": [ 4, 8, 12, 16 ], "texture": "#all" }
+      }
+    }
+  ]
+}

@@ -67,8 +67,8 @@ public class DbaMenuScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         super.extractRenderState(context, mouseX, mouseY, delta);
 
-        int sidebarBg = 0xEE11151A; // Dark blue/gray
-        int contentBg = 0xEE1A1C20; // Slightly lighter sleek gray
+        int sidebarBg = 0xAA11151A; // Dark blue/gray, but lighter alpha
+        int contentBg = 0xAA1A1C20; // Slightly lighter sleek gray
         int borderColor = 0xAA55FF88; // Sleek mint green accent
         int borderThick = 2;
 
@@ -89,14 +89,17 @@ public class DbaMenuScreen extends Screen {
 
             if (isActive) {
                 // Active highlight background
-                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x2255FF88);
+                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x4455FF88);
                 // Active left accent line
                 context.fill(tabX, tabY, tabX + 3, tabY + tabHeight, 0xFF55FF88);
             } else if (isHovered) {
                 // Hover highlight background
-                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x11FFFFFF);
+                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x33FFFFFF);
                 // Hover accent line
-                context.fill(tabX, tabY, tabX + 3, tabY + tabHeight, 0x66FFFFFF);
+                context.fill(tabX, tabY, tabX + 3, tabY + tabHeight, 0xAAFFFFFF);
+            } else {
+                // Inactive tabs get a slightly darker backing
+                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x44000000);
             }
             
             // Tab text (left-aligned with padding)

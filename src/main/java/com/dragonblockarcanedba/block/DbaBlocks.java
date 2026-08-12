@@ -193,6 +193,29 @@ public class DbaBlocks {
             .noOcclusion()
     );
 
+    public static final ResourceKey<Block> NAMEKIAN_DRAGON_BALL_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("namekian_dragon_ball")
+    );
+    public static final Block NAMEKIAN_DRAGON_BALL = new NamekianDragonBallBlock(
+        BlockBehaviour.Properties.of()
+            .setId(NAMEKIAN_DRAGON_BALL_KEY)
+            .strength(0.5f)
+            .sound(SoundType.GLASS)
+            .noOcclusion()
+    );
+
+    public static final ResourceKey<Block> GRAVITY_TRAINING_BLOCK_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("gravity_training_block")
+    );
+    public static final Block GRAVITY_TRAINING_BLOCK = new GravityTrainingBlock(
+        BlockBehaviour.Properties.of()
+            .setId(GRAVITY_TRAINING_BLOCK_KEY)
+            .mapColor(MapColor.METAL)
+            .strength(5.0f, 6.0f)
+            .sound(SoundType.METAL)
+            .requiresCorrectToolForDrops()
+    );
+
     // --- Registration helpers ---
     private static void registerBlock(ResourceKey<Block> key, Block block) {
         Registry.register(BuiltInRegistries.BLOCK, key, block);
@@ -221,5 +244,7 @@ public class DbaBlocks {
 
         Registry.register(BuiltInRegistries.BLOCK, SENZU_PLANT_KEY, SENZU_PLANT);
         Registry.register(BuiltInRegistries.BLOCK, EARTH_DRAGON_BALL_KEY, EARTH_DRAGON_BALL);
+        Registry.register(BuiltInRegistries.BLOCK, NAMEKIAN_DRAGON_BALL_KEY, NAMEKIAN_DRAGON_BALL);
+        Registry.register(BuiltInRegistries.BLOCK, GRAVITY_TRAINING_BLOCK_KEY, GRAVITY_TRAINING_BLOCK);
     }
 }

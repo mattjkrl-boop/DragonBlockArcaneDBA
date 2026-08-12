@@ -104,3 +104,10 @@ publishing {
 		// retrieving dependencies.
 	}
 }
+
+afterEvaluate {
+	tasks.named('runClient') {
+		dependsOn tasks.named('clientClasses')
+	}
+}
+

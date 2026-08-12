@@ -138,6 +138,15 @@ public class DbaItems {
     public static final ResourceKey<Item> EARTH_DRAGON_BALL_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("earth_dragon_ball")
     );
+    public static final ResourceKey<Item> NAMEKIAN_DRAGON_BALL_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("namekian_dragon_ball")
+    );
+    public static final ResourceKey<Item> DRAGON_RADAR_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("dragon_radar")
+    );
+    public static final ResourceKey<Item> GRAVITY_TRAINING_BLOCK_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("gravity_training_block")
+    );
     public static final ResourceKey<Item> SILVER_ZENI_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("silver_zeni")
     );
@@ -301,6 +310,17 @@ public class DbaItems {
         com.dragonblockarcanedba.block.DbaBlocks.EARTH_DRAGON_BALL,
         new Item.Properties().setId(EARTH_DRAGON_BALL_KEY).stacksTo(1)
     );
+    public static final Item NAMEKIAN_DRAGON_BALL = new BlockItem(
+        com.dragonblockarcanedba.block.DbaBlocks.NAMEKIAN_DRAGON_BALL,
+        new Item.Properties().setId(NAMEKIAN_DRAGON_BALL_KEY).stacksTo(1)
+    );
+    public static final Item DRAGON_RADAR = new Item(
+        new Item.Properties().setId(DRAGON_RADAR_KEY).stacksTo(1)
+    );
+    public static final Item GRAVITY_TRAINING_BLOCK = new BlockItem(
+        com.dragonblockarcanedba.block.DbaBlocks.GRAVITY_TRAINING_BLOCK,
+        new Item.Properties().setId(GRAVITY_TRAINING_BLOCK_KEY)
+    );
     public static final Item SILVER_ZENI = new Item(
         new Item.Properties().setId(SILVER_ZENI_KEY)
     );
@@ -344,51 +364,56 @@ public class DbaItems {
         .title(Component.translatable("itemGroup.dragonblockarcanedba.dba_items"))
         .icon(() -> new net.minecraft.world.item.ItemStack(DBA_LOGO))
         .displayItems((itemDisplayParameters, output) -> {
-            output.accept(SPACE_POD);
-            output.accept(BRONZE_COIN);
+            // === WEAPONS & TOOLS ===
+            output.accept(SPIRIT_SWORD);
+            output.accept(SICKLE_OF_SORROW);
             output.accept(BANSHO_FAN);
-            output.accept(DBA_ORB);
-            output.accept(KI_SHARD);
+            output.accept(WHIS_STAFF);
+
+            // === DRAGON BALLS & RADAR ===
+            output.accept(EARTH_DRAGON_BALL);
+            output.accept(NAMEKIAN_DRAGON_BALL);
+            output.accept(DRAGON_RADAR);
+
+            // === VEHICLES & TRANSPORT ===
+            output.accept(SPACE_POD);
+            output.accept(FLYING_NIMBUS);
+
+            // === CONSUMABLES & FOOD ===
+            output.accept(SENZU_BEAN);
+            output.accept(DINO_MEAT);
+            output.accept(RED_FRUIT);
             output.accept(RECOVERY_CAPSULE);
-            output.accept(DROP_RATE);
-            output.accept(DUNGEON_COIN);
-            output.accept(FAC_COIN);
-            output.accept(FAC_LOOP);
+
+            // === KI & ENERGY ===
+            output.accept(KI_SHARD);
+            output.accept(GOLD_KI_SHARD);
+            output.accept(BLUE_KI_ORB);
+            output.accept(PURPLE_KI_ORB);
+            output.accept(DBA_ORB);
+            output.accept(BLUE_ORB_1);
+            output.accept(BLUE_ORB_2);
+            output.accept(PURPLE_ORB_LARGE);
+            output.accept(PURPLE_ORB_SMALL);
+            output.accept(SPIRIT_CRYSTAL);
+            output.accept(XP_AURA);
             output.accept(FAC_POWER);
+
+            // === CURRENCY & COINS ===
+            output.accept(BRONZE_COIN);
+            output.accept(SILVER_COIN);
+            output.accept(GOLD_COIN);
+            output.accept(SILVER_ZENI);
             output.accept(T1_COIN);
             output.accept(T2_COIN);
             output.accept(TP_COIN_0_1);
             output.accept(ORBITAL_COIN);
+            output.accept(DUNGEON_COIN);
+            output.accept(FAC_COIN);
             output.accept(TRADE_COIN);
-            output.accept(GOLD_COIN);
-            output.accept(SPIRIT_SWORD);
-            output.accept(BLUE_ORB_1);
-            output.accept(SILVER_COIN);
-            output.accept(BLUE_ORB_2);
-            output.accept(BLUE_KI_ORB);
-            output.accept(MAJIN_MARK);
-            output.accept(XP_AURA);
-            output.accept(DNA_HELIX);
-            output.accept(GOLD_KI_SHARD);
-            output.accept(SICKLE_OF_SORROW);
             output.accept(TIME_COIN);
-            output.accept(RED_CROWN);
-            output.accept(BLUE_CROWN);
-            output.accept(PURPLE_KI_ORB);
-            output.accept(RED_FRUIT);
-            output.accept(WHIS_STAFF);
-            output.accept(PURPLE_ORB_LARGE);
-            output.accept(PURPLE_ORB_SMALL);
-            output.accept(RED_TICKETS);
-            output.accept(DBA_LOGO);
-            output.accept(SENZU_BEAN);
-            output.accept(SENZU_SPROUT);
-            output.accept(FLYING_NIMBUS);
-            output.accept(EARTH_DRAGON_BALL);
-            output.accept(SILVER_ZENI);
-            output.accept(BLOOD_RUBY);
-            output.accept(GAMMET);
-            output.accept(DINO_MEAT);
+
+            // === MATERIALS & INGOTS ===
             output.accept(KATCHIN_SHARD);
             output.accept(DRAGSTONE_INGOT);
             output.accept(AETHERIUM_INGOT);
@@ -396,13 +421,39 @@ public class DbaItems {
             output.accept(TIN_INGOT);
             output.accept(SILVER_INGOT);
             output.accept(STEEL_INGOT);
-            output.accept(SPIRIT_CRYSTAL);
+            output.accept(BLOOD_RUBY);
+            output.accept(GAMMET);
+
+            // === SPECIAL & MISC ===
+            output.accept(MAJIN_MARK);
+            output.accept(DNA_HELIX);
+            output.accept(DROP_RATE);
+            output.accept(FAC_LOOP);
+            output.accept(RED_CROWN);
+            output.accept(BLUE_CROWN);
+            output.accept(RED_TICKETS);
+            output.accept(DBA_LOGO);
+
+            // === CROPS & FARMING ===
+            output.accept(SENZU_SPROUT);
+
+            // === ORES ===
             output.accept(com.dragonblockarcanedba.block.DbaBlocks.KATCHIN_ORE);
             output.accept(com.dragonblockarcanedba.block.DbaBlocks.DRAGSTONE_ORE);
             output.accept(com.dragonblockarcanedba.block.DbaBlocks.AETHERIUM_ORE);
             output.accept(com.dragonblockarcanedba.block.DbaBlocks.BAUXITE_ORE);
             output.accept(com.dragonblockarcanedba.block.DbaBlocks.TIN_ORE);
             output.accept(com.dragonblockarcanedba.block.DbaBlocks.SILVER_ORE);
+
+            // === BLOCKS & TERRAIN ===
+            output.accept(GRAVITY_TRAINING_BLOCK);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.YELLOW_CLOUD_BLOCK);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.NAMEK_GRASS);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.NAMEK_STONE);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.VEGETA_GRASS);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.VEGETA_STONE);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.YARDRAT_GRASS);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.YARDRAT_STONE);
         })
         .build();
 
@@ -448,6 +499,9 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, SENZU_SPROUT_KEY, SENZU_SPROUT);
         Registry.register(BuiltInRegistries.ITEM, FLYING_NIMBUS_KEY, FLYING_NIMBUS);
         Registry.register(BuiltInRegistries.ITEM, EARTH_DRAGON_BALL_KEY, EARTH_DRAGON_BALL);
+        Registry.register(BuiltInRegistries.ITEM, NAMEKIAN_DRAGON_BALL_KEY, NAMEKIAN_DRAGON_BALL);
+        Registry.register(BuiltInRegistries.ITEM, DRAGON_RADAR_KEY, DRAGON_RADAR);
+        Registry.register(BuiltInRegistries.ITEM, GRAVITY_TRAINING_BLOCK_KEY, GRAVITY_TRAINING_BLOCK);
         Registry.register(BuiltInRegistries.ITEM, SILVER_ZENI_KEY, SILVER_ZENI);
         Registry.register(BuiltInRegistries.ITEM, BLOOD_RUBY_KEY, BLOOD_RUBY);
         Registry.register(BuiltInRegistries.ITEM, GAMMET_KEY, GAMMET);
