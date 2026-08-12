@@ -23,6 +23,10 @@ public class DbaNetwork {
         PayloadTypeRegistry.clientboundPlay().register(RaceSelectOpenPayload.TYPE, RaceSelectOpenPayload.CODEC);
         // Revive UI open screen (S2C)
         PayloadTypeRegistry.clientboundPlay().register(ReviveUiOpenPayload.TYPE, ReviveUiOpenPayload.CODEC);
+        // Wish Menu open screen (S2C)
+        PayloadTypeRegistry.clientboundPlay().register(WishMenuOpenPayload.TYPE, WishMenuOpenPayload.CODEC);
+        // Make Wish (C2S)
+        PayloadTypeRegistry.serverboundPlay().register(C2SMakeWishPayload.TYPE, C2SMakeWishPayload.CODEC);
         // Transform broadcast to nearby players (S2C)
         PayloadTypeRegistry.clientboundPlay().register(TransformBroadcastPayload.TYPE, TransformBroadcastPayload.CODEC);
 
@@ -254,6 +258,21 @@ public class DbaNetwork {
             ServerPlayer player = context.player();
             context.server().execute(() -> {
                 KiTechniqueHandler.fire(player, payload.slot());
+            });
+        });
+
+        // Handle Make Wish C2S
+        ServerPlayNetworking.registerGlobalReceiver(C2SMakeWishPayload.TYPE, (payload, context) -> {
+            ServerPlayer player = context.player();
+            int shenronId = payload.shenronId();
+            String wishType = payload.wishType();
+            context.server().execute(() -> {
+                net.minecraft.world.entity.Entity entity = player.level().getEntity(shenronId);
+                if (entity instanceof com.dragonblockarcanedba.entity.ShenronEntity shenron && shenron.isAlive()) {
+                    if (player.distanceToSqr(shenron) < 256.0) {
+                        shenron.grantWish(player, wishType);
+                    }
+                }
             });
         });
     }

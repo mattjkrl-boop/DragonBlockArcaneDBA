@@ -182,6 +182,17 @@ public class DbaBlocks {
             .sound(SoundType.CROP)
     );
 
+    public static final ResourceKey<Block> EARTH_DRAGON_BALL_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("earth_dragon_ball")
+    );
+    public static final Block EARTH_DRAGON_BALL = new EarthDragonBallBlock(
+        BlockBehaviour.Properties.of()
+            .setId(EARTH_DRAGON_BALL_KEY)
+            .strength(0.5f)
+            .sound(SoundType.GLASS)
+            .noOcclusion()
+    );
+
     // --- Registration helpers ---
     private static void registerBlock(ResourceKey<Block> key, Block block) {
         Registry.register(BuiltInRegistries.BLOCK, key, block);
@@ -209,5 +220,6 @@ public class DbaBlocks {
         registerBlock(SILVER_ORE_KEY, SILVER_ORE);
 
         Registry.register(BuiltInRegistries.BLOCK, SENZU_PLANT_KEY, SENZU_PLANT);
+        Registry.register(BuiltInRegistries.BLOCK, EARTH_DRAGON_BALL_KEY, EARTH_DRAGON_BALL);
     }
 }

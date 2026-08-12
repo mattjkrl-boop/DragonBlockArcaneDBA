@@ -1,0 +1,151 @@
+package com.dragonblockarcanedba.entity;
+
+import com.dragonblockarcanedba.network.WishMenuOpenPayload;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
+
+public class ShenronEntity extends Mob {
+    private boolean wishGranted = false;
+
+    // Kinematic Positional Tracking Ring Buffer (X=Yaw, Y=Y-height, Z=Pitch)
+    public final double[][] positions = new double[64][3];
+    public int ringBufferIndex = -1;
+    private double spawnX, spawnY, spawnZ;
+    private float animationTicks = 0.0F;
+
+    public ShenronEntity(EntityType<? extends Mob> entityType, Level level) {
+        super(entityType, level);
+        this.setNoGravity(true);
+    }
+
+    public static AttributeSupplier.Builder createAttributes() {
+        return Mob.createMobAttributes()
+            .add(Attributes.MAX_HEALTH, 100.0)
+            .add(Attributes.MOVEMENT_SPEED, 0.0);
+    }
+
+    @Override
+    public void tick() {
+        if (this.animationTicks == 0.0F) {
+            this.spawnX = this.getX();
+            this.spawnY = this.getY();
+            this.spawnZ = this.getZ();
+        }
+        this.animationTicks += 1.0F;
+
+        // Move in a slow, elegant circle around the spawn position
+        float angle = this.animationTicks * 0.02F;
+        double targetX = this.spawnX + Math.sin(angle) * 12.0;
+        double targetZ = this.spawnZ + (Math.cos(angle) - 1.0) * 12.0;
+        double targetY = this.spawnY + Math.sin(this.animationTicks * 0.05F) * 2.0;
+
+        double dx = targetX - this.getX();
+        double dz = targetZ - this.getZ();
+        float targetYaw = (float)(Math.atan2(dx, dz) * (180.0 / Math.PI));
+        
+        this.setYRot(targetYaw);
+        this.setPos(targetX, targetY, targetZ);
+
+        super.tick();
+
+        // Update the ring buffer with the head's current position every tick
+        if (this.ringBufferIndex < 0) {
+            // First tick initialization
+            for (int i = 0; i < this.positions.length; ++i) {
+                this.positions[i][0] = this.getYRot();
+                this.positions[i][1] = this.getY();
+                this.positions[i][2] = this.getXRot();
+            }
+        }
+
+        if (++this.ringBufferIndex == this.positions.length) {
+            this.ringBufferIndex = 0;
+        }
+
+        this.positions[this.ringBufferIndex][0] = this.getYRot();
+        this.positions[this.ringBufferIndex][1] = this.getY();
+        this.positions[this.ringBufferIndex][2] = this.getXRot();
+    }
+
+    @Override
+    protected InteractionResult mobInteract(Player player, InteractionHand hand) {
+        if (!this.level().isClientSide() && player instanceof ServerPlayer serverPlayer) {
+            ServerPlayNetworking.send(serverPlayer, new WishMenuOpenPayload(this.getId()));
+            return InteractionResult.SUCCESS;
+        }
+        return InteractionResult.SUCCESS;
+    }
+
+    public void grantWish(ServerPlayer player, String wishType) {
+        if (this.isRemoved() || this.wishGranted) return;
+        this.wishGranted = true;
+
+        com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
+        
+        switch (wishType) {
+            case "wealth" -> {
+                player.addItem(new net.minecraft.world.item.ItemStack(com.dragonblockarcanedba.item.DbaItems.SILVER_ZENI, 64));
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("\u00a76Shenron: \u00a7aYour wish for wealth has been granted."));
+            }
+            case "power" -> {
+                accessor.dba$setStatPoints(accessor.dba$getStatPoints() + 150);
+                accessor.dba$syncStats();
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("\u00a76Shenron: \u00a7aYour wish for power has been granted."));
+            }
+            case "immortality" -> {
+                player.addItem(new net.minecraft.world.item.ItemStack(com.dragonblockarcanedba.item.DbaItems.SENZU_BEAN, 16));
+                player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.RESISTANCE, 12000, 2
+                ));
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("\u00a76Shenron: \u00a7aYour wish for immortality has been granted."));
+            }
+            default -> {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("\u00a76Shenron: \u00a7cThat wish is beyond my power."));
+                this.wishGranted = false;
+                return;
+            }
+        }
+        
+        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            net.minecraft.world.entity.LightningBolt lightning = net.minecraft.world.entity.EntityTypes.LIGHTNING_BOLT.create(
+                serverLevel, net.minecraft.world.entity.EntitySpawnReason.EVENT
+            );
+            if (lightning != null) {
+                lightning.setPos(this.getX(), this.getY(), this.getZ());
+                serverLevel.addFreshEntity(lightning);
+            }
+            serverLevel.getServer().getPlayerList().broadcastSystemMessage(
+                net.minecraft.network.chat.Component.literal("\u00a76Shenron: \u00a7eFarewell!"), false
+            );
+        }
+        
+        this.discard();
+    }
+
+    @Override
+    public void travel(Vec3 travelVector) {
+        // Handled manually in tick()
+        this.setDeltaMovement(Vec3.ZERO);
+        this.move(net.minecraft.world.entity.MoverType.SELF, this.getDeltaMovement());
+    }
+
+    @Override
+    public boolean hurtServer(net.minecraft.server.level.ServerLevel level, DamageSource source, float amount) {
+        return false;
+    }
+
+    @Override
+    public boolean isNoAi() {
+        return true;
+    }
+}

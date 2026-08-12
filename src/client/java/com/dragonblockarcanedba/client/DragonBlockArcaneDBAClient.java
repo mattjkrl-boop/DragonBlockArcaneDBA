@@ -19,6 +19,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     public static KeyMapping techSlot2Key;
     public static KeyMapping techSlot3Key;
 
+    public static final net.minecraft.client.model.geom.ModelLayerLocation SHENRON_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
+        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("shenron"), "main"
+    );
+
     @Override
     public void onInitializeClient() {
         // Register Entity Renderers
@@ -29,6 +33,15 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.FLYING_NIMBUS,
             com.dragonblockarcanedba.client.render.FlyingNimbusRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SHENRON,
+            com.dragonblockarcanedba.client.render.ShenronRenderer::new
+        );
+
+        // Register model layers
+        net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry.registerModelLayer(
+            SHENRON_MODEL_LAYER, com.dragonblockarcanedba.client.model.ShenronModel::createBodyLayer
         );
 
         // Register GeckoLib replaced player renderer
@@ -199,6 +212,17 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             (payload, context) -> {
                 context.client().execute(() -> {
                     context.client().setScreenAndShow(new com.dragonblockarcanedba.client.gui.ReviveScreen());
+                });
+            }
+        );
+        // Register Wish Menu screen opener (S2C)
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.dragonblockarcanedba.network.WishMenuOpenPayload.TYPE,
+            (payload, context) -> {
+                context.client().execute(() -> {
+                    context.client().setScreenAndShow(
+                        new com.dragonblockarcanedba.client.gui.WishScreen(payload.shenronId())
+                    );
                 });
             }
         );
