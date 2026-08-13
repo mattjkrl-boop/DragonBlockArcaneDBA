@@ -207,6 +207,12 @@ public class DbaItems {
     public static final ResourceKey<Item> OX_KINGS_AX_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("ox_kings_ax")
     );
+    public static final ResourceKey<Item> GRAND_SWORD_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("grand_sword")
+    );
+    public static final ResourceKey<Item> Z_SWORD_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("z_sword")
+    );
 
     public static final Item SPACE_POD = new SpacePodItem(
         new Item.Properties().setId(SPACE_POD_KEY).stacksTo(1)
@@ -407,6 +413,12 @@ public class DbaItems {
     public static final Item OX_KINGS_AX = new Item(
         new Item.Properties().setId(OX_KINGS_AX_KEY).stacksTo(1)
     );
+    public static final Item GRAND_SWORD = new Item(
+        new Item.Properties().setId(GRAND_SWORD_KEY).stacksTo(1)
+    );
+    public static final Item Z_SWORD = new Item(
+        new Item.Properties().setId(Z_SWORD_KEY).stacksTo(1)
+    );
 
     public static final CreativeModeTab DBA_TAB = CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
         .title(Component.translatable("itemGroup.dragonblockarcanedba.dba_items"))
@@ -423,6 +435,8 @@ public class DbaItems {
             output.accept(CURSED_BLADE);
             output.accept(SABER);
             output.accept(OX_KINGS_AX);
+            output.accept(GRAND_SWORD);
+            output.accept(Z_SWORD);
             output.accept(BANSHO_FAN);
             output.accept(WHIS_STAFF);
 
@@ -578,6 +592,8 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, CURSED_BLADE_KEY, CURSED_BLADE);
         Registry.register(BuiltInRegistries.ITEM, SABER_KEY, SABER);
         Registry.register(BuiltInRegistries.ITEM, OX_KINGS_AX_KEY, OX_KINGS_AX);
+        Registry.register(BuiltInRegistries.ITEM, GRAND_SWORD_KEY, GRAND_SWORD);
+        Registry.register(BuiltInRegistries.ITEM, Z_SWORD_KEY, Z_SWORD);
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, DBA_TAB_KEY, DBA_TAB);
         DragonBlockArcaneDBA.LOGGER.info("Registered DBA items");
     }
