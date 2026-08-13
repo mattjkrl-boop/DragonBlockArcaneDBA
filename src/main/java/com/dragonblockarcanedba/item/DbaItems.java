@@ -195,6 +195,18 @@ public class DbaItems {
     public static final ResourceKey<Item> DEVIL_TRIDENT_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("devil_trident")
     );
+    public static final ResourceKey<Item> AZURE_DRAGON_SWORD_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("azure_dragon_sword")
+    );
+    public static final ResourceKey<Item> CURSED_BLADE_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("cursed_blade")
+    );
+    public static final ResourceKey<Item> SABER_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("saber")
+    );
+    public static final ResourceKey<Item> OX_KINGS_AX_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("ox_kings_ax")
+    );
 
     public static final Item SPACE_POD = new SpacePodItem(
         new Item.Properties().setId(SPACE_POD_KEY).stacksTo(1)
@@ -383,6 +395,18 @@ public class DbaItems {
     public static final Item DEVIL_TRIDENT = new DevilTridentItem(
         new Item.Properties().setId(DEVIL_TRIDENT_KEY).stacksTo(1)
     );
+    public static final Item AZURE_DRAGON_SWORD = new Item(
+        new Item.Properties().setId(AZURE_DRAGON_SWORD_KEY).stacksTo(1)
+    );
+    public static final Item CURSED_BLADE = new Item(
+        new Item.Properties().setId(CURSED_BLADE_KEY).stacksTo(1)
+    );
+    public static final Item SABER = new Item(
+        new Item.Properties().setId(SABER_KEY).stacksTo(1)
+    );
+    public static final Item OX_KINGS_AX = new Item(
+        new Item.Properties().setId(OX_KINGS_AX_KEY).stacksTo(1)
+    );
 
     public static final CreativeModeTab DBA_TAB = CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
         .title(Component.translatable("itemGroup.dragonblockarcanedba.dba_items"))
@@ -395,6 +419,10 @@ public class DbaItems {
             output.accept(DIMENSIONAL_SWORD);
             output.accept(POWER_POLE);
             output.accept(DEVIL_TRIDENT);
+            output.accept(AZURE_DRAGON_SWORD);
+            output.accept(CURSED_BLADE);
+            output.accept(SABER);
+            output.accept(OX_KINGS_AX);
             output.accept(BANSHO_FAN);
             output.accept(WHIS_STAFF);
 
@@ -546,6 +574,10 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, DIMENSIONAL_SWORD_KEY, DIMENSIONAL_SWORD);
         Registry.register(BuiltInRegistries.ITEM, POWER_POLE_KEY, POWER_POLE);
         Registry.register(BuiltInRegistries.ITEM, DEVIL_TRIDENT_KEY, DEVIL_TRIDENT);
+        Registry.register(BuiltInRegistries.ITEM, AZURE_DRAGON_SWORD_KEY, AZURE_DRAGON_SWORD);
+        Registry.register(BuiltInRegistries.ITEM, CURSED_BLADE_KEY, CURSED_BLADE);
+        Registry.register(BuiltInRegistries.ITEM, SABER_KEY, SABER);
+        Registry.register(BuiltInRegistries.ITEM, OX_KINGS_AX_KEY, OX_KINGS_AX);
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, DBA_TAB_KEY, DBA_TAB);
         DragonBlockArcaneDBA.LOGGER.info("Registered DBA items");
     }
