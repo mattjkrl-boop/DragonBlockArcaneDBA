@@ -404,7 +404,7 @@ public class DbaItems {
     public static final Item AZURE_DRAGON_SWORD = new Item(
         new Item.Properties().setId(AZURE_DRAGON_SWORD_KEY).stacksTo(1)
     );
-    public static final Item CURSED_BLADE = new Item(
+    public static final Item CURSED_BLADE = new CurseBladeItem(
         new Item.Properties().setId(CURSED_BLADE_KEY).stacksTo(1)
     );
     public static final Item SABER = new Item(
@@ -416,7 +416,7 @@ public class DbaItems {
     public static final Item GRAND_SWORD = new Item(
         new Item.Properties().setId(GRAND_SWORD_KEY).stacksTo(1)
     );
-    public static final Item Z_SWORD = new Item(
+    public static final Item Z_SWORD = new ZSwordItem(
         new Item.Properties().setId(Z_SWORD_KEY).stacksTo(1)
     );
 

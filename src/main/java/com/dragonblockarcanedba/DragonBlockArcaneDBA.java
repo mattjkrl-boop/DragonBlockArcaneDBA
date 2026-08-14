@@ -98,12 +98,14 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             com.dragonblockarcanedba.command.DbaCommand.register(dispatcher);
         });
 
-        // Block Mining for rapid-fire weapons (Dimensional Sword, Power Pole)
+        // Block Mining for rapid-fire / charging weapons (Dimensional Sword, Power Pole, Z Sword, Curse Blade)
         net.fabricmc.fabric.api.event.player.AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
             if (!player.isSpectator()) {
                 net.minecraft.world.item.ItemStack stack = player.getItemInHand(hand);
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem || 
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem) {
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) {
                     return net.minecraft.world.InteractionResult.FAIL;
                 }
             }

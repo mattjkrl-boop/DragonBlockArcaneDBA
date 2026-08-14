@@ -290,12 +290,22 @@ public class DbaNetwork {
             });
         });
 
-        // Handle Weapon Left Clicks on Air
+        // Handle Weapon Left Clicks on Air / Charge / Stream
         ServerPlayNetworking.registerGlobalReceiver(C2SWeaponLeftClickPayload.TYPE, (payload, context) -> {
             ServerPlayer player = context.player();
             context.server().execute(() -> {
                 net.minecraft.world.item.ItemStack stack = player.getMainHandItem();
-                if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem) {
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) {
+                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
+                        com.dragonblockarcanedba.item.ZSwordItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
+                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
+                        com.dragonblockarcanedba.item.ZSwordItem.onLeftClickRelease(player, stack, payload.chargeTicks());
+                    } else {
+                        com.dragonblockarcanedba.item.ZSwordItem.onLeftClickRelease(player, stack, 10);
+                    }
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) {
+                    com.dragonblockarcanedba.item.CurseBladeItem.streamCurseChain(player, stack);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem) {
                     com.dragonblockarcanedba.item.DimensionalSwordItem.fireSlash(player, stack);
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem) {
                     com.dragonblockarcanedba.item.PowerPoleItem.performWindSpin(player, stack);

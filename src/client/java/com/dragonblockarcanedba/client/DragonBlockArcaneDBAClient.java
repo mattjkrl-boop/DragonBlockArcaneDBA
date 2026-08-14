@@ -20,6 +20,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     public static KeyMapping techSlot3Key;
 
     private static int weaponUseTimer = 0;
+    private static int zSwordChargeTicks = 0;
 
     public static final net.minecraft.client.model.geom.ModelLayerLocation SHENRON_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
         com.dragonblockarcanedba.DragonBlockArcaneDBA.id("shenron"), "main"
@@ -77,6 +78,14 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.TRIDENT_SHARD,
             com.dragonblockarcanedba.client.render.TridentShardRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.Z_SHOCKWAVE,
+            com.dragonblockarcanedba.client.render.ZShockwaveRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.CURSE_CHAIN,
+            com.dragonblockarcanedba.client.render.CurseChainRenderer::new
         );
 
         net.minecraft.client.renderer.special.SpecialModelRenderers.ID_MAPPER.put(
@@ -146,27 +155,69 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 }
             }
 
-            // Detect continuous left-click for specific weapons
+            // Detect continuous left-click and charging for specific weapons
             if (client.player != null) {
                 if (weaponUseTimer > 0) {
                     weaponUseTimer--;
                 }
 
                 net.minecraft.world.item.ItemStack stack = client.player.getMainHandItem();
+
+                // 1. Z Sword Left-Click Charge & Release
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) {
+                    if (client.options.keyAttack.isDown()) {
+                        zSwordChargeTicks = Math.min(300, zSwordChargeTicks + 1);
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            zSwordChargeTicks
+                        ));
+                    } else if (zSwordChargeTicks > 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
+                            zSwordChargeTicks
+                        ));
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        zSwordChargeTicks = 0;
+                    }
+                } else {
+                    if (zSwordChargeTicks > 0) {
+                        zSwordChargeTicks = 0;
+                    }
+                }
+
+                // 2. Curse Blade Continuous Stream
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) {
+                    if (client.options.keyAttack.isDown() && weaponUseTimer <= 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
+                            0
+                        ));
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        weaponUseTimer = 4; // every 4 ticks
+                    }
+                }
+
+                // 3. Dimensional Sword & Power Pole Rapid Fire
                 boolean isRapidWeapon = stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem || 
                                         stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem;
 
                 if (isRapidWeapon && client.options.keyAttack.isDown()) {
                     if (weaponUseTimer <= 0) {
-                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload());
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
+                            0
+                        ));
                         client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
                         weaponUseTimer = 2; // 2 ticks = 10 attacks per second
                     }
-                } else if (!isRapidWeapon) {
+                } else if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem)) {
                     // Fallback for standard weapons detecting air click
                     if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
                         if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) { // If there are other weapons
-                            ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload());
+                            ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                                com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
+                                0
+                            ));
                         }
                     }
                 }

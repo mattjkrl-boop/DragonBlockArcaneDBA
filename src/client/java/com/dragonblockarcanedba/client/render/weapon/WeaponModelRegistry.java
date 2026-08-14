@@ -22,6 +22,8 @@ public class WeaponModelRegistry {
         registerBanshoFan();
         registerHollowsEdge();
         registerWhisStaff();
+        registerZSword();
+        registerCursedBlade();
     }
 
     public static ModelPart getModel(String name) {
@@ -189,5 +191,61 @@ public class WeaponModelRegistry {
         staffRoot.addChild(floatingRing);
 
         WEAPON_MODELS.put("whis_staff", staffRoot);
+    }
+
+    private static void registerZSword() {
+        ModelPart sword = new ModelPart();
+
+        ModelPart handle = new CylinderPart(0.9f, 7.0f, 8).setColor(0xFF8B6508);
+        handle.setPos(0, -3.5f, 0);
+
+        ModelPart guard = new BoxPart(5.0f, 0.8f, 1.6f).setColor(0xFFFFD700);
+        guard.setPos(0, 3.5f, 0);
+
+        ModelPart blade = new BladePart(2.8f, 0.6f, 24.0f, 0.4f, 0.1f).setColor(0xFFE8E8E8);
+        blade.setPos(0, 4.0f, 0);
+
+        ModelPart divineFuller = new BoxPart(0.8f, 20.0f, 0.7f).setColor(0xFFFFD700);
+        divineFuller.setPos(0, 14.0f, 0);
+
+        ModelPart pommel = new ConePart(1.4f, 2.2f, 8).setColor(0xFFFFD700);
+        pommel.setPos(0, -3.5f, 0);
+        pommel.setRot((float) Math.PI, 0, 0);
+
+        sword.addChild(handle);
+        sword.addChild(guard);
+        sword.addChild(blade);
+        sword.addChild(divineFuller);
+        sword.addChild(pommel);
+
+        WEAPON_MODELS.put("z_sword", sword);
+    }
+
+    private static void registerCursedBlade() {
+        ModelPart katana = new ModelPart();
+
+        ModelPart handle = new CylinderPart(0.7f, 6.0f, 8).setColor(0xFF1A1A1A);
+        handle.setPos(0, -3.0f, 0);
+
+        ModelPart guard = new BoxPart(2.6f, 0.4f, 2.6f).setColor(0xFF2E0854);
+        guard.setPos(0, 3.0f, 0);
+
+        ModelPart blade = new BladePart(1.6f, 0.3f, 22.0f, 0.2f, 0.05f).setColor(0xFF110011);
+        blade.setPos(0, 3.4f, 0);
+
+        ModelPart bloodEdge = new BoxPart(0.2f, 21.0f, 0.4f).setColor(0xFF8B0000);
+        bloodEdge.setPos(0.7f, 13.9f, 0);
+
+        ModelPart cursedRing = new RingPart(1.0f, 1.8f, 0.2f, 10).setColor(0xFF800080);
+        cursedRing.setPos(0, 3.2f, 0);
+        cursedRing.setRot((float) Math.PI / 4f, 0, 0);
+
+        katana.addChild(handle);
+        katana.addChild(guard);
+        katana.addChild(blade);
+        katana.addChild(bloodEdge);
+        katana.addChild(cursedRing);
+
+        WEAPON_MODELS.put("cursed_blade", katana);
     }
 }

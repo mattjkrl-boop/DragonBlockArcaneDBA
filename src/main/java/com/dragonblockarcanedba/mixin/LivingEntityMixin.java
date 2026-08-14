@@ -104,6 +104,16 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
         }
     }
 
+    // ========== Movement Curse Teleport Blocking ==========
+
+    @Inject(method = "randomTeleport", at = @At("HEAD"), cancellable = true)
+    private void dba$onRandomTeleport(double x, double y, double z, boolean showParticles, CallbackInfoReturnable<Boolean> cir) {
+        net.minecraft.world.effect.MobEffectInstance curse = ((LivingEntity)(Object)this).getEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
+        if (curse != null && curse.getAmplifier() >= 9) { // 10 stacks
+            cir.setReturnValue(false);
+        }
+    }
+
     // ========== Custom XP on Kill ==========
 
     @Inject(method = "die", at = @At("HEAD"))

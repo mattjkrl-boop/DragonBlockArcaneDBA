@@ -111,7 +111,36 @@ public class DbaEntities {
             EntityType.Builder.of(ShenronEntity::new, MobCategory.MISC)
                     .sized(3.0f, 6.0f)
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("shenron")))
+    );
 
+    public static final EntityType<ZShockwaveEntity> Z_SHOCKWAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("z_shockwave"),
+            EntityType.Builder.<ZShockwaveEntity>of(ZShockwaveEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 1.2f)
+                    .clientTrackingRange(12)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("z_shockwave")))
+    );
+
+    public static final EntityType<CurseChainEntity> CURSE_CHAIN = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("curse_chain"),
+            EntityType.Builder.<CurseChainEntity>of(CurseChainEntity::new, MobCategory.MISC)
+                    .sized(0.6f, 0.6f)
+                    .clientTrackingRange(10)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("curse_chain")))
+    );
+
+    public static final EntityType<DelayedLaunchEntity> DELAYED_LAUNCH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("delayed_launch"),
+            EntityType.Builder.<DelayedLaunchEntity>of(DelayedLaunchEntity::new, MobCategory.MISC)
+                    .sized(0.1f, 0.1f)
+                    .clientTrackingRange(10)
+                    .updateInterval(20)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("delayed_launch")))
     );
 
     public static void register() {
