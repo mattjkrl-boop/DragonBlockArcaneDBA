@@ -72,6 +72,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.ShenronRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.CURSE_LIGHTNING,
+            com.dragonblockarcanedba.client.render.CurseLightningRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.DIMENSIONAL_SLASH,
             com.dragonblockarcanedba.client.render.DimensionalSlashRenderer::new
         );
@@ -90,6 +94,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.DELAYED_LAUNCH,
             com.dragonblockarcanedba.client.render.DelayedLaunchRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SKY_CRACKS,
+            com.dragonblockarcanedba.client.render.SkyCracksRenderer::new
         );
 
         net.minecraft.client.renderer.special.SpecialModelRenderers.ID_MAPPER.put(

@@ -160,8 +160,8 @@ public class CurseBladeItem extends Item {
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float stormRatio = Math.min(1.0f, heldTicks / (float) MAX_ECLIPSE_CHANNEL_TICKS);
             double domainRadius = 10.0 + (stormRatio * 20.0); // 10 to 30 blocks radius
+            // 1. Tweak B: Localized supernatural storm atmosphere (Handled by ClientLevelWeatherMixin)
 
-            // 1. Tweak B: Localized supernatural storm atmosphere
             // Dense swirling vortex wind particles around the domain
             for (int i = 0; i < (int) (8 + stormRatio * 16); i++) {
                 double angle = serverLevel.getRandom().nextDouble() * Math.PI * 2;
@@ -194,11 +194,11 @@ public class CurseBladeItem extends Item {
                 // Apply Storm of Darkness custom effect
                 enemy.addEffect(new MobEffectInstance(DbaEffects.STORM_OF_DARKNESS_HOLDER, 60, (int) (stormRatio * 3), false, true), player);
 
-                // Wind toss: Random wind push
-                if (heldTicks % 10 == 0 && serverLevel.getRandom().nextFloat() < 0.35f) {
-                    double wx = (serverLevel.getRandom().nextDouble() - 0.5) * 0.7;
-                    double wz = (serverLevel.getRandom().nextDouble() - 0.5) * 0.7;
-                    enemy.setDeltaMovement(enemy.getDeltaMovement().add(wx, 0.25, wz));
+                // Wind toss: Aggressive wind push
+                if (heldTicks % 5 == 0 && serverLevel.getRandom().nextFloat() < 0.6f) {
+                    double wx = (serverLevel.getRandom().nextDouble() - 0.5) * 1.5;
+                    double wz = (serverLevel.getRandom().nextDouble() - 0.5) * 1.5;
+                    enemy.setDeltaMovement(enemy.getDeltaMovement().add(wx, 0.6, wz));
                     enemy.hurtMarked = true;
                 }
 
@@ -246,23 +246,74 @@ public class CurseBladeItem extends Item {
 
                     // Actual Strike
                     if (heldTicks % 40 == 20) {
-                        // Dark Red Lightning strike
-                        for (double y = targetPos.y; y <= targetPos.y + 16; y += 1.0) {
-                            serverLevel.sendParticles(
-                                new DustParticleOptions(0x8B0000, 2.5F), // Dark red beam
-                                targetPos.x + (serverLevel.getRandom().nextDouble() - 0.5) * 0.3,
-                                y,
-                                targetPos.z + (serverLevel.getRandom().nextDouble() - 0.5) * 0.3,
-                                2, 0.1, 0.1, 0.1, 0.02
-                            );
+                        com.dragonblockarcanedba.entity.CurseLightningEntity lightning = new com.dragonblockarcanedba.entity.CurseLightningEntity(
+                            com.dragonblockarcanedba.entity.DbaEntities.CURSE_LIGHTNING, serverLevel
+                        );
+                        lightning.setPos(targetPos.x, targetPos.y, targetPos.z);
+                        if (serverLevel.getRandom().nextFloat() < 0.15f) {
+                            lightning.setRare(true);
                         }
+                        serverLevel.addFreshEntity(lightning);
 
                         // Magic thunder damage
                         lightningTarget.hurtServer(serverLevel, serverLevel.damageSources().magic(), 450.0f);
+                        lightningTarget.igniteForSeconds(5);
                         serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
-                            SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.8f, 0.7f);
+                            SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 3.0f, 0.7f);
+                        serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
+                            SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 2.0f, 0.6f);
+                                
+                        // Fire on ground
+                        BlockPos firePos = BlockPos.containing(targetPos.x, targetPos.y, targetPos.z);
+                        if (serverLevel.getBlockState(firePos).isAir() && serverLevel.getBlockState(firePos.below()).isSolid()) {
+                            serverLevel.setBlockAndUpdate(firePos, net.minecraft.world.level.block.Blocks.FIRE.defaultBlockState());
+                        }
                     }
                 }
+            }
+
+            // Environmental ambient lightning
+            if (serverLevel.getRandom().nextFloat() < 0.5f) { // ~10 strikes per second
+                double rx = player.getX() + (serverLevel.getRandom().nextDouble() - 0.5) * 60;
+                double rz = player.getZ() + (serverLevel.getRandom().nextDouble() - 0.5) * 60;
+                double ry = serverLevel.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, (int)rx, (int)rz);
+                
+                com.dragonblockarcanedba.entity.CurseLightningEntity ambient = new com.dragonblockarcanedba.entity.CurseLightningEntity(
+                    com.dragonblockarcanedba.entity.DbaEntities.CURSE_LIGHTNING, serverLevel
+                );
+                ambient.setPos(rx, ry, rz);
+                if (serverLevel.getRandom().nextFloat() < 0.15f) {
+                    ambient.setRare(true);
+                }
+                serverLevel.addFreshEntity(ambient);
+                
+                // Sound for EVERY strike (Lower volume to avoid ear-rape with so many strikes)
+                serverLevel.playSound(null, rx, ry, rz,
+                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 0.8f, 0.6f + serverLevel.getRandom().nextFloat() * 0.4f);
+                serverLevel.playSound(null, rx, ry, rz,
+                    SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 0.6f, 0.5f + serverLevel.getRandom().nextFloat() * 0.2f);
+                
+                // Damage and fire
+                AABB strikeBox = new AABB(rx - 3, ry - 3, rz - 3, rx + 3, ry + 3, rz + 3);
+                for (LivingEntity victim : serverLevel.getEntitiesOfClass(LivingEntity.class, strikeBox, e -> e != player)) {
+                    victim.hurtServer(serverLevel, serverLevel.damageSources().lightningBolt(), 15.0f);
+                    victim.igniteForSeconds(5);
+                }
+                
+                // Set ground on fire
+                BlockPos firePos = BlockPos.containing(rx, ry, rz);
+                if (serverLevel.getBlockState(firePos).isAir() && serverLevel.getBlockState(firePos.below()).isSolid()) {
+                    serverLevel.setBlockAndUpdate(firePos, net.minecraft.world.level.block.Blocks.FIRE.defaultBlockState());
+                }
+            }
+
+            // Custom sky cracks
+            if (heldTicks % 80 == 0) {
+                com.dragonblockarcanedba.entity.SkyCracksEntity cracks = new com.dragonblockarcanedba.entity.SkyCracksEntity(
+                    com.dragonblockarcanedba.entity.DbaEntities.SKY_CRACKS, serverLevel
+                );
+                cracks.setPos(player.getX(), 280, player.getZ()); // Render high in the sky
+                serverLevel.addFreshEntity(cracks);
             }
 
             // 4. Tweak C: At maximum charge (15s = 300 ticks) and beyond, full root on heavily cursed enemies

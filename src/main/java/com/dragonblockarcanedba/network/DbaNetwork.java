@@ -296,6 +296,7 @@ public class DbaNetwork {
             context.server().execute(() -> {
                 net.minecraft.world.item.ItemStack stack = player.getMainHandItem();
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) {
+                    if (player.getCooldowns().isOnCooldown(stack)) return;
                     if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
                         com.dragonblockarcanedba.item.ZSwordItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
                     } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
@@ -309,6 +310,8 @@ public class DbaNetwork {
                     com.dragonblockarcanedba.item.DimensionalSwordItem.fireSlash(player, stack);
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem) {
                     com.dragonblockarcanedba.item.PowerPoleItem.performWindSpin(player, stack);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) {
+                    com.dragonblockarcanedba.item.DevilTridentItem.performLeftClickTargeting(player, stack, null);
                 }
             });
         });

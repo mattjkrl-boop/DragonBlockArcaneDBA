@@ -51,6 +51,18 @@ public class StormOfDarknessEffect extends MobEffect {
                 entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
                 2, 0.3, 0.3, 0.3, 0.02
             );
+            level.sendParticles(
+                new DustParticleOptions(0x0A0A0A, 1.5F), // Black ash
+                entity.getX(), entity.getY() + entity.getBbHeight(), entity.getZ(),
+                1, 0.4, 0.4, 0.4, 0.01
+            );
+            if (level.getRandom().nextFloat() < 0.2f) {
+                level.sendParticles(
+                    new DustParticleOptions(0xFFFF00, 1.0F), // Yellow static
+                    entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
+                    1, 0.5, 0.5, 0.5, 0.01
+                );
+            }
         }
 
         return true;

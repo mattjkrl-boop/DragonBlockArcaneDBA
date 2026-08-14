@@ -7,10 +7,12 @@
 		"LivingEntityMixin",
 		"FoodDataMixin",
 		"WindChargeMixin",
-		"EntityTeleportMixin"
+		"EntityTeleportMixin",
+		"DelayedDamageMixin"
 	],
 	"client": [
-		"CloudTextureMixin"
+		"CloudTextureMixin",
+		"ClientLevelWeatherMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

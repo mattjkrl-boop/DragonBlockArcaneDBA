@@ -53,19 +53,53 @@ public class DevilTridentItem extends Item {
     // Left Click: Three-Pronged Lasers or Targeting
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (attacker instanceof Player player && !player.level().isClientSide()) {
+        if (attacker instanceof Player player) {
+            // Let the network payload / air swing handler do the targeting so it works consistently.
+            // If they actually physically hit a target in melee, we can also target them here as a fallback.
+            performLeftClickTargeting(player, stack, target);
+        }
+    }
+
+    public static void performLeftClickTargeting(Player player, ItemStack stack, LivingEntity fallbackTarget) {
+        if (!player.level().isClientSide() && player.level() instanceof ServerLevel serverLevel) {
             net.minecraft.nbt.CompoundTag tag = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
             if (tag.getBoolean("isDeployed").orElse(false)) {
-                // Command swarm to target
-                tag.putString("swarmTarget", target.getUUID().toString());
-                stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+                LivingEntity target = fallbackTarget;
                 
-                // Add glowing to indicate marked target
-                target.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.GLOWING, 60, 0, false, false));
+                // Raytrace to find target if fallback is null
+                if (target == null) {
+                    Vec3 eyePos = player.getEyePosition();
+                    Vec3 look = player.getLookAngle();
+                    
+                    AABB searchBox = player.getBoundingBox().inflate(64.0);
+                    List<LivingEntity> potentialTargets = serverLevel.getEntitiesOfClass(
+                        LivingEntity.class, searchBox,
+                        e -> e.isAlive() && e != player && !e.isSpectator()
+                    );
+
+                    double bestScore = Double.MAX_VALUE;
+                    for (LivingEntity e : potentialTargets) {
+                        Vec3 toTarget = e.position().add(0, e.getBbHeight() * 0.5, 0).subtract(eyePos);
+                        double distance = toTarget.length();
+                        double dot = look.dot(toTarget.normalize());
+
+                        if (dot > 0.90) { // Forward cone
+                            double score = distance * (2.0 - dot);
+                            if (score < bestScore) {
+                                bestScore = score;
+                                target = e;
+                            }
+                        }
+                    }
+                }
                 
-                // Play command sound
-                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.ZOMBIE_VILLAGER_CONVERTED, net.minecraft.sounds.SoundSource.PLAYERS, 0.5f, 2.0f);
+                if (target != null) {
+                    tag.putString("swarmTarget", target.getUUID().toString());
+                    stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+                    target.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.GLOWING, 60, 0, false, false));
+                    player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                        net.minecraft.sounds.SoundEvents.ZOMBIE_VILLAGER_CONVERTED, net.minecraft.sounds.SoundSource.PLAYERS, 0.5f, 2.0f);
+                }
             } else {
                 fireLasers(player);
             }
@@ -157,7 +191,7 @@ public class DevilTridentItem extends Item {
         // 1. Prioritize Protection: Find incoming projectiles
         List<net.minecraft.world.entity.projectile.Projectile> projectiles = world.getEntitiesOfClass(
             net.minecraft.world.entity.projectile.Projectile.class, 
-            player.getBoundingBox().inflate(6.0), 
+            player.getBoundingBox().inflate(12.0), // Increased radius from 6 to 12
             p -> p.getOwner() != player && !(p instanceof TridentShardEntity)
         );
         
@@ -195,7 +229,7 @@ public class DevilTridentItem extends Item {
             if (tag.getBoolean("isDeployed").orElse(false)) {
                 com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
                 double maxKi = com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(player);
-                double drainAmount = maxKi * 0.01 / 1800.0; // 1% over 90 seconds (1800 ticks)
+                double drainAmount = maxKi * 0.01 / 1200.0; // 1% per minute (1200 ticks)
                 double currentKi = accessor.dba$getCurrentKi();
                 
                 if (currentKi >= drainAmount) {
@@ -231,7 +265,7 @@ public class DevilTridentItem extends Item {
             activeShards.clear();
         } else {
             // 2. Offense: Calculate needed damage
-            List<LivingEntity> enemies = world.getEntitiesOfClass(LivingEntity.class, player.getBoundingBox().inflate(20.0), e -> e.isAlive() && e != player);
+            List<LivingEntity> enemies = world.getEntitiesOfClass(LivingEntity.class, player.getBoundingBox().inflate(40.0), e -> e.isAlive() && e != player);
             
             for (LivingEntity enemy : enemies) {
                 if (activeShards.isEmpty()) break;

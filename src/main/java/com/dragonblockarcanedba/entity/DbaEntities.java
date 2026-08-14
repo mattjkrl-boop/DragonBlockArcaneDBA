@@ -123,6 +123,15 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("z_shockwave")))
     );
 
+    public static final EntityType<CurseLightningEntity> CURSE_LIGHTNING = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("curse_lightning"),
+            EntityType.Builder.<CurseLightningEntity>of(CurseLightningEntity::new, MobCategory.MISC)
+                    .sized(0.0f, 0.0f)
+                    .clientTrackingRange(64)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("curse_lightning")))
+    );
+
     public static final EntityType<CurseChainEntity> CURSE_CHAIN = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("curse_chain"),
@@ -141,6 +150,15 @@ public class DbaEntities {
                     .clientTrackingRange(10)
                     .updateInterval(20)
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("delayed_launch")))
+    );
+
+    public static final EntityType<SkyCracksEntity> SKY_CRACKS = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("sky_cracks"),
+            EntityType.Builder.<SkyCracksEntity>of(SkyCracksEntity::new, MobCategory.MISC)
+                    .sized(100.0f, 100.0f) // Giant bounding box
+                    .clientTrackingRange(256) // Max tracking range
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("sky_cracks")))
     );
 
     public static void register() {

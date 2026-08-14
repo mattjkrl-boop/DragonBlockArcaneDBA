@@ -140,7 +140,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
             Vec3 currentPos = this.position();
             Vec3 dir = targetPos.subtract(currentPos);
             if (dir.lengthSqr() > 0.1) {
-                Vec3 move = dir.normalize().scale(1.5); // Fast attack speed
+                Vec3 move = dir.normalize().scale(2.5); // Very fast attack speed (increased from 1.5)
                 this.setPos(currentPos.x + move.x, currentPos.y + move.y, currentPos.z + move.z);
             }
 
@@ -159,7 +159,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
         } else {
             // Orbit owner with zero delay
             double orbitRadius = 2.0;
-            double speed = this.lifeTime * 0.2;
+            double speed = this.lifeTime * 0.4; // Spin faster around owner when idle
             double angle = speed + (shardIndex * (Math.PI * 2 / 10.0));
             
             // Creates an angled, vertical orbit
