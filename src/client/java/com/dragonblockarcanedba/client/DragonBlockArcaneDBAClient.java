@@ -87,6 +87,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.entity.DbaEntities.CURSE_CHAIN,
             com.dragonblockarcanedba.client.render.CurseChainRenderer::new
         );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DELAYED_LAUNCH,
+            com.dragonblockarcanedba.client.render.DelayedLaunchRenderer::new
+        );
 
         net.minecraft.client.renderer.special.SpecialModelRenderers.ID_MAPPER.put(
             com.dragonblockarcanedba.DragonBlockArcaneDBA.id("procedural_weapon"),
