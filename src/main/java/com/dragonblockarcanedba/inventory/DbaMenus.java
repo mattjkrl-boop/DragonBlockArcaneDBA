@@ -4,7 +4,6 @@ import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.MenuType;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 
 public class DbaMenus {
     // Note: If we don't need extra data on open, simple MenuType is fine.

@@ -86,6 +86,16 @@ public class ModMenuIntegration implements ModMenuApi {
                 }
             ).bounds(x - 100, y + 20, 200, 20).build());
 
+            // Toggle 3D Weapons
+            addRenderableWidget(Button.builder(
+                Component.literal("3D Weapons: " + (DbaConfig.use3dWeapons ? "ON" : "OFF")),
+                btn -> {
+                    DbaConfig.use3dWeapons = !DbaConfig.use3dWeapons;
+                    btn.setMessage(Component.literal("3D Weapons: " + (DbaConfig.use3dWeapons ? "ON" : "OFF")));
+                    DbaConfig.save();
+                }
+            ).bounds(x - 100, y + 50, 200, 20).build());
+
             // Save & Close Button
             addRenderableWidget(Button.builder(
                 Component.literal("Done"),
@@ -94,7 +104,7 @@ public class ModMenuIntegration implements ModMenuApi {
                         this.minecraft.setScreenAndShow(parent);
                     }
                 }
-            ).bounds(x - 100, y + 60, 200, 20).build());
+            ).bounds(x - 100, y + 80, 200, 20).build());
         }
 
         @Override

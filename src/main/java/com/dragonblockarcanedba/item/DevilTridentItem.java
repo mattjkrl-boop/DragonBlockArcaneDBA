@@ -1,10 +1,28 @@
 package com.dragonblockarcanedba.item;
 
+import com.dragonblockarcanedba.effect.DbaEffects;
+
+import com.dragonblockarcanedba.entity.TridentShardEntity;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.List;
+import java.util.Map;
+import com.dragonblockarcanedba.util.SwarmHelper;
 
 public class DevilTridentItem extends Item {
     public DevilTridentItem(Properties properties) {
@@ -14,7 +32,7 @@ public class DevilTridentItem extends Item {
                     Attributes.ATTACK_DAMAGE,
                     new AttributeModifier(
                         BASE_ATTACK_DAMAGE_ID,
-                        13.0, // Solid damage
+                        749.0, // Late game damage (1 + 749 = 750)
                         AttributeModifier.Operation.ADD_VALUE
                     ),
                     EquipmentSlotGroup.MAINHAND
@@ -30,5 +48,208 @@ public class DevilTridentItem extends Item {
                 )
                 .build()
         ));
+    }
+
+    // Left Click: Three-Pronged Lasers or Targeting
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            net.minecraft.nbt.CompoundTag tag = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
+            if (tag.getBoolean("isDeployed").orElse(false)) {
+                // Command swarm to target
+                tag.putString("swarmTarget", target.getUUID().toString());
+                stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+                
+                // Add glowing to indicate marked target
+                target.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.GLOWING, 60, 0, false, false));
+                
+                // Play command sound
+                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sounds.SoundEvents.ZOMBIE_VILLAGER_CONVERTED, net.minecraft.sounds.SoundSource.PLAYERS, 0.5f, 2.0f);
+            } else {
+                fireLasers(player);
+            }
+        }
+    }
+
+    public static void fireLasers(Player player) {
+        if (!player.level().isClientSide()) {
+            for (int i = -1; i <= 1; i++) {
+                com.dragonblockarcanedba.entity.KiBlastEntity laser = new com.dragonblockarcanedba.entity.KiBlastEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_BLAST, player.level());
+                laser.setOwner(player);
+                laser.setDamage(250.0f); // 3 * 250 = 750
+                laser.setColor(0xFF0000);
+                
+                Vec3 look = player.getLookAngle();
+                Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
+                Vec3 offset = right.scale(i * 0.5);
+                Vec3 start = player.getEyePosition().add(offset);
+                
+                laser.setPos(start.x, start.y, start.z);
+                laser.shoot(look.x, look.y, look.z, 2.5f, 0.0f);
+                player.level().addFreshEntity(laser);
+            }
+        }
+    }
+
+    public static void recallShards(ServerLevel serverLevel, Player player, ItemStack stack, net.minecraft.nbt.CompoundTag tag) {
+        List<TridentShardEntity> shards = serverLevel.getEntitiesOfClass(TridentShardEntity.class, player.getBoundingBox().inflate(64.0), e -> e.getOwnerId() == player.getId());
+        for (TridentShardEntity shard : shards) {
+            shard.recall();
+        }
+        SwarmHelper.recallSwarm(stack);
+        player.getCooldowns().addCooldown(stack, 200); // 10 second repair cooldown
+    }
+
+    // Right Click: Deployment / Recall
+    @Override
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        if (!level.isClientSide()) {
+            ServerLevel serverLevel = (ServerLevel) level;
+            boolean isDeployed = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag().getBoolean("isDeployed").orElse(false);
+
+            if (isDeployed) {
+                // Recall Shards
+                recallShards(serverLevel, player, stack, stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag());
+            } else {
+                // Ground Slam & Shockwave
+                Vec3 pos = player.position();
+                for (int i = 0; i < 360; i += 5) {
+                    double angle = Math.toRadians(i);
+                    serverLevel.sendParticles(
+                        new DustParticleOptions(0xFF0000, 2.5F), // Red
+                        pos.x + Math.cos(angle) * 5.0, pos.y + 0.1, pos.z + Math.sin(angle) * 5.0,
+                        1, 0.0, 0.5, 0.0, 0.05
+                    );
+                }
+
+                AABB aoe = player.getBoundingBox().inflate(5.0);
+                List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e != player && e.isAlive());
+                for (LivingEntity t : targets) {
+                    t.hurtServer(serverLevel, serverLevel.damageSources().magic(), 750.0f);
+                    t.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 300, 2, false, true), player);
+                    
+                    // Ground pull
+                    t.setDeltaMovement(t.getDeltaMovement().add(0, -2.0, 0));
+                    t.hurtMarked = true;
+                }
+
+                // Spawn 10 Shards
+                for (int i = 0; i < 10; i++) {
+                    TridentShardEntity shard = new TridentShardEntity(player.level(), player, i);
+                    shard.setPos(pos.x, pos.y + 2.0, pos.z);
+                    serverLevel.addFreshEntity(shard);
+                }
+
+                SwarmHelper.deploySwarm(stack, 10, 15000.0f); // 15000 is default health
+                
+                player.getCooldowns().addCooldown(stack, 40); // 2 second buffer before recall
+            }
+            return InteractionResult.SUCCESS;
+        }
+        return InteractionResult.PASS;
+    }
+
+    public static void manageShardSwarm(Player player, ServerLevel world) {
+        List<TridentShardEntity> activeShards = new java.util.ArrayList<>(world.getEntitiesOfClass(TridentShardEntity.class, player.getBoundingBox().inflate(64.0), e -> e.getOwnerId() == player.getId() && !e.isRecalling()));
+
+        // 1. Prioritize Protection: Find incoming projectiles
+        List<net.minecraft.world.entity.projectile.Projectile> projectiles = world.getEntitiesOfClass(
+            net.minecraft.world.entity.projectile.Projectile.class, 
+            player.getBoundingBox().inflate(6.0), 
+            p -> p.getOwner() != player && !(p instanceof TridentShardEntity)
+        );
+        
+        for (net.minecraft.world.entity.projectile.Projectile proj : projectiles) {
+            if (!activeShards.isEmpty()) {
+                TridentShardEntity protector = activeShards.remove(0);
+                protector.intercept(proj);
+            }
+        }
+
+        // Check if there is a swarm target set in the player's held trident
+        ItemStack trident = player.getMainHandItem();
+        if (!(trident.getItem() instanceof DevilTridentItem)) {
+            trident = player.getOffhandItem();
+        }
+        
+        LivingEntity priorityTarget = null;
+        if (trident.getItem() instanceof DevilTridentItem) {
+            Map<Integer, Float> missing = SwarmHelper.getMissingEntities(trident, activeShards);
+            if (!missing.isEmpty()) {
+                for (Map.Entry<Integer, Float> entry : missing.entrySet()) {
+                    TridentShardEntity shard = new TridentShardEntity(player.level(), player, entry.getKey());
+                    shard.setSwarmHealth(entry.getValue());
+                    shard.setPos(player.getX(), player.getY() + 2.0, player.getZ());
+                    world.addFreshEntity(shard);
+                    activeShards.add(shard);
+                }
+            }
+
+            if (activeShards.isEmpty()) return;
+
+            net.minecraft.nbt.CompoundTag tag = trident.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
+            
+            // Ki Drain logic
+            if (tag.getBoolean("isDeployed").orElse(false)) {
+                com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
+                double maxKi = com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(player);
+                double drainAmount = maxKi * 0.01 / 1800.0; // 1% over 90 seconds (1800 ticks)
+                double currentKi = accessor.dba$getCurrentKi();
+                
+                if (currentKi >= drainAmount) {
+                    accessor.dba$addKi(-drainAmount);
+                } else {
+                    // Out of Ki! Recall automatically!
+                    recallShards(world, player, trident, tag);
+                    return; // Stop processing swarm
+                }
+            }
+
+            if (tag.contains("swarmTarget")) {
+                String targetUuidStr = tag.getString("swarmTarget").orElse("");
+                if (!targetUuidStr.isEmpty()) {
+                    java.util.UUID targetUuid = java.util.UUID.fromString(targetUuidStr);
+                    net.minecraft.world.entity.Entity e = world.getEntity(targetUuid);
+                    if (e instanceof LivingEntity le && le.isAlive()) {
+                        priorityTarget = le;
+                    } else {
+                        // Target died or lost, clear it
+                        tag.remove("swarmTarget");
+                        trident.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+                    }
+                }
+            }
+        }
+
+        if (priorityTarget != null) {
+            // Swarm the priority target with all remaining shards!
+            for (TridentShardEntity attacker : activeShards) {
+                attacker.setTarget(priorityTarget);
+            }
+            activeShards.clear();
+        } else {
+            // 2. Offense: Calculate needed damage
+            List<LivingEntity> enemies = world.getEntitiesOfClass(LivingEntity.class, player.getBoundingBox().inflate(20.0), e -> e.isAlive() && e != player);
+            
+            for (LivingEntity enemy : enemies) {
+                if (activeShards.isEmpty()) break;
+                
+                float enemyHealth = enemy.getHealth();
+                int shardsNeeded = (int) Math.ceil(enemyHealth / 100.0f); // 100 is shard damage
+                
+                // Send only the exact number of shards needed to kill
+                for (int i = 0; i < shardsNeeded && !activeShards.isEmpty(); i++) {
+                    TridentShardEntity attacker = activeShards.remove(0);
+                    attacker.setTarget(enemy);
+                }
+            }
+        }
+        
+        // Remaining shards just orbit
+        for (TridentShardEntity idle : activeShards) {
+            idle.setTarget(null);
+        }
     }
 }

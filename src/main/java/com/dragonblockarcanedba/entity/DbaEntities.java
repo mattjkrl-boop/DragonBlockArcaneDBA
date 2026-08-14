@@ -24,6 +24,26 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("flying_nimbus")))
     );
 
+    public static final EntityType<DimensionalSlashEntity> DIMENSIONAL_SLASH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("dimensional_slash"),
+            EntityType.Builder.<DimensionalSlashEntity>of(DimensionalSlashEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 0.5f)
+                    .clientTrackingRange(10)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("dimensional_slash")))
+    );
+
+    public static final EntityType<TridentShardEntity> TRIDENT_SHARD = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("trident_shard"),
+            EntityType.Builder.<TridentShardEntity>of(TridentShardEntity::new, MobCategory.MISC)
+                    .sized(0.5f, 0.5f)
+                    .clientTrackingRange(10)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("trident_shard")))
+    );
+
 
     public static final EntityType<KiBlastEntity> KI_BLAST = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,

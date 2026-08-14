@@ -98,6 +98,18 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             com.dragonblockarcanedba.command.DbaCommand.register(dispatcher);
         });
 
+        // Block Mining for rapid-fire weapons (Dimensional Sword, Power Pole)
+        net.fabricmc.fabric.api.event.player.AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
+            if (!player.isSpectator()) {
+                net.minecraft.world.item.ItemStack stack = player.getItemInHand(hand);
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem || 
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem) {
+                    return net.minecraft.world.InteractionResult.FAIL;
+                }
+            }
+            return net.minecraft.world.InteractionResult.PASS;
+        });
+
         // Register Attack Hook for Stamina Drain
         net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
             if (!world.isClientSide()) {
@@ -113,6 +125,16 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     accessor.dba$addStamina(-drain);
                 }
                 accessor.dba$syncStats();
+
+                // Devil Trident Target logic
+                net.minecraft.world.item.ItemStack stack = player.getItemInHand(hand);
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) {
+                    net.minecraft.nbt.CompoundTag tag = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
+                    if (tag.getBoolean("isDeployed").orElse(false)) {
+                        tag.putString("swarmTarget", entity.getUUID().toString());
+                        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+                    }
+                }
             }
             return net.minecraft.world.InteractionResult.PASS;
         });
@@ -126,6 +148,13 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     for (net.minecraft.server.level.ServerPlayer player : world.players()) {
                         planet.tickPlanetEffects(player);
                     }
+                }
+            }
+
+            // Devil Trident Shard Swarm AI
+            for (net.minecraft.server.level.ServerLevel world : server.getAllLevels()) {
+                for (net.minecraft.server.level.ServerPlayer player : world.players()) {
+                    com.dragonblockarcanedba.item.DevilTridentItem.manageShardSwarm(player, world);
                 }
             }
         });

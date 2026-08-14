@@ -3,10 +3,7 @@ package com.dragonblockarcanedba.block.entity;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.inventory.GravityTrainingMenu;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.Containers;
@@ -110,7 +107,7 @@ public class GravityTrainingBlockEntity extends BlockEntity implements MenuProvi
                         float damage = (entity.gravity / 1000.0f) * 20.0f;
                         if (damage > 0.1f) {
                             player.invulnerableTime = 0;
-                            player.hurt(level.damageSources().generic(), damage);
+                            player.hurtServer((net.minecraft.server.level.ServerLevel) level, level.damageSources().generic(), damage);
                         }
                     }
 

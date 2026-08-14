@@ -19,6 +19,8 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     public static KeyMapping techSlot2Key;
     public static KeyMapping techSlot3Key;
 
+    private static int weaponUseTimer = 0;
+
     public static final net.minecraft.client.model.geom.ModelLayerLocation SHENRON_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
         com.dragonblockarcanedba.DragonBlockArcaneDBA.id("shenron"), "main"
     );
@@ -68,14 +70,25 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.entity.DbaEntities.SHENRON,
             com.dragonblockarcanedba.client.render.ShenronRenderer::new
         );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DIMENSIONAL_SLASH,
+            com.dragonblockarcanedba.client.render.DimensionalSlashRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.TRIDENT_SHARD,
+            com.dragonblockarcanedba.client.render.TridentShardRenderer::new
+        );
+
+        net.minecraft.client.renderer.special.SpecialModelRenderers.ID_MAPPER.put(
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("procedural_weapon"),
+            com.dragonblockarcanedba.client.render.item.ProceduralWeaponUnbakedModel.CODEC
+        );
+
 
         // Register model layers
         net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry.registerModelLayer(
             SHENRON_MODEL_LAYER, com.dragonblockarcanedba.client.model.ShenronModel::createBodyLayer
-
         );
-
-
 
         // Load persisted config from disk
         com.dragonblockarcanedba.client.config.DbaConfig.load();
@@ -129,6 +142,32 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 for (net.minecraft.world.entity.player.Player player : client.level.players()) {
                     if (player instanceof net.minecraft.client.player.AbstractClientPlayer clientPlayer) {
                         com.dragonblockarcanedba.client.render.AuraRenderer.renderAura(clientPlayer);
+                    }
+                }
+            }
+
+            // Detect continuous left-click for specific weapons
+            if (client.player != null) {
+                if (weaponUseTimer > 0) {
+                    weaponUseTimer--;
+                }
+
+                net.minecraft.world.item.ItemStack stack = client.player.getMainHandItem();
+                boolean isRapidWeapon = stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem || 
+                                        stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem;
+
+                if (isRapidWeapon && client.options.keyAttack.isDown()) {
+                    if (weaponUseTimer <= 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload());
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        weaponUseTimer = 2; // 2 ticks = 10 attacks per second
+                    }
+                } else if (!isRapidWeapon) {
+                    // Fallback for standard weapons detecting air click
+                    if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
+                        if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) { // If there are other weapons
+                            ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload());
+                        }
                     }
                 }
             }

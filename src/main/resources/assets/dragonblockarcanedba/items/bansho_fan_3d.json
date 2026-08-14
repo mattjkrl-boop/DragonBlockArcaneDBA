@@ -1,0 +1,26 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": "gui",
+        "model": {
+          "type": "minecraft:model",
+          "model": "dragonblockarcanedba:item/bansho_fan"
+        }
+      },
+      {
+        "when": "fixed",
+        "model": {
+          "type": "minecraft:model",
+          "model": "dragonblockarcanedba:item/bansho_fan"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "dragonblockarcanedba:item/bansho_fan_3d"
+    }
+  }
+}

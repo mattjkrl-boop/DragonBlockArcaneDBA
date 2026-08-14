@@ -1,7 +1,6 @@
 package com.dragonblockarcanedba.ki;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;

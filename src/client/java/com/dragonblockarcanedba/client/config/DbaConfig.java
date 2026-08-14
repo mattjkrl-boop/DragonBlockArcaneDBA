@@ -14,6 +14,7 @@ public class DbaConfig {
     public static double baseKiRecoveryMultiplier = 1.0;
     public static boolean chargeVisualsEnabled = true;
     public static double statGainMultiplier = 1.0;
+    public static boolean use3dWeapons = false;
 
     public static void load() {
         try {
@@ -24,6 +25,7 @@ public class DbaConfig {
                         baseKiRecoveryMultiplier = data.baseKiRecoveryMultiplier;
                         chargeVisualsEnabled = data.chargeVisualsEnabled;
                         statGainMultiplier = data.statGainMultiplier;
+                        use3dWeapons = data.use3dWeapons;
                     }
                 }
             } else {
@@ -37,7 +39,7 @@ public class DbaConfig {
     public static void save() {
         try {
             try (FileWriter writer = new FileWriter(FILE)) {
-                GSON.toJson(new ConfigData(baseKiRecoveryMultiplier, chargeVisualsEnabled, statGainMultiplier), writer);
+                GSON.toJson(new ConfigData(baseKiRecoveryMultiplier, chargeVisualsEnabled, statGainMultiplier, use3dWeapons), writer);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -48,11 +50,13 @@ public class DbaConfig {
         double baseKiRecoveryMultiplier;
         boolean chargeVisualsEnabled;
         double statGainMultiplier;
+        boolean use3dWeapons;
 
-        ConfigData(double b, boolean c, double s) {
+        ConfigData(double b, boolean c, double s, boolean u) {
             this.baseKiRecoveryMultiplier = b;
             this.chargeVisualsEnabled = c;
             this.statGainMultiplier = s;
+            this.use3dWeapons = u;
         }
     }
 }

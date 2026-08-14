@@ -1,0 +1,69 @@
+Core Input Rule (ALWAYS IMPLEMENT ALL TWEAKS TOO)
+• Left slot: activates from left click and remains the weapon's primary attack. The ability can be instant, continuously active while held, or charge-based.
+• Right slot: activates from right click and remains the weapon's secondary/special ability. Same flexibility.
+• There are no separate left-click and left-hold abilities. Each weapon has one definitive Left ability and one definitive Right ability.
+• Each ability below has 3 small tweak options that can be selected during implementation without changing the weapon's core identity.
+
+───
+
+Z Sword
+Identity: Divine heavy weapon — overwhelming power, gravity, space control, and massive attacks.
+LEFT — Z Shockwave
+Hold the Z Sword and channel power into it. The longer it is held, the larger and more powerful the attack becomes. Releasing it sends a gigantic horizontal energy wave forward.
+• Travels a very long distance.
+• Extremely wide hitbox.
+• High damage.
+• Heavy knockback.
+• At maximum charge, the wave can split terrain visually or pass through multiple enemies.
+• The player becomes slower while charging to make the weapon feel extremely heavy, they also get launched backwards a little when they swing depending on the charge,the max charge is 15sec, more charge more ki cost goes down should drain like 5% a second it's that powerful. And follow the all the tweaks too
+Tweaks:
+• A: Maximum charge creates multiple smaller waves behind the main wave that travel slower.
+• B: Fully charged wave ignores terrain and travels through blocks.
+• C: Maximum charge briefly roots enemies hit into the ground 2 blocks and they will start taking damage from their head in the blocks if they get hit directly by the first big wave.
+RIGHT — Katchin Weight
+Hold the sword downward and enter a divine heavy stance.
+• Player becomes extremely difficult/impossible to knock back.
+• Movement becomes heavily restricted.
+• Incoming damage is reduced a LOT.
+• While maintaining the stance, the sword accumulates Weight Power.
+• Releasing right click unleashes a massive gravity-infused sword slam.
+• The slam creates a huge circular shockwave.
+• Enemies caught inside are heavily slowed and launched outward.
+• The longer the stance was maintained, the stronger the attack. 
+Tweaks:
+• A: The field completely roots them in the ground for a couple seconds then they launch up and back from center
+• B: Charging creates progressively stronger gravitational particles and screen effects.
+Weapon purpose: The Z Sword becomes the ultimate "I sacrifice mobility for overwhelming power" weapon.
+
+───
+
+Curse Blade
+Identity: Dark curse weapon — movement denial, chains, curses, and battlefield corruption.
+LEFT — Curse Chain
+Hold left click to continuously project spectral cursed chains toward enemies.
+• Chains seek nearby enemies.
+• Each successful hit applies a Movement Curse stack. This is going to be custom effect we make and not rely on other effects
+• Every stack reduces movement speed.
+• Stacks also reduce jump height and any other movement like dashing with trident or anything 
+• Releasing left click stops the attack but the more the harder it is for them to move until they frozen until it wares off or they break out. The effect lasts for 5 sec each stack and stacks to 10 and just will give darkness effect and make it harder to move using the custom effect without relying on other effects. And each hit resets that 5 sec countdown and adds a stack once no more hits any stack after 5 sec is all gone. They can escape by attacking with whatever the chains don't have much health, each stack is a chain,you can hit it b4 it gets to u and kill it which saves the stack from hitting you. You will only have 10 chains around u if another comes it'll just kill the lowest health one or random if all same health and then replace it so they chain will just disappear when killed.
+Tweaks:
+• A: Chains can jump from one enemy to another if it's only doing it to avoid being killed by an upcoming chain and it's already at 10 max and if the enemy is close enough.
+• B: Maximum stacks prevent teleportation/dashing.
+• C: Hitting a heavily cursed enemy pulls them toward you a little and the chains stay with them. The chains will also be around their whole body so they won't see much added with the darkness.
+RIGHT — Abyssal Eclipse
+Channel the Curse Blade to corrupt the surrounding sky.
+• Weather changes to a dark supernatural storm. So thunder. And really windy so wind particles around a huge radius and will have chance of moving enemies around or making someone drop their holding item.
+• Sky becomes significantly darker. 
+• Rain begins falling.
+• Occasional dark red lightning strikes the battlefield. (Change the look of lightning right b4 it comes
+• Enemies within the storm receive increasing nausea and darkness let's do this with new effect called Storm of Darkness
+• Movement is progressively slowed. 
+• The longer you channel, the larger the storm becomes up to a max
+• Releasing right click ends the channel.
+Tweaks:
+• A: Dark lightning specifically targets cursed enemies.
+• B: The storm becomes an actual localized weather zone rather than changing the entire world's weather.
+• C: At maximum charge 15sec and beyond, the eclipse creates a short-duration full root(completely can't move just days teleport from any weapons or anything etc) on heavily cursed enemies.
+Weapon purpose: The strongest anti-movement/control sword.
+
+───

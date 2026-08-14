@@ -46,6 +46,9 @@ public class DbaNetwork {
 
         // Gravity Block (C2S)
         PayloadTypeRegistry.serverboundPlay().register(C2SSetGravityPayload.TYPE, C2SSetGravityPayload.CODEC);
+
+        // Weapon Left Click (C2S)
+        PayloadTypeRegistry.serverboundPlay().register(C2SWeaponLeftClickPayload.TYPE, C2SWeaponLeftClickPayload.CODEC);
     }
 
     public static void registerServer() {
@@ -283,6 +286,19 @@ public class DbaNetwork {
             context.server().execute(() -> {
                 if (context.player().containerMenu instanceof com.dragonblockarcanedba.inventory.GravityTrainingMenu menu) {
                     menu.updateGravity(payload.gravity());
+                }
+            });
+        });
+
+        // Handle Weapon Left Clicks on Air
+        ServerPlayNetworking.registerGlobalReceiver(C2SWeaponLeftClickPayload.TYPE, (payload, context) -> {
+            ServerPlayer player = context.player();
+            context.server().execute(() -> {
+                net.minecraft.world.item.ItemStack stack = player.getMainHandItem();
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem) {
+                    com.dragonblockarcanedba.item.DimensionalSwordItem.fireSlash(player, stack);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem) {
+                    com.dragonblockarcanedba.item.PowerPoleItem.performWindSpin(player, stack);
                 }
             });
         });

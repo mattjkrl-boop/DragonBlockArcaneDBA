@@ -1,0 +1,26 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": "gui",
+        "model": {
+          "type": "minecraft:model",
+          "model": "dragonblockarcanedba:item/power_pole"
+        }
+      },
+      {
+        "when": "fixed",
+        "model": {
+          "type": "minecraft:model",
+          "model": "dragonblockarcanedba:item/power_pole"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "dragonblockarcanedba:item/power_pole_3d"
+    }
+  }
+}
