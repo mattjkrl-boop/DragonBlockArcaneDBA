@@ -13,7 +13,7 @@ def flood_fill_transparent(img, start_pos, threshold=40):
         return
         
     transparent = (255, 255, 255, 0)
-    
+     
     stack = [start_pos]
     visited = set()
     
