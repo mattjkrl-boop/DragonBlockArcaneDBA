@@ -98,14 +98,16 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             com.dragonblockarcanedba.command.DbaCommand.register(dispatcher);
         });
 
-        // Block Mining for rapid-fire / charging weapons (Dimensional Sword, Power Pole, Z Sword, Curse Blade)
+        // Block Mining for rapid-fire / charging weapons (Dimensional Sword, Power Pole, Z Sword, Curse Blade, Hollow's Edge, Azure Dragon Sword)
         net.fabricmc.fabric.api.event.player.AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
             if (!player.isSpectator()) {
                 net.minecraft.world.item.ItemStack stack = player.getItemInHand(hand);
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem || 
                     stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) {
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) {
                     return net.minecraft.world.InteractionResult.FAIL;
                 }
             }
@@ -136,6 +138,11 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                         tag.putString("swarmTarget", entity.getUUID().toString());
                         stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
                     }
+                }
+
+                // Azure Dragon Sword Target lock-on logic (Tweak B)
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem && entity instanceof net.minecraft.world.entity.LivingEntity living) {
+                    com.dragonblockarcanedba.item.AzureDragonSwordItem.LOCKED_TARGET_MAP.put(player.getUUID(), living);
                 }
             }
             return net.minecraft.world.InteractionResult.PASS;

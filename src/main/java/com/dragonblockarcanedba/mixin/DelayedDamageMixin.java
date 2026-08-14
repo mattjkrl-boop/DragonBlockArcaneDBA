@@ -68,6 +68,11 @@ public abstract class DelayedDamageMixin {
             else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.DEVILS_HANDS_HOLDER)) {
                 isCinematicallyLocked = true;
             }
+            // Storm of Darkness & Dark Faded
+            else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.STORM_OF_DARKNESS_HOLDER) ||
+                     self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.DARK_FADED_HOLDER)) {
+                isCinematicallyLocked = true;
+            }
             // Spirit Sword lift
             else if (self.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION)) {
                 isCinematicallyLocked = true;

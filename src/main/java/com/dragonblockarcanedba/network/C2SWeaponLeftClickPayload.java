@@ -6,7 +6,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
-public record C2SWeaponLeftClickPayload(int actionType, int chargeTicks) implements CustomPacketPayload {
+public record C2SWeaponLeftClickPayload(int actionType, int chargeTicks, boolean extraFlag) implements CustomPacketPayload {
     public static final Identifier ID = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "c2s_weapon_left_click");
     public static final Type<C2SWeaponLeftClickPayload> TYPE = new Type<>(ID);
 
@@ -15,12 +15,17 @@ public record C2SWeaponLeftClickPayload(int actionType, int chargeTicks) impleme
     public static final int ACTION_RELEASE = 2;
 
     public C2SWeaponLeftClickPayload() {
-        this(ACTION_CLICK, 0);
+        this(ACTION_CLICK, 0, false);
+    }
+
+    public C2SWeaponLeftClickPayload(int actionType, int chargeTicks) {
+        this(actionType, chargeTicks, false);
     }
 
     public static final StreamCodec<RegistryFriendlyByteBuf, C2SWeaponLeftClickPayload> CODEC = StreamCodec.composite(
         ByteBufCodecs.VAR_INT, C2SWeaponLeftClickPayload::actionType,
         ByteBufCodecs.VAR_INT, C2SWeaponLeftClickPayload::chargeTicks,
+        ByteBufCodecs.BOOL, C2SWeaponLeftClickPayload::extraFlag,
         C2SWeaponLeftClickPayload::new
     );
 

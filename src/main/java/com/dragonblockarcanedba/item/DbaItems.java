@@ -401,7 +401,7 @@ public class DbaItems {
     public static final Item DEVIL_TRIDENT = new DevilTridentItem(
         new Item.Properties().setId(DEVIL_TRIDENT_KEY).stacksTo(1)
     );
-    public static final Item AZURE_DRAGON_SWORD = new Item(
+    public static final Item AZURE_DRAGON_SWORD = new AzureDragonSwordItem(
         new Item.Properties().setId(AZURE_DRAGON_SWORD_KEY).stacksTo(1)
     );
     public static final Item CURSED_BLADE = new CurseBladeItem(

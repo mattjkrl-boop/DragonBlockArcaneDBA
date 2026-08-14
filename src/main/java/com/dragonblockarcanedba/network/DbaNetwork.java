@@ -306,6 +306,22 @@ public class DbaNetwork {
                     }
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) {
                     com.dragonblockarcanedba.item.CurseBladeItem.streamCurseChain(player, stack);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) {
+                    if (player.getCooldowns().isOnCooldown(stack)) return;
+                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
+                        com.dragonblockarcanedba.item.HollowsEdgeItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
+                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
+                        com.dragonblockarcanedba.item.HollowsEdgeItem.onLeftClickRelease(player, stack, payload.chargeTicks());
+                    } else {
+                        com.dragonblockarcanedba.item.HollowsEdgeItem.onLeftClickDash(player, stack, payload.extraFlag());
+                    }
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) {
+                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
+                        com.dragonblockarcanedba.item.AzureDragonSwordItem.stopDragonRush(player);
+                    } else {
+                        if (player.getCooldowns().isOnCooldown(stack)) return;
+                        com.dragonblockarcanedba.item.AzureDragonSwordItem.onDragonRushTick(player, stack, payload.extraFlag());
+                    }
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem) {
                     com.dragonblockarcanedba.item.DimensionalSwordItem.fireSlash(player, stack);
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem) {

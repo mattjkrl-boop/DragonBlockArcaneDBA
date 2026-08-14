@@ -1,0 +1,346 @@
+package com.dragonblockarcanedba.item;
+
+import com.dragonblockarcanedba.attribute.PlayerStats;
+import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.entity.AzureLightningEntity;
+import com.dragonblockarcanedba.entity.AzureStormEntity;
+import com.dragonblockarcanedba.entity.AzureTornadoEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemUseAnimation;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Azure Dragon Sword — Wind, Flight & Tempest Manipulation Weapon.
+ * 
+ * LEFT: Azure Dragon Rush (Superman / Elytra Flight & Dragon Wind)
+ * - Hold left click to fly freely with Elytra flight pose in look direction at high speed.
+ * - Sneaking (Shift) slows down speed for precision (Tweak A).
+ * - Leaves bright blue wind trails and blasts nearby enemies away.
+ * - Fall damage immune during rush and on next landing.
+ * - Landing / diving into ground creates Sonic Quake shockwave (Tweak B).
+ * - Passing through enemies spawns miniature tornadoes launching them (Tweak C).
+ * 
+ * RIGHT: Call of the Tempest (Dragon Storm Domain)
+ * - Hold right click to channel a massive storm domain (up to 15s / 300 ticks max charge).
+ * - Causes rain, localized thunder, howling wind turbulence, and periodic cyan dragon lightning.
+ * - Storm lasts up to 30s.
+ * - Tweak A: Storm follows the player.
+ * - Tweak B: Storm follows targeted enemy.
+ * - Tweak C: At max charge, summons a giant tornado filled with lightning.
+ */
+public class AzureDragonSwordItem extends Item {
+    public static final int MAX_TEMPEST_CHARGE_TICKS = 300; // 15 seconds
+
+    // Track players currently rushing with Azure Dragon Sword
+    public static final Map<UUID, Boolean> IS_RUSHING_MAP = new ConcurrentHashMap<>();
+    // Track lock-on target for Tweak B
+    public static final Map<UUID, LivingEntity> LOCKED_TARGET_MAP = new ConcurrentHashMap<>();
+
+    public AzureDragonSwordItem(Properties properties) {
+        super(properties.attributes(
+            ItemAttributeModifiers.builder()
+                .add(
+                    Attributes.ATTACK_DAMAGE,
+                    new AttributeModifier(
+                        BASE_ATTACK_DAMAGE_ID,
+                        799.0, // 1 + 799 = 800 base damage
+                        AttributeModifier.Operation.ADD_VALUE
+                    ),
+                    EquipmentSlotGroup.MAINHAND
+                )
+                .add(
+                    Attributes.ATTACK_SPEED,
+                    new AttributeModifier(
+                        BASE_ATTACK_SPEED_ID,
+                        -2.0, // Swift fluid wind swings
+                        AttributeModifier.Operation.ADD_VALUE
+                    ),
+                    EquipmentSlotGroup.MAINHAND
+                )
+                .build()
+        ));
+    }
+
+    // --- LEFT CLICK: Azure Dragon Rush (Flight & Sonic Quake) ---
+
+    public static final Map<UUID, Long> LAST_RUSH_START_TIME = new ConcurrentHashMap<>();
+    public static final Map<UUID, Boolean> DOUBLE_RUSHING_MAP = new ConcurrentHashMap<>();
+
+    public static void onDragonRushTick(ServerPlayer player, ItemStack stack, boolean isSneaking) {
+        ServerLevel level = (ServerLevel) player.level();
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+        // Double click detection
+        boolean wasRushing = IS_RUSHING_MAP.getOrDefault(player.getUUID(), false);
+        if (!wasRushing) {
+            long now = System.currentTimeMillis();
+            long lastStart = LAST_RUSH_START_TIME.getOrDefault(player.getUUID(), 0L);
+            if (now - lastStart < 400) { // 400ms double click window
+                DOUBLE_RUSHING_MAP.put(player.getUUID(), true);
+            } else {
+                DOUBLE_RUSHING_MAP.put(player.getUUID(), false);
+            }
+            LAST_RUSH_START_TIME.put(player.getUUID(), now);
+        }
+
+        boolean isDoubleRushing = DOUBLE_RUSHING_MAP.getOrDefault(player.getUUID(), false);
+
+        // Drain Ki
+        double maxKi = PlayerStats.getMaxKi(player);
+        // Normal rush: 0 drain. Double Rush: 1% a sec.
+        double drainPerTick = isDoubleRushing ? ((maxKi * 0.01) / 20.0) : 0.0;
+        double currentKi = accessor.dba$getCurrentKi();
+
+        if (drainPerTick > 0) {
+            if (currentKi >= drainPerTick) {
+                accessor.dba$addKi(-drainPerTick);
+                accessor.dba$syncStats();
+            } else {
+                // If they run out of mana during double rush, drop from sky & 1 sec cooldown
+                stopDragonRush(player);
+                player.getCooldowns().addCooldown(stack, 20);
+                return;
+            }
+        }
+
+        IS_RUSHING_MAP.put(player.getUUID(), true);
+
+        // Force Elytra / fall flying animation pose
+        player.startFallFlying();
+
+        Vec3 look = player.getLookAngle();
+        // Speed: 1.85 normal, 0.75 if sneaking. Double rush = 3.7
+        double flightSpeed = isDoubleRushing ? 3.7 : (isSneaking ? 0.75 : 1.85);
+        Vec3 velocity = look.scale(flightSpeed);
+        player.setDeltaMovement(velocity);
+        player.fallDistance = 0.0f;
+        player.hurtMarked = true;
+
+        // Blue dragon wind trail behind player
+        for (int i = 0; i < (isDoubleRushing ? 8 : 4); i++) {
+            double offset = -0.5 - (i * 0.4);
+            Vec3 trailPos = player.position().add(look.scale(offset)).add(0, 0.5, 0);
+
+            level.sendParticles(
+                new DustParticleOptions(isDoubleRushing ? 0x00FF88 : 0x00E5FF, isDoubleRushing ? 2.5F : 1.8F), // Cyan to Greenish-Cyan for boost
+                trailPos.x + (level.getRandom().nextDouble() - 0.5) * 0.6,
+                trailPos.y + (level.getRandom().nextDouble() - 0.5) * 0.6,
+                trailPos.z + (level.getRandom().nextDouble() - 0.5) * 0.6,
+                1, 0.0, 0.05, 0.0, 0.01
+            );
+            level.sendParticles(
+                ParticleTypes.CLOUD,
+                trailPos.x, trailPos.y, trailPos.z,
+                1, 0.0, 0.02, 0.0, 0.02
+            );
+        }
+
+        // Pushes nearby enemies away and deals pass-through damage
+        AABB rushBox = player.getBoundingBox().inflate(isDoubleRushing ? 4.0 : 2.5, 1.5, isDoubleRushing ? 4.0 : 2.5);
+        List<LivingEntity> nearbyEnemies = level.getEntitiesOfClass(LivingEntity.class, rushBox, e -> e.isAlive() && e != player);
+
+        for (LivingEntity enemy : nearbyEnemies) {
+            // Wind push
+            Vec3 push = enemy.position().subtract(player.position()).normalize().scale(isDoubleRushing ? 2.5 : 1.5).add(0, 0.4, 0);
+            enemy.setDeltaMovement(enemy.getDeltaMovement().add(push));
+            enemy.hurtMarked = true;
+
+            // Damage
+            float damage = (isDoubleRushing ? 600.0f : 350.0f) + (float) (accessor.dba$getStrength() * 2.0);
+            enemy.hurtServer(level, level.damageSources().mobAttack(player), damage);
+
+            // Tweak C: Passing through an enemy creates a miniature tornado that launches them
+            if (level.getRandom().nextFloat() < (isDoubleRushing ? 0.8f : 0.4f)) {
+                AzureTornadoEntity miniTornado = new AzureTornadoEntity(level, player, enemy.position(), 1.0f, false);
+                level.addFreshEntity(miniTornado);
+            }
+        }
+
+        // Check for ground impact while rushing -> Trigger Sonic Quake (Tweak B)
+        if (player.onGround() || player.horizontalCollision) {
+            triggerSonicQuake(player, stack);
+            if (isDoubleRushing) {
+                // "until u hit something" - ends double rush
+                DOUBLE_RUSHING_MAP.put(player.getUUID(), false);
+            }
+        }
+
+        // Flying sound hum
+        if (player.tickCount % (isDoubleRushing ? 8 : 15) == 0) {
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, isDoubleRushing ? 1.8f : 1.2f, isDoubleRushing ? 1.5f : 1.1f);
+        }
+    }
+
+    public static void stopDragonRush(ServerPlayer player) {
+        IS_RUSHING_MAP.remove(player.getUUID());
+        DOUBLE_RUSHING_MAP.remove(player.getUUID());
+        player.fallDistance = 0.0f; // Immune to fall damage
+        player.stopFallFlying();
+    }
+
+    public static void triggerSonicQuake(ServerPlayer player, ItemStack stack) {
+        ServerLevel level = (ServerLevel) player.level();
+        Vec3 pos = player.position();
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+        float quakeDamage = 450.0f + (float) (accessor.dba$getStrength() * 2.5);
+        double radius = 8.0;
+
+        AABB quakeBox = player.getBoundingBox().inflate(radius, 3.0, radius);
+        List<LivingEntity> targets = level.getEntitiesOfClass(LivingEntity.class, quakeBox, e -> e.isAlive() && e != player && pos.distanceTo(e.position()) <= radius);
+
+        for (LivingEntity target : targets) {
+            target.hurtServer(level, level.damageSources().mobAttack(player), quakeDamage);
+            // Launch high into the air
+            target.setDeltaMovement(target.getDeltaMovement().add(0, 1.4, 0));
+            target.hurtMarked = true;
+        }
+
+        // Ground shockwave rings
+        for (int i = 0; i < 40; i++) {
+            double angle = Math.toRadians(i * 9);
+            double px = pos.x + Math.cos(angle) * (radius * 0.8);
+            double pz = pos.z + Math.sin(angle) * (radius * 0.8);
+
+            level.sendParticles(
+                new DustParticleOptions(0x00E5FF, 2.2F),
+                px, pos.y + 0.2, pz,
+                1, 0.0, 0.3, 0.0, 0.05
+            );
+            level.sendParticles(
+                ParticleTypes.EXPLOSION,
+                px, pos.y + 0.1, pz,
+                1, 0.0, 0.0, 0.0, 0.0
+            );
+        }
+
+        level.playSound(null, pos.x, pos.y, pos.z,
+            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.8f);
+    }
+
+    // --- RIGHT CLICK: Call of the Tempest (Dragon Storm Domain) ---
+
+    @Override
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        player.startUsingItem(hand);
+        return InteractionResult.CONSUME;
+    }
+
+    @Override
+    public int getUseDuration(ItemStack stack, LivingEntity entity) {
+        return 72000;
+    }
+
+    @Override
+    public ItemUseAnimation getUseAnimation(ItemStack stack) {
+        return ItemUseAnimation.BOW;
+    }
+
+    @Override
+    public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
+        if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            ServerLevel serverLevel = (ServerLevel) level;
+            int heldTicks = getUseDuration(stack, living) - remainingTicks;
+            float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_TEMPEST_CHARGE_TICKS);
+
+            // Channeling atmosphere: Massive swirling storm wind & intense electric charge around player
+            float intensity = 1.0f + (chargeRatio * 2.0f);
+            
+            // Dense swirling wind at feet and body
+            for (int i = 0; i < (int)(8 * intensity); i++) {
+                double angle = serverLevel.getRandom().nextDouble() * Math.PI * 2;
+                double r = 1.0 + serverLevel.getRandom().nextDouble() * (2.0 + chargeRatio * 4.0);
+                double px = player.getX() + Math.cos(angle) * r;
+                double pz = player.getZ() + Math.sin(angle) * r;
+                double py = player.getY() + serverLevel.getRandom().nextDouble() * 3.0;
+
+                serverLevel.sendParticles(
+                    new DustParticleOptions(0x00E5FF, 1.8F * intensity),
+                    px, py, pz,
+                    1, -Math.sin(angle) * 0.2, 0.1, Math.cos(angle) * 0.2, 0.05
+                );
+                
+                if (serverLevel.getRandom().nextFloat() < 0.3f) {
+                    serverLevel.sendParticles(
+                        ParticleTypes.CLOUD,
+                        px, py, pz,
+                        1, 0.0, 0.05, 0.0, 0.02
+                    );
+                }
+            }
+
+            // Occasional lightning crackles around player
+            if (heldTicks % 10 == 0) {
+                serverLevel.sendParticles(
+                    ParticleTypes.ELECTRIC_SPARK,
+                    player.getX(), player.getY() + 1.5, player.getZ(),
+                    10, 0.5, 1.0, 0.5, 0.2
+                );
+            }
+
+            if (heldTicks % 20 == 0) {
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.5f, 0.5f + chargeRatio * 0.7f);
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.0f, 0.8f + chargeRatio * 0.4f);
+            }
+        }
+    }
+
+    @Override
+    public boolean releaseUsing(ItemStack stack, Level level, LivingEntity living, int timeLeft) {
+        if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            ServerLevel serverLevel = (ServerLevel) level;
+            int heldTicks = getUseDuration(stack, living) - timeLeft;
+
+            if (heldTicks >= 10) {
+                float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_TEMPEST_CHARGE_TICKS);
+                float radius = 10.0f + (chargeRatio * 20.0f); // 10 to 30 blocks radius
+                boolean isMaxCharge = (chargeRatio >= 0.95f);
+
+                LivingEntity target = LOCKED_TARGET_MAP.get(player.getUUID());
+                boolean followsPlayer = (target == null); // Tweak A (follows player) vs Tweak B (follows target)
+
+                Vec3 spawnPos = target != null ? target.position() : player.position();
+                AzureStormEntity storm = new AzureStormEntity(serverLevel, player, spawnPos, radius, followsPlayer, target, isMaxCharge);
+                serverLevel.addFreshEntity(storm);
+
+                player.sendSystemMessage(Component.literal("§b✦ Tempest Summoned! (" + (int) radius + "m domain) ✦"), true);
+
+                // Sound
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 3.0f, 0.8f);
+
+                player.getCooldowns().addCooldown(stack, 60 + (int) (chargeRatio * 60));
+            }
+        }
+        return true;
+    }
+}

@@ -68,6 +68,20 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
     @ModifyVariable(method = "hurtServer", at = @At("HEAD"), argsOnly = true, ordinal = 0)
     private float dba$modifyIncomingDamage(float amount, net.minecraft.server.level.ServerLevel level, DamageSource source) {
         if ((Object) this instanceof Player player) {
+            // Hollowed Phasing Immunity: Negate all block suffocation damage
+            if (player.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.HOLLOWED_HOLDER) && 
+                source.is(net.minecraft.world.damagesource.DamageTypes.IN_WALL)) {
+                return 0.0f;
+            }
+
+            // Azure Dragon Rush Fall Damage Immunity
+            if (source.is(net.minecraft.tags.DamageTypeTags.IS_FALL)) {
+                if (com.dragonblockarcanedba.item.AzureDragonSwordItem.IS_RUSHING_MAP.containsKey(player.getUUID()) ||
+                    player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) {
+                    return 0.0f;
+                }
+            }
+
             // Whis Staff Auto-Dodge: 50% chance to negate ALL incoming damage while held
             if (player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
                 if (level.getRandom().nextFloat() < 0.50f) {

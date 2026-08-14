@@ -161,6 +161,65 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("sky_cracks")))
     );
 
+    public static final EntityType<VoidRiftEntity> VOID_RIFT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("void_rift"),
+            EntityType.Builder.<VoidRiftEntity>of(VoidRiftEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 3.0f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("void_rift")))
+    );
+
+    public static final EntityType<HollowAfterimageEntity> HOLLOW_AFTERIMAGE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("hollow_afterimage"),
+            EntityType.Builder.<HollowAfterimageEntity>of(HollowAfterimageEntity::new, MobCategory.MISC)
+                    .sized(0.6f, 1.8f)
+                    .clientTrackingRange(12)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("hollow_afterimage")))
+    );
+
+    public static final EntityType<VoidSlashEntity> VOID_SLASH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("void_slash"),
+            EntityType.Builder.<VoidSlashEntity>of(VoidSlashEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 0.8f)
+                    .clientTrackingRange(12)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("void_slash")))
+    );
+
+    public static final EntityType<AzureStormEntity> AZURE_STORM = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("azure_storm"),
+            EntityType.Builder.<AzureStormEntity>of(AzureStormEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("azure_storm")))
+    );
+
+    public static final EntityType<AzureLightningEntity> AZURE_LIGHTNING = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("azure_lightning"),
+            EntityType.Builder.<AzureLightningEntity>of(AzureLightningEntity::new, MobCategory.MISC)
+                    .sized(0.0f, 0.0f)
+                    .clientTrackingRange(64)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("azure_lightning")))
+    );
+
+    public static final EntityType<AzureTornadoEntity> AZURE_TORNADO = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("azure_tornado"),
+            EntityType.Builder.<AzureTornadoEntity>of(AzureTornadoEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 8.0f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("azure_tornado")))
+    );
+
     public static void register() {
         DragonBlockArcaneDBA.LOGGER.info("Registering Entities for " + DragonBlockArcaneDBA.MOD_ID);
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(OTHERWORLD_GUIDE, OtherworldGuideEntity.createMobAttributes());

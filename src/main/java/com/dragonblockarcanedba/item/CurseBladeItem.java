@@ -321,6 +321,13 @@ public class CurseBladeItem extends Item {
                 for (LivingEntity enemy : enemiesInStorm) {
                     MobEffectInstance curse = enemy.getEffect(DbaEffects.MOVEMENT_CURSE_HOLDER);
                     if (curse != null && curse.getAmplifier() >= 4) { // 5+ stacks
+                        // Violent Ground Slam (Soul Hook Refinement)
+                        enemy.setDeltaMovement(0, -2.5, 0);
+                        enemy.hurtMarked = true;
+                        
+                        // Magic impact damage
+                        enemy.hurtServer(serverLevel, serverLevel.damageSources().magic(), 150.0f);
+
                         // 3 seconds complete root (amp 9)
                         enemy.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 60, 9, false, true));
                         serverLevel.sendParticles(

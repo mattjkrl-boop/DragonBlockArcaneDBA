@@ -15,6 +15,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.effect.MobEffects;
+import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 
 import java.util.Comparator;
 import java.util.List;
@@ -200,11 +202,32 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
                 // Small magic hit damage
                 target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, (LivingEntity) owner), 35.0f);
 
+                // Lifesteal & Blood Shield (Soul Rend Refinement)
+                if (owner instanceof Player player) {
+                    float healAmount = 2.0f + (newAmp * 1.5f);
+                    if (player.getHealth() < player.getMaxHealth()) {
+                        player.heal(healAmount);
+                    } else {
+                        // Max health -> Blood Shield (Absorption)
+                        MobEffectInstance currentAbsorb = player.getEffect(MobEffects.ABSORPTION);
+                        int absorbAmp = (currentAbsorb != null) ? Math.min(4, currentAbsorb.getAmplifier() + 1) : 0;
+                        player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 100, absorbAmp, false, false));
+                    }
+                }
+
                 // Tweak C: Pull target toward owner if heavily cursed (5+ stacks)
                 if (newAmp >= 4) {
                     Vec3 pull = owner.position().subtract(target.position()).normalize().scale(0.7);
                     target.setDeltaMovement(target.getDeltaMovement().add(pull.x, 0.15, pull.z));
                     target.hurtMarked = true;
+
+                    // Stamina / Ki Restoration (Soul Rend Refinement)
+                    if (owner instanceof Player player) {
+                        PlayerStatsAccessor stats = (PlayerStatsAccessor) player;
+                        stats.dba$addKi(10.0);
+                        stats.dba$addStamina(5.0);
+                        stats.dba$syncStats();
+                    }
                 }
             } else {
                 Vec3 step = dir.normalize().scale(1.6);

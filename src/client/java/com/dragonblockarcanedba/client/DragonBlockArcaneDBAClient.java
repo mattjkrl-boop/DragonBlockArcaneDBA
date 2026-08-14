@@ -21,6 +21,8 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
     private static int weaponUseTimer = 0;
     private static int zSwordChargeTicks = 0;
+    private static int hollowChargeTicks = 0;
+    private static boolean isAzureRushing = false;
 
     public static final net.minecraft.client.model.geom.ModelLayerLocation SHENRON_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
         com.dragonblockarcanedba.DragonBlockArcaneDBA.id("shenron"), "main"
@@ -98,6 +100,30 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.SKY_CRACKS,
             com.dragonblockarcanedba.client.render.SkyCracksRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.VOID_RIFT,
+            com.dragonblockarcanedba.client.render.VoidRiftRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.HOLLOW_AFTERIMAGE,
+            com.dragonblockarcanedba.client.render.HollowAfterimageRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.VOID_SLASH,
+            com.dragonblockarcanedba.client.render.VoidSlashRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.AZURE_STORM,
+            com.dragonblockarcanedba.client.render.AzureStormRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.AZURE_LIGHTNING,
+            com.dragonblockarcanedba.client.render.AzureLightningRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.AZURE_TORNADO,
+            com.dragonblockarcanedba.client.render.AzureTornadoRenderer::new
         );
 
         net.minecraft.client.renderer.special.SpecialModelRenderers.ID_MAPPER.put(
@@ -197,7 +223,63 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     }
                 }
 
-                // 2. Curse Blade Continuous Stream
+                // 2. Hollow's Edge Charge & Multi-Dash
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) {
+                    boolean isHoldingS = client.options.keyDown.isDown();
+                    if (client.options.keyAttack.isDown()) {
+                        hollowChargeTicks = Math.min(100, hollowChargeTicks + 1);
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            hollowChargeTicks,
+                            isHoldingS
+                        ));
+                    } else if (hollowChargeTicks > 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
+                            hollowChargeTicks,
+                            isHoldingS
+                        ));
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        hollowChargeTicks = 0;
+                    } else if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
+                        // Click dash during active sequence
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
+                            0,
+                            isHoldingS
+                        ));
+                    }
+                } else {
+                    if (hollowChargeTicks > 0) {
+                        hollowChargeTicks = 0;
+                    }
+                }
+
+                // 3. Azure Dragon Sword Rush
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) {
+                    boolean isSneaking = client.options.keyShift.isDown();
+                    if (client.options.keyAttack.isDown()) {
+                        isAzureRushing = true;
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            0,
+                            isSneaking
+                        ));
+                    } else if (isAzureRushing) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
+                            0,
+                            isSneaking
+                        ));
+                        isAzureRushing = false;
+                    }
+                } else {
+                    if (isAzureRushing) {
+                        isAzureRushing = false;
+                    }
+                }
+
+                // 4. Curse Blade Continuous Stream
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) {
                     if (client.options.keyAttack.isDown() && weaponUseTimer <= 0) {
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
@@ -209,7 +291,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     }
                 }
 
-                // 3. Dimensional Sword & Power Pole Rapid Fire
+                // 5. Dimensional Sword & Power Pole Rapid Fire
                 boolean isRapidWeapon = stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem || 
                                         stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem;
 
@@ -222,7 +304,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                         client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
                         weaponUseTimer = 2; // 2 ticks = 10 attacks per second
                     }
-                } else if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem)) {
+                } else if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem)) {
                     // Fallback for standard weapons detecting air click
                     if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
                         if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) { // If there are other weapons
