@@ -51,9 +51,11 @@ public class ZShockwaveEntity extends Projectile {
     public ZShockwaveEntity(Level level, LivingEntity owner, float chargeRatio, float damage, boolean isSubWave) {
         super(DbaEntities.Z_SHOCKWAVE, level);
         this.setOwner(owner);
-        this.setPos(owner.getX(), owner.getY() + 0.8, owner.getZ());
-        this.setYRot(owner.getYRot());
-        this.setXRot(owner.getXRot());
+        if (owner != null) {
+            this.setPos(owner.getX(), owner.getY() + 0.8, owner.getZ());
+            this.setYRot(owner.getYRot());
+            this.setXRot(owner.getXRot());
+        }
         this.damage = damage;
         this.noPhysics = true;
 
