@@ -328,6 +328,12 @@ public class DbaNetwork {
                     com.dragonblockarcanedba.item.PowerPoleItem.performWindSpin(player, stack);
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) {
                     com.dragonblockarcanedba.item.DevilTridentItem.performLeftClickTargeting(player, stack, null);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
+                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
+                        com.dragonblockarcanedba.item.SaberItem.onBlitzRelease(player, stack, payload.chargeTicks());
+                    } else {
+                        com.dragonblockarcanedba.item.SaberItem.onBlitzTick(player, stack, payload.chargeTicks());
+                    }
                 }
             });
         });

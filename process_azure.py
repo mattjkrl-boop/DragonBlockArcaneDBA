@@ -30,7 +30,7 @@ def flood_fill_transparent(img, start_pos, threshold=40):
            abs(current_color[2] - start_color[2]) < threshold and current_color[3] > 0:
            
             pixels[x, y] = transparent
-            
+         
             if x > 0: stack.append((x - 1, y))
             if x < width - 1: stack.append((x + 1, y))
             if y > 0: stack.append((x, y - 1))

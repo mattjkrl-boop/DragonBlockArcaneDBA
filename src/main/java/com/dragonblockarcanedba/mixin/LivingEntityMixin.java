@@ -97,6 +97,15 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
                 }
             }
 
+            // Saber Perfect Dodge: Dodging an incoming attack negates damage and resets Flash Step charges
+            if (com.dragonblockarcanedba.item.SaberItem.isPerfectDodgeActive(player)) {
+                if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+                    com.dragonblockarcanedba.item.SaberItem.triggerPerfectDodge(serverPlayer);
+                }
+                player.invulnerableTime = Math.max(player.invulnerableTime, 12);
+                return 0.0f;
+            }
+
             // Standard damage mitigation if not dodged (defense-based)
             if (!source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_ARMOR)) {
                 double multiplier = PlayerStats.getDamageMultiplier(player);
@@ -128,7 +137,36 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
         }
     }
 
+    // ========== Phasing: Allow clicking through chained enemies ==========
+    
+    @Inject(method = "isPickable", at = @At("HEAD"), cancellable = true)
+    private void dba$isPickable(CallbackInfoReturnable<Boolean> cir) {
+        if (((LivingEntity)(Object)this).hasEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER)) {
+            cir.setReturnValue(false); // Unpickable: Crosshair ignores them, allowing clicks to pass through to the next enemy!
+        }
+    }
+
     // ========== Custom XP on Kill ==========
+
+    // ========== Prevent Saber Arm Shake ==========
+
+    @Inject(method = "swing(Lnet/minecraft/world/InteractionHand;Z)V", at = @At("HEAD"), cancellable = true, require = 0)
+    private void dba$onSwingWithBoolean(net.minecraft.world.InteractionHand hand, boolean updateSelf, CallbackInfo ci) {
+        if ((Object) this instanceof Player player) {
+            if (hand == net.minecraft.world.InteractionHand.MAIN_HAND && player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
+                ci.cancel();
+            }
+        }
+    }
+    
+    @Inject(method = "swing(Lnet/minecraft/world/InteractionHand;)V", at = @At("HEAD"), cancellable = true, require = 0)
+    private void dba$onSwing(net.minecraft.world.InteractionHand hand, CallbackInfo ci) {
+        if ((Object) this instanceof Player player) {
+            if (hand == net.minecraft.world.InteractionHand.MAIN_HAND && player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
+                ci.cancel();
+            }
+        }
+    }
 
     @Inject(method = "die", at = @At("HEAD"))
     private void dba$onDeathCustomXp(DamageSource damageSource, CallbackInfo ci) {

@@ -22,7 +22,11 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     private static int weaponUseTimer = 0;
     private static int zSwordChargeTicks = 0;
     private static int hollowChargeTicks = 0;
+    private static int saberChargeTicks = 0;
     private static boolean isAzureRushing = false;
+    private static float lastCameraYRot = 0;
+    private static float lastCameraXRot = 0;
+    private static boolean manualSaberCameraOverride = false;
 
     public static final net.minecraft.client.model.geom.ModelLayerLocation SHENRON_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
         com.dragonblockarcanedba.DragonBlockArcaneDBA.id("shenron"), "main"
@@ -304,7 +308,89 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                         client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
                         weaponUseTimer = 2; // 2 ticks = 10 attacks per second
                     }
-                } else if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem)) {
+                }
+
+                // 6. Saber Blitz Flurry (Hold Left Click)
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
+                    if (client.options.keyAttack.isDown()) {
+                        saberChargeTicks++;
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            saberChargeTicks
+                        ));
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+
+                        // Client-side Phasing / Transparency targeting
+                        if (client.level != null) {
+                            net.minecraft.world.phys.Vec3 eyePos = client.player.getEyePosition();
+                            net.minecraft.world.phys.Vec3 look = client.player.getLookAngle();
+                            java.util.List<net.minecraft.world.entity.LivingEntity> nearby = client.level.getEntitiesOfClass(
+                                net.minecraft.world.entity.LivingEntity.class,
+                                client.player.getBoundingBox().inflate(3.5),
+                                e -> e.isAlive() && e != client.player && client.player.distanceTo(e) <= 3.5 && !e.isInvisible()
+                            );
+                            int bestId = -1;
+                            double bestDot = 0.45;
+                            for (net.minecraft.world.entity.LivingEntity e : nearby) {
+                                net.minecraft.world.phys.Vec3 toE = e.getBoundingBox().getCenter().subtract(eyePos).normalize();
+                                double dot = look.dot(toE);
+                                if (dot > bestDot) {
+                                    bestDot = dot;
+                                    bestId = e.getId();
+                                }
+                            }
+                            com.dragonblockarcanedba.item.SaberItem.clientPhasedEntityId = bestId;
+
+                            // Auto-Aim Logic
+                            float yDelta = Math.abs(client.player.getYRot() - lastCameraYRot);
+                            float xDelta = Math.abs(client.player.getXRot() - lastCameraXRot);
+                            // If player moves mouse significantly (>5 degrees), they take manual control
+                            if (yDelta > 5.0f || xDelta > 5.0f) {
+                                manualSaberCameraOverride = true;
+                            }
+
+                            if (!manualSaberCameraOverride && bestId != -1) {
+                                net.minecraft.world.entity.Entity target = client.level.getEntity(bestId);
+                                if (target != null) {
+                                    net.minecraft.world.phys.Vec3 toTarget = target.getBoundingBox().getCenter().subtract(client.player.getEyePosition());
+                                    double r = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
+                                    float targetYRot = (float)(Math.atan2(toTarget.z, toTarget.x) * (180 / Math.PI)) - 90.0f;
+                                    float targetXRot = (float)(-(Math.atan2(toTarget.y, r) * (180 / Math.PI)));
+
+                                    float newYRot = net.minecraft.util.Mth.approachDegrees(client.player.getYRot(), targetYRot, 20.0f);
+                                    float newXRot = net.minecraft.util.Mth.approachDegrees(client.player.getXRot(), targetXRot, 20.0f);
+                                    client.player.setYRot(newYRot);
+                                    client.player.setXRot(newXRot);
+                                }
+                            }
+                        }
+                        lastCameraYRot = client.player.getYRot();
+                        lastCameraXRot = client.player.getXRot();
+                    } else if (saberChargeTicks > 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
+                            saberChargeTicks
+                        ));
+                        saberChargeTicks = 0;
+                        com.dragonblockarcanedba.item.SaberItem.clientPhasedEntityId = -1;
+                        manualSaberCameraOverride = false;
+                    } else {
+                        com.dragonblockarcanedba.item.SaberItem.clientPhasedEntityId = -1;
+                        manualSaberCameraOverride = false;
+                        lastCameraYRot = client.player.getYRot();
+                        lastCameraXRot = client.player.getXRot();
+                    }
+                } else {
+                    if (saberChargeTicks > 0) {
+                        saberChargeTicks = 0;
+                        com.dragonblockarcanedba.item.SaberItem.clientPhasedEntityId = -1;
+                        manualSaberCameraOverride = false;
+                    }
+                    lastCameraYRot = client.player.getYRot();
+                    lastCameraXRot = client.player.getXRot();
+                }
+
+                if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem)) {
                     // Fallback for standard weapons detecting air click
                     if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
                         if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) { // If there are other weapons

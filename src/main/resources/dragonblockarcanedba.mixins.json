@@ -8,11 +8,13 @@
 		"FoodDataMixin",
 		"WindChargeMixin",
 		"EntityTeleportMixin",
-		"DelayedDamageMixin"
+		"DelayedDamageMixin",
+		"EntityMixin"
 	],
 	"client": [
 		"CloudTextureMixin",
-		"ClientLevelWeatherMixin"
+		"ClientLevelWeatherMixin",
+		"client.SaberClientMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

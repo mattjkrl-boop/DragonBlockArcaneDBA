@@ -1,5 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
+import net.minecraft.world.damagesource.DamageSource;
+
 import com.dragonblockarcanedba.effect.DbaEffects;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -116,8 +118,10 @@ public class VoidRiftEntity extends Projectile {
                     List<LivingEntity> victims = serverLevel.getEntitiesOfClass(LivingEntity.class, blastBox, e -> e.isAlive() && e != owner);
 
                     for (LivingEntity victim : victims) {
-                        // Massive damage
-                        victim.hurtServer(serverLevel, serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : victim), this.damage);
+                        DamageSource source = owner instanceof net.minecraft.world.entity.player.Player p 
+                            ? serverLevel.damageSources().playerAttack(p) 
+                            : serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : victim);
+                        victim.hurtServer(serverLevel, source, this.damage);
 
                         // Violent outward launch
                         Vec3 push = victim.position().subtract(center).normalize().scale(2.2).add(0, 0.8, 0);
@@ -176,11 +180,15 @@ public class VoidRiftEntity extends Projectile {
                         proj.setDeltaMovement(toCenter.normalize().scale(0.8));
                     }
 
-                    // Damage and slow enemies inside
+                    // Damage, slow, and hold enemies inside
                     if (e instanceof LivingEntity living) {
                         living.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 20, 3, false, false));
+                        living.addEffect(new MobEffectInstance(DbaEffects.RIFTED_HOLDER, 20, 0, false, false));
                         if (this.tickCount % 10 == 0) {
-                            living.hurtServer(serverLevel, serverLevel.damageSources().magic(), 25.0f);
+                            DamageSource source = owner instanceof net.minecraft.world.entity.player.Player p 
+                                ? serverLevel.damageSources().playerAttack(p) 
+                                : serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : living);
+                            living.hurtServer(serverLevel, source, 25.0f);
                         }
                     }
                 }

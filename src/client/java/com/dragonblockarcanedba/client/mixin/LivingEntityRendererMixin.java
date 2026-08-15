@@ -31,7 +31,7 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
             hasKiSense = accessor.dba$isTechniqueActive("ki_sense");
         }
         
-        if (hasKiSense && entity.distanceTo(localPlayer) <= 15.0f && entity.isAlive() && !entity.isInvisible()) {
+        if (hasKiSense && entity.distanceTo(localPlayer) <= 15.0f && entity.isAlive()) {
             float health = entity.getHealth();
             float maxHealth = entity.getMaxHealth();
 
@@ -58,6 +58,13 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
                 // Otherwise, render health bar directly as the primary nameTag
                 state.nameTag = healthBar;
             }
+        }
+    }
+
+    @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V", at = @At("TAIL"))
+    protected void dba$extractRenderState(T entity, S state, float partialTicks, CallbackInfo ci) {
+        if (com.dragonblockarcanedba.item.SaberItem.clientPhasedEntityId == entity.getId()) {
+            state.isInvisible = true;
         }
     }
 

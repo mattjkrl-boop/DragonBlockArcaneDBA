@@ -407,7 +407,7 @@ public class DbaItems {
     public static final Item CURSED_BLADE = new CurseBladeItem(
         new Item.Properties().setId(CURSED_BLADE_KEY).stacksTo(1)
     );
-    public static final Item SABER = new Item(
+    public static final Item SABER = new SaberItem(
         new Item.Properties().setId(SABER_KEY).stacksTo(1)
     );
     public static final Item OX_KINGS_AX = new Item(

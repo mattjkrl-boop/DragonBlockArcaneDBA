@@ -107,7 +107,8 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) {
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
                     return net.minecraft.world.InteractionResult.FAIL;
                 }
             }
@@ -116,6 +117,10 @@ public class DragonBlockArcaneDBA implements ModInitializer {
 
         // Register Attack Hook for Stamina Drain
         net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            if (player.getItemInHand(hand).getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
+                return net.minecraft.world.InteractionResult.FAIL;
+            }
+
             if (!world.isClientSide()) {
                 com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
                 double stamina = accessor.dba$getCurrentStamina();
@@ -166,6 +171,9 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     com.dragonblockarcanedba.item.DevilTridentItem.manageShardSwarm(player, world);
                 }
             }
+
+            // Saber Server Tick (Blitz sequences, Flash Step recharge, Escalating Speed expire)
+            com.dragonblockarcanedba.item.SaberItem.tickServer(server);
         });
 
         // Register Death Hook (Otherworld mechanics)

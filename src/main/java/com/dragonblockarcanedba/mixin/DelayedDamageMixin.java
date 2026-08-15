@@ -73,9 +73,20 @@ public abstract class DelayedDamageMixin {
                      self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.DARK_FADED_HOLDER)) {
                 isCinematicallyLocked = true;
             }
+            // Hollow's Edge Rift Vacuum
+            else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.RIFTED_HOLDER)) {
+                isCinematicallyLocked = true;
+            }
             // Spirit Sword lift
             else if (self.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION)) {
                 isCinematicallyLocked = true;
+            }
+            // Whis Staff & Power Pole (Slowness Freeze)
+            else if (self.hasEffect(net.minecraft.world.effect.MobEffects.SLOWNESS)) {
+                var effect = self.getEffect(net.minecraft.world.effect.MobEffects.SLOWNESS);
+                if (effect != null && effect.getAmplifier() >= 9) {
+                    isCinematicallyLocked = true;
+                }
             }
             
             if (isCinematicallyLocked) {
