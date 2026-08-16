@@ -109,5 +109,10 @@
   "item.dragonblockarcanedba.dragon_radar": "Dragon Radar",
   "block.dragonblockarcanedba.gravity_training_block": "Gravity Training Block",
   "item.dragonblockarcanedba.gravity_training_block": "Gravity Training Block",
-  "entity.dragonblockarcanedba.shenron": "Shenron"
+  "entity.dragonblockarcanedba.shenron": "Shenron",
+  "item.dragonblockarcanedba.evil_spear": "Evil Spear",
+  "item.dragonblockarcanedba.brave_sword": "Brave Sword",
+  "item.dragonblockarcanedba.katana": "Katana",
+  "item.dragonblockarcanedba.blaster_gun": "Blaster Gun",
+  "item.dragonblockarcanedba.blaster_ammo": "Blaster Ammo"
 }
