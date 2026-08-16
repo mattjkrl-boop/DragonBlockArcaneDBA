@@ -413,10 +413,10 @@ public class DbaItems {
     public static final Item SABER = new SaberItem(
         new Item.Properties().setId(SABER_KEY).stacksTo(1)
     );
-    public static final Item OX_KINGS_AX = new Item(
+    public static final Item OX_KINGS_AX = new OxKingsAxeItem(
         new Item.Properties().setId(OX_KINGS_AX_KEY).stacksTo(1)
     );
-    public static final Item GRAND_SWORD = new Item(
+    public static final Item GRAND_SWORD = new GrandSwordItem(
         new Item.Properties().setId(GRAND_SWORD_KEY).stacksTo(1)
     );
     public static final Item DABURA_SWORD = new Item(

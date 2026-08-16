@@ -108,7 +108,9 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) {
                     return net.minecraft.world.InteractionResult.FAIL;
                 }
             }
@@ -117,7 +119,10 @@ public class DragonBlockArcaneDBA implements ModInitializer {
 
         // Register Attack Hook for Stamina Drain
         net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
-            if (player.getItemInHand(hand).getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
+            net.minecraft.world.item.Item heldItem = player.getItemInHand(hand).getItem();
+            if (heldItem instanceof com.dragonblockarcanedba.item.SaberItem ||
+                heldItem instanceof com.dragonblockarcanedba.item.GrandSwordItem ||
+                heldItem instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) {
                 return net.minecraft.world.InteractionResult.FAIL;
             }
 

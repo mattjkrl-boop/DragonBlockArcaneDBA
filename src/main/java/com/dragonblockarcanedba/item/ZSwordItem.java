@@ -247,6 +247,7 @@ public class ZSwordItem extends Item {
                         target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 140, 4, false, true), player);
 
                         // Tweak A: Completely roots enemies in the ground for 2s (40 ticks), then launches them up and out
+                        target.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 50, 0, false, false, false), player);
                         target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 40, 9, false, true), player);
                         launchTargets.add(target);
                     }

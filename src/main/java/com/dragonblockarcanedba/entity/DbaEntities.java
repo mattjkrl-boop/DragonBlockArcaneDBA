@@ -220,6 +220,56 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("azure_tornado")))
     );
 
+    public static final EntityType<OxShockwaveEntity> OX_SHOCKWAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ox_shockwave"),
+            EntityType.Builder.<OxShockwaveEntity>of(OxShockwaveEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 1.0f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ox_shockwave")))
+    );
+
+    public static final EntityType<OxFissureEntity> OX_FISSURE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ox_fissure"),
+            EntityType.Builder.<OxFissureEntity>of(OxFissureEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 0.5f)
+                    .clientTrackingRange(12)
+                    .updateInterval(2)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ox_fissure")))
+    );
+
+    public static final EntityType<GrandCrescentWaveEntity> GRAND_CRESCENT_WAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("grand_crescent_wave"),
+            EntityType.Builder.<GrandCrescentWaveEntity>of(GrandCrescentWaveEntity::new, MobCategory.MISC)
+                    .sized(3.5f, 1.0f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("grand_crescent_wave")))
+    );
+
+    public static final EntityType<GrandBladeShardEntity> GRAND_BLADE_SHARD = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("grand_blade_shard"),
+            EntityType.Builder.<GrandBladeShardEntity>of(GrandBladeShardEntity::new, MobCategory.MISC)
+                    .sized(0.6f, 0.6f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("grand_blade_shard")))
+    );
+
+    public static final EntityType<ValorFieldEntity> VALOR_FIELD = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("valor_field"),
+            EntityType.Builder.<ValorFieldEntity>of(ValorFieldEntity::new, MobCategory.MISC)
+                    .sized(18.0f, 18.0f)
+                    .clientTrackingRange(24)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("valor_field")))
+    );
+
     public static void register() {
         DragonBlockArcaneDBA.LOGGER.info("Registering Entities for " + DragonBlockArcaneDBA.MOD_ID);
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(OTHERWORLD_GUIDE, OtherworldGuideEntity.createMobAttributes());

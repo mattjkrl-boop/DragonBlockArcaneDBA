@@ -334,6 +334,24 @@ public class DbaNetwork {
                     } else {
                         com.dragonblockarcanedba.item.SaberItem.onBlitzTick(player, stack, payload.chargeTicks());
                     }
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) {
+                    if (player.getCooldowns().isOnCooldown(stack)) return;
+                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
+                        com.dragonblockarcanedba.item.OxKingsAxeItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
+                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
+                        com.dragonblockarcanedba.item.OxKingsAxeItem.onLeftClickRelease(player, stack, payload.chargeTicks());
+                    } else {
+                        com.dragonblockarcanedba.item.OxKingsAxeItem.onLeftClickRelease(player, stack, 10);
+                    }
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) {
+                    if (player.getCooldowns().isOnCooldown(stack)) return;
+                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
+                        com.dragonblockarcanedba.item.GrandSwordItem.onLeftClickSpinTick(player, stack, payload.chargeTicks());
+                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
+                        com.dragonblockarcanedba.item.GrandSwordItem.onLeftClickSpinRelease(player, stack, payload.chargeTicks());
+                    } else {
+                        com.dragonblockarcanedba.item.GrandSwordItem.onLeftClickSpinRelease(player, stack, 10);
+                    }
                 }
             });
         });

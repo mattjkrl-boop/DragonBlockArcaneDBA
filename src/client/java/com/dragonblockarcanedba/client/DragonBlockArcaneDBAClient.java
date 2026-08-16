@@ -23,6 +23,8 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     private static int zSwordChargeTicks = 0;
     private static int hollowChargeTicks = 0;
     private static int saberChargeTicks = 0;
+    private static int oxAxeChargeTicks = 0;
+    private static int grandSwordSpinTicks = 0;
     private static boolean isAzureRushing = false;
     private static float lastCameraYRot = 0;
     private static float lastCameraXRot = 0;
@@ -128,6 +130,26 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.AZURE_TORNADO,
             com.dragonblockarcanedba.client.render.AzureTornadoRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.OX_SHOCKWAVE,
+            com.dragonblockarcanedba.client.render.OxShockwaveRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.OX_FISSURE,
+            com.dragonblockarcanedba.client.render.OxFissureRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.GRAND_CRESCENT_WAVE,
+            com.dragonblockarcanedba.client.render.GrandCrescentWaveRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.GRAND_BLADE_SHARD,
+            com.dragonblockarcanedba.client.render.GrandBladeShardRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.VALOR_FIELD,
+            com.dragonblockarcanedba.client.render.ValorFieldRenderer::new
         );
 
         net.minecraft.client.renderer.special.SpecialModelRenderers.ID_MAPPER.put(
@@ -390,7 +412,58 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     lastCameraXRot = client.player.getXRot();
                 }
 
-                if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem)) {
+                // 7. Ox King's Axe Left-Click Groundbreaker Charge & Release
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) {
+                    if (client.options.keyAttack.isDown()) {
+                        oxAxeChargeTicks = Math.min(200, oxAxeChargeTicks + 1);
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            oxAxeChargeTicks
+                        ));
+                    } else if (oxAxeChargeTicks > 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
+                            oxAxeChargeTicks
+                        ));
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        oxAxeChargeTicks = 0;
+                    }
+                } else {
+                    if (oxAxeChargeTicks > 0) {
+                        oxAxeChargeTicks = 0;
+                    }
+                }
+
+                // 8. Grand Sword Left-Click Spin & Blade Shards Fire
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) {
+                    if (client.options.keyAttack.isDown()) {
+                        grandSwordSpinTicks++;
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            grandSwordSpinTicks
+                        ));
+
+                        // Accelerating camera/player yaw spin client-side (15° to 35° per tick)
+                        float spinProgress = Math.min(1.0f, grandSwordSpinTicks / 100.0f);
+                        float spinSpeed = 15.0f + (spinProgress * 20.0f);
+                        client.player.setYRot(client.player.getYRot() + spinSpeed);
+                        client.player.yHeadRot = client.player.getYRot();
+                        client.player.yBodyRot = client.player.getYRot();
+                    } else if (grandSwordSpinTicks > 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
+                            grandSwordSpinTicks
+                        ));
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        grandSwordSpinTicks = 0;
+                    }
+                } else {
+                    if (grandSwordSpinTicks > 0) {
+                        grandSwordSpinTicks = 0;
+                    }
+                }
+
+                if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem)) {
                     // Fallback for standard weapons detecting air click
                     if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
                         if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) { // If there are other weapons
