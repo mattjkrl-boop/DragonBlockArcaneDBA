@@ -8,6 +8,7 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -138,9 +139,12 @@ public class ZShockwaveEntity extends Projectile {
                     
                     // Teleport 2 blocks down into the ground
                     target.teleportTo(target.getX(), target.getY() - 2.0, target.getZ());
-                    target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 80, 9, false, true));
+                    target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 80, 9, false, true), owner instanceof LivingEntity livingOwner ? livingOwner : null);
                     // Suffocation / block crush damage from head embedded in terrain
-                    target.hurtServer(serverLevel, serverLevel.damageSources().inWall(), 250.0f);
+                    DamageSource crushSource = owner instanceof LivingEntity livingOwner
+                        ? serverLevel.damageSources().indirectMagic(this, livingOwner)
+                        : serverLevel.damageSources().inWall();
+                    target.hurtServer(serverLevel, crushSource, 250.0f);
                 }
             }
 

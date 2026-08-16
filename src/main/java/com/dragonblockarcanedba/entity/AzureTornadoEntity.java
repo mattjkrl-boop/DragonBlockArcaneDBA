@@ -91,7 +91,10 @@ public class AzureTornadoEntity extends Projectile {
 
                 // Continuous wind damage
                 if (this.tickCount % 10 == 0) {
-                    target.hurtServer(serverLevel, serverLevel.damageSources().magic(), giant ? 60.0f : 25.0f);
+                    net.minecraft.world.damagesource.DamageSource tornadoSource = this.getOwner() instanceof LivingEntity owner
+                        ? serverLevel.damageSources().indirectMagic(this, owner)
+                        : serverLevel.damageSources().magic();
+                    target.hurtServer(serverLevel, tornadoSource, giant ? 60.0f : 25.0f);
                 }
             }
 

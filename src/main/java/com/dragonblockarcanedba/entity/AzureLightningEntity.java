@@ -59,7 +59,10 @@ public class AzureLightningEntity extends Projectile {
                                     this.getX() + 3.5, this.getY() + 4, this.getZ() + 3.5);
                 List<LivingEntity> victims = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e.isAlive() && e != this.getOwner());
                 for (LivingEntity victim : victims) {
-                    victim.hurtServer(serverLevel, serverLevel.damageSources().lightningBolt(), this.damage);
+                    net.minecraft.world.damagesource.DamageSource boltSource = this.getOwner() instanceof LivingEntity owner
+                        ? serverLevel.damageSources().indirectMagic(this, owner)
+                        : serverLevel.damageSources().lightningBolt();
+                    victim.hurtServer(serverLevel, boltSource, this.damage);
                     victim.setDeltaMovement(victim.getDeltaMovement().add(0, 0.4, 0));
                     victim.hurtMarked = true;
                 }

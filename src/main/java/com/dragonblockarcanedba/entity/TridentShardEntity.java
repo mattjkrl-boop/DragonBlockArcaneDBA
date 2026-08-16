@@ -146,8 +146,11 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
 
             // Damage if close
             if (this.distanceToSqr(target) < 4.0) {
-                target.hurtServer((ServerLevel) this.level(), this.level().damageSources().magic(), 100.0f);
-                target.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 60, 0, false, false));
+                net.minecraft.world.damagesource.DamageSource shardSource = this.getOwner() instanceof LivingEntity livingOwner
+                    ? this.level().damageSources().mobProjectile(this, livingOwner)
+                    : this.level().damageSources().magic();
+                target.hurtServer((ServerLevel) this.level(), shardSource, 100.0f);
+                target.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 60, 0, false, false), this.getOwner());
                 
                 // Recoil
                 this.health -= 100.0f;
