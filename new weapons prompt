@@ -1,32 +1,266 @@
-Core Input Rule (ALWAYS IMPLEMENT ALL TWEAKS TOO)  
-• Left slot: activates from left click and remains the weapon's primary attack. The ability can be instant, continuously active while held, or charge-based.  
-• Right slot: activates from right click and remains the weapon's secondary/special ability. Same flexibility.  
-• There are no separate left-click and left-hold abilities. Each weapon has one definitive Left ability and one definitive Right ability.  
-• Each ability below has 3 small tweak options that can be selected during implementation without changing the weapon's core identity.  
-  
-───  
-Saber  
-Identity: Fastest weapon — precision, mobility, counters, and rapid combat.  
-LEFT — Blitz Flurry  
-Hold left click to continuously perform extremely rapid saber strikes.  
-• Automatically chains attacks meaning you hold it down actual tick rate slows besides your head movement and clicking the rest ur movement does so you can have time to turn and once you get close to an entity you let go and immediately click and hold again to just back from that enemy and to another one nearly in your line of sight it will launch you there then and you can keep doing this until no more in sight if you don't let go and clickhold again and fail to repeat combo or you just let go and stop holding again it'll end up launching you a bit past the enemy from the prev launch and it will then have all the spots bc once on enemy gets stuck they get whatever effect that's best to use to make it hard to see and impossible to move check what effect that is and they would get that but then the points make to each entity will form the straightest line and it will pull all of them to that exact line from their position to the closest position to them and that will basically "snap their neck" they take more insane damage and they already were taking damage being chained bc of the effect you find out of the ones we already have made.  
-• Player can redirect the combo with their camera like I said but the weapon will make ur camera movement move at the normal well slowed down movement automatically for you to chain easier unless you move your camera a good amount to not get effected by slight adjustments then it'll let you control it until you let go again.  
-• Every several hits creates a stronger slash.  
-Tweaks:  
-• A: Increase attack speed the longer the combo continues so fast attack speed afterwards for even different weapons if you wanna combo. But it doesn't last too long that attack speed boost. Bc when your attacking your not really attacking with the weapon with left click you will target the thing next to it when u left click so u won't actually hit the mob ur running into the attack slash should be automatic once you get near mob and have piercing a bit and go behind it even. So this will make it so mobs are transparent like almost fully like 90% gone when ur close and make it then so when u go to combo the chain u can't hit the mob ur launched at blocking the chain from continuing. Also it takes up 5% mana each chain.  
-RIGHT — Flash Step  
-Instantly dash in the direction the player is looking.  
-• Works horizontally and vertically.  
-• Can be used in midair.  
-• Can pass through enemies.  
-• Leaves an afterimage like another weapon we have look for that weapon use same code   
-• Damages enemies crossed during the dash.  
-• Short cooldown prevents unlimited spam.  
-Holding right click instead repeatedly performs short Flash Steps as long as stamina/ki remains.  
-Tweaks:  
-• A: Dash behind the targeted enemy instead of toward the crosshair.  
-• B: Allow three consecutive charges before cooldown.  
-• C: Dodging an incoming attack resets the cooldown.  
-Weapon purpose: Best pure combat mobility weapon.  
-  
+This is a prompt audit everything first then create the changes to add the functionality to both weapons!
+
+This is what I'ma give to AI agent what r tips for me: Core Input Rule (ALWAYS IMPLEMENT ALL TWEAKS TOO)
+• Left slot: activates from left click and remains the weapon's primary attack. The ability can be instant, continuously active while held, or charge-based.
+• Right slot: activates from right click and remains the weapon's secondary/special ability. Same flexibility.
+• There are no separate left-click and left-hold abilities. Each weapon has one definitive Left ability and one definitive Right ability.
+• Each ability below has 3 small tweak options that can be selected during implementation without changing the weapon's core identity.
+
 ───
+
+Ox King's Axe
+Identity: Immovable powerhouse — knockback, ground attacks, huge AoE, and battlefield denial.
+LEFT — Groundbreaker
+Hold left click to repeatedly charge the axe.
+• Player becomes increasingly rooted as the charge increases. Until fully unable to move
+• Ground cracks appear beneath the player. Actual visual black cracks
+• Releasing causes an enormous downward strike. Full of actual particles and actual axes texture going to ground 
+• Sends a shockwave across the ground. In 360.
+• Enemies are launched upward and outward.
+• The longer the charge, the larger the shockwave. This means it starts larger and then as it disapates bc it started bigger it takes more blocks traveled to disapate
+• Maximum charge can destroy weak blocks along the shockwave's path if you want that functionality. I do want this also max charge which is going to be 10sec will spawn explosion too that really big.
+Tweaks:
+• A: Shockwave travels farther.
+• B: Shockwave creates multiple smaller secondary waves.
+• C: Maximum charge leaves temporary damaging fissures in the ground.
+RIGHT — Colossal Stance
+Hold right click to become an absolute immovable object.
+• Player cannot be knocked back.
+• Player becomes completely stationary.
+• A huge aura surrounds them bigger then any weapons effect area we did b4
+• Enemies inside are massively slowed.
+• Enemies approaching the player are pushed backward.
+• The axe continuously builds King's Force.
+• Releasing right click causes an enormous AoE slam based on how long you maintained the stance. Max 15sec it will become harder to hold on to and start to damage you massively with % based damage of current health but get to the max ur know by a red flash on ur screen then it'll a sec later fail if you don't time it and it'll fall back on u dealing 25% damage that was built up,if you release b4 that 1 sec buffer u succeed and slam the ground dealing the most damage any weapon has ever does all in 1 tick pure damage aoe in massive area b4 the build up finishes things still r slowed ofc take damage and get pushed out of area which will still be massive but smaller then the explosion radius so still could get damaged a lot.
+Weapon purpose: Best physical battlefield-control weapon.
+
+───
+
+Grand Sword
+Identity: Balanced legendary greatsword — AoE, defense, ranged energy, and team utility.
+LEFT — Grand Cyclone
+Hold left click to continuously spin the greatsword. You will be actually spun around constantly faster and faster
+• Damages enemies repeatedly. When facing them and piercing farther and farther away from player the faster u spin
+• Knocks enemies away.
+• Blocks or deflects projectiles or any ranged attack like ki or something 
+• Player slowly moves while spinning. But not like the can control it well bc if they move str8 there str8 constantly changes
+• Releasing ends the cyclone with a powerful outward slash. The way the person is facing.
+Tweaks:
+• B: Final slash fires a crescent energy wave.
+RIGHT — Valor Field
+Hold right click to create a large energy field around yourself.
+• Allies inside receive Strength and Resistance.
+• You receive the strongest version of the buffs.
+• Enemy projectiles entering the field are slowed or like in water and instead of falling actually just hang in the air and ki attacks hang too they just stay there then break and fall down and disappear after a few seconds b4 they disappear though they will still do full damage to u if u actually go touch them and they will continue along the path if you walk away and the field stops touching them
+• Enemies entering the field are slightly slowed.
+• Continuously drains stamina/ki.
+• Releasing removes the field.
+Tweaks:
+• B: Make it also give attack-speed buffs.
+• C: Allow the field to move with the player while held the field will not stay in a spot it follows the person holding it like the right click for the trident does
+Weapon purpose: Best all-rounder/team-support weapon.
+
+───
+
+Yes — if you mean an AI coding agent, the biggest improvement is to make the prompt resistant to the agent “interpreting” your ideas differently.
+
+- Put a **NON-NEGOTIABLE IMPLEMENTATION RULES** section at the top.
+- Tell it to **inspect the existing code first**, especially your existing weapon, damage, mana/ki, effects, projectile, animation, particle, and cooldown systems.
+- Tell it to **reuse existing systems instead of creating duplicate systems**.
+- Separate **exact requirements** from **optional tweaks**.
+- Explicitly say **do not simplify mechanics** because they seem complicated.
+- Explicitly say **do not silently change mechanics** if something is difficult to implement.
+- Tell it to **make reasonable implementation decisions only where you haven't specified behavior**.
+- Tell it to ask only when a decision would fundamentally change the weapon's identity; otherwise implement it.
+- Require it to **audit its own implementation after coding**.
+- Require it to test **early release, maximum charge, maximum-charge failure, repeated attacks, entity detection, multiplayer/server behavior, and edge cases**.
+- Tell it to inspect existing custom entities/effects before assuming something is vanilla Minecraft.
+- Tell it to preserve your project's existing architecture and conventions.
+- Tell it to avoid adding unnecessary files/classes/systems.
+- Tell it to fix related bugs it discovers only if they directly prevent the requested ability from working; don't redesign unrelated weapons.
+- Most importantly, use language like **“This is a specification, not a suggestion.”**
+
+A particularly useful addition would be:
+
+> **AI AGENT IMPLEMENTATION CONTRACT**
+> - Treat every mechanic explicitly stated below as mandatory.
+> - Do not remove, simplify, reinterpret, replace, or omit mechanics because they are complex.
+> - Do not invent mechanics that are not specified.
+> - Before editing, inspect the existing implementation and identify the systems already available for damage, AoE, knockback, particles, animations, projectiles, effects, mana/ki, cooldowns, and networking.
+> - Reuse existing systems whenever possible.
+> - If an existing system conflicts with this specification, modify the existing system only as much as necessary to satisfy the specification.
+> - Implement the actual gameplay behavior, not merely a visual approximation.
+> - Visual effects must correspond to the actual gameplay event they represent.
+> - All gameplay-critical logic must work correctly server-side in multiplayer.
+> - Do not silently substitute a different mechanic. If something genuinely cannot be implemented as specified, report exactly what prevented it and what portion remains incomplete.
+> - After implementation, perform a full audit against every bullet in this specification and fix anything missing.
+> - Test every ability at minimum charge, during charge, early release, maximum charge, and failure states where applicable.
+> - Do not add arbitrary cooldowns, costs, range limits, damage limits, durations, or restrictions unless specified here or already required by the existing weapon framework.
+> - Preserve the weapon's stated identity. Optional tweaks may modify the behavior specified by the tweak, but may not remove the core mechanics.
+
+This audit might not be right take it with grian of salt first audit whole mod and EVERY weapon and then completly add the functionality to both weapons:
+
+    Viewed new%20weapons%20prompt:1-97
+Listed directory dragonblockarcanedba
+Listed directory item
+Searched for "Ox"
+Searched for "Grand"
+Searched for "ox_kings_ax"
+Viewed DbaItems.java:190-250
+Viewed DbaItems.java:250-320
+Viewed DbaItems.java:320-380
+Viewed DbaItems.java:380-440
+Viewed DragonBlockArcaneDBA.java:80-160
+Viewed SaberItem.java:1-120
+Searched for "LeftClick"
+Viewed DragonBlockArcaneDBAClient.java:200-320
+Viewed DragonBlockArcaneDBAClient.java:320-400
+Viewed ZSwordItem.java:1-140
+Viewed ZSwordItem.java:141-280
+Viewed DevilTridentItem.java:1-180
+Viewed DelayedDamageMixin.java:1-100
+Listed directory entity
+Viewed SkyCracksEntity.java:1-31
+Viewed ZShockwaveEntity.java:1-100
+Viewed DbaEntities.java:1-100
+Listed directory renderer
+Listed directory client
+Listed directory render
+
+Here is a detailed breakdown of what works well, what needs improvement, and the exact tips to make your prompt bulletproof for an AI coding agent—followed by a **ready-to-use, polished Master Prompt** formatted specifically for this codebase.
+
+---
+
+### Key Tips & Why They Matter for AI Agents
+
+#### 1. Eliminate the "Optional Tweaks" Ambiguity
+* **The Problem:** Your prompt lists "Tweaks A, B, C" like optional choices, but your top rule says `(ALWAYS IMPLEMENT ALL TWEAKS TOO)`. AI agents frequently get confused by this and either pick only one tweak or drop some core mechanics to "fit" the tweaks.
+* **The Fix:** Bake all the tweaks directly into the **core specification** as definitive features rather than listing them separately.
+
+#### 2. Explicitly Specify the Fabric Network Architecture for Left-Click
+* **The Problem:** In vanilla Minecraft / Fabric, left-click holding/charging does **not** exist natively (only right-click has `use()` and `onUseTick()`). If you don't tell the agent *how* this repository handles left-click hold, it will either try to turn left-click into standard right-click or write broken mixins.
+* **The Fix:** Explicitly tell the agent to follow the existing repo pattern:
+  1. Register left-click tracking in [DragonBlockArcaneDBAClient.java](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/src/client/java/com/dragonblockarcanedba/client/DragonBlockArcaneDBAClient.java) (`keyAttack.isDown()`, sending [C2SWeaponLeftClickPayload](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/src/main/java/com/dragonblockarcanedba/network/C2SWeaponLeftClickPayload.java)).
+  2. Handle server reception in [DbaNetwork.java](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/src/main/java/com/dragonblockarcanedba/network/DbaNetwork.java).
+  3. Register both weapons in `AttackBlockCallback.EVENT` in [DragonBlockArcaneDBA.java](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/src/main/java/com/dragonblockarcanedba/DragonBlockArcaneDBA.java) to prevent mining while holding left click (as required by [AGENTS.md](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/.agents/AGENTS.md)).
+
+#### 3. Give Exact Math & Tick Timings (Prevent Hallucinations)
+* **The Problem:** Phrases like "enormous damage", "really big explosion", or "massive aura" cause agents to guess arbitrary numbers (e.g., 10 damage vs 1,000,000 damage, 5 blocks vs 50 blocks).
+* **The Fix:** Specify exact base damage, Strength scaling multipliers, radiuses in blocks, and timings in ticks (20 ticks = 1 second).
+
+#### 4. Define the 1-Second Release / Failure Window Mathematically
+* **The Problem:** The King's Force 15-second charge with a 1-second success buffer and 25% recoil failure is a complex state machine. Agents will often simplify it or make it impossible to trigger.
+* **The Fix:** Define the timeline explicitly:
+  * `0s – 14s (0–280 ticks)`: Charging King's Force. Drains % HP or adds pressure.
+  * `14s – 15s (280–300 ticks)`: **Critical Peak Window** (Screen flashes red, audio warning cue). Releasing here triggers the **Ultimate 1-Tick Slam**.
+  * `> 15s (>300 ticks)`: **Stance Overload / Failure**. Stance breaks, user takes 25% built-up damage as recoil, and gets locked in cooldown with no slam.
+
+---
+
+### Copy-Paste Master Prompt for the AI Agent
+
+You can copy and paste the prompt below directly to your AI agent:
+
+```markdown
+# TASK SPECIFICATION: Ox King's Axe & Grand Sword Implementation
+
+## NON-NEGOTIABLE IMPLEMENTATION CONTRACT
+- Treat every mechanic, timing, damage value, and visual effect below as mandatory specification.
+- Do NOT simplify, omit, or replace mechanics because they seem complex.
+- Do NOT invent arbitrary mechanics, cooldowns, or costs not specified here.
+- Minecraft Java 26.2 (Fabric Modloader) architecture must be strictly followed.
+- Inspect and reuse existing systems in this repository:
+  • Left-click holding/charging: `DragonBlockArcaneDBAClient.java` -> `C2SWeaponLeftClickPayload` -> `DbaNetwork.java`.
+  • Rapid-fire / Hold-attack block break prevention: Add both weapons to `AttackBlockCallback.EVENT` in `DragonBlockArcaneDBA.java`.
+  • Right-click abilities: Use vanilla `use()`, `getUseDuration() = 72000`, `ItemUseAnimation.BLOCK`, `onUseTick()`, and `releaseUsing()`.
+  • Stat scaling & Ki/Stamina: Use `PlayerStatsAccessor` (`dba$getCurrentKi()`, `dba$addKi()`, `dba$getCurrentStamina()`, `dba$addStamina()`, `dba$syncStats()`).
+  • Existing weapon classes in `com.dragonblockarcanedba.item.*` (e.g. `ZSwordItem.java`, `SaberItem.java`, `DevilTridentItem.java`).
+  • Replace placeholder `new Item(...)` in `DbaItems.java` with new class instances `new OxKingsAxeItem(...)` and `new GrandSwordItem(...)`.
+
+---
+
+## 1. OX KING'S AXE (`ox_kings_ax`)
+**Identity:** Immovable powerhouse — extreme knockback, ground destruction, massive AoE, and battlefield denial.
+- **Item Stats:** 950 Base Attack Damage, -3.3 Attack Speed (heavy feel).
+
+### LEFT ABILITY: Groundbreaker (Hold Left Click to Charge)
+- **Mechanics:**
+  • **Charging Phase (Up to 10s / 200 ticks):**
+    - Player becomes progressively rooted as charge ticks increase: at 0–2s (50% speed reduction), at 2–5s (80% speed reduction), at 5–10s (completely stationary, 100% rooted, `deltaMovement = (0, y < 0 ? y : 0, 0)`).
+    - Black ground crack visuals appear beneath the player (expanding black dust particles `DustParticleOptions(0x000000, 2.0F)` / ground crack rings).
+    - Drains 2.5% max Ki/Stamina per second during charge.
+  • **Release (Downward Strike & 360° Shockwave):**
+    - Player executes an enormous downward slam with weapon swing and ground impact sound (`SoundEvents.GENERIC_EXPLODE`, `SoundEvents.ANVIL_LAND`).
+    - Unleashes a 360-degree ground shockwave expanding outward.
+    - Shockwave radius and travel distance scale with charge (from 4 blocks at min charge up to 24 blocks at max charge).
+    - Enemies hit are launched violently upward and outward (heavy vertical and radial knockback).
+    - Damage: `350.0f + (chargeRatio * 850.0f) + (Strength * 3.5f * chargeRatio)`.
+  • **Tweaks (All Fully Integrated):**
+    - **Tweak A (Far Travel):** Maximum wave travel range is extended to 24 blocks.
+    - **Tweak B (Secondary Echo Waves):** At >= 50% charge, the primary wave spawns 2 secondary concentric ring waves trailing 0.3s behind it, dealing 40% secondary damage.
+    - **Tweak C (Fissures & Max Charge Destruction):**
+      - At maximum charge (10s), spawns a massive central explosion (`ParticleTypes.EXPLOSION_EMITTER`) and destroys weak terrain blocks along the shockwave path (blocks with blast resistance <= 2.0 like foliage, grass, glass, dirt).
+      - Leaves temporary damaging ground fissures (magma/black dust particles lasting 5 seconds) that deal 50 damage/sec to any enemy standing on them.
+
+### RIGHT ABILITY: Colossal Stance (Hold Right Click)
+- **Mechanics:**
+  • **Stance Active (Hold Right Click, up to 15s / 300 ticks):**
+    - Player becomes completely stationary and 100% immune to knockback.
+    - Massive King's Force aura expands around the player (12-block radius, vibrant orange/red dust and heavy pressure particles).
+    - **Battlefield Denial:** Enemies inside the 12-block aura are heavily slowed (Slowness IV) and continuously pushed outward away from the player.
+    - Continuously builds "King's Force".
+    - Starting at 10 seconds of holding, player takes 3% current HP pressure damage per second.
+  • **Timing Window & Execution:**
+    - **Normal Release (0.5s – 14.0s):** Releases an AoE ground slam dealing `400.0f + (holdRatio * 900.0f) + (Strength * 3.0f * holdRatio)` in a 10-block radius.
+    - **Peak Window (14.0s – 15.0s / 280–300 ticks):** Screen flashes red with a high-pitched heavy warning sound (`SoundEvents.WARDEN_SONIC_CHARGE` / `SoundEvents.BEACON_ACTIVATE`).
+      - If released during this 1.0s window: **Flawless King's Slam**! Unleashes the single highest 1-tick pure damage AoE slam in the game (`2000.0f + Strength * 5.0f`) in a massive 20-block radius, disintegrating weak mobs and applying screen-shake.
+    - **Failure State (> 15.0s / > 300 ticks):** If player fails to release before 15.0s, the stance overloads and collapses:
+      - Player takes 25% of the built-up damage as recoil self-damage.
+      - Stance breaks immediately, applying a 10-second cooldown with no offensive slam.
+
+---
+
+## 2. GRAND SWORD (`grand_sword`)
+**Identity:** Balanced legendary greatsword — continuous AoE spinning, projectile interception, defense, and team utility.
+- **Item Stats:** 850 Base Attack Damage, -2.4 Attack Speed.
+
+### LEFT ABILITY: Grand Cyclone (Hold Left Click)
+- **Mechanics:**
+  • **Continuous Spin (Hold Left Click):**
+    - Continuously spins the player client-side (`player.setYRot(player.getYRot() + spinSpeed)`), accelerating faster the longer it is held (from 15°/tick up to 35°/tick).
+    - Player moves slowly and erratically forward in their current facing direction.
+    - Deals continuous sweeping slash damage to all enemies in a 4.5-block radius every 3 ticks (`120.0f + Strength * 0.8f` per tick).
+    - Knocks enemies away from the spinning blade.
+    - **Projectile Interception:** Deflects, destroys, or bounces away all incoming hostile projectiles (arrows, Ki blasts, tridents) within 4.0 blocks.
+    - Drains 4% max Ki/Stamina per second.
+  • **Release (Outward Slash + Crescent Wave):**
+    - Releasing left click executes a decisive outward finisher slash dealing `450.0f + Strength * 2.0f`.
+    - **Tweak B (Crescent Energy Wave):** The final slash fires a large glowing golden-white crescent energy wave projectile (`GrandCrescentWaveEntity`) in the player's look direction, piercing enemies for `600.0f + Strength * 2.5f`.
+
+### RIGHT ABILITY: Valor Field (Hold Right Click)
+- **Mechanics:**
+  • **Field Activation (Hold Right Click):**
+    - Creates a large 9-block radius golden protective energy dome around the player.
+    - **Tweak C (Mobile Field):** The field moves with the player while held (centered on player position).
+    - Continuously drains 3.5% max Ki / Stamina per second.
+  • **Buffs to Allies & Self:**
+    - Allies inside the field receive Strength II and Resistance II.
+    - The caster receives the strongest version: **Strength III, Resistance III, and Haste II / Attack Speed Boost** (Tweak B).
+    - Enemies entering the field are slowed (Slowness II).
+  • **Projectile Stasis / Hang Mechanics:**
+    - Any hostile enemy projectiles (arrows, Ki blasts, tridents) entering the 9-block field have their velocity reduced to near zero (`setDeltaMovement(vel.scale(0.02))`) and hang suspended in mid-air inside the field.
+    - Suspended projectiles float for up to 4 seconds before breaking/fading away.
+    - If any enemy or player walks into a suspended projectile, it detonates and applies full damage.
+    - If the caster walks away and the field no longer touches the suspended projectiles, they resume their trajectory.
+  • **Release:** Releasing right-click instantly removes the field and buffs.
+
+---
+
+## REQUIRED CODE AUDIT BEFORE COMPLETION
+1. Both items registered in `DbaItems.java` and replaced placeholder `Item` constructors.
+2. Both items added to `AttackBlockCallback.EVENT` in `DragonBlockArcaneDBA.java` to prevent mining while holding left click.
+3. Left-click charging and tick sending wired in `DragonBlockArcaneDBAClient.java`.
+4. Packet handling wired in `DbaNetwork.java` for `C2SWeaponLeftClickPayload`.
+5. All new entities (e.g. `GrandCrescentWaveEntity`, `FissureEntity` / shockwaves) registered in `DbaEntities.java` and client renderers registered in `DragonBlockArcaneDBAClient.java`.
+6. Verified compilation via `python build.py`.
+```

@@ -137,7 +137,7 @@ public class DimensionalSwordItem extends Item {
         AABB aoe = new AABB(center.x - 3, center.y - 1, center.z - 3, center.x + 3, center.y + 2, center.z + 3);
         List<LivingEntity> targets = level.getEntitiesOfClass(LivingEntity.class, aoe, e -> e != owner && e.isAlive());
         for (LivingEntity target : targets) {
-            target.hurtServer(level, level.damageSources().magic(), 750.0f);
+            target.hurtServer(level, level.damageSources().playerAttack(owner), 750.0f);
             target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 200, 1, false, true), owner);
         }
     }

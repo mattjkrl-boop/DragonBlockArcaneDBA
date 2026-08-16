@@ -161,7 +161,7 @@ public class DevilTridentItem extends Item {
                 AABB aoe = player.getBoundingBox().inflate(5.0);
                 List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e != player && e.isAlive());
                 for (LivingEntity t : targets) {
-                    t.hurtServer(serverLevel, serverLevel.damageSources().magic(), 750.0f);
+                    t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), 750.0f);
                     t.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 300, 2, false, true), player);
                     
                     // Ground pull

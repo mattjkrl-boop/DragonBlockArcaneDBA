@@ -210,6 +210,9 @@ public class DbaItems {
     public static final ResourceKey<Item> GRAND_SWORD_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("grand_sword")
     );
+    public static final ResourceKey<Item> DABURA_SWORD_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("dabura_sword")
+    );
     public static final ResourceKey<Item> Z_SWORD_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("z_sword")
     );
@@ -416,6 +419,9 @@ public class DbaItems {
     public static final Item GRAND_SWORD = new Item(
         new Item.Properties().setId(GRAND_SWORD_KEY).stacksTo(1)
     );
+    public static final Item DABURA_SWORD = new Item(
+        new Item.Properties().setId(DABURA_SWORD_KEY).stacksTo(1)
+    );
     public static final Item Z_SWORD = new ZSwordItem(
         new Item.Properties().setId(Z_SWORD_KEY).stacksTo(1)
     );
@@ -436,6 +442,7 @@ public class DbaItems {
             output.accept(SABER);
             output.accept(OX_KINGS_AX);
             output.accept(GRAND_SWORD);
+            output.accept(DABURA_SWORD);
             output.accept(Z_SWORD);
             output.accept(BANSHO_FAN);
             output.accept(WHIS_STAFF);
@@ -593,6 +600,7 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, SABER_KEY, SABER);
         Registry.register(BuiltInRegistries.ITEM, OX_KINGS_AX_KEY, OX_KINGS_AX);
         Registry.register(BuiltInRegistries.ITEM, GRAND_SWORD_KEY, GRAND_SWORD);
+        Registry.register(BuiltInRegistries.ITEM, DABURA_SWORD_KEY, DABURA_SWORD);
         Registry.register(BuiltInRegistries.ITEM, Z_SWORD_KEY, Z_SWORD);
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, DBA_TAB_KEY, DBA_TAB);
         DragonBlockArcaneDBA.LOGGER.info("Registered DBA items");

@@ -244,10 +244,10 @@ public class ZSwordItem extends Item {
                         target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalSlamDamage);
 
                         // Heavily slowed
-                        target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 140, 4, false, true));
+                        target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 140, 4, false, true), player);
 
                         // Tweak A: Completely roots enemies in the ground for 2s (40 ticks), then launches them up and out
-                        target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 40, 9, false, true));
+                        target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 40, 9, false, true), player);
                         launchTargets.add(target);
                     }
                 }

@@ -36,10 +36,13 @@ public abstract class DelayedDamageMixin {
         // Only apply this delayed combo logic to entities that are alive
         if (self.isAlive() && amount > 0) {
             // We apply this to any player attacks or projectiles owned by the player
-            if (source.getEntity() instanceof net.minecraft.world.entity.player.Player) {
+            if (source.getEntity() instanceof net.minecraft.world.entity.player.Player player) {
                 dba$accumulatedDamage += amount;
                 dba$damageDelayTicks = 10; // 0.5 seconds of combo time
                 dba$lastDamageSource = source;
+
+                // Ensure vanilla kill credit & last hurt player are set immediately
+                self.setLastHurtByMob(player);
 
                 // Make the entity flash red and play the hurt animation so it feels responsive!
                 self.level().broadcastEntityEvent(self, (byte) 2); // 2 is the standard hurt animation
