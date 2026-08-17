@@ -128,6 +128,52 @@ public class DbaHudOverlay implements HudElement {
             }
             guiGraphics.text(client.font, net.minecraft.network.chat.Component.literal(text), x, currentY, 0xFFFFFF);
         }
+
+        // Colossal Stance HUD Warning for Ox King's Axe
+        if (player.isUsingItem() && (player.getUseItem().getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem)) {
+            int usedTicks = player.getTicksUsingItem();
+            int screenWidth = client.getWindow().getGuiScaledWidth();
+
+            if (usedTicks >= 280 && usedTicks <= 300) {
+                // Peak Window (14.0s - 15.0s): Flashing red warning frame & release alert!
+                float pulse = 0.5f + 0.5f * (float) Math.sin((player.tickCount + deltaTracker.getGameTimeDeltaPartialTick(false)) * 0.8f);
+                int alpha = (int) (120 + pulse * 120);
+                int redColor = (alpha << 24) | 0x00FF0000;
+
+                // Screen border frame
+                guiGraphics.fill(0, 0, screenWidth, 6, redColor);
+                guiGraphics.fill(0, screenHeight - 6, screenWidth, screenHeight, redColor);
+                guiGraphics.fill(0, 0, 6, screenHeight, redColor);
+                guiGraphics.fill(screenWidth - 6, 0, screenWidth, screenHeight, redColor);
+
+                // Centered alert
+                guiGraphics.centeredText(
+                    client.font,
+                    net.minecraft.network.chat.Component.literal("\u00A7c\u00A7l\u2726 FLAWLESS KING'S SLAM READY \u2014 RELEASE NOW! \u2726"),
+                    screenWidth / 2,
+                    screenHeight / 2 - 30,
+                    0xFFFF2222
+                );
+            } else if (usedTicks > 300) {
+                // Failure overload warning
+                guiGraphics.centeredText(
+                    client.font,
+                    net.minecraft.network.chat.Component.literal("\u00A74\u00A7l\u26A0 STANCE OVERLOADING \u2014 COLLAPSE IMMINENT! \u26A0"),
+                    screenWidth / 2,
+                    screenHeight / 2 - 30,
+                    0xFFFF0000
+                );
+            } else if (usedTicks >= 200) {
+                // Pressure phase
+                guiGraphics.centeredText(
+                    client.font,
+                    net.minecraft.network.chat.Component.literal("\u00A76King's Force: " + String.format("%.1fs", usedTicks / 20.0f) + " / 15.0s [Pressure Active]"),
+                    screenWidth / 2,
+                    screenHeight / 2 - 30,
+                    0xFFFFAA00
+                );
+            }
+        }
     }
     
     private record StyledBar(int y, float percent, int fillColor, int borderColor) {}

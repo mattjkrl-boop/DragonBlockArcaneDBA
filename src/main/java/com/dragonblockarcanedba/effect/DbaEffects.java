@@ -33,6 +33,12 @@ public class DbaEffects {
     public static final ResourceKey<MobEffect> RIFTED_KEY = ResourceKey.create(
         Registries.MOB_EFFECT, DragonBlockArcaneDBA.id("rifted")
     );
+    public static final ResourceKey<MobEffect> VALOR_KEY = ResourceKey.create(
+        Registries.MOB_EFFECT, DragonBlockArcaneDBA.id("valor")
+    );
+    public static final ResourceKey<MobEffect> CINEMATIC_TRACKING_KEY = ResourceKey.create(
+        Registries.MOB_EFFECT, DragonBlockArcaneDBA.id("cinematic_tracking")
+    );
 
     public static final MobEffect BLEEDING = new BleedingEffect();
     public static final MobEffect MELTING = new MeltingEffect();
@@ -42,6 +48,8 @@ public class DbaEffects {
     public static final MobEffect HOLLOWED = new HollowedEffect();
     public static final MobEffect DARK_FADED = new DarkFadedEffect();
     public static final MobEffect RIFTED = new RiftedEffect();
+    public static final MobEffect VALOR = new ValorEffect();
+    public static final MobEffect CINEMATIC_TRACKING = new CinematicTrackingEffect();
     
     public static Holder<MobEffect> BLEEDING_HOLDER;
     public static Holder<MobEffect> MELTING_HOLDER;
@@ -51,6 +59,8 @@ public class DbaEffects {
     public static Holder<MobEffect> HOLLOWED_HOLDER;
     public static Holder<MobEffect> DARK_FADED_HOLDER;
     public static Holder<MobEffect> RIFTED_HOLDER;
+    public static Holder<MobEffect> VALOR_HOLDER;
+    public static Holder<MobEffect> CINEMATIC_TRACKING_HOLDER;
 
     public static void register() {
         BLEEDING_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, BLEEDING_KEY, BLEEDING);
@@ -61,6 +71,8 @@ public class DbaEffects {
         HOLLOWED_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, HOLLOWED_KEY, HOLLOWED);
         DARK_FADED_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, DARK_FADED_KEY, DARK_FADED);
         RIFTED_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, RIFTED_KEY, RIFTED);
+        VALOR_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, VALOR_KEY, VALOR);
+        CINEMATIC_TRACKING_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, CINEMATIC_TRACKING_KEY, CINEMATIC_TRACKING);
         DragonBlockArcaneDBA.LOGGER.info("Registered DBA effects");
     }
 }

@@ -180,6 +180,11 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
         if (killer == null || !(killer instanceof net.minecraft.server.level.ServerPlayer)) {
             killer = entity.getKillCredit();
         }
+        if (killer == null || !(killer instanceof net.minecraft.server.level.ServerPlayer)) {
+            if (entity.getLastHurtByMob() instanceof net.minecraft.server.level.ServerPlayer lastHurtPlayer) {
+                killer = lastHurtPlayer;
+            }
+        }
 
         if (killer == null || !(killer instanceof net.minecraft.server.level.ServerPlayer)) {
             for (net.minecraft.world.effect.MobEffectInstance instance : entity.getActiveEffects()) {

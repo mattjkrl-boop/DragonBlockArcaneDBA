@@ -23,6 +23,9 @@ public abstract class DelayedDamageMixin {
     private DamageSource dba$lastDamageSource = null;
 
     @Unique
+    private net.minecraft.world.entity.player.Player dba$lastPlayer = null;
+
+    @Unique
     private boolean dba$isApplyingDelayedDamage = false;
 
     @Inject(method = "hurtServer", at = @At("HEAD"), cancellable = true)
@@ -40,6 +43,12 @@ public abstract class DelayedDamageMixin {
                 dba$accumulatedDamage += amount;
                 dba$damageDelayTicks = 10; // 0.5 seconds of combo time
                 dba$lastDamageSource = source;
+                dba$lastPlayer = player;
+
+                // Automatically apply invisible cinematic tracking effect to track all player weapon damage
+                self.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 15, 0, false, false, false
+                ), player);
 
                 // Ensure vanilla kill credit & last hurt player are set immediately
                 self.setLastHurtByMob(player);
@@ -63,8 +72,16 @@ public abstract class DelayedDamageMixin {
             // Check for cinematic CC effects that should lock the damage combo
             boolean isCinematicallyLocked = false;
             
-            // Z-Sword & Curse Blade root/lift
-            if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER)) {
+            // Universal Cinematic Tracking Effect (Invisible damage combo lock)
+            if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER)) {
+                isCinematicallyLocked = true;
+            }
+            // Slowness (Blade Hazard CC, Freeze, battlefield denial)
+            else if (self.hasEffect(net.minecraft.world.effect.MobEffects.SLOWNESS)) {
+                isCinematicallyLocked = true;
+            }
+            // Z-Sword, Axe & Curse Blade root/lift
+            else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER)) {
                 isCinematicallyLocked = true;
             }
             // Devil Trident ground pull
@@ -84,13 +101,6 @@ public abstract class DelayedDamageMixin {
             else if (self.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION)) {
                 isCinematicallyLocked = true;
             }
-            // Whis Staff & Power Pole (Slowness Freeze)
-            else if (self.hasEffect(net.minecraft.world.effect.MobEffects.SLOWNESS)) {
-                var effect = self.getEffect(net.minecraft.world.effect.MobEffects.SLOWNESS);
-                if (effect != null && effect.getAmplifier() >= 9) {
-                    isCinematicallyLocked = true;
-                }
-            }
             
             if (isCinematicallyLocked) {
                 // Keep the buffer at exactly 0.5s (10 ticks) so it pops immediately after the effect wears off
@@ -103,7 +113,13 @@ public abstract class DelayedDamageMixin {
                 // Time to apply the massive accumulated damage!
                 dba$isApplyingDelayedDamage = true;
                 if (self.level() instanceof ServerLevel serverLevel) {
-                    DamageSource source = dba$lastDamageSource != null ? dba$lastDamageSource : serverLevel.damageSources().generic();
+                    DamageSource source = dba$lastDamageSource != null 
+                        ? dba$lastDamageSource 
+                        : (dba$lastPlayer != null ? serverLevel.damageSources().playerAttack(dba$lastPlayer) : serverLevel.damageSources().generic());
+                    
+                    if (dba$lastPlayer != null) {
+                        self.setLastHurtByMob(dba$lastPlayer);
+                    }
                     self.hurtServer(serverLevel, source, dba$accumulatedDamage);
                 }
                 dba$isApplyingDelayedDamage = false;
@@ -111,6 +127,7 @@ public abstract class DelayedDamageMixin {
                 // Reset
                 dba$accumulatedDamage = 0.0f;
                 dba$lastDamageSource = null;
+                dba$lastPlayer = null;
             }
         }
     }
