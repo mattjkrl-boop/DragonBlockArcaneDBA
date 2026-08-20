@@ -73,6 +73,9 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             ResourceKey.create(Registries.PLACED_FEATURE, id("silver_ore"))
         );
 
+        // Initialize default built-in registries (Races, Forms)
+        com.dragonblockarcanedba.registry.DbaRegistries.initDefaults();
+
         // Register Entities
         com.dragonblockarcanedba.entity.DbaEntities.register();
 
