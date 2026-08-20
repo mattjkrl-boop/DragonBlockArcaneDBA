@@ -1,266 +1,228 @@
-This is a prompt audit everything first then create the changes to add the functionality to both weapons!
+# DRAGON BLOCK ARCANE (DBA) — COMPLETE WEAPONS DESIGN SPECIFICATION & MASTER PROMPT
 
-This is what I'ma give to AI agent what r tips for me: Core Input Rule (ALWAYS IMPLEMENT ALL TWEAKS TOO)
+Core Input Rule (ALWAYS IMPLEMENT ALL TWEAKS & PASSIVES):
 • Left slot: activates from left click and remains the weapon's primary attack. The ability can be instant, continuously active while held, or charge-based.
 • Right slot: activates from right click and remains the weapon's secondary/special ability. Same flexibility.
 • There are no separate left-click and left-hold abilities. Each weapon has one definitive Left ability and one definitive Right ability.
-• Each ability below has 3 small tweak options that can be selected during implementation without changing the weapon's core identity.
+• Each ability has 3 integrated tweaks/features that are fully realized in gameplay without changing the weapon's core identity.
 
 ───
-
-Ox King's Axe
-Identity: Immovable powerhouse — knockback, ground attacks, huge AoE, and battlefield denial.
-LEFT — Groundbreaker
-Hold left click to repeatedly charge the axe.
-• Player becomes increasingly rooted as the charge increases. Until fully unable to move
-• Ground cracks appear beneath the player. Actual visual black cracks
-• Releasing causes an enormous downward strike. Full of actual particles and actual axes texture going to ground 
-• Sends a shockwave across the ground. In 360.
-• Enemies are launched upward and outward.
-• The longer the charge, the larger the shockwave. This means it starts larger and then as it disapates bc it started bigger it takes more blocks traveled to disapate
-• Maximum charge can destroy weak blocks along the shockwave's path if you want that functionality. I do want this also max charge which is going to be 10sec will spawn explosion too that really big.
-Tweaks:
-• A: Shockwave travels farther.
-• B: Shockwave creates multiple smaller secondary waves.
-• C: Maximum charge leaves temporary damaging fissures in the ground.
-RIGHT — Colossal Stance
-Hold right click to become an absolute immovable object.
-• Player cannot be knocked back.
-• Player becomes completely stationary.
-• A huge aura surrounds them bigger then any weapons effect area we did b4
-• Enemies inside are massively slowed.
-• Enemies approaching the player are pushed backward.
-• The axe continuously builds King's Force.
-• Releasing right click causes an enormous AoE slam based on how long you maintained the stance. Max 15sec it will become harder to hold on to and start to damage you massively with % based damage of current health but get to the max ur know by a red flash on ur screen then it'll a sec later fail if you don't time it and it'll fall back on u dealing 25% damage that was built up,if you release b4 that 1 sec buffer u succeed and slam the ground dealing the most damage any weapon has ever does all in 1 tick pure damage aoe in massive area b4 the build up finishes things still r slowed ofc take damage and get pushed out of area which will still be massive but smaller then the explosion radius so still could get damaged a lot.
-Weapon purpose: Best physical battlefield-control weapon.
-
-───
-
-Grand Sword
-Identity: Balanced legendary greatsword — AoE, defense, ranged energy, and team utility.
-LEFT — Grand Cyclone
-Hold left click to continuously spin the greatsword. You will be actually spun around constantly faster and faster
-• Damages enemies repeatedly. When facing them and piercing farther and farther away from player the faster u spin
-• Knocks enemies away.
-• Blocks or deflects projectiles or any ranged attack like ki or something 
-• Player slowly moves while spinning. But not like the can control it well bc if they move str8 there str8 constantly changes
-• Releasing ends the cyclone with a powerful outward slash. The way the person is facing.
-Tweaks:
-• B: Final slash fires a crescent energy wave.
-RIGHT — Valor Field
-Hold right click to create a large energy field around yourself.
-• Allies inside receive Strength and Resistance.
-• You receive the strongest version of the buffs.
-• Enemy projectiles entering the field are slowed or like in water and instead of falling actually just hang in the air and ki attacks hang too they just stay there then break and fall down and disappear after a few seconds b4 they disappear though they will still do full damage to u if u actually go touch them and they will continue along the path if you walk away and the field stops touching them
-• Enemies entering the field are slightly slowed.
-• Continuously drains stamina/ki.
-• Releasing removes the field.
-Tweaks:
-• B: Make it also give attack-speed buffs.
-• C: Allow the field to move with the player while held the field will not stay in a spot it follows the person holding it like the right click for the trident does
-Weapon purpose: Best all-rounder/team-support weapon.
-
-───
-
-Yes — if you mean an AI coding agent, the biggest improvement is to make the prompt resistant to the agent “interpreting” your ideas differently.
-
-- Put a **NON-NEGOTIABLE IMPLEMENTATION RULES** section at the top.
-- Tell it to **inspect the existing code first**, especially your existing weapon, damage, mana/ki, effects, projectile, animation, particle, and cooldown systems.
-- Tell it to **reuse existing systems instead of creating duplicate systems**.
-- Separate **exact requirements** from **optional tweaks**.
-- Explicitly say **do not simplify mechanics** because they seem complicated.
-- Explicitly say **do not silently change mechanics** if something is difficult to implement.
-- Tell it to **make reasonable implementation decisions only where you haven't specified behavior**.
-- Tell it to ask only when a decision would fundamentally change the weapon's identity; otherwise implement it.
-- Require it to **audit its own implementation after coding**.
-- Require it to test **early release, maximum charge, maximum-charge failure, repeated attacks, entity detection, multiplayer/server behavior, and edge cases**.
-- Tell it to inspect existing custom entities/effects before assuming something is vanilla Minecraft.
-- Tell it to preserve your project's existing architecture and conventions.
-- Tell it to avoid adding unnecessary files/classes/systems.
-- Tell it to fix related bugs it discovers only if they directly prevent the requested ability from working; don't redesign unrelated weapons.
-- Most importantly, use language like **“This is a specification, not a suggestion.”**
-
-A particularly useful addition would be:
-
-> **AI AGENT IMPLEMENTATION CONTRACT**
-> - Treat every mechanic explicitly stated below as mandatory.
-> - Do not remove, simplify, reinterpret, replace, or omit mechanics because they are complex.
-> - Do not invent mechanics that are not specified.
-> - Before editing, inspect the existing implementation and identify the systems already available for damage, AoE, knockback, particles, animations, projectiles, effects, mana/ki, cooldowns, and networking.
-> - Reuse existing systems whenever possible.
-> - If an existing system conflicts with this specification, modify the existing system only as much as necessary to satisfy the specification.
-> - Implement the actual gameplay behavior, not merely a visual approximation.
-> - Visual effects must correspond to the actual gameplay event they represent.
-> - All gameplay-critical logic must work correctly server-side in multiplayer.
-> - Do not silently substitute a different mechanic. If something genuinely cannot be implemented as specified, report exactly what prevented it and what portion remains incomplete.
-> - After implementation, perform a full audit against every bullet in this specification and fix anything missing.
-> - Test every ability at minimum charge, during charge, early release, maximum charge, and failure states where applicable.
-> - Do not add arbitrary cooldowns, costs, range limits, damage limits, durations, or restrictions unless specified here or already required by the existing weapon framework.
-> - Preserve the weapon's stated identity. Optional tweaks may modify the behavior specified by the tweak, but may not remove the core mechanics.
-
-This audit might not be right take it with grian of salt first audit whole mod and EVERY weapon and then completly add the functionality to both weapons:
-
-    Viewed new%20weapons%20prompt:1-97
-Listed directory dragonblockarcanedba
-Listed directory item
-Searched for "Ox"
-Searched for "Grand"
-Searched for "ox_kings_ax"
-Viewed DbaItems.java:190-250
-Viewed DbaItems.java:250-320
-Viewed DbaItems.java:320-380
-Viewed DbaItems.java:380-440
-Viewed DragonBlockArcaneDBA.java:80-160
-Viewed SaberItem.java:1-120
-Searched for "LeftClick"
-Viewed DragonBlockArcaneDBAClient.java:200-320
-Viewed DragonBlockArcaneDBAClient.java:320-400
-Viewed ZSwordItem.java:1-140
-Viewed ZSwordItem.java:141-280
-Viewed DevilTridentItem.java:1-180
-Viewed DelayedDamageMixin.java:1-100
-Listed directory entity
-Viewed SkyCracksEntity.java:1-31
-Viewed ZShockwaveEntity.java:1-100
-Viewed DbaEntities.java:1-100
-Listed directory renderer
-Listed directory client
-Listed directory render
-
-Here is a detailed breakdown of what works well, what needs improvement, and the exact tips to make your prompt bulletproof for an AI coding agent—followed by a **ready-to-use, polished Master Prompt** formatted specifically for this codebase.
-
----
-
-### Key Tips & Why They Matter for AI Agents
-
-#### 1. Eliminate the "Optional Tweaks" Ambiguity
-* **The Problem:** Your prompt lists "Tweaks A, B, C" like optional choices, but your top rule says `(ALWAYS IMPLEMENT ALL TWEAKS TOO)`. AI agents frequently get confused by this and either pick only one tweak or drop some core mechanics to "fit" the tweaks.
-* **The Fix:** Bake all the tweaks directly into the **core specification** as definitive features rather than listing them separately.
-
-#### 2. Explicitly Specify the Fabric Network Architecture for Left-Click
-* **The Problem:** In vanilla Minecraft / Fabric, left-click holding/charging does **not** exist natively (only right-click has `use()` and `onUseTick()`). If you don't tell the agent *how* this repository handles left-click hold, it will either try to turn left-click into standard right-click or write broken mixins.
-* **The Fix:** Explicitly tell the agent to follow the existing repo pattern:
-  1. Register left-click tracking in [DragonBlockArcaneDBAClient.java](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/src/client/java/com/dragonblockarcanedba/client/DragonBlockArcaneDBAClient.java) (`keyAttack.isDown()`, sending [C2SWeaponLeftClickPayload](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/src/main/java/com/dragonblockarcanedba/network/C2SWeaponLeftClickPayload.java)).
-  2. Handle server reception in [DbaNetwork.java](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/src/main/java/com/dragonblockarcanedba/network/DbaNetwork.java).
-  3. Register both weapons in `AttackBlockCallback.EVENT` in [DragonBlockArcaneDBA.java](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/src/main/java/com/dragonblockarcanedba/DragonBlockArcaneDBA.java) to prevent mining while holding left click (as required by [AGENTS.md](file:///c:/Users/carte/Documents/Code/MC%20Mods/DragonBlockArcaneDBA/.agents/AGENTS.md)).
-
-#### 3. Give Exact Math & Tick Timings (Prevent Hallucinations)
-* **The Problem:** Phrases like "enormous damage", "really big explosion", or "massive aura" cause agents to guess arbitrary numbers (e.g., 10 damage vs 1,000,000 damage, 5 blocks vs 50 blocks).
-* **The Fix:** Specify exact base damage, Strength scaling multipliers, radiuses in blocks, and timings in ticks (20 ticks = 1 second).
-
-#### 4. Define the 1-Second Release / Failure Window Mathematically
-* **The Problem:** The King's Force 15-second charge with a 1-second success buffer and 25% recoil failure is a complex state machine. Agents will often simplify it or make it impossible to trigger.
-* **The Fix:** Define the timeline explicitly:
-  * `0s – 14s (0–280 ticks)`: Charging King's Force. Drains % HP or adds pressure.
-  * `14s – 15s (280–300 ticks)`: **Critical Peak Window** (Screen flashes red, audio warning cue). Releasing here triggers the **Ultimate 1-Tick Slam**.
-  * `> 15s (>300 ticks)`: **Stance Overload / Failure**. Stance breaks, user takes 25% built-up damage as recoil, and gets locked in cooldown with no slam.
-
----
-
-### Copy-Paste Master Prompt for the AI Agent
-
-You can copy and paste the prompt below directly to your AI agent:
 
 ```markdown
-# TASK SPECIFICATION: Ox King's Axe & Grand Sword Implementation
+## 15. Darkness Sword (`dabura_sword`)
+Identity: Abyssal Darkness Weapon — overwhelming darkness manipulation, void slashes, enemy suppression, and a devastating eclipse domain.
+Stats: 850 Base Attack Damage, -1.8 Attack Speed.
 
-## NON-NEGOTIABLE IMPLEMENTATION CONTRACT
-- Treat every mechanic, timing, damage value, and visual effect below as mandatory specification.
-- Do NOT simplify, omit, or replace mechanics because they seem complex.
-- Do NOT invent arbitrary mechanics, cooldowns, or costs not specified here.
-- Minecraft Java 26.2 (Fabric Modloader) architecture must be strictly followed.
-- Inspect and reuse existing systems in this repository:
-  • Left-click holding/charging: `DragonBlockArcaneDBAClient.java` -> `C2SWeaponLeftClickPayload` -> `DbaNetwork.java`.
-  • Rapid-fire / Hold-attack block break prevention: Add both weapons to `AttackBlockCallback.EVENT` in `DragonBlockArcaneDBA.java`.
-  • Right-click abilities: Use vanilla `use()`, `getUseDuration() = 72000`, `ItemUseAnimation.BLOCK`, `onUseTick()`, and `releaseUsing()`.
-  • Stat scaling & Ki/Stamina: Use `PlayerStatsAccessor` (`dba$getCurrentKi()`, `dba$addKi()`, `dba$getCurrentStamina()`, `dba$addStamina()`, `dba$syncStats()`).
-  • Existing weapon classes in `com.dragonblockarcanedba.item.*` (e.g. `ZSwordItem.java`, `SaberItem.java`, `DevilTridentItem.java`).
-  • Replace placeholder `new Item(...)` in `DbaItems.java` with new class instances `new OxKingsAxeItem(...)` and `new GrandSwordItem(...)`.
+LEFT — Abyssal Slash
+Hold left click to charge darkness into the blade, up to 8s / 160 ticks.
+• The sword progressively becomes surrounded by black/purple energy and darkness particles.
+• Releasing fires a massive crescent-shaped darkness wave in the direction faced.
+• The wave travels up to 32 blocks and damages every entity it passes through.
+• Enemies hit receive Darkness and Slowness IV for 5 seconds.
+• Fully charged attacks create a secondary smaller wave behind the primary wave.
+• Damage: 400.0 + (chargeRatio * 800.0) + (Strength * 3.0 * chargeRatio).
 
----
+Tweaks:
+• A: Fully charged slash creates 2 additional delayed darkness waves.
+• B: Darkness wave pierces through terrain and entities without disappearing.
+• C: Enemies struck multiple times become increasingly slowed and weakened.
 
-## 1. OX KING'S AXE (`ox_kings_ax`)
-**Identity:** Immovable powerhouse — extreme knockback, ground destruction, massive AoE, and battlefield denial.
-- **Item Stats:** 950 Base Attack Damage, -3.3 Attack Speed (heavy feel).
+RIGHT — World of Darkness
+Hold right click to create an expanding darkness domain around the player, up to 15s / 300 ticks.
+• Domain expands from 8 to 30 blocks based on charge.
+• The entire area becomes visually consumed by swirling black/purple darkness.
+• Enemies inside receive Darkness, Nausea, Slowness IV, and Weakness.
+• Hostile projectiles entering the domain are slowed dramatically.
+• At maximum charge, the domain triggers Abyssal Eclipse:
+  - The sky darkens.
+  - All enemies inside are briefly suspended.
+  - Multiple enormous darkness blades fall through the domain.
+  - Final burst deals 1200.0 + (Strength * 4.0) magic damage.
+• 5-second cooldown after maximum-charge Eclipse.
 
-### LEFT ABILITY: Groundbreaker (Hold Left Click to Charge)
-- **Mechanics:**
-  • **Charging Phase (Up to 10s / 200 ticks):**
-    - Player becomes progressively rooted as charge ticks increase: at 0–2s (50% speed reduction), at 2–5s (80% speed reduction), at 5–10s (completely stationary, 100% rooted, `deltaMovement = (0, y < 0 ? y : 0, 0)`).
-    - Black ground crack visuals appear beneath the player (expanding black dust particles `DustParticleOptions(0x000000, 2.0F)` / ground crack rings).
-    - Drains 2.5% max Ki/Stamina per second during charge.
-  • **Release (Downward Strike & 360° Shockwave):**
-    - Player executes an enormous downward slam with weapon swing and ground impact sound (`SoundEvents.GENERIC_EXPLODE`, `SoundEvents.ANVIL_LAND`).
-    - Unleashes a 360-degree ground shockwave expanding outward.
-    - Shockwave radius and travel distance scale with charge (from 4 blocks at min charge up to 24 blocks at max charge).
-    - Enemies hit are launched violently upward and outward (heavy vertical and radial knockback).
-    - Damage: `350.0f + (chargeRatio * 850.0f) + (Strength * 3.5f * chargeRatio)`.
-  • **Tweaks (All Fully Integrated):**
-    - **Tweak A (Far Travel):** Maximum wave travel range is extended to 24 blocks.
-    - **Tweak B (Secondary Echo Waves):** At >= 50% charge, the primary wave spawns 2 secondary concentric ring waves trailing 0.3s behind it, dealing 40% secondary damage.
-    - **Tweak C (Fissures & Max Charge Destruction):**
-      - At maximum charge (10s), spawns a massive central explosion (`ParticleTypes.EXPLOSION_EMITTER`) and destroys weak terrain blocks along the shockwave path (blocks with blast resistance <= 2.0 like foliage, grass, glass, dirt).
-      - Leaves temporary damaging ground fissures (magma/black dust particles lasting 5 seconds) that deal 50 damage/sec to any enemy standing on them.
+Tweaks:
+• A: Domain dynamically follows the player while held.
+• B: Enemy projectiles are heavily slowed and can be suspended inside the domain.
+• C: Maximum charge triggers the full Abyssal Eclipse execution.
 
-### RIGHT ABILITY: Colossal Stance (Hold Right Click)
-- **Mechanics:**
-  • **Stance Active (Hold Right Click, up to 15s / 300 ticks):**
-    - Player becomes completely stationary and 100% immune to knockback.
-    - Massive King's Force aura expands around the player (12-block radius, vibrant orange/red dust and heavy pressure particles).
-    - **Battlefield Denial:** Enemies inside the 12-block aura are heavily slowed (Slowness IV) and continuously pushed outward away from the player.
-    - Continuously builds "King's Force".
-    - Starting at 10 seconds of holding, player takes 3% current HP pressure damage per second.
-  • **Timing Window & Execution:**
-    - **Normal Release (0.5s – 14.0s):** Releases an AoE ground slam dealing `400.0f + (holdRatio * 900.0f) + (Strength * 3.0f * holdRatio)` in a 10-block radius.
-    - **Peak Window (14.0s – 15.0s / 280–300 ticks):** Screen flashes red with a high-pitched heavy warning sound (`SoundEvents.WARDEN_SONIC_CHARGE` / `SoundEvents.BEACON_ACTIVATE`).
-      - If released during this 1.0s window: **Flawless King's Slam**! Unleashes the single highest 1-tick pure damage AoE slam in the game (`2000.0f + Strength * 5.0f`) in a massive 20-block radius, disintegrating weak mobs and applying screen-shake.
-    - **Failure State (> 15.0s / > 300 ticks):** If player fails to release before 15.0s, the stance overloads and collapses:
-      - Player takes 25% of the built-up damage as recoil self-damage.
-      - Stance breaks immediately, applying a 10-second cooldown with no offensive slam.
+Weapon purpose: Ultimate darkness-control sword, combining enormous ranged slashes with oppressive battlefield-wide debuffs.
 
 ---
 
-## 2. GRAND SWORD (`grand_sword`)
-**Identity:** Balanced legendary greatsword — continuous AoE spinning, projectile interception, defense, and team utility.
-- **Item Stats:** 850 Base Attack Damage, -2.4 Attack Speed.
+## 16. Evil Spear (`evil_spear`)
+Identity: Cursed Hunter Weapon — target marking, supernatural spear throws, enemy impalement, and chained executions.
+Stats: 800 Base Attack Damage, -1.6 Attack Speed.
 
-### LEFT ABILITY: Grand Cyclone (Hold Left Click)
-- **Mechanics:**
-  • **Continuous Spin (Hold Left Click):**
-    - Continuously spins the player client-side (`player.setYRot(player.getYRot() + spinSpeed)`), accelerating faster the longer it is held (from 15°/tick up to 35°/tick).
-    - Player moves slowly and erratically forward in their current facing direction.
-    - Deals continuous sweeping slash damage to all enemies in a 4.5-block radius every 3 ticks (`120.0f + Strength * 0.8f` per tick).
-    - Knocks enemies away from the spinning blade.
-    - **Projectile Interception:** Deflects, destroys, or bounces away all incoming hostile projectiles (arrows, Ki blasts, tridents) within 4.0 blocks.
-    - Drains 4% max Ki/Stamina per second.
-  • **Release (Outward Slash + Crescent Wave):**
-    - Releasing left click executes a decisive outward finisher slash dealing `450.0f + Strength * 2.0f`.
-    - **Tweak B (Crescent Energy Wave):** The final slash fires a large glowing golden-white crescent energy wave projectile (`GrandCrescentWaveEntity`) in the player's look direction, piercing enemies for `600.0f + Strength * 2.5f`.
+LEFT — Evil Impale
+Hold left click to charge the spear for up to 6s / 120 ticks.
+• The spear gathers dark red energy while charging.
+• Releasing launches a high-speed spectral spear toward the aimed target.
+• The spear pierces through entities and continues traveling until its range is exhausted.
+• The first enemy hit becomes Marked by Evil for 8 seconds.
+• Marked enemies receive increasing damage from subsequent Evil Spear attacks.
+• Damage: 450.0 + (chargeRatio * 700.0) + (Strength * 3.0 * chargeRatio).
+• On impact, a short-range dark shockwave pushes nearby enemies away from the impaled target.
 
-### RIGHT ABILITY: Valor Field (Hold Right Click)
-- **Mechanics:**
-  • **Field Activation (Hold Right Click):**
-    - Creates a large 9-block radius golden protective energy dome around the player.
-    - **Tweak C (Mobile Field):** The field moves with the player while held (centered on player position).
-    - Continuously drains 3.5% max Ki / Stamina per second.
-  • **Buffs to Allies & Self:**
-    - Allies inside the field receive Strength II and Resistance II.
-    - The caster receives the strongest version: **Strength III, Resistance III, and Haste II / Attack Speed Boost** (Tweak B).
-    - Enemies entering the field are slowed (Slowness II).
-  • **Projectile Stasis / Hang Mechanics:**
-    - Any hostile enemy projectiles (arrows, Ki blasts, tridents) entering the 9-block field have their velocity reduced to near zero (`setDeltaMovement(vel.scale(0.02))`) and hang suspended in mid-air inside the field.
-    - Suspended projectiles float for up to 4 seconds before breaking/fading away.
-    - If any enemy or player walks into a suspended projectile, it detonates and applies full damage.
-    - If the caster walks away and the field no longer touches the suspended projectiles, they resume their trajectory.
-  • **Release:** Releasing right-click instantly removes the field and buffs.
+Tweaks:
+• A: Spear pierces multiple enemies and applies the Evil Mark to every target hit.
+• B: Marked enemies are slowly pulled toward the spear's impact point.
+• C: Killing a Marked enemy causes the spear to automatically seek another nearby enemy.
+
+RIGHT — Hell Hunt
+Right click locks onto an enemy within 32 blocks.
+• The target receives a large visible Evil Mark.
+• Player immediately launches toward the target at extreme speed.
+• On arrival, the player performs a devastating downward spear strike.
+• The target is driven into the ground and temporarily rooted.
+• A circular demonic shockwave erupts from the impact point.
+• If additional Marked enemies are nearby, the spear automatically chains to them.
+• Each chained target increases the final impact damage.
+• Maximum of 8 chained targets.
+• 5-second cooldown after the chain ends.
+
+Tweaks:
+• A: Chains automatically select the nearest Marked enemy.
+• B: Each successful chain increases attack speed and movement speed for 2 seconds.
+• C: Final target receives a much larger execution strike based on the number of chained enemies.
+
+Weapon purpose: High-mobility cursed spear focused on marking, hunting, piercing, and chaining executions between enemies.
 
 ---
 
-## REQUIRED CODE AUDIT BEFORE COMPLETION
-1. Both items registered in `DbaItems.java` and replaced placeholder `Item` constructors.
-2. Both items added to `AttackBlockCallback.EVENT` in `DragonBlockArcaneDBA.java` to prevent mining while holding left click.
-3. Left-click charging and tick sending wired in `DragonBlockArcaneDBAClient.java`.
-4. Packet handling wired in `DbaNetwork.java` for `C2SWeaponLeftClickPayload`.
-5. All new entities (e.g. `GrandCrescentWaveEntity`, `FissureEntity` / shockwaves) registered in `DbaEntities.java` and client renderers registered in `DragonBlockArcaneDBAClient.java`.
-6. Verified compilation via `python build.py`.
+## 17. Katana (`katana`)
+Identity: Supreme Speed Weapon — precision swordsmanship, instant movement, enemy tagging, and cinematic multi-target execution.
+Stats: 780 Base Attack Damage, 0.5 Attack Speed.
+
+LEFT — Flashdraw
+Hold left click to enter a rapid sword-drawing stance.
+• Player becomes briefly locked into the aimed direction.
+• Nearby enemies within 16 blocks are automatically detected.
+• Releasing instantly dashes through the selected target.
+• Every enemy crossed during the dash receives a Silent Mark.
+• No damage occurs immediately.
+• After the dash finishes, all marked enemies are simultaneously struck.
+• Damage: 500.0 + (Strength * 2.5) per marked target.
+• The player then returns to normal movement with a brief afterimage trail.
+
+Tweaks:
+• A: Automatically chains through additional enemies within 16 blocks.
+• B: Every consecutive target increases the final strike damage.
+• C: Player receives a brief invulnerability window during the dash.
+
+RIGHT — Iaijutsu: Heaven Splitter
+Hold right click to charge an ultimate precision slash.
+• Charging lasts up to 5 seconds.
+• Player becomes completely still while preparing the strike.
+• A thin energy line appears along the player's aim direction.
+• Releasing instantly dashes forward along that line.
+• Every entity intersecting the line is struck simultaneously.
+• A short delay occurs after the dash before the damage lands.
+• The delayed slash creates a massive vertical energy cut.
+• Damage: 1000.0 + (chargeRatio * 1000.0) + (Strength * 4.0 * chargeRatio).
+• 4-second cooldown.
+
+Tweaks:
+• A: Longer charge increases slash width.
+• B: Slash can automatically redirect toward the nearest enemy intersecting the attack path.
+• C: Killing an enemy with Heaven Splitter immediately restores one Flashdraw charge/window.
+
+Weapon purpose: Pure high-speed assassin weapon — minimal area spam, maximum precision, movement, timing, and cinematic instant kills.
+
+---
+
+## 18. Blaster Gun (`blaster_gun`)
+Identity: Energy Firearm — ammunition management, rapid energy projectiles, heat buildup, charged shots, and devastating beam fire.
+Stats: 450 Base Attack Damage.
+
+AMMO — Blaster Ammo (`blaster_ammo`)
+• Used exclusively by the Blaster Gun.
+• Each standard shot consumes 1 ammunition.
+• Heavy attacks consume additional ammunition based on charge.
+• Ammunition is visibly tracked through the weapon's current ammo state.
+• The weapon cannot fire when insufficient ammunition is available.
+
+LEFT — Blaster Barrage
+Hold left click to continuously fire energy blasts while ammunition remains.
+• Each shot consumes 1 Blaster Ammo.
+• Projectiles travel extremely quickly with a bright energy trail.
+• Shots automatically aim toward the player's crosshair.
+• Repeatedly hitting the same target builds Heat.
+• Heat increases projectile damage and size.
+• At maximum Heat, the next shot becomes an Overcharged Blast.
+• Standard damage: 250.0 + (Spirit * 1.5).
+• Overcharged Blast damage: 700.0 + (Spirit * 3.0).
+• Overcharged shots consume 3 ammunition.
+
+Tweaks:
+• A: Projectiles pierce through multiple enemies.
+• B: Successful consecutive hits increase Heat faster and increase projectile size.
+• C: Overcharged Blast creates a small explosion on impact.
+
+RIGHT — Erasure Cannon
+Hold right click to charge an enormous energy cannon.
+• Requires ammunition to begin charging.
+• Charging creates progressively larger energy particles around the gun.
+• Player movement becomes progressively slower while charging.
+• Releasing fires a massive straight energy beam.
+• Beam range: 48 blocks.
+• Beam continuously damages every entity intersecting it.
+• Standard beam cost: 10 ammunition.
+• Maximum charge cost: 20 ammunition.
+• Damage: 900.0 + (chargeRatio * 1400.0) + (Spirit * 4.0).
+• Maximum charge produces a large explosion at the beam endpoint.
+• 6-second cooldown.
+
+Tweaks:
+• A: Beam pierces entities and continues through multiple targets.
+• B: Maximum-charge beam pulls enemies toward its centerline.
+• C: Overcharged maximum beam creates a large energy explosion at the endpoint.
+
+Weapon purpose: Dedicated ranged destruction weapon with a real ammunition economy, rapid-fire pressure, Heat buildup, and a powerful charged finisher.
+
+---
+
+## 19. Brave Sword (`brave_sword`)
+Identity: Heroic Legendary Sword — relentless sword assault, escalating power, high-speed finishing strikes, and concentrated heroic energy.
+Stats: 900 Base Attack Damage, -1.4 Attack Speed.
+
+LEFT — Brave Sword Assault
+Hold left click to perform a continuous sequence of rapid sword attacks.
+• Each successful strike builds Brave Power.
+• Attacks become progressively faster as the combo continues.
+• Every 5th successful hit creates a larger energy slash.
+• Missing an attack or releasing left click begins a short 2-second combo preservation window.
+• During the preservation window, attacking again immediately resumes the combo.
+• At 10+ consecutive hits, the next strike becomes a Brave Finisher.
+• Brave Finisher launches the player forward through the target and creates a massive horizontal energy slash.
+• Base strike damage: 400.0 + (Strength * 2.0).
+• Finisher damage: 900.0 + (Strength * 4.0).
+
+Tweaks:
+• A: Consecutive hits continuously increase attack speed up to a maximum combo bonus.
+• B: Every 5th hit fires an additional energy crescent.
+• C: Brave Finisher becomes stronger based on the number of consecutive hits.
+
+RIGHT — Brave Sword Attack
+Hold right click to charge the sword with concentrated heroic energy.
+• Charge duration: up to 8s / 160 ticks.
+• Sword becomes progressively surrounded by bright energy.
+• Player is slowed while charging.
+• Releasing launches a high-speed sword dash toward the aimed direction.
+• The player passes completely through enemies during the dash.
+• A massive delayed slash occurs immediately after the player stops.
+• The slash extends up to 24 blocks and can hit every enemy in its path.
+• Damage: 600.0 + (chargeRatio * 1400.0) + (Strength * 4.0 * chargeRatio).
+• Maximum charge creates a secondary energy shockwave.
+• 5-second cooldown.
+
+Tweaks:
+• A: Maximum charge dramatically increases the width and range of the finishing slash.
+• B: The dash automatically locks onto the nearest enemy along the aimed path.
+• C: Killing an enemy with the finishing slash creates a secondary heroic shockwave that damages nearby enemies.
+
+Weapon purpose: Legendary high-power sword built around sustained combos, escalating bravery, and one massive cinematic finishing attack.
 ```
+
+This follows the existing weapon specification structure: identity, stats, one definitive Left ability, one definitive Right ability, three integrated tweaks for each ability, and a weapon-purpose statement. The source's core contract specifically requires exactly one Left and one Right ability with three integrated gameplay tweaks each. 
+
+The five are also the exact pending weapons listed in your existing specification: Darkness Sword, Evil Spear, Katana, Blaster Gun + Ammo, and Brave Sword. 

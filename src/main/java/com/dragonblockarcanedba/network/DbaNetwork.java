@@ -352,6 +352,33 @@ public class DbaNetwork {
                     } else {
                         com.dragonblockarcanedba.item.GrandSwordItem.onLeftClickSpinRelease(player, stack, 10);
                     }
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem) {
+                    if (player.getCooldowns().isOnCooldown(stack)) return;
+                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
+                        com.dragonblockarcanedba.item.DaburaSwordItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
+                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
+                        com.dragonblockarcanedba.item.DaburaSwordItem.onLeftClickRelease(player, stack, payload.chargeTicks());
+                    }
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem) {
+                    if (player.getCooldowns().isOnCooldown(stack)) return;
+                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
+                        com.dragonblockarcanedba.item.EvilSpearItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
+                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
+                        com.dragonblockarcanedba.item.EvilSpearItem.onLeftClickRelease(player, stack, payload.chargeTicks());
+                    }
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem) {
+                    if (player.getCooldowns().isOnCooldown(stack)) return;
+                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
+                        com.dragonblockarcanedba.item.KatanaItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
+                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
+                        com.dragonblockarcanedba.item.KatanaItem.onLeftClickRelease(player, stack, payload.chargeTicks());
+                    }
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem) {
+                    if (player.getCooldowns().isOnCooldown(stack)) return;
+                    com.dragonblockarcanedba.item.BlasterGunItem.onLeftClickBarrageTick(player, stack, payload.chargeTicks());
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem) {
+                    if (player.getCooldowns().isOnCooldown(stack)) return;
+                    com.dragonblockarcanedba.item.BraveSwordItem.onLeftClickAssaultTick(player, stack, payload.chargeTicks());
                 }
             });
         });

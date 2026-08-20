@@ -39,6 +39,12 @@ public class DbaEffects {
     public static final ResourceKey<MobEffect> CINEMATIC_TRACKING_KEY = ResourceKey.create(
         Registries.MOB_EFFECT, DragonBlockArcaneDBA.id("cinematic_tracking")
     );
+    public static final ResourceKey<MobEffect> MARKED_BY_EVIL_KEY = ResourceKey.create(
+        Registries.MOB_EFFECT, DragonBlockArcaneDBA.id("marked_by_evil")
+    );
+    public static final ResourceKey<MobEffect> SILENT_MARK_KEY = ResourceKey.create(
+        Registries.MOB_EFFECT, DragonBlockArcaneDBA.id("silent_mark")
+    );
 
     public static final MobEffect BLEEDING = new BleedingEffect();
     public static final MobEffect MELTING = new MeltingEffect();
@@ -50,6 +56,8 @@ public class DbaEffects {
     public static final MobEffect RIFTED = new RiftedEffect();
     public static final MobEffect VALOR = new ValorEffect();
     public static final MobEffect CINEMATIC_TRACKING = new CinematicTrackingEffect();
+    public static final MobEffect MARKED_BY_EVIL = new MarkedByEvilEffect();
+    public static final MobEffect SILENT_MARK = new SilentMarkEffect();
     
     public static Holder<MobEffect> BLEEDING_HOLDER;
     public static Holder<MobEffect> MELTING_HOLDER;
@@ -61,6 +69,8 @@ public class DbaEffects {
     public static Holder<MobEffect> RIFTED_HOLDER;
     public static Holder<MobEffect> VALOR_HOLDER;
     public static Holder<MobEffect> CINEMATIC_TRACKING_HOLDER;
+    public static Holder<MobEffect> MARKED_BY_EVIL_HOLDER;
+    public static Holder<MobEffect> SILENT_MARK_HOLDER;
 
     public static void register() {
         BLEEDING_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, BLEEDING_KEY, BLEEDING);
@@ -73,6 +83,8 @@ public class DbaEffects {
         RIFTED_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, RIFTED_KEY, RIFTED);
         VALOR_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, VALOR_KEY, VALOR);
         CINEMATIC_TRACKING_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, CINEMATIC_TRACKING_KEY, CINEMATIC_TRACKING);
+        MARKED_BY_EVIL_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, MARKED_BY_EVIL_KEY, MARKED_BY_EVIL);
+        SILENT_MARK_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, SILENT_MARK_KEY, SILENT_MARK);
         DragonBlockArcaneDBA.LOGGER.info("Registered DBA effects");
     }
 }

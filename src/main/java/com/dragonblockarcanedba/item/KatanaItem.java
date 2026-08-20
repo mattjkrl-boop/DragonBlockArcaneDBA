@@ -1,0 +1,289 @@
+package com.dragonblockarcanedba.item;
+
+import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.entity.DbaEntities;
+import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemUseAnimation;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Katana — Supreme Speed Weapon.
+ * Precision swordsmanship, instant movement, enemy tagging, and cinematic multi-target execution.
+ */
+public class KatanaItem extends Item {
+    public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
+
+    public KatanaItem(Properties properties) {
+        super(properties.attributes(
+            ItemAttributeModifiers.builder()
+                .add(
+                    Attributes.ATTACK_DAMAGE,
+                    new AttributeModifier(
+                        BASE_ATTACK_DAMAGE_ID,
+                        779.0, // 1 + 779 = 780 base damage
+                        AttributeModifier.Operation.ADD_VALUE
+                    ),
+                    EquipmentSlotGroup.MAINHAND
+                )
+                .add(
+                    Attributes.ATTACK_SPEED,
+                    new AttributeModifier(
+                        BASE_ATTACK_SPEED_ID,
+                        0.5, // Ultra swift swings (+0.5 over base)
+                        AttributeModifier.Operation.ADD_VALUE
+                    ),
+                    EquipmentSlotGroup.MAINHAND
+                )
+                .build()
+        ));
+    }
+
+    // --- LEFT CLICK: Flashdraw (Multi-target Instant Dash Execution) ---
+
+    public static void onLeftClickChargeTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
+        ServerLevel level = (ServerLevel) player.level();
+        // Drawing stance: silver sparks around sheathed hilt
+        if (chargeTicks % 2 == 0) {
+            double ox = (level.getRandom().nextDouble() - 0.5) * 0.6;
+            double oy = 0.6 + level.getRandom().nextDouble() * 0.4;
+            double oz = (level.getRandom().nextDouble() - 0.5) * 0.6;
+
+            level.sendParticles(
+                new DustParticleOptions(0xFFFFFF, 1.4f),
+                player.getX() + ox, player.getY() + oy, player.getZ() + oz,
+                1, 0, 0.02, 0, 0.01
+            );
+        }
+    }
+
+    public static void onLeftClickRelease(ServerPlayer player, ItemStack stack, int chargeTicks) {
+        ServerLevel level = (ServerLevel) player.level();
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+        if (player.getCooldowns().isOnCooldown(stack)) return;
+
+        // Find enemies within 16 blocks to chain through (up to 5 targets, Tweak A)
+        Vec3 eye = player.getEyePosition();
+        Vec3 look = player.getLookAngle();
+
+        AABB searchBox = player.getBoundingBox().inflate(16.0);
+        List<LivingEntity> potential = level.getEntitiesOfClass(
+            LivingEntity.class, searchBox,
+            e -> e.isAlive() && e != player
+        );
+
+        Set<Integer> visited = new HashSet<>();
+        List<LivingEntity> chain = new ArrayList<>();
+
+        // Start with best target in look direction
+        LivingEntity current = null;
+        double bestScore = 0.4;
+        for (LivingEntity e : potential) {
+            Vec3 to = e.getEyePosition().subtract(eye).normalize();
+            double dot = look.dot(to);
+            if (dot > bestScore) {
+                bestScore = dot;
+                current = e;
+            }
+        }
+
+        if (current != null) {
+            chain.add(current);
+            visited.add(current.getId());
+
+            // Chain to up to 4 more nearby enemies
+            for (int i = 0; i < 4; i++) {
+                AABB nearBox = current.getBoundingBox().inflate(12.0);
+                List<LivingEntity> nearby = level.getEntitiesOfClass(
+                    LivingEntity.class, nearBox,
+                    e -> e.isAlive() && e != player && !visited.contains(e.getId())
+                );
+                if (nearby.isEmpty()) break;
+                LivingEntity next = nearby.get(0);
+                chain.add(next);
+                visited.add(next.getId());
+                current = next;
+            }
+        }
+
+        // Tweak C: Invulnerability window during dash
+        player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, 20, 4, false, false));
+
+        Vec3 startPos = player.position();
+
+        if (!chain.isEmpty()) {
+            for (int i = 0; i < chain.size(); i++) {
+                LivingEntity t = chain.get(i);
+                // Leave afterimage entity at intermediate spot
+                HollowAfterimageEntity afterimage = new HollowAfterimageEntity(level, player);
+                afterimage.setPos(player.getX(), player.getY(), player.getZ());
+                level.addFreshEntity(afterimage);
+
+                // Teleport past target
+                Vec3 past = t.position().add(player.getLookAngle().scale(1.5));
+                player.teleportTo(level, past.x, past.y, past.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+
+                // Apply Silent Mark
+                t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.SILENT_MARK_HOLDER, 20, 0, false, false));
+                t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 25, 0, false, false, false), player);
+
+                // Tweak B: +20% damage per consecutive target crossed
+                float streakBonus = 1.0f + (i * 0.2f);
+                float damage = (500.0f + (float) (accessor.dba$getStrength() * 2.5f)) * streakBonus;
+
+                final LivingEntity finalTarget = t;
+                final float finalDamage = damage;
+                // Delayed simultaneous strike 0.3s (6 ticks) later
+                level.getServer().execute(() -> {
+                    finalTarget.hurtServer(level, level.damageSources().playerAttack(player), finalDamage);
+                    level.sendParticles(ParticleTypes.SWEEP_ATTACK, finalTarget.getX(), finalTarget.getY() + 1.0, finalTarget.getZ(), 2, 0.2, 0.2, 0.2, 0);
+                    level.sendParticles(new DustParticleOptions(0xFFFFFF, 1.8f), finalTarget.getX(), finalTarget.getY() + 1.0, finalTarget.getZ(), 10, 0.3, 0.5, 0.3, 0.1);
+                    level.playSound(null, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ(), SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.5f, 1.6f);
+                });
+            }
+        } else {
+            // Freeform straight flash dash forward
+            Vec3 targetPos = startPos.add(look.scale(14.0));
+            player.teleportTo(level, targetPos.x, targetPos.y, targetPos.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+        }
+
+        // Blade sheathing ring sound
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.0f, 1.8f);
+
+        player.getCooldowns().addCooldown(stack, 30);
+    }
+
+    // --- RIGHT CLICK: Iaijutsu: Heaven Splitter ---
+
+    @Override
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        player.startUsingItem(hand);
+        return InteractionResult.CONSUME;
+    }
+
+    @Override
+    public int getUseDuration(ItemStack stack, LivingEntity entity) {
+        return 72000;
+    }
+
+    @Override
+    public ItemUseAnimation getUseAnimation(ItemStack stack) {
+        return ItemUseAnimation.BLOCK;
+    }
+
+    @Override
+    public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
+        if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            ServerLevel serverLevel = (ServerLevel) level;
+            int heldTicks = getUseDuration(stack, living) - remainingTicks;
+            float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);
+
+            // Stationary stillness focus
+            player.setDeltaMovement(0, player.getDeltaMovement().y > 0 ? 0 : player.getDeltaMovement().y * 0.5, 0);
+            player.hurtMarked = true;
+
+            // Thin glowing white-cyan aim guide line extending forward up to 24 blocks
+            Vec3 eye = player.getEyePosition();
+            Vec3 look = player.getLookAngle();
+            for (double d = 1.0; d <= 24.0; d += 1.5) {
+                Vec3 p = eye.add(look.scale(d));
+                serverLevel.sendParticles(
+                    new DustParticleOptions(0x00FFFF, 1.2f + chargeRatio * 0.6f),
+                    p.x, p.y, p.z,
+                    1, 0, 0, 0, 0
+                );
+            }
+
+            if (heldTicks % 20 == 0) {
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.8f, 1.2f + chargeRatio * 0.6f);
+            }
+        }
+    }
+
+    @Override
+    public boolean releaseUsing(ItemStack stack, Level level, LivingEntity living, int timeLeft) {
+        if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            ServerLevel serverLevel = (ServerLevel) level;
+            PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+            int heldTicks = getUseDuration(stack, living) - timeLeft;
+            float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
+
+            // Instant dash along aim line up to 24 blocks (Tweak B: snaps to nearest enemy)
+            Vec3 start = player.position();
+            Vec3 look = player.getLookAngle();
+            double dashDist = 16.0 + (chargeRatio * 8.0);
+            Vec3 end = start.add(look.scale(dashDist));
+
+            // Hit entities along the line
+            AABB lineBox = new AABB(start, end).inflate(2.0 + chargeRatio * 2.0); // Tweak A: wider with charge
+            List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
+                LivingEntity.class, lineBox,
+                e -> e.isAlive() && e != player
+            );
+
+            // Teleport player to destination
+            player.teleportTo(serverLevel, end.x, end.y, end.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+
+            // Delayed massive vertical energy cut (0.5s / 10 ticks)
+            float baseDamage = 1000.0f + (chargeRatio * 1000.0f);
+            float strDamage = (float) (accessor.dba$getStrength() * 4.0f * chargeRatio);
+            float totalDamage = baseDamage + strDamage;
+
+            for (LivingEntity t : targets) {
+                t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
+                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage);
+
+                // Tweak C: If target dies, reset Flashdraw cooldown
+                if (!t.isAlive()) {
+                    player.getCooldowns().removeCooldown(com.dragonblockarcanedba.item.DbaItems.KATANA_KEY.identifier());
+                }
+            }
+
+            // Giant vertical particle slash line
+            for (double d = 0; d <= dashDist; d += 1.0) {
+                Vec3 p = start.add(look.scale(d));
+                for (double y = 0; y <= 6.0; y += 1.0) {
+                    serverLevel.sendParticles(
+                        new DustParticleOptions(0xFFFFFF, 2.2f),
+                        p.x, p.y + y, p.z,
+                        1, 0, 0.05, 0, 0.02
+                    );
+                }
+            }
+
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.0f, 1.8f);
+
+            player.getCooldowns().addCooldown(stack, 80); // 4-second cooldown
+        }
+        return true;
+    }
+}

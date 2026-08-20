@@ -193,6 +193,7 @@ public class CurseBladeItem extends Item {
             for (LivingEntity enemy : enemiesInStorm) {
                 // Apply Storm of Darkness custom effect
                 enemy.addEffect(new MobEffectInstance(DbaEffects.STORM_OF_DARKNESS_HOLDER, 60, (int) (stormRatio * 3), false, true), player);
+                enemy.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), player);
 
                 // Wind toss: Aggressive wind push
                 if (heldTicks % 5 == 0 && serverLevel.getRandom().nextFloat() < 0.6f) {
@@ -330,6 +331,7 @@ public class CurseBladeItem extends Item {
 
                         // 3 seconds complete root (amp 9)
                         enemy.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 60, 9, false, true), player);
+                        enemy.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), player);
                         serverLevel.sendParticles(
                             ParticleTypes.LARGE_SMOKE,
                             enemy.getX(), enemy.getY() + 0.5, enemy.getZ(),

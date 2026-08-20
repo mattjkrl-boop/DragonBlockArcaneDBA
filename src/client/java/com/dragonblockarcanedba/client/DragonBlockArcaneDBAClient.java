@@ -25,6 +25,11 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     private static int saberChargeTicks = 0;
     private static int oxAxeChargeTicks = 0;
     private static int grandSwordSpinTicks = 0;
+    private static int daburaChargeTicks = 0;
+    private static int evilSpearChargeTicks = 0;
+    private static int katanaDrawTicks = 0;
+    private static int blasterBarrageTicks = 0;
+    private static int braveAssaultTicks = 0;
     private static boolean isAzureRushing = false;
     private static float lastCameraYRot = 0;
     private static float lastCameraXRot = 0;
@@ -150,6 +155,26 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.VALOR_FIELD,
             com.dragonblockarcanedba.client.render.ValorFieldRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DARKNESS_WAVE,
+            com.dragonblockarcanedba.client.render.DarknessWaveRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DARKNESS_BLADE,
+            com.dragonblockarcanedba.client.render.DarknessBladeRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.EVIL_SPEAR_PROJECTILE,
+            com.dragonblockarcanedba.client.render.EvilSpearProjectileRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BLASTER_BOLT,
+            com.dragonblockarcanedba.client.render.BlasterBoltRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BRAVE_SLASH,
+            com.dragonblockarcanedba.client.render.BraveSlashRenderer::new
         );
 
         net.minecraft.client.renderer.special.SpecialModelRenderers.ID_MAPPER.put(
@@ -463,7 +488,113 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     }
                 }
 
-                if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem)) {
+                // 9. Darkness Sword (Dabura Sword) Left-Click Abyssal Slash Charge & Release
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem) {
+                    if (client.options.keyAttack.isDown()) {
+                        daburaChargeTicks = Math.min(160, daburaChargeTicks + 1);
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            daburaChargeTicks
+                        ));
+                    } else if (daburaChargeTicks > 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
+                            daburaChargeTicks
+                        ));
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        daburaChargeTicks = 0;
+                    }
+                } else {
+                    if (daburaChargeTicks > 0) {
+                        daburaChargeTicks = 0;
+                    }
+                }
+
+                // 10. Evil Spear Left-Click Impale Charge & Release
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem) {
+                    if (client.options.keyAttack.isDown()) {
+                        evilSpearChargeTicks = Math.min(120, evilSpearChargeTicks + 1);
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            evilSpearChargeTicks
+                        ));
+                    } else if (evilSpearChargeTicks > 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
+                            evilSpearChargeTicks
+                        ));
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        evilSpearChargeTicks = 0;
+                    }
+                } else {
+                    if (evilSpearChargeTicks > 0) {
+                        evilSpearChargeTicks = 0;
+                    }
+                }
+
+                // 11. Katana Left-Click Flashdraw Charge & Release
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem) {
+                    if (client.options.keyAttack.isDown()) {
+                        katanaDrawTicks = Math.min(100, katanaDrawTicks + 1);
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            katanaDrawTicks
+                        ));
+                    } else if (katanaDrawTicks > 0) {
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
+                            katanaDrawTicks
+                        ));
+                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        katanaDrawTicks = 0;
+                    }
+                } else {
+                    if (katanaDrawTicks > 0) {
+                        katanaDrawTicks = 0;
+                    }
+                }
+
+                // 12. Blaster Gun Left-Click Barrage (Continuous)
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem) {
+                    if (client.options.keyAttack.isDown()) {
+                        blasterBarrageTicks++;
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            blasterBarrageTicks
+                        ));
+                        if (blasterBarrageTicks % 3 == 0) {
+                            client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        }
+                    } else if (blasterBarrageTicks > 0) {
+                        blasterBarrageTicks = 0;
+                    }
+                } else {
+                    if (blasterBarrageTicks > 0) {
+                        blasterBarrageTicks = 0;
+                    }
+                }
+
+                // 13. Brave Sword Left-Click Assault (Continuous Combo)
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem) {
+                    if (client.options.keyAttack.isDown()) {
+                        braveAssaultTicks++;
+                        ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
+                            com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
+                            braveAssaultTicks
+                        ));
+                        if (braveAssaultTicks % 4 == 0) {
+                            client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        }
+                    } else if (braveAssaultTicks > 0) {
+                        blasterBarrageTicks = 0;
+                    }
+                } else {
+                    if (braveAssaultTicks > 0) {
+                        braveAssaultTicks = 0;
+                    }
+                }
+
+                if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem)) {
                     // Fallback for standard weapons detecting air click
                     if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
                         if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) { // If there are other weapons

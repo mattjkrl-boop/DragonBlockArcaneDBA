@@ -153,6 +153,14 @@ public class DbaMenuScreen extends Screen {
     }
 
     @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (tabs.get(activeTab).mouseReleased(event)) {
+            return true;
+        }
+        return super.mouseReleased(event);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (tabs.get(activeTab).mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount)) {
             return true;

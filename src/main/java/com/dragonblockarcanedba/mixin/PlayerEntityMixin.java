@@ -371,7 +371,34 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     @Override
     public void dba$setLevel(int level) {
-        this.dbaLevel = level;
+        int oldLevel = this.dbaLevel;
+        this.dbaLevel = Math.max(1, level);
+        long diff = (long) this.dbaLevel - (long) oldLevel;
+        if (diff > 0) {
+            long newAp = (long) this.dbaAp + (diff * 3L);
+            this.dbaAp = (int) Math.min((long) Integer.MAX_VALUE, newAp);
+        } else if (diff < 0) {
+            long newAp = (long) this.dbaAp + (diff * 3L);
+            this.dbaAp = (int) Math.max(0L, newAp);
+        }
+        dba$syncStats();
+    }
+
+    @Unique
+    @Override
+    public void dba$addLevel(int levels) {
+        int oldLevel = this.dbaLevel;
+        long targetLevel = (long) this.dbaLevel + (long) levels;
+        this.dbaLevel = (int) Math.min((long) Integer.MAX_VALUE, Math.max(1L, targetLevel));
+        long diff = (long) this.dbaLevel - (long) oldLevel;
+        if (diff > 0) {
+            long newAp = (long) this.dbaAp + (diff * 3L);
+            this.dbaAp = (int) Math.min((long) Integer.MAX_VALUE, newAp);
+        } else if (diff < 0) {
+            long newAp = (long) this.dbaAp + (diff * 3L);
+            this.dbaAp = (int) Math.max(0L, newAp);
+        }
+        dba$syncStats();
     }
 
     @Unique
@@ -383,14 +410,17 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     @Override
     public void dba$setXp(int xp) {
-        this.dbaXp = xp;
+        this.dbaXp = Math.max(0, xp);
         // Process level ups if set XP is higher than requirement
         int req = PlayerStats.getXpToNextLevel(dbaLevel);
-        while (this.dbaXp >= req) {
+        int safetyLimit = 0;
+        while (this.dbaXp >= req && req > 0 && safetyLimit < 10000 && dbaLevel < Integer.MAX_VALUE) {
             this.dbaXp -= req;
             dbaLevel++;
-            dbaAp += 3; // Gain 3 attribute points on level up
+            long newAp = (long) this.dbaAp + 3L;
+            this.dbaAp = (int) Math.min((long) Integer.MAX_VALUE, newAp);
             req = PlayerStats.getXpToNextLevel(dbaLevel);
+            safetyLimit++;
         }
         dba$syncStats();
     }
@@ -398,13 +428,27 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     @Override
     public void dba$addXp(int amount) {
-        this.dbaXp += amount;
+        long targetXp = (long) this.dbaXp + (long) amount;
+        this.dbaXp = (int) Math.min((long) Integer.MAX_VALUE, Math.max(Integer.MIN_VALUE, targetXp));
         int req = PlayerStats.getXpToNextLevel(dbaLevel);
-        while (this.dbaXp >= req) {
+        int safetyLimit = 0;
+        while (this.dbaXp >= req && req > 0 && safetyLimit < 10000 && dbaLevel < Integer.MAX_VALUE) {
             this.dbaXp -= req;
             dbaLevel++;
-            dbaAp += 3; // Gain 3 attribute points on level up
+            long newAp = (long) this.dbaAp + 3L;
+            this.dbaAp = (int) Math.min((long) Integer.MAX_VALUE, newAp);
             req = PlayerStats.getXpToNextLevel(dbaLevel);
+            safetyLimit++;
+        }
+        while (this.dbaXp < 0 && dbaLevel > 1 && safetyLimit < 20000) {
+            dbaLevel--;
+            this.dbaAp = Math.max(0, this.dbaAp - 3);
+            int prevReq = PlayerStats.getXpToNextLevel(dbaLevel);
+            this.dbaXp += prevReq;
+            safetyLimit++;
+        }
+        if (this.dbaXp < 0) {
+            this.dbaXp = 0;
         }
         dba$syncStats();
     }

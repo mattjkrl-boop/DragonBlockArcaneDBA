@@ -15,9 +15,17 @@ public class StatsTab implements MenuTab {
     private final String[] stats = {"strength", "dexterity", "defense", "willpower", "spirit", "vitality"};
     private final String[] statDisplayNames = {"Strength", "Dexterity", "Defense", "Willpower", "Spirit", "Vitality"};
 
+    // Continuous hold upgrade tracking
+    private boolean isMouseDown = false;
+    private String heldStat = null;
+    private long holdStartMs = 0;
+    private long lastUpgradeMs = 0;
+
     @Override
     public void init(DbaMenuScreen screen) {
         this.parent = screen;
+        this.isMouseDown = false;
+        this.heldStat = null;
     }
 
     @Override
@@ -29,6 +37,55 @@ public class StatsTab implements MenuTab {
         int startX = parent.getContentX();
         int startY = parent.getY();
         int width = parent.getContentWidth();
+
+        // Process continuous hold upgrading
+        if (heldStat != null && isMouseDown) {
+            int statIndex = -1;
+            for (int s = 0; s < stats.length; s++) {
+                if (stats[s].equals(heldStat)) {
+                    statIndex = s;
+                    break;
+                }
+            }
+
+            if (statIndex >= 0) {
+                int btnX = startX + width - 30;
+                int y = startY + 55 + statIndex * 24;
+                int btnY = y - 4;
+                int btnW = 18;
+                int btnH = 18;
+
+                // Check bounds with generous margin so micro-mouse movements don't cancel holding
+                if (mouseX < btnX - 10 || mouseX > btnX + btnW + 10 || mouseY < btnY - 10 || mouseY > btnY + btnH + 10) {
+                    heldStat = null;
+                } else {
+                    String raceId = accessor.dba$getRaceId().getPath();
+                    int currentUpgrades = accessor.dba$getStatUpgradeCount(heldStat);
+                    int apCost = PlayerStats.getUpgradeCost(raceId, heldStat, currentUpgrades);
+                    int milestone = (currentUpgrades / 5) * 5;
+                    int reqLvl = milestone * 2;
+                    boolean canAfford = accessor.dba$getStatPoints() >= apCost;
+                    boolean levelMet = accessor.dba$getLevel() >= reqLvl;
+
+                    if (!canAfford || !levelMet) {
+                        heldStat = null;
+                    } else {
+                        long now = System.currentTimeMillis();
+                        long heldDuration = now - holdStartMs;
+                        if (heldDuration >= 300) { // 300ms initial delay before fast repeat
+                            // Accelerate: starts at 50ms interval, ramps up to 20ms after 1.2s
+                            long interval = (heldDuration >= 1200) ? 20 : (heldDuration >= 700 ? 35 : 50);
+                            if (now - lastUpgradeMs >= interval) {
+                                sendUpgrade(heldStat);
+                                lastUpgradeMs = now;
+                            }
+                        }
+                    }
+                }
+            } else {
+                heldStat = null;
+            }
+        }
 
         // Title
         String raceName = accessor.dba$getRaceId().getPath();
@@ -54,9 +111,14 @@ public class StatsTab implements MenuTab {
         String xpText = "XP: " + accessor.dba$getXp() + "/" + PlayerStats.getXpToNextLevel(accessor.dba$getLevel());
         String apText = "AP: " + accessor.dba$getStatPoints();
         
-        context.text(client.font, Component.literal(levelText), startX + 15, startY + 30, 0xFFFFFFFF);
-        context.text(client.font, Component.literal(xpText), startX + 85, startY + 30, 0xFFFFFFFF);
-        context.text(client.font, Component.literal(apText), startX + width - 70, startY + 30, 0xFFFFAA00);
+        int lvlX = startX + 15;
+        context.text(client.font, Component.literal(levelText), lvlX, startY + 30, 0xFFFFFFFF);
+        int lvlWidth = client.font.width(levelText);
+        int xpX = lvlX + lvlWidth + 12;
+        context.text(client.font, Component.literal(xpText), xpX, startY + 30, 0xFFFFFFFF);
+        
+        int apWidth = client.font.width(apText);
+        context.text(client.font, Component.literal(apText), startX + width - apWidth - 15, startY + 30, 0xFFFFAA00);
 
         // Subtle separator line
         context.fill(startX + 10, startY + 45, startX + width - 10, startY + 46, 0x44FFFFFF);
@@ -120,7 +182,6 @@ public class StatsTab implements MenuTab {
             context.text(client.font, Component.literal(statString), barX + barWidth + 10, y, 0xFFFFFFFF);
             
             // Display AP cost and Req level below the bar
-            // Display the AP cost (format nicely if it's very large)
             String apString = "Cost: " + apCost + " AP";
             if (apCost >= 1000000) {
                 apString = "Cost: " + (apCost / 1000000) + "M AP";
@@ -134,15 +195,17 @@ public class StatsTab implements MenuTab {
             int btnW = 18;
             int btnH = 18;
             boolean hoverBtn = (mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH);
+            boolean isHeld = statName.equals(heldStat) && isMouseDown;
             
             if (canUpgrade) {
-                context.fill(btnX, btnY, btnX + btnW, btnY + btnH, hoverBtn ? 0xAA55FF88 : 0x55113322);
+                int bgCol = isHeld ? 0xDD55FF88 : (hoverBtn ? 0xAA55FF88 : 0x55113322);
+                context.fill(btnX, btnY, btnX + btnW, btnY + btnH, bgCol);
                 context.fill(btnX, btnY, btnX + btnW, btnY + 1, 0xFF55FF88); // Top
                 context.fill(btnX, btnY + btnH - 1, btnX + btnW, btnY + btnH, 0xFF55FF88); // Bottom
                 context.fill(btnX, btnY, btnX + 1, btnY + btnH, 0xFF55FF88); // Left
                 context.fill(btnX + btnW - 1, btnY, btnX + btnW, btnY + btnH, 0xFF55FF88); // Right
                 
-                context.centeredText(client.font, Component.literal("+"), btnX + btnW/2, btnY + 5, hoverBtn ? 0xFFFFFFFF : 0xFF55FF88);
+                context.centeredText(client.font, Component.literal("+"), btnX + btnW/2, btnY + 5, (hoverBtn || isHeld) ? 0xFFFFFFFF : 0xFF55FF88);
             } else {
                 context.fill(btnX, btnY, btnX + btnW, btnY + btnH, 0x44111111);
                 context.fill(btnX, btnY, btnX + btnW, btnY + 1, 0x44FFFFFF);
@@ -163,6 +226,13 @@ public class StatsTab implements MenuTab {
         int kiPanelY = startY + 205;
         context.fill(startX + 10, kiPanelY, startX + width - 10, kiPanelY + 15, 0x2255FFFF);
         context.centeredText(client.font, Component.literal(kiString), startX + width / 2, kiPanelY + 4, 0xFF55FFFF);
+    }
+
+    private void sendUpgrade(String statName) {
+        CompoundTag nbt = new CompoundTag();
+        nbt.putString("action", "upgrade");
+        nbt.putString("stat", statName);
+        ClientPlayNetworking.send(new ActionPayload(nbt));
     }
 
     @Override
@@ -190,7 +260,7 @@ public class StatsTab implements MenuTab {
             int reqLvl = milestone * 2;
             boolean canAfford = accessor.dba$getStatPoints() >= apCost;
             boolean levelMet = accessor.dba$getLevel() >= reqLvl;
-            boolean canUpgrade = canAfford && levelMet && apCost <= 9000;
+            boolean canUpgrade = canAfford && levelMet;
 
             int y = startY + 55 + i * 24;
             int btnY = y - 4;
@@ -199,14 +269,30 @@ public class StatsTab implements MenuTab {
             
             if (mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH) {
                 if (canUpgrade) {
-                    CompoundTag nbt = new CompoundTag();
-                    nbt.putString("action", "upgrade");
-                    nbt.putString("stat", statName);
-                    ClientPlayNetworking.send(new ActionPayload(nbt));
+                    sendUpgrade(statName);
+                    this.isMouseDown = true;
+                    this.heldStat = statName;
+                    this.holdStartMs = System.currentTimeMillis();
+                    this.lastUpgradeMs = this.holdStartMs;
                     return true;
                 }
             }
         }
+        this.isMouseDown = false;
+        this.heldStat = null;
+        return false;
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        this.isMouseDown = true;
+        return false;
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        this.isMouseDown = false;
+        this.heldStat = null;
         return false;
     }
 }

@@ -110,7 +110,12 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) {
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem) {
                     return net.minecraft.world.InteractionResult.FAIL;
                 }
             }

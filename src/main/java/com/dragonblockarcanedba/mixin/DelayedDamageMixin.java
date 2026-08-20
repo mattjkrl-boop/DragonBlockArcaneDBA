@@ -76,31 +76,8 @@ public abstract class DelayedDamageMixin {
             if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER)) {
                 isCinematicallyLocked = true;
             }
-            // Slowness (Blade Hazard CC, Freeze, battlefield denial)
-            else if (self.hasEffect(net.minecraft.world.effect.MobEffects.SLOWNESS)) {
-                isCinematicallyLocked = true;
-            }
-            // Z-Sword, Axe & Curse Blade root/lift
-            else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER)) {
-                isCinematicallyLocked = true;
-            }
-            // Devil Trident ground pull
-            else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.DEVILS_HANDS_HOLDER)) {
-                isCinematicallyLocked = true;
-            }
-            // Storm of Darkness & Dark Faded
-            else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.STORM_OF_DARKNESS_HOLDER) ||
-                     self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.DARK_FADED_HOLDER)) {
-                isCinematicallyLocked = true;
-            }
-            // Hollow's Edge Rift Vacuum
-            else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.RIFTED_HOLDER)) {
-                isCinematicallyLocked = true;
-            }
-            // Spirit Sword lift
-            else if (self.hasEffect(net.minecraft.world.effect.MobEffects.LEVITATION)) {
-                isCinematicallyLocked = true;
-            }
+
+
             
             if (isCinematicallyLocked) {
                 // Keep the buffer at exactly 0.5s (10 ticks) so it pops immediately after the effect wears off

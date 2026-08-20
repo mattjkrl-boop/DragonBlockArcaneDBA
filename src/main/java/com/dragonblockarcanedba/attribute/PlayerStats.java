@@ -139,8 +139,12 @@ public class PlayerStats {
     }
 
     public static int getXpToNextLevel(int currentLevel) {
-        // Lowered XP scaling to make leveling faster
-        return (int) (50 * Math.pow(currentLevel, 1.05));
+        if (currentLevel <= 0) return 50;
+        double calc = 50.0 * Math.pow(currentLevel, 1.05);
+        if (calc >= Integer.MAX_VALUE || Double.isInfinite(calc) || Double.isNaN(calc)) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) calc;
     }
 
     public static int getStatGain(String raceId, String statName) {

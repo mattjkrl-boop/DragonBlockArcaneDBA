@@ -78,6 +78,7 @@ public class SpiritSwordItem extends Item {
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
         // Apply Levitation III for 6 seconds (120 ticks)
         target.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 120, 2, false, true), attacker);
+        target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 120, 0, false, false, false), attacker);
 
         // Apply Glowing for 10 seconds (200 ticks) — target can't hide
         target.addEffect(new MobEffectInstance(MobEffects.GLOWING, 200, 0, false, true), attacker);

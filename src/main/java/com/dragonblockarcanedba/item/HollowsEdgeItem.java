@@ -243,6 +243,7 @@ public class HollowsEdgeItem extends Item {
         for (LivingEntity enemy : enemiesPassed) {
             enemy.hurtServer(level, level.damageSources().mobAttack(player), baseDmg);
             enemy.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 80, 0, false, true));
+            enemy.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 80, 0, false, false, false), player);
 
             level.sendParticles(
                 new DustParticleOptions(0x4B0082, 1.8F),

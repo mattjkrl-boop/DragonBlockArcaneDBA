@@ -270,6 +270,56 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("valor_field")))
     );
 
+    public static final EntityType<DarknessWaveEntity> DARKNESS_WAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("darkness_wave"),
+            EntityType.Builder.<DarknessWaveEntity>of(DarknessWaveEntity::new, MobCategory.MISC)
+                    .sized(3.5f, 1.2f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("darkness_wave")))
+    );
+
+    public static final EntityType<DarknessBladeEntity> DARKNESS_BLADE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("darkness_blade"),
+            EntityType.Builder.<DarknessBladeEntity>of(DarknessBladeEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 6.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("darkness_blade")))
+    );
+
+    public static final EntityType<EvilSpearProjectileEntity> EVIL_SPEAR_PROJECTILE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("evil_spear_projectile"),
+            EntityType.Builder.<EvilSpearProjectileEntity>of(EvilSpearProjectileEntity::new, MobCategory.MISC)
+                    .sized(1.2f, 1.2f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("evil_spear_projectile")))
+    );
+
+    public static final EntityType<BlasterBoltEntity> BLASTER_BOLT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("blaster_bolt"),
+            EntityType.Builder.<BlasterBoltEntity>of(BlasterBoltEntity::new, MobCategory.MISC)
+                    .sized(0.6f, 0.6f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("blaster_bolt")))
+    );
+
+    public static final EntityType<BraveSlashEntity> BRAVE_SLASH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("brave_slash"),
+            EntityType.Builder.<BraveSlashEntity>of(BraveSlashEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 1.2f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("brave_slash")))
+    );
+
     public static void register() {
         DragonBlockArcaneDBA.LOGGER.info("Registering Entities for " + DragonBlockArcaneDBA.MOD_ID);
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(OTHERWORLD_GUIDE, OtherworldGuideEntity.createMobAttributes());

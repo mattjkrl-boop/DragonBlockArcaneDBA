@@ -251,6 +251,7 @@ public class SaberItem extends Item {
                     
                     // Crowd Control: Apply Movement Curse amplifier 9 (full root + darkness) forever until snap!
                     currentTarget.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 999999, 9, false, true, false));
+                    currentTarget.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 999999, 0, false, false, false), player);
                     
                     // Damage & Slash Impact (This is caught and delayed by DelayedDamageMixin because of the Movement Curse!)
                     float baseDamage = 280.0f + (float) (accessor.dba$getStrength() * 1.8);
@@ -824,6 +825,7 @@ public class SaberItem extends Item {
                     
                     // Remove the crowd control effect to initiate the Cinematic Damage pop (0.5s delay)
                     e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
+                    e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER);
                     
                     // Burst Finishing Damage (Neck-Snap Finisher)
                     e.hurtServer(level, level.damageSources().playerAttack(anim.player), anim.damage);

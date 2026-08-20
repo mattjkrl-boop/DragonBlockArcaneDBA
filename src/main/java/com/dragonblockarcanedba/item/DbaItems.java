@@ -434,25 +434,25 @@ public class DbaItems {
     public static final Item GRAND_SWORD = new GrandSwordItem(
         new Item.Properties().setId(GRAND_SWORD_KEY).stacksTo(1)
     );
-    public static final Item DABURA_SWORD = new Item(
+    public static final Item DABURA_SWORD = new DaburaSwordItem(
         new Item.Properties().setId(DABURA_SWORD_KEY).stacksTo(1)
     );
     public static final Item Z_SWORD = new ZSwordItem(
         new Item.Properties().setId(Z_SWORD_KEY).stacksTo(1)
     );
-    public static final Item EVIL_SPEAR = new Item(
+    public static final Item EVIL_SPEAR = new EvilSpearItem(
         new Item.Properties().setId(EVIL_SPEAR_KEY).stacksTo(1)
     );
-    public static final Item BRAVE_SWORD = new Item(
+    public static final Item BRAVE_SWORD = new BraveSwordItem(
         new Item.Properties().setId(BRAVE_SWORD_KEY).stacksTo(1)
     );
-    public static final Item KATANA = new Item(
+    public static final Item KATANA = new KatanaItem(
         new Item.Properties().setId(KATANA_KEY).stacksTo(1)
     );
-    public static final Item BLASTER_GUN = new Item(
+    public static final Item BLASTER_GUN = new BlasterGunItem(
         new Item.Properties().setId(BLASTER_GUN_KEY).stacksTo(1)
     );
-    public static final Item BLASTER_AMMO = new Item(
+    public static final Item BLASTER_AMMO = new BlasterAmmoItem(
         new Item.Properties().setId(BLASTER_AMMO_KEY)
     );
 

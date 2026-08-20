@@ -1,0 +1,270 @@
+package com.dragonblockarcanedba.item;
+
+import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.entity.BraveSlashEntity;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemUseAnimation;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.List;
+
+/**
+ * Brave Sword — Heroic Legendary Sword (Tapion's Sword).
+ * Relentless sword assault, escalating Brave Power, high-speed finishing strikes, and concentrated heroic energy.
+ */
+public class BraveSwordItem extends Item {
+    public static final int MAX_RIGHT_CHARGE_TICKS = 160; // 8 seconds
+
+    public BraveSwordItem(Properties properties) {
+        super(properties.attributes(
+            ItemAttributeModifiers.builder()
+                .add(
+                    Attributes.ATTACK_DAMAGE,
+                    new AttributeModifier(
+                        BASE_ATTACK_DAMAGE_ID,
+                        899.0, // 1 + 899 = 900 base damage
+                        AttributeModifier.Operation.ADD_VALUE
+                    ),
+                    EquipmentSlotGroup.MAINHAND
+                )
+                .add(
+                    Attributes.ATTACK_SPEED,
+                    new AttributeModifier(
+                        BASE_ATTACK_SPEED_ID,
+                        -1.4, // Swift heroic swordplay
+                        AttributeModifier.Operation.ADD_VALUE
+                    ),
+                    EquipmentSlotGroup.MAINHAND
+                )
+                .build()
+        ));
+    }
+
+    // --- Combo Tracking ---
+
+    public static int getCombo(ItemStack stack) {
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+        if (customData != null) {
+            return customData.copyTag().getIntOr("Combo", 0);
+        }
+        return 0;
+    }
+
+    public static void setCombo(ItemStack stack, int combo) {
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+        CompoundTag tag = customData != null ? customData.copyTag() : new CompoundTag();
+        tag.putInt("Combo", combo);
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+    }
+
+    // --- LEFT CLICK: Brave Sword Assault (Combo & Finisher) ---
+
+    public static void onLeftClickAssaultTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
+        ServerLevel level = (ServerLevel) player.level();
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+        int combo = getCombo(stack);
+        // Attack rate scales with combo (Tweak A: higher combo = faster strikes)
+        int interval = Math.max(3, 8 - (combo / 2));
+        if (chargeTicks % interval != 0) return;
+
+        Vec3 eye = player.getEyePosition();
+        Vec3 look = player.getLookAngle();
+        Vec3 strikeTarget = eye.add(look.scale(3.5));
+
+        AABB hitBox = new AABB(eye, strikeTarget).inflate(1.5);
+        List<LivingEntity> targets = level.getEntitiesOfClass(
+            LivingEntity.class, hitBox,
+            e -> e.isAlive() && e != player
+        );
+
+        if (!targets.isEmpty()) {
+            LivingEntity target = targets.get(0);
+            combo++;
+            setCombo(stack, combo);
+
+            float strength = accessor.dba$getStrength();
+
+            if (combo >= 10) {
+                // Brave Finisher (Tweak C): Dash forward & unleash massive cross-slash
+                Vec3 past = target.position().add(look.scale(2.0));
+                player.teleportTo(level, past.x, past.y, past.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+
+                float finisherDmg = 900.0f + (strength * 4.0f);
+                target.hurtServer(level, level.damageSources().playerAttack(player), finisherDmg);
+
+                // Golden cross slash particles
+                level.sendParticles(ParticleTypes.EXPLOSION, target.getX(), target.getY() + 1.0, target.getZ(), 2, 0.2, 0.2, 0.2, 0);
+                level.sendParticles(new DustParticleOptions(0xFFD700, 2.5f), target.getX(), target.getY() + 1.0, target.getZ(), 25, 0.6, 0.6, 0.6, 0.1);
+                level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.8f, 1.2f);
+
+                setCombo(stack, 0); // Reset combo
+                player.sendSystemMessage(Component.literal("§6★ BRAVE FINISHER! ★"), true);
+            } else {
+                // Standard combo strike
+                float hitDmg = 400.0f + (strength * 2.0f);
+                target.hurtServer(level, level.damageSources().playerAttack(player), hitDmg);
+
+                // Tweak B: Every 5th hit releases bonus golden energy crescent wave
+                if (combo % 5 == 0) {
+                    BraveSlashEntity crescent = new BraveSlashEntity(level, player, hitDmg * 1.5f);
+                    crescent.setDeltaMovement(look.x * 1.8, look.y * 1.8, look.z * 1.8);
+                    level.addFreshEntity(crescent);
+                    level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 1.4f);
+                }
+
+                // Combo particle feedback & sound
+                level.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1.0, target.getZ(), 8, 0.3, 0.3, 0.3, 0.1);
+                level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
+                player.sendSystemMessage(Component.literal(String.format("§6Brave Power: §e%d Hits", combo)), true);
+            }
+        }
+    }
+
+    // --- RIGHT CLICK: Brave Sword Attack (Charged Piercing Heroic Dash) ---
+
+    @Override
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        player.startUsingItem(hand);
+        return InteractionResult.CONSUME;
+    }
+
+    @Override
+    public int getUseDuration(ItemStack stack, LivingEntity entity) {
+        return 72000;
+    }
+
+    @Override
+    public ItemUseAnimation getUseAnimation(ItemStack stack) {
+        return ItemUseAnimation.BLOCK;
+    }
+
+    @Override
+    public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
+        if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            ServerLevel serverLevel = (ServerLevel) level;
+            int heldTicks = getUseDuration(stack, living) - remainingTicks;
+            float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);
+
+            player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 1, false, false));
+
+            // Concentrated golden & cyan particles gathering around the sword
+            int count = 2 + (int) (chargeRatio * 8);
+            for (int i = 0; i < count; i++) {
+                double ox = (serverLevel.getRandom().nextDouble() - 0.5) * (0.8 + chargeRatio * 0.4);
+                double oy = serverLevel.getRandom().nextDouble() * 1.5;
+                double oz = (serverLevel.getRandom().nextDouble() - 0.5) * (0.8 + chargeRatio * 0.4);
+
+                serverLevel.sendParticles(
+                    new DustParticleOptions(0xFFD700, 1.6f + chargeRatio * 0.6f),
+                    player.getX() + ox, player.getY() + oy, player.getZ() + oz,
+                    1, 0, 0.05, 0, 0.01
+                );
+                if (i % 2 == 0) {
+                    serverLevel.sendParticles(
+                        new DustParticleOptions(0x00FFFF, 1.4f),
+                        player.getX() + ox, player.getY() + oy, player.getZ() + oz,
+                        1, 0, 0.03, 0, 0.01
+                    );
+                }
+            }
+
+            if (heldTicks % 20 == 0) {
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.9f, 0.8f + chargeRatio * 0.5f);
+            }
+        }
+    }
+
+    @Override
+    public boolean releaseUsing(ItemStack stack, Level level, LivingEntity living, int timeLeft) {
+        if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            ServerLevel serverLevel = (ServerLevel) level;
+            PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+            int heldTicks = getUseDuration(stack, living) - timeLeft;
+            float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
+
+            // High-speed piercing sword dash up to 24 blocks (Tweak B: snaps to look path)
+            Vec3 start = player.position();
+            Vec3 look = player.getLookAngle();
+            double dashDist = 14.0 + (chargeRatio * 10.0);
+            Vec3 end = start.add(look.scale(dashDist));
+
+            // Hit targets along the dash path
+            AABB pathBox = new AABB(start, end).inflate(2.0 + chargeRatio * 2.5); // Tweak A: wider with charge
+            List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
+                LivingEntity.class, pathBox,
+                e -> e.isAlive() && e != player
+            );
+
+            // Teleport player
+            player.teleportTo(serverLevel, end.x, end.y, end.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+
+            // Delayed heroic finishing slash: 600.0 + (chargeRatio * 1400.0) + (Strength * 4.0 * chargeRatio)
+            float baseDamage = 600.0f + (chargeRatio * 1400.0f);
+            float strDamage = (float) (accessor.dba$getStrength() * 4.0f * chargeRatio);
+            float totalDamage = baseDamage + strDamage;
+
+            boolean anyKilled = false;
+            for (LivingEntity t : targets) {
+                t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
+                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage);
+                if (!t.isAlive()) {
+                    anyKilled = true;
+                }
+            }
+
+            // Tweak C: If any enemy killed, or max charge, trigger secondary radial heroic shockwave
+            if (anyKilled || chargeRatio >= 0.9f) {
+                AABB shockAoe = player.getBoundingBox().inflate(6.0);
+                List<LivingEntity> shockTargets = serverLevel.getEntitiesOfClass(
+                    LivingEntity.class, shockAoe, e -> e.isAlive() && e != player && !targets.contains(e)
+                );
+                for (LivingEntity st : shockTargets) {
+                    st.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage * 0.4f);
+                }
+                serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, player.getX(), player.getY() + 1.0, player.getZ(), 2, 0.5, 0.5, 0.5, 0);
+            }
+
+            // Golden beam trail along the entire path
+            for (double d = 0; d <= dashDist; d += 0.8) {
+                Vec3 p = start.add(look.scale(d));
+                serverLevel.sendParticles(
+                    new DustParticleOptions(0xFFD700, 2.2f),
+                    p.x, p.y + 1.0, p.z,
+                    1, 0, 0, 0, 0
+                );
+            }
+
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.7f);
+
+            player.getCooldowns().addCooldown(stack, 100); // 5-second cooldown
+        }
+        return true;
+    }
+}

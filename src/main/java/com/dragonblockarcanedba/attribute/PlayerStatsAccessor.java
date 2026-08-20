@@ -22,6 +22,7 @@ public interface PlayerStatsAccessor {
 
     int dba$getLevel();
     void dba$setLevel(int level);
+    void dba$addLevel(int levels);
 
     int dba$getXp();
     void dba$setXp(int xp);
