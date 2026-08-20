@@ -142,24 +142,40 @@ public class DbaNetwork {
                 } else if ("select_race".equals(action)) {
                     String raceStr = nbt.getStringOr("race", "");
                     if (!raceStr.isEmpty()) {
+                        boolean wasAlreadySelected = accessor.dba$hasSelectedRace();
                         accessor.dba$setRaceId(Identifier.parse(raceStr));
                         accessor.dba$setHasSelectedRace(true);
                         accessor.dba$setSkinColor(nbt.getStringOr("skin_color", ""));
                         accessor.dba$setHairColor(nbt.getStringOr("hair_color", ""));
-                        // Reset stats for fresh start
-                        accessor.dba$setLevel(1);
-                        accessor.dba$setXp(0);
-                        accessor.dba$setStatPoints(0);
-                        accessor.dba$setStrength(0);
-                        accessor.dba$setDexterity(0);
-                        accessor.dba$setDefense(0);
-                        accessor.dba$setWillpower(0);
-                        accessor.dba$setSpirit(0);
-                        accessor.dba$setVitality(0);
                         
-                        // Clear upgrade counts
-                        for (String stat : new String[]{"strength", "dexterity", "defense", "willpower", "spirit", "vitality"}) {
-                            accessor.dba$setStatUpgradeCount(stat, 0);
+                        if (!wasAlreadySelected) {
+                            // Initial race selection: fresh start
+                            accessor.dba$setLevel(1);
+                            accessor.dba$setXp(0);
+                            accessor.dba$setStatPoints(0);
+                            accessor.dba$setStrength(0);
+                            accessor.dba$setDexterity(0);
+                            accessor.dba$setDefense(0);
+                            accessor.dba$setWillpower(0);
+                            accessor.dba$setSpirit(0);
+                            accessor.dba$setVitality(0);
+                            for (String stat : new String[]{"strength", "dexterity", "defense", "willpower", "spirit", "vitality"}) {
+                                accessor.dba$setStatUpgradeCount(stat, 0);
+                            }
+                        } else {
+                            // Changing race later: 75% stats gone (retain 25%)
+                            accessor.dba$setLevel(Math.max(1, (int) Math.round(accessor.dba$getLevel() * 0.25)));
+                            accessor.dba$setXp((int) Math.round(accessor.dba$getXp() * 0.25));
+                            accessor.dba$setStatPoints((int) Math.round(accessor.dba$getStatPoints() * 0.25));
+                            accessor.dba$setStrength((int) Math.round(accessor.dba$getStrength() * 0.25));
+                            accessor.dba$setDexterity((int) Math.round(accessor.dba$getDexterity() * 0.25));
+                            accessor.dba$setDefense((int) Math.round(accessor.dba$getDefense() * 0.25));
+                            accessor.dba$setWillpower((int) Math.round(accessor.dba$getWillpower() * 0.25));
+                            accessor.dba$setSpirit((int) Math.round(accessor.dba$getSpirit() * 0.25));
+                            accessor.dba$setVitality((int) Math.round(accessor.dba$getVitality() * 0.25));
+                            for (String stat : new String[]{"strength", "dexterity", "defense", "willpower", "spirit", "vitality"}) {
+                                accessor.dba$setStatUpgradeCount(stat, (int) Math.round(accessor.dba$getStatUpgradeCount(stat) * 0.25));
+                            }
                         }
                         
                         accessor.dba$setActiveFormId(null);
@@ -167,7 +183,7 @@ public class DbaNetwork {
                         // Sync stats first to update the player's Max Health attribute based on their new race
                         accessor.dba$syncStats();
                         
-                        // Heal to max stats on creation
+                        // Heal to max stats on creation / change
                         accessor.dba$setCurrentKi(com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(player));
                         accessor.dba$setCurrentStamina(com.dragonblockarcanedba.attribute.PlayerStats.getMaxStamina(player));
                         player.setHealth(player.getMaxHealth());

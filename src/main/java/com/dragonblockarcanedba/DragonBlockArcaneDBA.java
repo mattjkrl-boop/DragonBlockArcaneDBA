@@ -281,6 +281,18 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             }
         });
 
+        // Copy DBA data across death/respawn so race, stats, and level are preserved
+        net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents.COPY_FROM.register((oldPlayer, newPlayer, alive) -> {
+            com.dragonblockarcanedba.attribute.PlayerStatsAccessor oldAccessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) oldPlayer;
+            com.dragonblockarcanedba.attribute.PlayerStatsAccessor newAccessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) newPlayer;
+            newAccessor.dba$copyFrom(oldAccessor);
+        });
+
+        net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
+            com.dragonblockarcanedba.attribute.PlayerStatsAccessor newAccessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) newPlayer;
+            newAccessor.dba$syncStats();
+        });
+
     }
 
     public static Identifier id(String path) {

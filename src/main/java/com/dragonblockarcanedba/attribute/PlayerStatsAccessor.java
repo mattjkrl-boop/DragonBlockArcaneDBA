@@ -76,4 +76,6 @@ public interface PlayerStatsAccessor {
 
     KiTechnique dba$getKiTechniqueSlot(int slot);
     void dba$setKiTechniqueSlot(int slot, KiTechnique tech);
+
+    void dba$copyFrom(PlayerStatsAccessor original);
 }

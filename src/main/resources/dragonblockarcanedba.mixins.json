@@ -10,7 +10,8 @@
 		"EntityTeleportMixin",
 		"DelayedDamageMixin",
 		"EntityMixin",
-		"MinecraftServerMixin"
+		"MinecraftServerMixin",
+		"RangedAttributeMixin"
 	],
 	"client": [
 		"CloudTextureMixin",

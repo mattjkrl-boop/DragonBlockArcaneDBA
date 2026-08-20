@@ -770,4 +770,49 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             dbaKiTechniqueSlots[slot] = tech != null ? tech : KiTechnique.EMPTY;
         }
     }
+
+    @Unique
+    @Override
+    public void dba$copyFrom(PlayerStatsAccessor original) {
+        if (!(original instanceof PlayerEntityMixin old)) {
+            return;
+        }
+        this.dbaRaceId = old.dbaRaceId;
+        this.dbaSkinColor = old.dbaSkinColor;
+        this.dbaHairColor = old.dbaHairColor;
+        this.dbaHasSelectedRace = old.dbaHasSelectedRace;
+        this.dbaLevel = old.dbaLevel;
+        this.dbaXp = old.dbaXp;
+        this.dbaAp = old.dbaAp;
+
+        this.dbaStatsMap.clear();
+        this.dbaStatsMap.putAll(old.dbaStatsMap);
+
+        this.dbaStatUpgradesMap.clear();
+        this.dbaStatUpgradesMap.putAll(old.dbaStatUpgradesMap);
+
+        this.dbaActiveFormId = null;
+
+        this.dbaFormMasteryMap.clear();
+        this.dbaFormMasteryMap.putAll(old.dbaFormMasteryMap);
+
+        this.dbaFormMasteryXpMap.clear();
+        this.dbaFormMasteryXpMap.putAll(old.dbaFormMasteryXpMap);
+
+        this.dbaUnlockedTechniques.clear();
+        this.dbaUnlockedTechniques.putAll(old.dbaUnlockedTechniques);
+
+        this.dbaActiveTechniques.clear();
+        this.dbaActiveTechniques.putAll(old.dbaActiveTechniques);
+
+        System.arraycopy(old.dbaEquippedTechniques, 0, this.dbaEquippedTechniques, 0, 3);
+        System.arraycopy(old.dbaKiTechniqueSlots, 0, this.dbaKiTechniqueSlots, 0, 3);
+
+        Player player = (Player) (Object) this;
+        this.dbaCurrentKi = PlayerStats.getMaxKi(player);
+        this.dbaCurrentStamina = PlayerStats.getMaxStamina(player);
+
+        dba$updateAttributes();
+        dba$syncStats();
+    }
 }
