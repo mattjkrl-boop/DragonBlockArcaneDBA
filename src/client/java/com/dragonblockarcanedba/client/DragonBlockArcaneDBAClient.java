@@ -34,6 +34,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     private static float lastCameraYRot = 0;
     private static float lastCameraXRot = 0;
     private static boolean manualSaberCameraOverride = false;
+    public static boolean raceScreenOpened = false;
 
     public static final net.minecraft.client.model.geom.ModelLayerLocation SHENRON_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
         com.dragonblockarcanedba.DragonBlockArcaneDBA.id("shenron"), "main"
@@ -236,6 +237,17 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             while (techSlot3Key.consumeClick()) {
                 if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(2));
             }
+
+            // Open Race Selection menu if player has not selected a race yet
+            if (client.player != null && client.level != null && !raceScreenOpened) {
+                if (client.player instanceof PlayerStatsAccessor accessor) {
+                    if (!accessor.dba$hasSelectedRace() && client.player.tickCount > 15) {
+                        raceScreenOpened = true;
+                        client.setScreenAndShow(new com.dragonblockarcanedba.client.gui.RaceSelectionScreen());
+                    }
+                }
+            }
+
             if (client.level != null) {
                 for (net.minecraft.world.entity.player.Player player : client.level.players()) {
                     if (player instanceof net.minecraft.client.player.AbstractClientPlayer clientPlayer) {
@@ -614,6 +626,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 if (context.client().player instanceof PlayerStatsAccessor accessor) {
                     CompoundTag nbt = payload.nbtData();
                     accessor.dba$setRaceId(Identifier.parse(nbt.getStringOr("raceId", "dragonblockarcanedba:human")));
+                    accessor.dba$setHasSelectedRace(nbt.getBooleanOr("hasSelectedRace", false));
                     accessor.dba$setCurrentKi(nbt.getDoubleOr("currentKi", 100.0));
                     accessor.dba$setCurrentStamina(nbt.getDoubleOr("currentStamina", 100.0));
                     accessor.dba$setLevel(nbt.getIntOr("level", 1));

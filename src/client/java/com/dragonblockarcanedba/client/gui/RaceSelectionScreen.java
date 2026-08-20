@@ -523,6 +523,10 @@ public class RaceSelectionScreen extends Screen {
         data.putString("hair_color", hairHex);
 
         ClientPlayNetworking.send(new ActionPayload(data));
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor) {
+            accessor.dba$setHasSelectedRace(true);
+        }
         this.onClose();
     }
 

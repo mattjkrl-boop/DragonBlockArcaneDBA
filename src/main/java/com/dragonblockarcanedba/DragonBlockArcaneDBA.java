@@ -268,10 +268,11 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             return true; // Allow normal death for non-players
         });
 
-        // Trigger Race Selection on first join
+        // Trigger Race Selection and sync stats on join
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             net.minecraft.server.level.ServerPlayer player = handler.getPlayer();
             com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
+            accessor.dba$syncStats();
             if (!accessor.dba$hasSelectedRace()) {
                 net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, new com.dragonblockarcanedba.network.RaceSelectOpenPayload());
             }
