@@ -2,7 +2,7 @@
 """
 Dragon Block Arcane DBA — Launch Script
 Builds the mod (if needed) and launches the Minecraft client via Gradle runClient.
-Automatically downloads ModMenu into run/mods if not already present.
+Supports custom usernames, offline UUIDs, and local IP detection for LAN multiplayer.
 """
 import os
 import sys
@@ -10,6 +10,7 @@ import json
 import shutil
 import urllib.request
 import subprocess
+import socket
 
 
 def verify_java():
@@ -31,15 +32,95 @@ def verify_java():
     print(f"Using JAVA_HOME: {java_home}")
 
 
+def save_username(file_path, name):
+    """Save player name to persistent file."""
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(name.strip())
+    except Exception:
+        pass
+
+
+def resolve_username():
+    """Determine the username from CLI args, prompt, or saved file."""
+    saved_file = os.path.join("run", "player_name.txt")
+    saved_name = "Player"
+    if os.path.exists(saved_file):
+        try:
+            with open(saved_file, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    saved_name = content
+        except Exception:
+            pass
+
+    # Check CLI arguments
+    args = sys.argv[1:]
+    for i, arg in enumerate(args):
+        if arg in ("-u", "--username", "--name") and i + 1 < len(args):
+            chosen = args[i + 1].strip()
+            if chosen:
+                save_username(saved_file, chosen)
+                return chosen
+        elif arg.startswith("--username="):
+            chosen = arg.split("=", 1)[1].strip()
+            if chosen:
+                save_username(saved_file, chosen)
+                return chosen
+        elif arg.startswith("--name="):
+            chosen = arg.split("=", 1)[1].strip()
+            if chosen:
+                save_username(saved_file, chosen)
+                return chosen
+        elif not arg.startswith("-") and arg not in ("build", "runClient"):
+            # Positional argument (e.g. `python launch.py Bob`)
+            save_username(saved_file, arg.strip())
+            return arg.strip()
+
+    # If interactive console and no CLI username specified, prompt user
+    if sys.stdin.isatty():
+        try:
+            print(f"\nEnter player username (press Enter for '{saved_name}'): ", end="", flush=True)
+            user_input = sys.stdin.readline().strip()
+            if user_input:
+                saved_name = user_input
+                save_username(saved_file, saved_name)
+        except (EOFError, KeyboardInterrupt):
+            pass
+
+    return saved_name
+
+
+def get_local_ips():
+    """Detect local LAN IPv4 addresses."""
+    ips = set()
+    try:
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if not ip.startswith("127.") and not ip.startswith("169.254."):
+                ips.add(ip)
+    except Exception:
+        pass
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        if not ip.startswith("127."):
+            ips.add(ip)
+        s.close()
+    except Exception:
+        pass
+    return sorted(list(ips))
+
+
 def download_modmenu():
     """Download ModMenu from Modrinth into the run/mods directory if not already present."""
     mods_dir = os.path.join("run", "mods")
     os.makedirs(mods_dir, exist_ok=True)
 
-    # Check if any modmenu jar is already downloaded
     for file in os.listdir(mods_dir):
         if file.lower().startswith("modmenu") and file.endswith(".jar"):
-            print(f"ModMenu already present: {file}")
             return
 
     print("ModMenu not found. Downloading via Modrinth API...")
@@ -51,14 +132,12 @@ def download_modmenu():
         with urllib.request.urlopen(req, timeout=15) as response:
             versions = json.loads(response.read().decode())
 
-        # Try to find a version matching minecraft 26.2
         selected_version = None
         for v in versions:
             if "26.2" in v.get("game_versions", []):
                 selected_version = v
                 break
 
-        # Fallback to latest
         if not selected_version and versions:
             selected_version = versions[0]
 
@@ -67,17 +146,14 @@ def download_modmenu():
             return
 
         file_info = selected_version["files"][0]
-        download_url = file_info["url"]
-        filename = file_info["filename"]
-        dest_file = os.path.join(mods_dir, filename)
+        dest_file = os.path.join(mods_dir, file_info["filename"])
 
         print(f"Downloading ModMenu {selected_version['version_number']}...")
-        urllib.request.urlretrieve(download_url, dest_file)
+        urllib.request.urlretrieve(file_info["url"], dest_file)
         print(f"Downloaded: {dest_file}")
 
     except Exception as e:
         print(f"Warning: ModMenu download failed: {e}")
-        print("Continuing without ModMenu. You can install it manually in 'run/mods/'.")
 
 
 def download_geckolib():
@@ -85,10 +161,8 @@ def download_geckolib():
     mods_dir = os.path.join("run", "mods")
     os.makedirs(mods_dir, exist_ok=True)
 
-    # Check if any geckolib jar is already downloaded
     for file in os.listdir(mods_dir):
         if file.lower().startswith("geckolib") and file.endswith(".jar"):
-            print(f"GeckoLib already present: {file}")
             return
 
     print("GeckoLib not found. Downloading via Modrinth API...")
@@ -100,14 +174,12 @@ def download_geckolib():
         with urllib.request.urlopen(req, timeout=15) as response:
             versions = json.loads(response.read().decode())
 
-        # Try to find a version matching minecraft 26.2
         selected_version = None
         for v in versions:
             if "26.2" in v.get("game_versions", []):
                 selected_version = v
                 break
 
-        # Fallback to latest
         if not selected_version and versions:
             selected_version = versions[0]
 
@@ -116,17 +188,14 @@ def download_geckolib():
             return
 
         file_info = selected_version["files"][0]
-        download_url = file_info["url"]
-        filename = file_info["filename"]
-        dest_file = os.path.join(mods_dir, filename)
+        dest_file = os.path.join(mods_dir, file_info["filename"])
 
         print(f"Downloading GeckoLib {selected_version['version_number']}...")
-        urllib.request.urlretrieve(download_url, dest_file)
+        urllib.request.urlretrieve(file_info["url"], dest_file)
         print(f"Downloaded: {dest_file}")
 
     except Exception as e:
         print(f"Warning: GeckoLib download failed: {e}")
-        print("Continuing without GeckoLib. You can install it manually in 'run/mods/'.")
 
 
 def nuke_caches():
@@ -142,13 +211,34 @@ def nuke_caches():
 
 
 def launch_client():
-    print("=========================================")
-    print("Launching Dragon Block Arcane DBA Client")
-    print("=========================================")
-
     verify_java()
     download_modmenu()
     download_geckolib()
+
+    username = resolve_username()
+    local_ips = get_local_ips()
+    primary_ip = local_ips[0] if local_ips else "192.168.x.x"
+
+    print("\n" + "=" * 64)
+    print(f"  Dragon Block Arcane DBA — Minecraft Launcher")
+    print(f"  Active Profile: {username}")
+    print("=" * 64)
+    if local_ips:
+        print("  Your Local Network IP Address(es) for LAN:")
+        for ip in local_ips:
+            print(f"    -> {ip}")
+    print("----------------------------------------------------------------")
+    print("  [HOW TO HOST A LAN GAME]")
+    print("    1. Enter your singleplayer world.")
+    print("    2. Press ESC -> 'Open to LAN' -> configure -> 'Start LAN World'.")
+    print(f"    3. Share your IP and Port with friends (e.g. {primary_ip}:54321).")
+    print("")
+    print("  [HOW TO JOIN A LAN GAME]")
+    print(f"    1. Each player should launch with their own name:")
+    print(f"       python launch.py <PlayerName>")
+    print(f"    2. Go to 'Multiplayer' -> 'Direct Connection'.")
+    print(f"    3. Enter Host IP and Port (e.g. {primary_ip}:54321) -> 'Join Server'.")
+    print("=" * 64 + "\n")
 
     gradlew = "gradlew.bat" if os.name == "nt" else "./gradlew"
     if not os.path.exists(gradlew.replace("./", "")):
@@ -163,9 +253,10 @@ def launch_client():
             print("ERROR: Build failed! Fix errors before launching.")
             sys.exit(build_result.returncode)
 
-    print("Starting Minecraft client via runClient...")
+    gradle_cmd = [gradlew, "runClient", f"-Pusername={username}"]
+    print(f"Starting Minecraft client as '{username}' via Gradle runClient...")
     try:
-        result = subprocess.run([gradlew, "runClient"], capture_output=False)
+        result = subprocess.run(gradle_cmd, capture_output=False)
         sys.exit(result.returncode)
     except KeyboardInterrupt:
         print("\nClient terminated by user.")
@@ -176,9 +267,7 @@ def launch_client():
 
 
 if __name__ == "__main__":
-    nuke = "--nuke-caches" in sys.argv
-
-    if nuke:
+    if "--nuke-caches" in sys.argv:
         nuke_caches()
 
     launch_client()

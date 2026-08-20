@@ -108,6 +108,12 @@ publishing {
 afterEvaluate {
 	tasks.named('runClient') {
 		dependsOn tasks.named('clientClasses')
+		if (project.hasProperty('username')) {
+			args '--username', project.property('username')
+		}
+		if (project.hasProperty('uuid')) {
+			args '--uuid', project.property('uuid')
+		}
 	}
 }
 
