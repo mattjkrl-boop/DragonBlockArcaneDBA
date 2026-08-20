@@ -9,13 +9,13 @@
 		"WindChargeMixin",
 		"EntityTeleportMixin",
 		"DelayedDamageMixin",
-		"EntityMixin"
+		"EntityMixin",
+		"MinecraftServerMixin"
 	],
 	"client": [
 		"CloudTextureMixin",
 		"ClientLevelWeatherMixin",
-		"client.SaberClientMixin",
-		"client.IntegratedServerMixin"
+		"client.SaberClientMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
