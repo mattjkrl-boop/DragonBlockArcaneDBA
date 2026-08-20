@@ -14,7 +14,8 @@
 	"client": [
 		"CloudTextureMixin",
 		"ClientLevelWeatherMixin",
-		"client.SaberClientMixin"
+		"client.SaberClientMixin",
+		"client.IntegratedServerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
