@@ -48,28 +48,39 @@ public class WhisStaffItem extends Item {
     private static final double AOE_RADIUS = 12.0;
 
     public WhisStaffItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        349.0, // +349 on top of base 1 = 350 total
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -1.5, // Fast — befitting Whis's speed (effective 2.5 attacks/sec)
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    349.0, // +349 on top of base 1 = 350 total
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -1.5, // Fast — befitting Whis's speed (effective 2.5 attacks/sec)
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Physics: Angelic effortless motion
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("whis_angel_friction"), -0.80, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("whis_angel_drag"), -0.80, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- Left Click: Damage + Time Reversal + Temporal Shatter + Slowness ---
@@ -80,8 +91,23 @@ public class WhisStaffItem extends Item {
             timeTracker.dba$startReversing(200);
         }
 
-        // Temporal Stasis — time distortion freeze
+        // Temporal Stasis — time distortion freeze & extreme temporal drag
         target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, 100, 0, false, true), attacker);
+
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            target,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("whis_stasis_drag"),
+            4.0,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            target,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("whis_stasis_friction"),
+            3.0,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+        );
 
         if (attacker instanceof ServerPlayer serverPlayer) {
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();

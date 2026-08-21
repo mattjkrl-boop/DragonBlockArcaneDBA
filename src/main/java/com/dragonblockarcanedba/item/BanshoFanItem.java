@@ -45,37 +45,60 @@ import java.util.List;
  */
 public class BanshoFanItem extends Item {
     public BanshoFanItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        399.0, // +399 on top of base 1 = 400 total
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -1.0, // Fastest weapon — swift fan swipes (effective 3.0 attacks/sec)
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    399.0, // +399 on top of base 1 = 400 total
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -1.0, // Fastest weapon — swift fan swipes (effective 3.0 attacks/sec)
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Physics: Storm Emperor aerial glide (drastically reduced mid-air drag)
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("bansho_wind_drag"), -0.70, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- Left Click: Massive knockback + Bleeding II + Cyclone Slash ---
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        // Gale Force: Launch target 10 blocks with strong upward velocity
+        // Gale Force: Launch target 10 blocks with strong upward velocity & MC 26.2 catapult physics
         Vec3 diff = target.position().subtract(attacker.position()).normalize().scale(5.0);
         target.setDeltaMovement(target.getDeltaMovement().add(diff.x, 1.2, diff.z));
         target.hurtMarked = true; // Force velocity sync to client
+
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            target,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("bansho_gale_bounce"),
+            0.85,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            target,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("bansho_gale_drag"),
+            -0.60,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+        );
 
         // Apply Bleeding II (amplifier 1) for 15 seconds (300 ticks)
         target.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 300, 1, false, true), attacker);

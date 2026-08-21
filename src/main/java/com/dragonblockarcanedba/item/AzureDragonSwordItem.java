@@ -134,6 +134,15 @@ public class AzureDragonSwordItem extends Item {
         // Force Elytra / fall flying animation pose
         player.startFallFlying();
 
+        // MC 26.2 Physics: Reduce air drag for hypersonic aerial flight
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            player,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dragon_flight_drag"),
+            isDoubleRushing ? -0.90 : -0.75,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+        );
+
         double movementMultiplier = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
         if (movementMultiplier <= 0.0) {
             stopDragonRush(player);
@@ -224,6 +233,11 @@ public class AzureDragonSwordItem extends Item {
         DOUBLE_RUSHING_MAP.remove(player.getUUID());
         player.fallDistance = 0.0f; // Immune to fall damage
         player.stopFallFlying();
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.removeModifier(
+            player,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dragon_flight_drag")
+        );
     }
 
     public static void triggerSonicQuake(ServerPlayer player, ItemStack stack) {
@@ -239,8 +253,15 @@ public class AzureDragonSwordItem extends Item {
 
         for (LivingEntity target : targets) {
             target.hurtServer(level, level.damageSources().mobAttack(player), quakeDamage);
-            // Launch high into the air
+            // Launch high into the air with MC 26.2 elastic bounciness
             target.setDeltaMovement(target.getDeltaMovement().add(0, 1.4, 0));
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                target,
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                com.dragonblockarcanedba.DragonBlockArcaneDBA.id("sonic_quake_bounce"),
+                0.85,
+                net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+            );
             target.hurtMarked = true;
         }
 

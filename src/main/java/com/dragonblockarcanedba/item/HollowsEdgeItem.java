@@ -69,28 +69,43 @@ public class HollowsEdgeItem extends Item {
     public static final Map<UUID, VoidRiftEntity> ACTIVE_RIFT_MAP = new ConcurrentHashMap<>();
 
     public HollowsEdgeItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        849.0, // 1 + 849 = 850 base damage
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -1.8, // Fluid assassin strikes
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    849.0, // 1 + 849 = 850 base damage
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -1.8, // Fluid assassin strikes
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Stealth: Completely hide nameplates from afar when holding Hollow's Edge
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("hollow_nameplate_stealth"), -64.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.MINI_NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("hollow_mini_nameplate_stealth"), -10.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+        // MC 26.2 Physics: Assassin stealth glide
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("hollow_friction_glide"), -0.65, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- LEFT CLICK: Hollow Rush Charging, Release & Dash ---

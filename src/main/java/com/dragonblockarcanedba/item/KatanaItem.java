@@ -41,28 +41,39 @@ public class KatanaItem extends Item {
     public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
 
     public KatanaItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        779.0, // 1 + 779 = 780 base damage
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        0.5, // Ultra swift swings (+0.5 over base)
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    779.0, // 1 + 779 = 780 base damage
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    0.5, // Ultra swift swings (+0.5 over base)
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Physics: Samurai Iaido ground sliding friction & reduced air drag
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("katana_iaido_friction"), -0.75, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("katana_air_drag"), -0.50, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- LEFT CLICK: Flashdraw (Multi-target Instant Dash Execution) ---

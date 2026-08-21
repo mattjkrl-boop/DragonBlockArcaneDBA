@@ -54,28 +54,36 @@ public class OxKingsAxeItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 200; // 10 seconds
 
     public OxKingsAxeItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        949.0, // 1 + 949 = 950 base damage
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -3.3, // Heavy swing feel
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    949.0, // 1 + 949 = 950 base damage
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -3.3, // Heavy swing feel
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Physics: Titan Ground Grip (increased friction against knockback)
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("ox_ground_grip"), 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- LEFT CLICK: Groundbreaker Charging & Downward Shockwave Strike ---

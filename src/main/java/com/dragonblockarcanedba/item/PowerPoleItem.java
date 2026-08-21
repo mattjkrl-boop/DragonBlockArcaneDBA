@@ -89,6 +89,15 @@ public class PowerPoleItem extends Item {
                     
                     // Counter incoming rush velocity and apply overwhelming gale repulsion
                     com.dragonblockarcanedba.util.MovementLimiterHelper.applyPowerPoleGaleForce(t, eyePos, distance);
+
+                    // MC 26.2 Physics: Apply bounciness so enemies ricochet off terrain
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        t,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("pole_spin_bounce"),
+                        0.90,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                    );
                 }
             }
 
@@ -166,6 +175,15 @@ public class PowerPoleItem extends Item {
                 
                 // Pole Stun
                 living.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, 100, 0, false, false));
+
+                // MC 26.2 Physics: Apply high bounciness upon heavy impact
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    living,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("pole_poke_bounce"),
+                    0.95,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                );
                 
                 // 15% Heavy Concussion Stun
                 if (serverLevel.getRandom().nextFloat() < 0.15f) {

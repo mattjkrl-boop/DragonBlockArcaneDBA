@@ -85,8 +85,9 @@ public class DarknessWaveEntity extends Projectile {
                 // Apply damage
                 target.hurtServer(serverLevel, damageSource, this.damage);
 
-                // Debuff: Petrification Curse for 5s (100 ticks)
+                // Debuff: Petrification Curse & Dark Faded Darkness for 5s (100 ticks)
                 target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.PETRIFICATION_CURSE_HOLDER, 100, 0, false, true));
+                target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.DARK_FADED_HOLDER, 100, 0, false, true));
 
                 // Cinematic tracking buffer
                 if (owner instanceof LivingEntity livingOwner) {
