@@ -3,20 +3,28 @@ package com.dragonblockarcanedba.client.render;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.entity.OxShockwaveEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Ox King's Groundbreaker Shockwave in Minecraft 26.2.
- * Renders an expanding 360-degree ground shockwave ring with heavy fiery/earthquake geometries.
+ * Renders an expanding continuous volcanic ground shockwave ring with magma crests and earthquake fractures.
  */
 public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxShockwaveRenderer.OxShockwaveRenderState> {
     public OxShockwaveRenderer(EntityRendererProvider.Context context) {
         super(context);
+    }
+
+    public static class OxShockwaveRenderState extends EntityRenderState {
+        public float chargeRatio = 0.0f;
+        public boolean isSubWave = false;
+        public float currentRadius = 1.0f;
     }
 
     @Override
@@ -37,45 +45,56 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         float radius = state.currentRadius;
-        int segments = 24;
-        float height = 0.25f + (state.chargeRatio * 0.25f);
-        float ringThickness = 0.4f + (state.chargeRatio * 0.3f);
+        int segments = 28;
+        float height = 0.35f + (state.chargeRatio * 0.45f);
+        float ringWidth = 0.85f + (state.chargeRatio * 0.6f);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            for (int i = 0; i < segments; i++) {
-                double a1 = (i / (double) segments) * Math.PI * 2.0;
-                double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
+            Matrix4f matrix = pose.pose();
 
-                float x1 = (float) (Math.cos(a1) * radius);
-                float z1 = (float) (Math.sin(a1) * radius);
-                float x2 = (float) (Math.cos(a2) * radius);
-                float z2 = (float) (Math.sin(a2) * radius);
+            // 1. Fiery Magma Outer Ring
+            drawContinuousShockwaveRing(matrix, buffer, 0, 0.05f, 0, radius, radius - ringWidth, height, segments,
+                1.0f, 0.30f, 0.0f, 0.85f, 1.0f, 0.1f, 0.0f, 0.0f);
 
-                float midX = (x1 + x2) * 0.5f;
-                float midZ = (z1 + z2) * 0.5f;
-
-                // 1. Fiery Outer Glow
-                KiRenderHelper.drawColoredBox(pose, buffer,
-                    midX - ringThickness, 0.0f, midZ - ringThickness,
-                    midX + ringThickness, height, midZ + ringThickness,
-                    1.0f, state.isSubWave ? 0.6f : 0.25f, 0.0f, 0.85f
-                );
-
-                // 2. White-Gold Core Impact
-                KiRenderHelper.drawColoredBox(pose, buffer,
-                    midX - (ringThickness * 0.5f), 0.05f, midZ - (ringThickness * 0.5f),
-                    midX + (ringThickness * 0.5f), height * 0.8f, midZ + (ringThickness * 0.5f),
-                    1.0f, 0.95f, 0.7f, 0.95f
-                );
-            }
+            // 2. Blazing White-Gold Inner Ridge
+            drawContinuousShockwaveRing(matrix, buffer, 0, 0.08f, 0, radius - ringWidth * 0.25f, radius - ringWidth * 0.75f, height * 1.3f, segments,
+                1.0f, 0.90f, 0.2f, 0.95f, 1.0f, 0.4f, 0.0f, 0.8f);
         });
 
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    public static class OxShockwaveRenderState extends EntityRenderState {
-        public float chargeRatio = 1.0f;
-        public boolean isSubWave = false;
-        public float currentRadius = 0.5f;
+    private static void drawContinuousShockwaveRing(Matrix4f matrix, VertexConsumer consumer,
+                                                   float cx, float cy, float cz,
+                                                   float rOuter, float rInner, float height,
+                                                   int segments,
+                                                   float rTop, float gTop, float bTop, float aTop,
+                                                   float rBot, float gBot, float bBot, float aBot) {
+        for (int i = 0; i < segments; i++) {
+            double a1 = (i / (double) segments) * Math.PI * 2.0;
+            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
+
+            float x1Out = cx + (float) Math.cos(a1) * rOuter;
+            float z1Out = cz + (float) Math.sin(a1) * rOuter;
+            float x2Out = cx + (float) Math.cos(a2) * rOuter;
+            float z2Out = cz + (float) Math.sin(a2) * rOuter;
+
+            float x1In = cx + (float) Math.cos(a1) * rInner;
+            float z1In = cz + (float) Math.sin(a1) * rInner;
+            float x2In = cx + (float) Math.cos(a2) * rInner;
+            float z2In = cz + (float) Math.sin(a2) * rInner;
+
+            // Outer rising wall
+            consumer.addVertex(matrix, x1Out, cy, z1Out).setColor(rBot, gBot, bBot, aBot).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2Out, cy, z2Out).setColor(rBot, gBot, bBot, aBot).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, aTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, aTop).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+            // Top ridge connecting outer to inner
+            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, aTop).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, aTop).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2In, cy, z2In).setColor(rBot, gBot, bBot, aBot).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1In, cy, z1In).setColor(rBot, gBot, bBot, aBot).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        }
     }
 }

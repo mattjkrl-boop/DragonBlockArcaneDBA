@@ -154,8 +154,8 @@ public class WhisStaffItem extends Item {
             // --- Self-Buff: Celestial Grace (Speed + Jump Boost + Resistance + Safe Fall) for 10 seconds (200 ticks) ---
             player.addEffect(new MobEffectInstance(DbaEffects.CELESTIAL_GRACE_HOLDER, 200, 0, false, true));
 
-            // --- Shimmering white/silver temporal sphere ---
-            for (int i = 0; i < 150; i++) {
+            // --- Shimmering celestial silver/cyan temporal sphere ---
+            for (int i = 0; i < 220; i++) {
                 double theta = Math.random() * Math.PI * 2;
                 double phi = Math.random() * Math.PI;
                 double r = AOE_RADIUS;
@@ -163,24 +163,39 @@ public class WhisStaffItem extends Item {
                 double py = player.getY() + 1.0 + Math.cos(phi) * r;
                 double pz = player.getZ() + Math.sin(phi) * Math.sin(theta) * r;
                 serverLevel.sendParticles(
-                    new DustParticleOptions(0xE0E0FF, 1.8F),
+                    new DustParticleOptions(i % 3 == 0 ? 0xFFFFFF : (i % 3 == 1 ? 0x88EEFF : 0xDDCCFF), 1.8F),
                     px, py, pz,
-                    1, 0.0, 0.0, 0.0, 0.0
+                    1, 0.0, 0.02, 0.0, 0.01
                 );
             }
 
-            // Clock-like rotating particle ring at player's feet
-            for (int i = 0; i < 72; i++) {
-                double angle = Math.toRadians(i * 5);
-                double ringR = 3.0;
-                double px = player.getX() + Math.cos(angle) * ringR;
-                double pz = player.getZ() + Math.sin(angle) * ringR;
-                serverLevel.sendParticles(
-                    ParticleTypes.END_ROD,
-                    px, player.getY() + 0.2, pz,
-                    1, 0.0, 0.1, 0.0, 0.0
-                );
+            // Concentric celestial clock face rotating particle rings at player's feet
+            for (int ring = 1; ring <= 3; ring++) {
+                double ringR = ring * 3.5;
+                int count = ring * 36;
+                for (int i = 0; i < count; i++) {
+                    double angle = Math.toRadians((i * (360.0 / count)));
+                    double px = player.getX() + Math.cos(angle) * ringR;
+                    double pz = player.getZ() + Math.sin(angle) * ringR;
+                    serverLevel.sendParticles(
+                        ring == 2 ? ParticleTypes.END_ROD : new DustParticleOptions(0x88FFFF, 1.5F),
+                        px, player.getY() + 0.15, pz,
+                        1, 0.0, 0.05, 0.0, 0.01
+                    );
+                }
             }
+
+            // Central celestial flare
+            serverLevel.sendParticles(
+                new DustParticleOptions(0xFFFFFF, 3.0F),
+                player.getX(), player.getY() + 1.5, player.getZ(),
+                12, 0.3, 0.3, 0.3, 0.05
+            );
+            serverLevel.sendParticles(
+                ParticleTypes.END_ROD,
+                player.getX(), player.getY() + 1.5, player.getZ(),
+                15, 0.4, 0.4, 0.4, 0.1
+            );
         }
 
         // 5-second cooldown (100 ticks)

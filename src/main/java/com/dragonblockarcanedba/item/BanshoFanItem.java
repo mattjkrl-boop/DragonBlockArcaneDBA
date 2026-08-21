@@ -110,26 +110,31 @@ public class BanshoFanItem extends Item {
                     nearby.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 200, 0, false, true), serverPlayer);
                 }
 
-                // Cyclone particle effect — green swirling tornado around target
-                for (int i = 0; i < 60; i++) {
-                    double angle = Math.toRadians(i * 6);
-                    double r = 3.0 * (1.0 - (i / 60.0)); // Spiral inward
-                    double height = i * 0.05;
+                // Cyclone particle effect — multi-layered emerald & jade swirling vortex around target
+                for (int i = 0; i < 90; i++) {
+                    double angle = Math.toRadians(i * 8);
+                    double r = 3.5 * (1.0 - (i / 90.0));
+                    double height = i * 0.06;
                     double px = target.getX() + Math.cos(angle) * r;
                     double pz = target.getZ() + Math.sin(angle) * r;
                     serverLevel.sendParticles(
-                        new DustParticleOptions(0x00FF88, 1.5F),
+                        new DustParticleOptions(i % 2 == 0 ? 0x00FF88 : 0x88FFCC, 1.8F),
                         px, target.getY() + height, pz,
-                        1, 0.0, 0.1, 0.0, 0.0
+                        1, -Math.sin(angle) * 0.2, 0.08, Math.cos(angle) * 0.2, 0.02
                     );
                 }
             }
 
-            // Standard impact wind particles
+            // Standard impact wind burst & sweep particles
             serverLevel.sendParticles(
-                new DustParticleOptions(0xCCFFCC, 2.0F),
+                new DustParticleOptions(0x00FF99, 2.2F),
                 target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-                12, 0.5, 0.3, 0.5, 0.15
+                20, 0.6, 0.4, 0.6, 0.18
+            );
+            serverLevel.sendParticles(
+                net.minecraft.core.particles.ParticleTypes.SWEEP_ATTACK,
+                target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                3, 0.2, 0.2, 0.2, 0.0
             );
         }
     }
@@ -142,9 +147,22 @@ public class BanshoFanItem extends Item {
         // Play wind charge sound
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.WIND_CHARGE_THROW, SoundSource.NEUTRAL,
-            0.7F, 0.4F / (level.getRandom().nextFloat() * 0.4F + 0.8F));
+            0.9F, 0.5F / (level.getRandom().nextFloat() * 0.4F + 0.8F));
 
-        if (!level.isClientSide()) {
+        if (!level.isClientSide() && level instanceof ServerLevel serverLevel) {
+            // Emerald launch burst at player eye position
+            Vec3 eye = player.getEyePosition();
+            Vec3 look = player.getLookAngle();
+            for (int i = 0; i < 25; i++) {
+                serverLevel.sendParticles(
+                    new DustParticleOptions(0x00FFAA, 1.6F),
+                    eye.x + look.x * 0.8 + (serverLevel.getRandom().nextDouble() - 0.5) * 0.6,
+                    eye.y + look.y * 0.8 + (serverLevel.getRandom().nextDouble() - 0.5) * 0.6,
+                    eye.z + look.z * 0.8 + (serverLevel.getRandom().nextDouble() - 0.5) * 0.6,
+                    1, look.x * 0.4, look.y * 0.4, look.z * 0.4, 0.08
+                );
+            }
+
             // Fire 5 wind charges in a spread pattern
             float[] yawOffsets = { -8.0f, -4.0f, 0.0f, 4.0f, 8.0f };
             float[] pitchOffsets = { 2.0f, -1.0f, 0.0f, -1.0f, 2.0f };

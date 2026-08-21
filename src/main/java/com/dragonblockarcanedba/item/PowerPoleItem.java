@@ -107,31 +107,38 @@ public class PowerPoleItem extends Item {
                 }
             }
 
-            // Wind Particles in a Cone
-            // Fire multiple rings of particles expanding outward
-            for (double d = 1.0; d <= maxRange; d += 3.0) {
+            // Wind & Gale Particles in an expanding conical hurricane vortex
+            for (double d = 1.0; d <= maxRange; d += 2.0) {
                 Vec3 ringCenter = eyePos.add(lookDir.scale(d));
-                double ringRadius = d * Math.tan(Math.toRadians(30.0)); // Match the 30 degree cone
+                double ringRadius = d * Math.tan(Math.toRadians(32.0));
                 
-                for (int i = 0; i < 360; i += 45) { // Less dense further out is fine, or keep it dense
-                    double angle = Math.toRadians(i);
-                    // Generate orthogonal vectors to lookDir for the ring
-                    Vec3 up = new Vec3(0, 1, 0);
-                    if (Math.abs(lookDir.y) > 0.9) up = new Vec3(1, 0, 0);
-                    Vec3 right = lookDir.cross(up).normalize();
-                    Vec3 upOrthogonal = right.cross(lookDir).normalize();
-                    
+                Vec3 up = new Vec3(0, 1, 0);
+                if (Math.abs(lookDir.y) > 0.9) up = new Vec3(1, 0, 0);
+                Vec3 right = lookDir.cross(up).normalize();
+                Vec3 upOrthogonal = right.cross(lookDir).normalize();
+
+                int ringCount = Math.min(24, (int)(ringRadius * 6));
+                for (int i = 0; i < ringCount; i++) {
+                    double angle = (i / (double) ringCount) * Math.PI * 2;
                     Vec3 particlePos = ringCenter
                             .add(right.scale(Math.cos(angle) * ringRadius))
                             .add(upOrthogonal.scale(Math.sin(angle) * ringRadius));
-                            
+                    
+                    // Outer hurricane wind swirl
                     serverLevel.sendParticles(
-                        net.minecraft.core.particles.ParticleTypes.CLOUD,
+                        new DustParticleOptions(i % 2 == 0 ? 0xDDFFFF : 0x00FF88, 1.6F),
                         particlePos.x, particlePos.y, particlePos.z,
-                        1, 0.1, 0.1, 0.1, 0.05
+                        1, -lookDir.x * 0.1, 0.05, -lookDir.z * 0.1, 0.02
                     );
                 }
             }
+
+            // Radial blast at spinner
+            serverLevel.sendParticles(
+                net.minecraft.core.particles.ParticleTypes.SWEEP_ATTACK,
+                eyePos.x + lookDir.x * 1.5, eyePos.y + lookDir.y * 1.5, eyePos.z + lookDir.z * 1.5,
+                3, 0.4, 0.4, 0.4, 0.0
+            );
         }
     }
 
@@ -165,6 +172,17 @@ public class PowerPoleItem extends Item {
                     int stunDuration = 60 + serverLevel.getRandom().nextInt(41); // 3-5 seconds
                     living.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, stunDuration, 1, false, false));
                 }
+
+                // Impact kinetic detonation ring at hit target
+                for (int i = 0; i < 36; i++) {
+                    double angle = Math.toRadians(i * 10);
+                    double ringR = 2.2;
+                    serverLevel.sendParticles(
+                        new DustParticleOptions(0xFFD700, 2.0F),
+                        hitVec.x + Math.cos(angle) * ringR, hitVec.y + 0.3, hitVec.z + Math.sin(angle) * ringR,
+                        1, 0, 0.05, 0, 0.01
+                    );
+                }
             } else {
                 HitResult blockHit = getPlayerPOVHitResult(level, player, ClipContext.Fluid.NONE);
                 if (blockHit.getType() != HitResult.Type.MISS) {
@@ -172,12 +190,13 @@ public class PowerPoleItem extends Item {
                 }
             }
             
-            // Visual Extension using particles (Red/Orange line)
+            // Visual Extension: Thick Glowing Crimson Staff with Gold Caps
             double dist = eyePos.distanceTo(hitVec);
-            for (double d = 0; d < dist; d += 0.5) {
+            for (double d = 0; d < dist; d += 0.35) {
                 Vec3 p = eyePos.add(look.scale(d));
+                boolean isTip = (d >= dist - 1.2);
                 serverLevel.sendParticles(
-                    new DustParticleOptions(0xFF4500, 1.5F), // Orange-Red
+                    new DustParticleOptions(isTip ? 0xFFD700 : 0xD51818, isTip ? 2.5F : 2.0F),
                     p.x, p.y, p.z,
                     1, 0.0, 0.0, 0.0, 0.0
                 );

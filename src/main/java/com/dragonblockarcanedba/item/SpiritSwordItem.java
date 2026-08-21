@@ -140,15 +140,40 @@ public class SpiritSwordItem extends Item {
         Vec3 eyePos = player.getEyePosition();
         Vec3 lookVec = player.getViewVector(1.0f);
 
-        // --- Continuous alternating cyan/white particle beam every tick ---
+        // --- Continuous dense core beam + outer spiraling energy drill rings every tick ---
         boolean useCyan = (ticksUsed % 2 == 0);
-        for (double d = 1.0; d <= PULSE_RANGE; d += 0.4) {
+        Vec3 up = new Vec3(0, 1, 0);
+        Vec3 right = lookVec.cross(up).normalize();
+        if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
+        Vec3 orthoUp = right.cross(lookVec).normalize();
+
+        for (double d = 1.0; d <= PULSE_RANGE; d += 0.5) {
             Vec3 point = eyePos.add(lookVec.scale(d));
-            int color = useCyan ? 0x00FFFF : 0xFFFFFF;
+
+            // Dense Core
             serverLevel.sendParticles(
-                new DustParticleOptions(color, 1.0F),
+                new DustParticleOptions(useCyan ? 0x00FFFF : 0xFFFFFF, 1.6F),
                 point.x, point.y, point.z,
-                1, 0.02, 0.02, 0.02, 0.0
+                1, 0.01, 0.01, 0.01, 0.0
+            );
+
+            // Double spiraling energy drill helix
+            double spiralAngle1 = (ticksUsed * 0.4) + (d * 0.8);
+            double spiralAngle2 = spiralAngle1 + Math.PI;
+            double spiralRadius = 0.45;
+
+            Vec3 offset1 = right.scale(Math.cos(spiralAngle1) * spiralRadius).add(orthoUp.scale(Math.sin(spiralAngle1) * spiralRadius));
+            Vec3 offset2 = right.scale(Math.cos(spiralAngle2) * spiralRadius).add(orthoUp.scale(Math.sin(spiralAngle2) * spiralRadius));
+
+            serverLevel.sendParticles(
+                new DustParticleOptions(0x00E5FF, 1.2F),
+                point.x + offset1.x, point.y + offset1.y, point.z + offset1.z,
+                1, 0.0, 0.0, 0.0, 0.0
+            );
+            serverLevel.sendParticles(
+                new DustParticleOptions(0xFFFFFF, 1.0F),
+                point.x + offset2.x, point.y + offset2.y, point.z + offset2.z,
+                1, 0.0, 0.0, 0.0, 0.0
             );
         }
 
