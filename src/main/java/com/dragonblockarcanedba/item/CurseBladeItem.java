@@ -266,15 +266,15 @@ public class CurseBladeItem extends Item {
                                 
                         // Fire on ground
                         BlockPos firePos = BlockPos.containing(targetPos.x, targetPos.y, targetPos.z);
-                        if (serverLevel.getBlockState(firePos).isAir() && serverLevel.getBlockState(firePos.below()).isSolid()) {
+                        if (serverLevel.getBlockState(firePos).isAir() && serverLevel.getBlockState(firePos.below()).isSolidRender()) {
                             serverLevel.setBlockAndUpdate(firePos, net.minecraft.world.level.block.Blocks.FIRE.defaultBlockState());
                         }
                     }
                 }
             }
 
-            // Environmental ambient lightning
-            if (serverLevel.getRandom().nextFloat() < 0.5f) { // ~10 strikes per second
+            // Environmental ambient lightning (Dramatic, non-spammy pacing ~2-3 per second)
+            if (serverLevel.getRandom().nextFloat() < 0.12f) {
                 double rx = player.getX() + (serverLevel.getRandom().nextDouble() - 0.5) * 60;
                 double rz = player.getZ() + (serverLevel.getRandom().nextDouble() - 0.5) * 60;
                 double ry = serverLevel.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, (int)rx, (int)rz);
@@ -283,16 +283,16 @@ public class CurseBladeItem extends Item {
                     com.dragonblockarcanedba.entity.DbaEntities.CURSE_LIGHTNING, serverLevel
                 );
                 ambient.setPos(rx, ry, rz);
-                if (serverLevel.getRandom().nextFloat() < 0.15f) {
+                if (serverLevel.getRandom().nextFloat() < 0.20f) {
                     ambient.setRare(true);
                 }
                 serverLevel.addFreshEntity(ambient);
                 
-                // Sound for EVERY strike (Lower volume to avoid ear-rape with so many strikes)
+                // Thunder sound
                 serverLevel.playSound(null, rx, ry, rz,
-                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 0.8f, 0.6f + serverLevel.getRandom().nextFloat() * 0.4f);
+                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.2f, 0.6f + serverLevel.getRandom().nextFloat() * 0.4f);
                 serverLevel.playSound(null, rx, ry, rz,
-                    SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 0.6f, 0.5f + serverLevel.getRandom().nextFloat() * 0.2f);
+                    SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 0.9f, 0.5f + serverLevel.getRandom().nextFloat() * 0.2f);
                 
                 // Damage and fire
                 AABB strikeBox = new AABB(rx - 3, ry - 3, rz - 3, rx + 3, ry + 3, rz + 3);
@@ -303,7 +303,7 @@ public class CurseBladeItem extends Item {
                 
                 // Set ground on fire
                 BlockPos firePos = BlockPos.containing(rx, ry, rz);
-                if (serverLevel.getBlockState(firePos).isAir() && serverLevel.getBlockState(firePos.below()).isSolid()) {
+                if (serverLevel.getBlockState(firePos).isAir() && serverLevel.getBlockState(firePos.below()).isSolidRender()) {
                     serverLevel.setBlockAndUpdate(firePos, net.minecraft.world.level.block.Blocks.FIRE.defaultBlockState());
                 }
             }

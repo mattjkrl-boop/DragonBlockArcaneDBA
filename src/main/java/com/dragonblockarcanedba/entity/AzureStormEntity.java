@@ -26,7 +26,7 @@ public class AzureStormEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> FOLLOWS_PLAYER = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> TARGET_ID = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.INT);
 
-    private int maxLifetime = 600; // 30 seconds
+    private int maxLifetime = 220; // 11 seconds (Fast, intense, punchy combat duration)
     private boolean isMaxCharged = false;
     private boolean hasSpawnedGiantTornado = false;
 
