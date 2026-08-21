@@ -17,6 +17,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
@@ -146,6 +147,11 @@ public class SaberItem extends Item {
         }
 
         ServerLevel level = (ServerLevel) player.level();
+        if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
+            ACTIVE_BLITZ_MAP.remove(player.getUUID());
+            return;
+        }
+
         UUID playerUuid = player.getUUID();
         long now = level.getGameTime();
 
@@ -217,9 +223,7 @@ public class SaberItem extends Item {
                 net.minecraft.world.phys.AABB slowBox = player.getBoundingBox().inflate(64.0);
                 List<LivingEntity> slowEntities = level.getEntitiesOfClass(LivingEntity.class, slowBox, e -> e != player && e.isAlive());
                 for (LivingEntity e : slowEntities) {
-                    e.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.SLOWNESS, 80, 9, false, false, false));
-                    e.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.MINING_FATIGUE, 80, 9, false, false, false));
-                    e.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.WEAKNESS, 80, 9, false, false, false));
+                    e.addEffect(new MobEffectInstance(DbaEffects.JUDGEMENT_LOCK_HOLDER, 80, 0, false, false, false));
                 }
 
                 // Sound cue for target chain lock
@@ -553,7 +557,8 @@ public class SaberItem extends Item {
                 anim.startPositions.put(e, e.position());
                 anim.endPositions.put(e, snapTarget);
                 
-                // (The entity will become visible again because the Movement Curse gets cleared upon snap or they die)
+                // Judgement Lock stasis during the finisher dimensional slash
+                e.addEffect(new MobEffectInstance(DbaEffects.JUDGEMENT_LOCK_HOLDER, 30, 0, false, false));
             }
 
             if (minT > maxT) { minT = -2.0; maxT = 2.0; }
@@ -634,6 +639,13 @@ public class SaberItem extends Item {
             }
         }
 
+        if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
+            player.sendSystemMessage(Component.literal("§cImmobilized! Cannot flash step."), true);
+            return;
+        }
+
+        double ccMult = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
+
         // Deduct 1 charge
         FLASH_STEP_CHARGES.put(playerUuid, charges - 1);
         LAST_RECHARGE_TIME.putIfAbsent(playerUuid, level.getGameTime());
@@ -646,7 +658,7 @@ public class SaberItem extends Item {
         Vec3 look = player.getLookAngle();
 
         // Tweak A: Check if an enemy is targeted within 16 blocks to dash directly behind them
-        LivingEntity targetedEnemy = findFlashStepTarget(player, level, 16.0);
+        LivingEntity targetedEnemy = findFlashStepTarget(player, level, 16.0 * ccMult);
         Vec3 destination;
 
         if (targetedEnemy != null) {
@@ -654,8 +666,8 @@ public class SaberItem extends Item {
             Vec3 enemyLook = targetedEnemy.getLookAngle();
             destination = targetedEnemy.position().subtract(enemyLook.scale(1.5));
         } else {
-            // Directional dash (works horizontally & vertically)
-            double dashDistance = 7.0;
+            // Directional dash (works horizontally & vertically, scaled by CC / movement limiter)
+            double dashDistance = 7.0 * ccMult;
             Vec3 rayEnd = eyePos.add(look.scale(dashDistance + 1.0));
             BlockHitResult hit = level.clip(new ClipContext(eyePos, rayEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
 
@@ -788,13 +800,27 @@ public class SaberItem extends Item {
         Iterator<BlitzFinisherAnim> it = ACTIVE_FINISHERS.iterator();
         while (it.hasNext()) {
             BlitzFinisherAnim anim = it.next();
+            
+            // Disconnect safety: if player disconnected during finisher, restore entities and remove anim
+            if (anim.player == null || anim.player.isRemoved() || !anim.player.isAlive()) {
+                for (LivingEntity e : anim.targets) {
+                    if (e != null && e.isAlive()) {
+                        e.noPhysics = false;
+                        e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
+                        e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER);
+                    }
+                }
+                it.remove();
+                continue;
+            }
+
             anim.ticks++;
             
             float progress = (float) anim.ticks / (float) anim.maxTicks;
             progress = net.minecraft.util.Mth.clamp(progress, 0.0f, 1.0f);
             
             for (LivingEntity e : anim.targets) {
-                if (!e.isAlive()) continue;
+                if (e == null || !e.isAlive() || e.isRemoved()) continue;
                 
                 Vec3 start = anim.startPositions.get(e);
                 Vec3 end = anim.endPositions.get(e);
@@ -813,7 +839,7 @@ public class SaberItem extends Item {
                 ServerLevel level = anim.level;
                 
                 for (LivingEntity e : anim.targets) {
-                    if (!e.isAlive()) continue;
+                    if (e == null || !e.isAlive() || e.isRemoved()) continue;
                     e.noPhysics = false;
                     
                     // Violent fracture particles at each snapped mob
@@ -828,7 +854,10 @@ public class SaberItem extends Item {
                     e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER);
                     
                     // Burst Finishing Damage (Neck-Snap Finisher)
-                    e.hurtServer(level, level.damageSources().playerAttack(anim.player), anim.damage);
+                    DamageSource dmgSource = (!anim.player.isRemoved() && anim.player.isAlive())
+                        ? level.damageSources().playerAttack(anim.player)
+                        : level.damageSources().generic();
+                    e.hurtServer(level, dmgSource, anim.damage);
                 }
                 
                 // Straight-line visual slash beam along the entire calculated best-fit line
@@ -858,7 +887,9 @@ public class SaberItem extends Item {
                 level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
                     SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.5f, 1.4f);
 
-                anim.player.sendSystemMessage(Component.literal("§b✦ BLITZ FINISHER: " + anim.targets.size() + " Enemies Snapped! ✦"), true);
+                if (!anim.player.isRemoved()) {
+                    anim.player.sendSystemMessage(Component.literal("§b✦ BLITZ FINISHER: " + anim.targets.size() + " Enemies Snapped! ✦"), true);
+                }
                 
                 it.remove();
             }
@@ -904,5 +935,14 @@ public class SaberItem extends Item {
                 }
             }
         }
+    }
+
+    public static void onPlayerDisconnect(UUID playerUuid) {
+        ACTIVE_BLITZ_MAP.remove(playerUuid);
+        SPEED_BUFF_EXPIRE_MAP.remove(playerUuid);
+        FLASH_STEP_CHARGES.remove(playerUuid);
+        LAST_RECHARGE_TIME.remove(playerUuid);
+        PERFECT_DODGE_EXPIRE_TIME.remove(playerUuid);
+        ACTIVE_FINISHERS.removeIf(anim -> anim.player != null && anim.player.getUUID().equals(playerUuid));
     }
 }

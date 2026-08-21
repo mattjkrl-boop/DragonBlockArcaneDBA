@@ -632,6 +632,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     accessor.dba$setLevel(nbt.getIntOr("level", 1));
                     accessor.dba$setXp(nbt.getIntOr("xp", 0));
                     accessor.dba$setStatPoints(nbt.getIntOr("ap", 0));
+                    accessor.dba$setSpeedPercent(nbt.getIntOr("speedPercent", 100));
                     accessor.dba$setSkinColor(nbt.getStringOr("skinColor", ""));
                     accessor.dba$setHairColor(nbt.getStringOr("hairColor", ""));
 

@@ -118,14 +118,14 @@ public class GrandBladeShardEntity extends Projectile {
                     // 1. Stackable damage
                     victim.hurtServer(serverLevel, damageSource, this.damage);
 
-                    // 2. Slowness: Stacks AMPLIFIER (effect level), NOT duration
+                    // 2. Valor Stun: Stacks AMPLIFIER (effect level), pinning the target at high stacks
                     int currentAmp = 0;
-                    if (victim.hasEffect(MobEffects.SLOWNESS)) {
-                        currentAmp = victim.getEffect(MobEffects.SLOWNESS).getAmplifier() + 1;
-                        currentAmp = Math.min(5, currentAmp); // Max Slowness VI (amplifier 5)
+                    if (victim.hasEffect(DbaEffects.VALOR_STUN_HOLDER)) {
+                        currentAmp = victim.getEffect(DbaEffects.VALOR_STUN_HOLDER).getAmplifier() + 1;
+                        currentAmp = Math.min(5, currentAmp);
                     }
                     // Fixed 60-tick duration (3 seconds)
-                    victim.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 60, currentAmp, false, true, true));
+                    victim.addEffect(new MobEffectInstance(DbaEffects.VALOR_STUN_HOLDER, 60, currentAmp, false, true, true));
 
                     // 3. Cinematic Delayed Damage invisible tracking (no HUD icon, no particles, holds during slowness)
                     if (owner instanceof LivingEntity livingOwner) {
@@ -183,10 +183,10 @@ public class GrandBladeShardEntity extends Projectile {
                     victim.hurtServer(serverLevel, damageSource, this.damage);
 
                     int currentAmp = 0;
-                    if (victim.hasEffect(MobEffects.SLOWNESS)) {
-                        currentAmp = Math.min(5, victim.getEffect(MobEffects.SLOWNESS).getAmplifier() + 1);
+                    if (victim.hasEffect(DbaEffects.VALOR_STUN_HOLDER)) {
+                        currentAmp = Math.min(5, victim.getEffect(DbaEffects.VALOR_STUN_HOLDER).getAmplifier() + 1);
                     }
-                    victim.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 60, currentAmp, false, true, true));
+                    victim.addEffect(new MobEffectInstance(DbaEffects.VALOR_STUN_HOLDER, 60, currentAmp, false, true, true));
 
                     if (owner instanceof LivingEntity livingOwner) {
                         victim.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), livingOwner);

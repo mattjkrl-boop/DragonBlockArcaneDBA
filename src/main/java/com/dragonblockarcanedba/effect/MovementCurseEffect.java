@@ -1,13 +1,14 @@
 package com.dragonblockarcanedba.effect;
 
+import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -16,11 +17,18 @@ import net.minecraft.world.phys.Vec3;
  * - Stacks from 1 to 10 (amplifier 0 to 9).
  * - Each stack reduces movement speed and jump velocity by 10%.
  * - At 10 stacks (amplifier 9), the entity is completely frozen in place, cannot jump, dash, or teleport.
- * - Stacks above 5 add Darkness and vision obscuring spectral chain particles.
+ * - Stacks above 5 add dense dark smoke and vision-obscuring spectral chain particles.
  */
 public class MovementCurseEffect extends MobEffect {
     public MovementCurseEffect() {
         super(MobEffectCategory.HARMFUL, 0x2E0854); // Deep cursed purple
+
+        this.addAttributeModifier(
+            Attributes.MOVEMENT_SPEED,
+            DragonBlockArcaneDBA.id("effect.movement_curse.speed"),
+            -0.10,
+            AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
+        );
     }
 
     @Override
@@ -38,8 +46,6 @@ public class MovementCurseEffect extends MobEffect {
             // Full root: zero horizontal motion, gravity still pulls down if airborne
             entity.setDeltaMovement(0.0, velocity.y < 0 ? velocity.y : 0.0, 0.0);
             entity.hurtMarked = true;
-            // Darkness to obstruct vision
-            entity.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 40, 0, false, false));
         } else {
             // Progressive movement and jump dampening
             double newX = velocity.x * movementRetained;
@@ -47,11 +53,6 @@ public class MovementCurseEffect extends MobEffect {
             double newY = velocity.y > 0 ? velocity.y * movementRetained : velocity.y;
             entity.setDeltaMovement(newX, newY, newZ);
             entity.hurtMarked = true;
-        }
-
-        // Tweak C: High stacks add Darkness
-        if (stacks >= 5) {
-            entity.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 30, 0, false, false));
         }
 
         // Visual spectral chain particles

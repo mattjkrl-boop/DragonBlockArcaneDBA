@@ -24,11 +24,19 @@ import java.util.List;
  *   Damage falloff: linear from center
  */
 public class KiTechniqueHandler {
+    private static final java.util.Map<java.util.UUID, Long> LAST_FIRE_TIME = new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
      * Fires the Ki technique in the given slot for a player.
      */
     public static void fire(ServerPlayer player, int slot) {
+        long now = player.level().getGameTime();
+        long last = LAST_FIRE_TIME.getOrDefault(player.getUUID(), 0L);
+        if (now - last < 4) {
+            return; // Rate-limited: 4 ticks (0.2s) minimum between Ki fires to prevent macro packet flooding
+        }
+        LAST_FIRE_TIME.put(player.getUUID(), now);
+
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
         KiTechnique tech = accessor.dba$getKiTechniqueSlot(slot);
         if (tech.isEmpty) {
@@ -242,5 +250,9 @@ public class KiTechniqueHandler {
         AABB box = new AABB(pos.x - radius, pos.y - radius, pos.z - radius,
                             pos.x + radius, pos.y + radius, pos.z + radius);
         return level.getEntitiesOfClass(LivingEntity.class, box, e -> e != caster && e.isAlive());
+    }
+
+    public static void onPlayerDisconnect(java.util.UUID playerUuid) {
+        LAST_FIRE_TIME.remove(playerUuid);
     }
 }

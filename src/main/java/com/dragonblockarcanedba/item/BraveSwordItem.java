@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.BraveSlashEntity;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -169,7 +170,8 @@ public class BraveSwordItem extends Item {
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);
 
-            player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 1, false, false));
+            // Heroic Focus: courageous stance, armor & jump power
+            player.addEffect(new MobEffectInstance(DbaEffects.HEROIC_FOCUS_HOLDER, 10, 0, false, false));
 
             // Concentrated golden & cyan particles gathering around the sword
             int count = 2 + (int) (chargeRatio * 8);
@@ -208,10 +210,17 @@ public class BraveSwordItem extends Item {
             int heldTicks = getUseDuration(stack, living) - timeLeft;
             float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
 
-            // High-speed piercing sword dash up to 24 blocks (Tweak B: snaps to look path)
+            if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
+                player.sendSystemMessage(Component.literal("§cImmobilized! Cannot dash."), true);
+                return false;
+            }
+
+            double ccMult = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
+
+            // High-speed piercing sword dash up to 24 blocks (scaled by CC / movement limiter)
             Vec3 start = player.position();
             Vec3 look = player.getLookAngle();
-            double dashDist = 14.0 + (chargeRatio * 10.0);
+            double dashDist = (14.0 + (chargeRatio * 10.0)) * ccMult;
             Vec3 end = start.add(look.scale(dashDist));
 
             // Hit targets along the dash path

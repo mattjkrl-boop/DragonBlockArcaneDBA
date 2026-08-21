@@ -96,7 +96,7 @@ public class DevilTridentItem extends Item {
                 if (target != null) {
                     tag.putString("swarmTarget", target.getUUID().toString());
                     stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
-                    target.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.GLOWING, 60, 0, false, false));
+                    target.addEffect(new MobEffectInstance(DbaEffects.MARKED_BY_EVIL_HOLDER, 60, 0, false, false));
                     player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                         net.minecraft.sounds.SoundEvents.ZOMBIE_VILLAGER_CONVERTED, net.minecraft.sounds.SoundSource.PLAYERS, 0.5f, 2.0f);
                 }
@@ -187,6 +187,15 @@ public class DevilTridentItem extends Item {
     }
 
     public static void manageShardSwarm(Player player, ServerLevel world) {
+        // Quick check: only execute swarm management if player is holding a Devil Trident
+        ItemStack trident = player.getMainHandItem();
+        if (!(trident.getItem() instanceof DevilTridentItem)) {
+            trident = player.getOffhandItem();
+        }
+        if (!(trident.getItem() instanceof DevilTridentItem)) {
+            return;
+        }
+
         List<TridentShardEntity> activeShards = new java.util.ArrayList<>(world.getEntitiesOfClass(TridentShardEntity.class, player.getBoundingBox().inflate(64.0), e -> e.getOwnerId() == player.getId() && !e.isRecalling()));
 
         // 1. Prioritize Protection: Find incoming projectiles
@@ -203,12 +212,6 @@ public class DevilTridentItem extends Item {
             }
         }
 
-        // Check if there is a swarm target set in the player's held trident
-        ItemStack trident = player.getMainHandItem();
-        if (!(trident.getItem() instanceof DevilTridentItem)) {
-            trident = player.getOffhandItem();
-        }
-        
         LivingEntity priorityTarget = null;
         if (trident.getItem() instanceof DevilTridentItem) {
             Map<Integer, Float> missing = SwarmHelper.getMissingEntities(trident, activeShards);

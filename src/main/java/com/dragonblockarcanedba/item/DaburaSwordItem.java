@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.DarknessBladeEntity;
 import com.dragonblockarcanedba.entity.DarknessWaveEntity;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -85,7 +86,9 @@ public class DaburaSwordItem extends Item {
         }
 
         // Slow player while charging
-        player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 2, false, false));
+        Vec3 vel = player.getDeltaMovement();
+        player.setDeltaMovement(vel.x * 0.4, vel.y, vel.z * 0.4);
+        player.hurtMarked = true;
 
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
 
@@ -205,7 +208,7 @@ public class DaburaSwordItem extends Item {
                 }
             }
 
-            // Continuous debuffs on enemies inside domain
+            // Continuous debuffs on enemies inside domain: Petrification Curse
             AABB domainBox = player.getBoundingBox().inflate(domainRadius, 8.0, domainRadius);
             List<LivingEntity> enemies = serverLevel.getEntitiesOfClass(
                 LivingEntity.class, domainBox,
@@ -213,10 +216,7 @@ public class DaburaSwordItem extends Item {
             );
 
             for (LivingEntity enemy : enemies) {
-                enemy.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 40, 0, false, true));
-                enemy.addEffect(new MobEffectInstance(MobEffects.NAUSEA, 60, 0, false, true));
-                enemy.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 40, 3, false, true));
-                enemy.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 40, 1, false, true));
+                enemy.addEffect(new MobEffectInstance(DbaEffects.PETRIFICATION_CURSE_HOLDER, 40, 0, false, true));
             }
 
             // Tweak B: Slow / suspend hostile enemy projectiles entering domain
@@ -252,9 +252,9 @@ public class DaburaSwordItem extends Item {
         // Suspend enemies in mid-air & apply cinematic lock
         for (LivingEntity enemy : enemies) {
             enemy.setDeltaMovement(0, 0.4, 0);
-            enemy.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 40, 1, false, false));
+            enemy.addEffect(new MobEffectInstance(DbaEffects.PETRIFICATION_CURSE_HOLDER, 60, 1, false, false));
             enemy.addEffect(new MobEffectInstance(
-                com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false
+                DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false
             ), player);
             enemy.hurtServer(level, level.damageSources().playerAttack(player), burstDamage);
         }

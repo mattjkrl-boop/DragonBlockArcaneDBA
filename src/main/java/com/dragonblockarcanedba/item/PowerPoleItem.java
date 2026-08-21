@@ -1,9 +1,8 @@
 package com.dragonblockarcanedba.item;
 
-
-
-
+import com.dragonblockarcanedba.effect.DbaEffects;
 import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -76,26 +75,35 @@ public class PowerPoleItem extends Item {
                 Vec3 toTarget = targetPos.subtract(eyePos);
                 double distance = toTarget.length();
                 
-                if (distance > maxRange || distance < 0.1) continue;
-                
-                // Cone angle check - getting wider further out
-                // Let's say cone is 60 degrees total (30 degrees each side)
                 Vec3 toTargetDir = toTarget.normalize();
-                double dotProduct = lookDir.dot(toTargetDir);
+                double dotProduct = Math.max(-1.0, Math.min(1.0, lookDir.dot(toTargetDir)));
                 double angleToTarget = Math.toDegrees(Math.acos(dotProduct));
-                
-                if (angleToTarget <= 30.0) {
+
+                boolean inCone = angleToTarget <= 35.0;
+                boolean inClosePerimeter = distance <= 4.5; // Radial barrier around the spinner
+
+                if (inCone || inClosePerimeter) {
                     // Inverse area damage scaling
-                    // Wider it goes, the more split the damage is.
-                    // Damage = 750 / max(1.0, distance / 3.0)
                     float damage = 750.0f / (float) Math.max(1.0, distance / 3.0);
-                    
                     t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), damage);
                     
-                    // Knockback outward from player
-                    Vec3 knockback = toTargetDir.scale(1.5 / Math.max(1.0, distance / 5.0));
-                    t.setDeltaMovement(t.getDeltaMovement().add(knockback.x, 0.2, knockback.z));
-                    t.hurtMarked = true;
+                    // Counter incoming rush velocity and apply overwhelming gale repulsion
+                    com.dragonblockarcanedba.util.MovementLimiterHelper.applyPowerPoleGaleForce(t, eyePos, distance);
+                }
+            }
+
+            // Deflect incoming projectiles & Ki Blasts
+            List<net.minecraft.world.entity.projectile.Projectile> projectiles = serverLevel.getEntitiesOfClass(
+                net.minecraft.world.entity.projectile.Projectile.class, aoe, p -> p.isAlive() && p.getOwner() != player
+            );
+            for (net.minecraft.world.entity.projectile.Projectile p : projectiles) {
+                Vec3 pPos = p.position();
+                Vec3 toProj = pPos.subtract(eyePos);
+                double pDist = toProj.length();
+                if (pDist <= maxRange && (pDist <= 4.5 || lookDir.dot(toProj.normalize()) > 0.75)) {
+                    p.setOwner(player);
+                    p.setDeltaMovement(toProj.normalize().scale(2.2));
+                    p.hurtMarked = true;
                 }
             }
 
@@ -149,14 +157,13 @@ public class PowerPoleItem extends Item {
                 // Damage
                 living.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), 750.0f);
                 
-                // Slowness
-                living.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 100, 3, false, false));
+                // Pole Stun
+                living.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, 100, 0, false, false));
                 
-                // 15% Blackout Stun
+                // 15% Heavy Concussion Stun
                 if (serverLevel.getRandom().nextFloat() < 0.15f) {
                     int stunDuration = 60 + serverLevel.getRandom().nextInt(41); // 3-5 seconds
-                    living.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, stunDuration, 0, false, false));
-                    living.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, stunDuration, 10, false, false)); // Full freeze
+                    living.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, stunDuration, 1, false, false));
                 }
             } else {
                 HitResult blockHit = getPlayerPOVHitResult(level, player, ClipContext.Fluid.NONE);

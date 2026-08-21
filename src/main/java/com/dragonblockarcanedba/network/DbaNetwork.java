@@ -196,6 +196,10 @@ public class DbaNetwork {
                     if (overworld != null) {
                         player.teleportTo(overworld, 0.5, 100, 0.5, java.util.Collections.emptySet(), 0, 0, false);
                     }
+                } else if ("set_speed_percent".equals(action)) {
+                    int percent = nbt.getIntOr("percent", 100);
+                    accessor.dba$setSpeedPercent(percent);
+                    accessor.dba$syncStats();
                 }
             });
         });
@@ -425,5 +429,22 @@ public class DbaNetwork {
                 ServerPlayNetworking.send(other, payload);
             }
         }
+    }
+
+    /**
+     * Sends a specific player's transformation and race state to a target player.
+     */
+    public static void sendTransformStateTo(ServerPlayer sourcePlayer, ServerPlayer targetPlayer) {
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) sourcePlayer;
+        Identifier raceId = accessor.dba$getRaceId();
+        Identifier formId = accessor.dba$getActiveFormId();
+
+        TransformBroadcastPayload payload = new TransformBroadcastPayload(
+            sourcePlayer.getId(),
+            raceId != null ? raceId.toString() : "",
+            formId != null ? formId.toString() : ""
+        );
+
+        ServerPlayNetworking.send(targetPlayer, payload);
     }
 }

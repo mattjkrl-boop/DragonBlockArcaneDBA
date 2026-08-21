@@ -90,12 +90,12 @@ public class GravityTrainingBlockEntity extends BlockEntity implements MenuProvi
                 player.setDeltaMovement(player.getDeltaMovement().add(0, -pull, 0));
                 player.hurtMarked = true; // Tell client to update motion
 
-                // Dynamic Slowness Effect: Amplifier scales with gravity (0 to 6)
-                int slownessAmp = Math.min(6, entity.gravity / 150);
+                // Dynamic Gravity Weight: Ancient Weight effect
+                int weightAmp = Math.min(3, entity.gravity / 250);
                 player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
-                    net.minecraft.world.effect.MobEffects.SLOWNESS,
+                    com.dragonblockarcanedba.effect.DbaEffects.ANCIENT_WEIGHT_HOLDER,
                     25,
-                    slownessAmp,
+                    weightAmp,
                     false,
                     false
                 ));

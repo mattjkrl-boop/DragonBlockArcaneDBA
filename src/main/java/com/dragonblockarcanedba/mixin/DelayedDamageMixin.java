@@ -20,10 +20,7 @@ public abstract class DelayedDamageMixin {
     private int dba$damageDelayTicks = 0;
 
     @Unique
-    private DamageSource dba$lastDamageSource = null;
-
-    @Unique
-    private net.minecraft.world.entity.player.Player dba$lastPlayer = null;
+    private java.util.UUID dba$lastPlayerUuid = null;
 
     @Unique
     private boolean dba$isApplyingDelayedDamage = false;
@@ -42,8 +39,7 @@ public abstract class DelayedDamageMixin {
             if (source.getEntity() instanceof net.minecraft.world.entity.player.Player player) {
                 dba$accumulatedDamage += amount;
                 dba$damageDelayTicks = 10; // 0.5 seconds of combo time
-                dba$lastDamageSource = source;
-                dba$lastPlayer = player;
+                dba$lastPlayerUuid = player.getUUID();
 
                 // Automatically apply invisible cinematic tracking effect to track all player weapon damage
                 self.addEffect(new net.minecraft.world.effect.MobEffectInstance(
@@ -70,15 +66,16 @@ public abstract class DelayedDamageMixin {
             LivingEntity self = (LivingEntity) (Object) this;
             
             // Check for cinematic CC effects that should lock the damage combo
-            boolean isCinematicallyLocked = false;
-            
-            // Universal Cinematic Tracking Effect (Invisible damage combo lock)
-            if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER)) {
-                isCinematicallyLocked = true;
-            }
+            boolean isCinematicallyLocked = self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.TEMPORAL_STASIS_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.JUDGEMENT_LOCK_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.SPIRIT_IMPALE_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.VALOR_STUN_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.POLE_STUN_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.FISSURE_STUN_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.PETRIFICATION_CURSE_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
 
-
-            
             if (isCinematicallyLocked) {
                 // Keep the buffer at exactly 0.5s (10 ticks) so it pops immediately after the effect wears off
                 dba$damageDelayTicks = 10;
@@ -90,21 +87,22 @@ public abstract class DelayedDamageMixin {
                 // Time to apply the massive accumulated damage!
                 dba$isApplyingDelayedDamage = true;
                 if (self.level() instanceof ServerLevel serverLevel) {
-                    DamageSource source = dba$lastDamageSource != null 
-                        ? dba$lastDamageSource 
-                        : (dba$lastPlayer != null ? serverLevel.damageSources().playerAttack(dba$lastPlayer) : serverLevel.damageSources().generic());
-                    
-                    if (dba$lastPlayer != null) {
-                        self.setLastHurtByMob(dba$lastPlayer);
+                    net.minecraft.world.entity.player.Player attacker = dba$lastPlayerUuid != null ? serverLevel.getPlayerByUUID(dba$lastPlayerUuid) : null;
+                    DamageSource source;
+                    if (attacker != null && !attacker.isRemoved() && attacker.isAlive()) {
+                        source = serverLevel.damageSources().playerAttack(attacker);
+                        self.setLastHurtByMob(attacker);
+                    } else {
+                        source = serverLevel.damageSources().generic();
                     }
+                    
                     self.hurtServer(serverLevel, source, dba$accumulatedDamage);
                 }
                 dba$isApplyingDelayedDamage = false;
                 
                 // Reset
                 dba$accumulatedDamage = 0.0f;
-                dba$lastDamageSource = null;
-                dba$lastPlayer = null;
+                dba$lastPlayerUuid = null;
             }
         }
     }

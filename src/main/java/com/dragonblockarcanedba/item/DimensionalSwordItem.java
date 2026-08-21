@@ -99,8 +99,8 @@ public class DimensionalSwordItem extends Item {
                 // Phase 1: Origin wave
                 spawnDimensionalWave(serverLevel, player.position(), player);
                 
-                // Phase 2: Darkness
-                player.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 40, 0, false, false));
+                // Phase 2: Spatial Rift Energy Surge
+                player.addEffect(new MobEffectInstance(DbaEffects.RIFTED_HOLDER, 60, 0, false, false));
                 
                 // Phase 3: Destination wave
                 spawnDimensionalWave(serverLevel, dest, player);

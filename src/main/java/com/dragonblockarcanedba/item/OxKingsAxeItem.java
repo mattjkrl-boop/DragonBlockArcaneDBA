@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.OxShockwaveEntity;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -99,17 +100,17 @@ public class OxKingsAxeItem extends Item {
             return;
         }
 
-        // Progressive Rooting: 0–2s (50%), 2–5s (80%), 5–10s (100% stationary)
+        // Progressive Rooting & Poise: Ox Brace
         if (chargeTicks < 40) {
-            player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 1, false, false)); // 50% slow
+            player.addEffect(new MobEffectInstance(DbaEffects.OX_BRACE_HOLDER, 10, 0, false, false));
         } else if (chargeTicks < 100) {
-            player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 3, false, false)); // 80% slow
+            player.addEffect(new MobEffectInstance(DbaEffects.OX_BRACE_HOLDER, 10, 1, false, false));
         } else {
             // Completely stationary / 100% rooted
             Vec3 vel = player.getDeltaMovement();
             player.setDeltaMovement(0.0, vel.y < 0 ? vel.y : 0.0, 0.0);
             player.hurtMarked = true;
-            player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 6, false, false));
+            player.addEffect(new MobEffectInstance(DbaEffects.OX_BRACE_HOLDER, 10, 2, false, false));
         }
 
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
@@ -193,9 +194,8 @@ public class OxKingsAxeItem extends Item {
             player.setDeltaMovement(0.0, vel.y < 0 ? vel.y : 0.0, 0.0);
             player.hurtMarked = true;
 
-            // Resistance IV (80% damage reduction)
-            player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, 10, 3, false, false));
-            player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 6, false, false));
+            // Ox Brace (Mountain poise & damage reduction)
+            player.addEffect(new MobEffectInstance(DbaEffects.OX_BRACE_HOLDER, 10, 1, false, false));
 
             // 2. 12-block King's Force Battlefield Denial Aura
             double auraRadius = 12.0;
@@ -208,8 +208,8 @@ public class OxKingsAxeItem extends Item {
             for (LivingEntity enemy : enemies) {
                 double dist = Math.sqrt(enemy.distanceToSqr(player));
                 if (dist <= auraRadius) {
-                    // Heavily slowed
-                    enemy.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 20, 3, false, true));
+                    // Fissure Stun (Volcanic tremor slow)
+                    enemy.addEffect(new MobEffectInstance(DbaEffects.FISSURE_STUN_HOLDER, 20, 0, false, true));
 
                     // Deal pressure damage every 5 ticks (caught by Delayed Damage Mixin)
                     if (heldTicks % 5 == 0) {
@@ -313,9 +313,9 @@ public class OxKingsAxeItem extends Item {
                         double dist = Math.sqrt(target.distanceToSqr(player));
                         if (dist <= slamRadius) {
                             target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), peakDamage);
-                            target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 140, 4, false, true));
-                            target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), player);
-                            target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER, 60, 2, false, true), player);
+                            target.addEffect(new MobEffectInstance(DbaEffects.FISSURE_STUN_HOLDER, 140, 1, false, true));
+                            target.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), player);
+                            target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 60, 2, false, true), player);
 
                             Vec3 toTarget = target.position().subtract(player.position()).normalize().scale(2.5);
                             target.setDeltaMovement(target.getDeltaMovement().add(toTarget.x, 0.9, toTarget.z));
@@ -363,7 +363,7 @@ public class OxKingsAxeItem extends Item {
                         double dist = Math.sqrt(target.distanceToSqr(player));
                         if (dist <= slamRadius) {
                             target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalSlamDmg);
-                            target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 80, 3, false, true));
+                            target.addEffect(new MobEffectInstance(DbaEffects.FISSURE_STUN_HOLDER, 80, 0, false, true));
                             target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 40, 0, false, false, false), player);
                             target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER, 40, 1, false, true), player);
 

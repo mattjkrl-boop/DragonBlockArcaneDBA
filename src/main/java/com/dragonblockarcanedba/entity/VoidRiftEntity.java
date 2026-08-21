@@ -182,7 +182,6 @@ public class VoidRiftEntity extends Projectile {
 
                     // Damage, slow, and hold enemies inside
                     if (e instanceof LivingEntity living) {
-                        living.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 20, 3, false, false), owner);
                         living.addEffect(new MobEffectInstance(DbaEffects.RIFTED_HOLDER, 20, 0, false, false), owner);
                         if (this.tickCount % 10 == 0) {
                             DamageSource source = owner instanceof net.minecraft.world.entity.player.Player p 

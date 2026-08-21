@@ -2,9 +2,11 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.EvilSpearProjectileEntity;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -83,7 +85,9 @@ public class EvilSpearItem extends Item {
             return;
         }
 
-        player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 1, false, false));
+        Vec3 vel = player.getDeltaMovement();
+        player.setDeltaMovement(vel.x * 0.5, vel.y, vel.z * 0.5);
+        player.hurtMarked = true;
 
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
 
@@ -142,6 +146,12 @@ public class EvilSpearItem extends Item {
                 return InteractionResult.PASS;
             }
 
+            if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(serverPlayer)) {
+                serverPlayer.sendSystemMessage(Component.literal("§cImmobilized! Cannot rush."), true);
+                return InteractionResult.FAIL;
+            }
+
+            double ccMult = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(serverPlayer);
             ServerLevel serverLevel = (ServerLevel) level;
             // 32-meter lock-on search
             LivingEntity target = findLockOnTarget(serverPlayer, 32.0);
@@ -149,9 +159,9 @@ public class EvilSpearItem extends Item {
                 performHellHunt(serverPlayer, stack, target);
                 return InteractionResult.SUCCESS;
             } else {
-                // If no direct target, perform forward high-speed lunge
+                // If no direct target, perform forward high-speed lunge (scaled by CC / movement limits)
                 Vec3 look = serverPlayer.getLookAngle();
-                serverPlayer.setDeltaMovement(look.x * 2.0, 0.4, look.z * 2.0);
+                serverPlayer.setDeltaMovement(look.x * 2.0 * ccMult, 0.4 * ccMult, look.z * 2.0 * ccMult);
                 serverPlayer.hurtMarked = true;
                 serverLevel.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
                     SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 0.5f);
@@ -240,9 +250,8 @@ public class EvilSpearItem extends Item {
             level.playSound(null, t.getX(), t.getY(), t.getZ(), SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.8f, 0.5f);
         }
 
-        // Tweak B: Speed II and Attack Speed boost for 2 seconds (40 ticks)
-        player.addEffect(new MobEffectInstance(MobEffects.SPEED, 40, 1, false, false));
-        player.addEffect(new MobEffectInstance(MobEffects.HASTE, 40, 2, false, false));
+        // Demon Surge: Demonic rush speed, attack frenzy, and jump boost for 40 ticks
+        player.addEffect(new MobEffectInstance(DbaEffects.DEMON_SURGE_HOLDER, 40, 0, false, false));
 
         // 5-second cooldown
         player.getCooldowns().addCooldown(stack, 100);

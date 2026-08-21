@@ -41,6 +41,8 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     private int dbaXp = 0;
     @Unique
     private int dbaAp = 0;
+    @Unique
+    private int dbaSpeedPercent = 100;
 
     @Unique
     private final Map<String, Integer> dbaStatsMap = new HashMap<>();
@@ -91,6 +93,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         dbaOut.putInt("level", dbaLevel);
         dbaOut.putInt("xp", dbaXp);
         dbaOut.putInt("ap", dbaAp);
+        dbaOut.putInt("speedPercent", dbaSpeedPercent);
 
         ValueOutput statsOut = dbaOut.child("stats");
         dbaStatsMap.forEach(statsOut::putInt);
@@ -143,6 +146,8 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         dbaLevel = dbaIn.getIntOr("level", 1);
         dbaXp = dbaIn.getIntOr("xp", 0);
         dbaAp = dbaIn.getIntOr("ap", 0);
+        dbaSpeedPercent = dbaIn.getIntOr("speedPercent", 100);
+        if (dbaSpeedPercent < 1 || dbaSpeedPercent > 100) dbaSpeedPercent = 100;
 
         dbaStatsMap.clear();
         ValueInput statsIn = dbaIn.childOrEmpty("stats");
@@ -659,6 +664,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         dbaNbt.putInt("level", dbaLevel);
         dbaNbt.putInt("xp", dbaXp);
         dbaNbt.putInt("ap", dbaAp);
+        dbaNbt.putInt("speedPercent", dbaSpeedPercent);
 
         CompoundTag statsNbt = new CompoundTag();
         dbaStatsMap.forEach(statsNbt::putInt);
@@ -735,7 +741,9 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             double effectiveDex = PlayerStats.getEffectiveStat(player, "dexterity");
             net.minecraft.world.entity.ai.attributes.AttributeInstance speedAttr = player.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
             if (speedAttr != null) {
-                speedAttr.setBaseValue(0.1 + (effectiveDex * 0.001));
+                double maxBonus = effectiveDex * 0.001;
+                double speedRatio = Math.max(1, Math.min(100, dbaSpeedPercent)) / 100.0;
+                speedAttr.setBaseValue(0.1 + (maxBonus * speedRatio));
             }
         }
     }
@@ -784,6 +792,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         this.dbaLevel = old.dbaLevel;
         this.dbaXp = old.dbaXp;
         this.dbaAp = old.dbaAp;
+        this.dbaSpeedPercent = old.dbaSpeedPercent;
 
         this.dbaStatsMap.clear();
         this.dbaStatsMap.putAll(old.dbaStatsMap);
@@ -814,5 +823,18 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
 
         dba$updateAttributes();
         dba$syncStats();
+    }
+
+    @Unique
+    @Override
+    public int dba$getSpeedPercent() {
+        return dbaSpeedPercent <= 0 ? 100 : dbaSpeedPercent;
+    }
+
+    @Unique
+    @Override
+    public void dba$setSpeedPercent(int percent) {
+        this.dbaSpeedPercent = Math.max(1, Math.min(100, percent));
+        dba$updateAttributes();
     }
 }

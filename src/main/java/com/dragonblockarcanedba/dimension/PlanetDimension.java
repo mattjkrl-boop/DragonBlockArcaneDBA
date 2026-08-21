@@ -41,8 +41,10 @@ public class PlanetDimension {
         // Atmosphere / Oxygen depletion damage
         if (lowOxygen && entity instanceof Player player) {
             if (player.tickCount % oxygenTickRate == 0 && !player.isCreative() && !player.isSpectator()) {
-                player.addEffect(new MobEffectInstance(MobEffects.WITHER, 60, 0, false, false));
-                player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 60, 1, false, false));
+                if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+                    player.hurtServer(serverLevel, serverLevel.damageSources().drown(), 4.0f);
+                }
+                player.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.EARTH_SHATTER_HOLDER, 60, 0, false, false));
             }
         }
     }

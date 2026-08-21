@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.BlasterBoltEntity;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -191,8 +192,8 @@ public class BlasterGunItem extends Item {
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);
 
-            // Progressively slower movement
-            player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 2, false, false));
+            // Energy Overcharge: recoil stabilization & aiming focus
+            player.addEffect(new MobEffectInstance(DbaEffects.ENERGY_OVERCHARGE_HOLDER, 10, 0, false, false));
 
             // Expanding energy sphere particles around the muzzle
             Vec3 eye = player.getEyePosition();

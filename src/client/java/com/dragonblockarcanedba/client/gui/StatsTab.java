@@ -21,11 +21,15 @@ public class StatsTab implements MenuTab {
     private long holdStartMs = 0;
     private long lastUpgradeMs = 0;
 
+    // Speed slider dragging
+    private boolean isDraggingSpeedSlider = false;
+
     @Override
     public void init(DbaMenuScreen screen) {
         this.parent = screen;
         this.isMouseDown = false;
         this.heldStat = null;
+        this.isDraggingSpeedSlider = false;
     }
 
     @Override
@@ -153,9 +157,10 @@ public class StatsTab implements MenuTab {
             int y = startY + 55 + i * 24;
             
             // Draw progress bar based on AP affordability
-            int barWidth = 90;
+            boolean isDex = "dexterity".equals(statName);
+            int barWidth = isDex ? 52 : 70;
             int barHeight = 8;
-            int barX = startX + 90;
+            int barX = startX + 74;
             
             float progress = (float) accessor.dba$getStatPoints() / (float) apCost;
             if (progress > 1.0f) progress = 1.0f;
@@ -172,14 +177,14 @@ public class StatsTab implements MenuTab {
             context.fill(barX + barWidth, y, barX + barWidth + 1, y + barHeight, 0x55FFFFFF); // Right
             
             int textColor = levelMet ? 0xFFFFFFFF : 0xFFFF5555;
-            String reqString = !levelMet ? " (Req Lvl " + reqLvl + ")" : "";
+            String reqString = !levelMet ? " (Req " + reqLvl + ")" : "";
             
             // Display stat name + current
             context.text(client.font, Component.literal(displayName), startX + 15, y, 0xFFFFFFFF);
             
             // Display raw stat + gain
             String statString = String.format("%d (+%d)", currentLevel, gain);
-            context.text(client.font, Component.literal(statString), barX + barWidth + 10, y, 0xFFFFFFFF);
+            context.text(client.font, Component.literal(statString), barX + barWidth + 6, y, 0xFFFFFFFF);
             
             // Display AP cost and Req level below the bar
             String apString = "Cost: " + apCost + " AP";
@@ -189,6 +194,40 @@ public class StatsTab implements MenuTab {
                 apString = "Cost: " + (apCost / 1000) + "k AP";
             }
             context.text(client.font, Component.literal(apString + reqString), barX, y + 10, textColor);
+            
+            // If Dexterity: render the 1-100% Speed Control Slider!
+            if (isDex) {
+                int sliderX = startX + 172;
+                int sliderY = y - 1;
+                int sliderW = 60;
+                int sliderH = 12;
+                int speedPct = accessor.dba$getSpeedPercent();
+                boolean hoverSlider = (mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY - 2 && mouseY <= sliderY + sliderH + 2);
+                
+                // Track background
+                context.fill(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH, 0x66000000);
+                
+                // Filled portion (Cyan gradient feel)
+                int fillW = Math.max(2, (int)(sliderW * (speedPct / 100.0f)));
+                int fillColor = (hoverSlider || isDraggingSpeedSlider) ? 0xEE00E5FF : 0xAA00B0FF;
+                context.fill(sliderX, sliderY, sliderX + fillW, sliderY + sliderH, fillColor);
+                
+                // Slider borders
+                int borderCol = (hoverSlider || isDraggingSpeedSlider) ? 0xAA00E5FF : 0x55FFFFFF;
+                context.fill(sliderX - 1, sliderY - 1, sliderX + sliderW + 1, sliderY, borderCol);
+                context.fill(sliderX - 1, sliderY + sliderH, sliderX + sliderW + 1, sliderY + sliderH + 1, borderCol);
+                context.fill(sliderX - 1, sliderY, sliderX, sliderY + sliderH, borderCol);
+                context.fill(sliderX + sliderW, sliderY, sliderX + sliderW + 1, sliderY + sliderH, borderCol);
+                
+                // Draggable handle knob
+                int knobX = sliderX + fillW;
+                context.fill(knobX - 2, sliderY - 2, knobX + 2, sliderY + sliderH + 2, 0xFFFFFFFF);
+                context.fill(knobX - 1, sliderY - 1, knobX + 1, sliderY + sliderH + 1, 0xFF00E5FF);
+                
+                // Centered text inside slider
+                String speedText = speedPct + "% Spd";
+                context.centeredText(client.font, Component.literal(speedText), sliderX + sliderW / 2, sliderY + 2, 0xFFFFFFFF);
+            }
             
             // Custom Upgrade Button
             int btnY = y - 4;
@@ -228,9 +267,26 @@ public class StatsTab implements MenuTab {
         context.centeredText(client.font, Component.literal(kiString), startX + width / 2, kiPanelY + 4, 0xFF55FFFF);
     }
 
+    private void updateSpeedFromMouse(double mouseX, int sliderX, int sliderW, PlayerStatsAccessor accessor) {
+        float frac = (float)(mouseX - sliderX) / (float)sliderW;
+        int percent = Math.max(1, Math.min(100, Math.round(frac * 100.0f)));
+        if (percent != accessor.dba$getSpeedPercent()) {
+            accessor.dba$setSpeedPercent(percent);
+            sendSpeedPercent(percent);
+        }
+    }
+
+    private void sendSpeedPercent(int percent) {
+        CompoundTag nbt = new CompoundTag();
+        nbt.putString("action", "set_speed_percent");
+        nbt.putInt("percent", percent);
+        ClientPlayNetworking.send(new ActionPayload(nbt));
+    }
+
     private void sendUpgrade(String statName) {
         CompoundTag nbt = new CompoundTag();
         nbt.putString("action", "upgrade");
+        nbt.putInt("percent", 0);
         nbt.putString("stat", statName);
         ClientPlayNetworking.send(new ActionPayload(nbt));
     }
@@ -247,6 +303,17 @@ public class StatsTab implements MenuTab {
         
         double mouseX = event.x();
         double mouseY = event.y();
+
+        // Check Dexterity Speed Slider click
+        int sliderX = startX + 172;
+        int sliderW = 60;
+        int sliderH = 14;
+        int dexY = startY + 55 + 1 * 24 - 2;
+        if (mouseX >= sliderX - 3 && mouseX <= sliderX + sliderW + 3 && mouseY >= dexY && mouseY <= dexY + sliderH) {
+            this.isDraggingSpeedSlider = true;
+            updateSpeedFromMouse(mouseX, sliderX, sliderW, accessor);
+            return true;
+        }
         
         int btnX = startX + width - 30;
 
@@ -285,6 +352,17 @@ public class StatsTab implements MenuTab {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (this.isDraggingSpeedSlider) {
+            Minecraft client = Minecraft.getInstance();
+            if (client.player != null) {
+                PlayerStatsAccessor accessor = (PlayerStatsAccessor) client.player;
+                int startX = parent.getContentX();
+                int sliderX = startX + 172;
+                int sliderW = 60;
+                updateSpeedFromMouse(event.x(), sliderX, sliderW, accessor);
+            }
+            return true;
+        }
         this.isMouseDown = true;
         return false;
     }
@@ -293,6 +371,10 @@ public class StatsTab implements MenuTab {
     public boolean mouseReleased(MouseButtonEvent event) {
         this.isMouseDown = false;
         this.heldStat = null;
+        if (this.isDraggingSpeedSlider) {
+            this.isDraggingSpeedSlider = false;
+            return true;
+        }
         return false;
     }
 }

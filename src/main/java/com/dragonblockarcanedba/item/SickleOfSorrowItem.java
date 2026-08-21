@@ -76,8 +76,8 @@ public class SickleOfSorrowItem extends Item {
         // Apply Melting III (amplifier 2) for 15 seconds (300 ticks)
         target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 2, false, true), attacker);
 
-        // Apply Darkness for 4 seconds (80 ticks) — blinds target
-        target.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 80, 0, false, true), attacker);
+        // Apply Sorrow Rift for 4 seconds (80 ticks) — weeping shadow corruption
+        target.addEffect(new MobEffectInstance(DbaEffects.SORROW_RIFT_HOLDER, 80, 0, false, true), attacker);
 
         if (attacker instanceof ServerPlayer serverPlayer) {
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
@@ -139,8 +139,8 @@ public class SickleOfSorrowItem extends Item {
                     // Instant burst magic damage
                     target.hurtServer(serverLevel, serverLevel.damageSources().magic(), burstDamage);
 
-                    // Slowness IV for 10 seconds (200 ticks)
-                    target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 200, 3, false, true), player);
+                    // Sorrow Rift for 10 seconds (200 ticks)
+                    target.addEffect(new MobEffectInstance(DbaEffects.SORROW_RIFT_HOLDER, 200, 0, false, true), player);
 
                     // Gravity Well: Pull target toward player
                     Vec3 pullDir = player.position().subtract(target.position()).normalize().scale(1.5);

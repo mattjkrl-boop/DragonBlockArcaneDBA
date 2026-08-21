@@ -227,9 +227,9 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
 
     // ========== Time Reversal System (Whis Staff) ==========
 
-    /** Rolling buffer of the last 400 positions (20 seconds at 20 TPS). Most recent first. */
+    /** Rolling buffer of recent positions (most recent first). Lazily initialized to prevent heap bloat. */
     @Unique
-    private final Deque<Vec3> dba$positionHistory = new ArrayDeque<>(400);
+    private Deque<Vec3> dba$positionHistory = null;
 
     /** Whether this entity is currently having its movement reversed. */
     @Unique
@@ -241,7 +241,10 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
 
     @Override
     public void dba$pushPosition(Vec3 pos) {
-        if (dba$positionHistory.size() >= 400) {
+        if (dba$positionHistory == null) {
+            dba$positionHistory = new ArrayDeque<>(200);
+        }
+        if (dba$positionHistory.size() >= 200) {
             dba$positionHistory.removeLast();
         }
         dba$positionHistory.addFirst(pos);
@@ -254,10 +257,20 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
 
     @Override
     public void dba$startReversing(int ticks) {
-        if (!dba$positionHistory.isEmpty()) {
-            dba$reversing = true;
-            dba$reverseTicks = ticks;
+        LivingEntity self = (LivingEntity) (Object) this;
+        // If history is empty, synthesize a starting baseline so reversal takes effect immediately
+        if (dba$positionHistory == null || dba$positionHistory.isEmpty()) {
+            dba$pushPosition(self.position());
+            Vec3 back = self.getDeltaMovement().scale(-1.5);
+            if (back.lengthSqr() < 0.01) {
+                back = self.getLookAngle().scale(-0.8);
+            }
+            for (int i = 1; i <= Math.min(ticks, 40); i++) {
+                dba$pushPosition(self.position().add(back.scale(i * 0.2)));
+            }
         }
+        dba$reversing = true;
+        dba$reverseTicks = ticks;
     }
 
     @Override
@@ -267,9 +280,9 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
 
     /**
      * Tick injection on LivingEntity.tick():
-     * - While NOT reversing: record current position into the history buffer.
-     * - While reversing: pop positions from history and apply them with noPhysics,
-     *   allowing entities to phase through blocks and potentially suffocate.
+     * - Only tracks positions for players and entities in active temporal distortion.
+     * - While reversing: pop positions from history and apply them with noPhysics.
+     * - Discards buffer on mobs after reversal to preserve server memory.
      */
     @Inject(method = "tick", at = @At("HEAD"))
     private void dba$onTick(CallbackInfo ci) {
@@ -277,7 +290,7 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
         if (self.level().isClientSide()) return;
 
         if (dba$reversing) {
-            if (dba$reverseTicks > 0 && !dba$positionHistory.isEmpty()) {
+            if (dba$reverseTicks > 0 && dba$positionHistory != null && !dba$positionHistory.isEmpty()) {
                 Vec3 pos = dba$positionHistory.pollFirst();
                 self.noPhysics = true;
                 self.setPos(pos.x, pos.y, pos.z);
@@ -294,9 +307,12 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
                 // Reversal complete — restore normal physics
                 dba$reversing = false;
                 self.noPhysics = false;
+                if (!(self instanceof Player)) {
+                    dba$positionHistory = null; // Free memory on server mobs
+                }
             }
-        } else {
-            // Normal operation: record position history
+        } else if (self instanceof Player || dba$positionHistory != null) {
+            // Track position for players and active combat entities
             dba$pushPosition(self.position());
         }
     }

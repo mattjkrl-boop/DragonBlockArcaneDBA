@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -76,12 +77,9 @@ public class SpiritSwordItem extends Item {
     // --- Left Click: Massive damage + Levitation III + Spirit Cleave + Disarm ---
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        // Apply Levitation III for 6 seconds (120 ticks)
-        target.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 120, 2, false, true), attacker);
-        target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 120, 0, false, false, false), attacker);
-
-        // Apply Glowing for 10 seconds (200 ticks) — target can't hide
-        target.addEffect(new MobEffectInstance(MobEffects.GLOWING, 200, 0, false, true), attacker);
+        // Apply Spirit Impale (mid-air suspension + damage weakness + divine Ki radiance)
+        target.addEffect(new MobEffectInstance(DbaEffects.SPIRIT_IMPALE_HOLDER, 120, 0, false, true), attacker);
+        target.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 120, 0, false, false, false), attacker);
 
         // Spirit Cleave: 2% of target's max HP as bonus magic damage
         if (attacker instanceof ServerPlayer serverPlayer) {
@@ -179,8 +177,8 @@ public class SpiritSwordItem extends Item {
                     float percentDamage = livingTarget.getMaxHealth() * 0.02f;
                     livingTarget.hurtServer(serverLevel, serverLevel.damageSources().magic(), percentDamage);
 
-                    // Apply Weakness II for 5 seconds (100 ticks)
-                    livingTarget.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 100, 1, false, true), player);
+                    // Apply Spirit Impale for 5 seconds (100 ticks)
+                    livingTarget.addEffect(new MobEffectInstance(DbaEffects.SPIRIT_IMPALE_HOLDER, 100, 0, false, true), player);
 
                     // Impact particle burst at hit entity — big cyan/white explosion
                     serverLevel.sendParticles(

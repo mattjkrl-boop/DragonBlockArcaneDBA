@@ -113,7 +113,9 @@ public class HollowsEdgeItem extends Item {
         }
 
         // Heavy movement slowdown while charging
-        player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 3, false, false));
+        Vec3 vel = player.getDeltaMovement();
+        player.setDeltaMovement(vel.x * 0.3, vel.y, vel.z * 0.3);
+        player.hurtMarked = true;
 
         // Dark void particles converging into blade
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
@@ -184,6 +186,14 @@ public class HollowsEdgeItem extends Item {
     }
 
     private static void performBlink(ServerPlayer player, ItemStack stack, double maxDistance, boolean holdingBackward, boolean isThirdDash) {
+        if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
+            player.sendSystemMessage(Component.literal("§cImmobilized! Cannot blink."), true);
+            return;
+        }
+
+        double ccMult = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
+        maxDistance *= ccMult;
+
         ServerLevel level = (ServerLevel) player.level();
         Vec3 startPos = player.position();
         Vec3 look = player.getLookAngle();
@@ -366,5 +376,14 @@ public class HollowsEdgeItem extends Item {
             player.getCooldowns().addCooldown(stack, 60);
         }
         return true;
+    }
+
+    public static void onPlayerDisconnect(UUID playerUuid) {
+        ACTIVE_RUSH_EXPIRE_TIME.remove(playerUuid);
+        DASH_COUNT_MAP.remove(playerUuid);
+        VoidRiftEntity rift = ACTIVE_RIFT_MAP.remove(playerUuid);
+        if (rift != null && rift.isAlive()) {
+            rift.discard();
+        }
     }
 }

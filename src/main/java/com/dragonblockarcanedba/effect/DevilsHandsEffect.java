@@ -1,26 +1,40 @@
 package com.dragonblockarcanedba.effect;
 
-
+import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
-
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Custom "Devil's Hands" status effect — Extremely oppressive late-game effect.
  * 
  * Repeatedly applies chaotic debuffs:
- * - Blindness
- * - Complete immobilization (Slowness high amp)
- * - Dark Red Fire (deals high percentage-based damage)
+ * - Movement Speed & Attack Speed suppression
+ * - Chaotic stuttering paralysis & dark ash
+ * - Dark Red Fire (deals percentage-based damage)
  */
 public class DevilsHandsEffect extends MobEffect {
     public DevilsHandsEffect() {
         super(MobEffectCategory.HARMFUL, 0x8B0000); // Dark Red
+
+        this.addAttributeModifier(
+            Attributes.MOVEMENT_SPEED,
+            DragonBlockArcaneDBA.id("effect.devils_hands.speed"),
+            -0.60,
+            AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
+        );
+
+        this.addAttributeModifier(
+            Attributes.ATTACK_SPEED,
+            DragonBlockArcaneDBA.id("effect.devils_hands.attack_speed"),
+            -0.50,
+            AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
+        );
     }
 
     @Override
@@ -30,22 +44,12 @@ public class DevilsHandsEffect extends MobEffect {
 
     @Override
     public boolean applyEffectTick(ServerLevel level, LivingEntity entity, int amplifier) {
-        // Chaotic random triggers
-        // The higher the amplifier, the more frequently it triggers
-        float chanceToTrigger = 0.05f + (amplifier * 0.02f);
-        
-        // Random stuttering Blindness and Freeze
+        // Chaotic random freeze triggers
+        float chanceToTrigger = 0.08f + (amplifier * 0.03f);
         if (level.getRandom().nextFloat() < chanceToTrigger) {
-            // Random duration between 1 to 3 seconds
-            int duration = 20 + level.getRandom().nextInt(40);
-            
-            if (level.getRandom().nextBoolean()) {
-                // Apply Blindness
-                entity.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, duration, 0, false, false));
-            } else {
-                // Apply Movement Freeze (Slowness VII basically stops them)
-                entity.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, duration, 6, false, false));
-            }
+            Vec3 vel = entity.getDeltaMovement();
+            entity.setDeltaMovement(vel.x * 0.1, vel.y < 0 ? vel.y : 0.0, vel.z * 0.1);
+            entity.hurtMarked = true;
         }
 
         // Apply Dark Red Fire Damage (more frequently, every ~10 ticks on average)

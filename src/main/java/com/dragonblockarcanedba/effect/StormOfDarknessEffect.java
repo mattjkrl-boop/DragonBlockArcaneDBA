@@ -1,25 +1,40 @@
 package com.dragonblockarcanedba.effect;
 
+import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.phys.Vec3;
 
 /**
  * Storm of Darkness — Status effect applied to enemies caught inside Curse Blade's Abyssal Eclipse.
  * 
- * - Causes Darkness and Nausea / Confusion.
- * - Progressively slows movement.
+ * - Reduces Attack Speed & Movement Speed.
+ * - Progressively slows and disorients movement.
  * - Creates dark abyssal mist and wind ash around afflicted targets.
  */
 public class StormOfDarknessEffect extends MobEffect {
     public StormOfDarknessEffect() {
         super(MobEffectCategory.HARMFUL, 0x0A0A14); // Abyssal black
+
+        this.addAttributeModifier(
+            Attributes.MOVEMENT_SPEED,
+            DragonBlockArcaneDBA.id("effect.storm_of_darkness.speed"),
+            -0.45,
+            AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
+        );
+
+        this.addAttributeModifier(
+            Attributes.ATTACK_SPEED,
+            DragonBlockArcaneDBA.id("effect.storm_of_darkness.attack_speed"),
+            -0.40,
+            AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
+        );
     }
 
     @Override
@@ -29,11 +44,7 @@ public class StormOfDarknessEffect extends MobEffect {
 
     @Override
     public boolean applyEffectTick(ServerLevel level, LivingEntity entity, int amplifier) {
-        // Apply Darkness and Nausea continuously
-        entity.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 50, 0, false, false));
-        entity.addEffect(new MobEffectInstance(MobEffects.NAUSEA, 60, 0, false, false));
-
-        // Progressive movement slowing
+        // Progressive movement slowing & confusion drag
         Vec3 vel = entity.getDeltaMovement();
         float drag = Math.max(0.4f, 0.85f - (amplifier * 0.1f));
         entity.setDeltaMovement(vel.x * drag, vel.y > 0 ? vel.y * drag : vel.y, vel.z * drag);

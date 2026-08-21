@@ -144,8 +144,8 @@ public class ValorFieldEntity extends Projectile {
                             // Allies receive Tier 2 Valor (Level II / Amplifier 1)
                             entity.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.VALOR_HOLDER, 40, 1, false, false, true));
                         } else {
-                            // Enemy Debuff: Slowness II
-                            entity.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 40, 1, false, false, true));
+                            // Enemy Debuff: Valor Stun
+                            entity.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.VALOR_STUN_HOLDER, 40, 1, false, false, true));
 
                             // Continuous golden energy field pressure damage & cinematic tracking
                             if (caster instanceof Player playerCaster) {

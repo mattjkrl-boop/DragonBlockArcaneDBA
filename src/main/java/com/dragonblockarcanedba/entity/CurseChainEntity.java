@@ -208,10 +208,8 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
                     if (player.getHealth() < player.getMaxHealth()) {
                         player.heal(healAmount);
                     } else {
-                        // Max health -> Blood Shield (Absorption)
-                        MobEffectInstance currentAbsorb = player.getEffect(MobEffects.ABSORPTION);
-                        int absorbAmp = (currentAbsorb != null) ? Math.min(4, currentAbsorb.getAmplifier() + 1) : 0;
-                        player.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 100, absorbAmp, false, false));
+                        // Max health -> Blood Shield (Direct absorption hearts)
+                        player.setAbsorptionAmount(Math.min(player.getMaxHealth(), player.getAbsorptionAmount() + 4.0f));
                     }
                 }
 

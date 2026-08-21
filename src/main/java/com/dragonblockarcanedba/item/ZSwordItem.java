@@ -95,8 +95,8 @@ public class ZSwordItem extends Item {
             return;
         }
 
-        // Heavy movement slowdown while charging
-        player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 4, false, false));
+        // Heavy movement slowdown & grounding while charging
+        player.addEffect(new MobEffectInstance(DbaEffects.ANCIENT_WEIGHT_HOLDER, 10, 0, false, false));
 
         // Visual charge effects: Golden spiraling dust into the sword
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
@@ -187,9 +187,8 @@ public class ZSwordItem extends Item {
             player.setDeltaMovement(0.0, vel.y < 0 ? vel.y : 0.0, 0.0);
             player.hurtMarked = true;
 
-            // 2. Heavy divine damage reduction (Resistance IV = 80% reduction)
-            player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, 10, 3, false, false));
-            player.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 6, false, false));
+            // 2. Heavy divine damage reduction and grounding (Ancient Weight)
+            player.addEffect(new MobEffectInstance(DbaEffects.ANCIENT_WEIGHT_HOLDER, 10, 1, false, false));
 
             // 3. Tweak B: Gravitational particles and screen atmosphere
             if (heldTicks % 2 == 0) {
@@ -243,8 +242,8 @@ public class ZSwordItem extends Item {
                         // Slam damage
                         target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalSlamDamage);
 
-                        // Heavily slowed
-                        target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 140, 4, false, true), player);
+                        // Heavily slowed & shattered by shockwave
+                        target.addEffect(new MobEffectInstance(DbaEffects.EARTH_SHATTER_HOLDER, 140, 0, false, true), player);
 
                         // Tweak A: Completely roots enemies in the ground for 2s (40 ticks), then launches them up and out
                         target.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 50, 0, false, false, false), player);

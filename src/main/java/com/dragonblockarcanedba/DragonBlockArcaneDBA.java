@@ -138,9 +138,8 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                 com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
                 double stamina = accessor.dba$getCurrentStamina();
                 if (stamina < 8.0) {
-                    // Apply 75% damage penalty approx and attack speed slowdown via effects
-                    player.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.WEAKNESS, 40, 2, false, false));
-                    player.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.MINING_FATIGUE, 40, 1, false, false));
+                    // Apply stamina exhaustion weakness & fatigue via custom Earth Shatter effect
+                    player.addEffect(new net.minecraft.world.effect.MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.EARTH_SHATTER_HOLDER, 40, 0, false, false));
                 } else {
                     double strength = com.dragonblockarcanedba.attribute.PlayerStats.getEffectiveStat(player, "strength");
                     double drain = 8.0 + (strength * 0.25); // Scales with strength
@@ -159,8 +158,8 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                 }
 
                 // Azure Dragon Sword Target lock-on logic (Tweak B)
-                if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem && entity instanceof net.minecraft.world.entity.LivingEntity living) {
-                    com.dragonblockarcanedba.item.AzureDragonSwordItem.LOCKED_TARGET_MAP.put(player.getUUID(), living);
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem && entity instanceof net.minecraft.world.entity.LivingEntity) {
+                    com.dragonblockarcanedba.item.AzureDragonSwordItem.LOCKED_TARGET_MAP.put(player.getUUID(), entity.getUUID());
                 }
             }
             return net.minecraft.world.InteractionResult.PASS;
@@ -265,13 +264,14 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     }
                     
                     player.teleportTo(otherworld, 0.5, startY, -1.5, java.util.Collections.emptySet(), 0, 0, false);
+                    return false; // Cancel death only if safely teleported to Otherworld
                 }
-                return false; // Cancel death
+                return true; // Fallback to normal vanilla death if otherworld is unavailable
             }
             return true; // Allow normal death for non-players
         });
 
-        // Trigger Race Selection and sync stats on join
+        // Trigger Race Selection, sync stats on join, and sync transformations across players
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             net.minecraft.server.level.ServerPlayer player = handler.getPlayer();
             com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
@@ -279,6 +279,34 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             if (!accessor.dba$hasSelectedRace()) {
                 net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, new com.dragonblockarcanedba.network.RaceSelectOpenPayload());
             }
+
+            // Broadcast joining player's transformation state to others
+            com.dragonblockarcanedba.network.DbaNetwork.broadcastTransformState(player);
+            // Send existing players' active transformation states to the newly joined player
+            if (player.level() instanceof net.minecraft.server.level.ServerLevel level) {
+                for (net.minecraft.server.level.ServerPlayer other : level.players()) {
+                    if (other != player) {
+                        com.dragonblockarcanedba.network.DbaNetwork.sendTransformStateTo(other, player);
+                    }
+                }
+            }
+        });
+
+        // Sync transformation state when an entity starts tracking a player (render distance entry)
+        net.fabricmc.fabric.api.networking.v1.EntityTrackingEvents.START_TRACKING.register((trackedEntity, trackingPlayer) -> {
+            if (trackedEntity instanceof net.minecraft.server.level.ServerPlayer trackedPlayer) {
+                com.dragonblockarcanedba.network.DbaNetwork.sendTransformStateTo(trackedPlayer, trackingPlayer);
+            }
+        });
+
+        // Clean up static maps and memory on player disconnect
+        net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            java.util.UUID playerUuid = handler.getPlayer().getUUID();
+            com.dragonblockarcanedba.item.AzureDragonSwordItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.SaberItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.HollowsEdgeItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.GrandSwordItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.ki.KiTechniqueHandler.onPlayerDisconnect(playerUuid);
         });
 
         // Copy DBA data across death/respawn so race, stats, and level are preserved

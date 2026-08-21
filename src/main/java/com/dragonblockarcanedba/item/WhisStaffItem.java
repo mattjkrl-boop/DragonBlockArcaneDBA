@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.util.TimeTracker;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -79,8 +80,8 @@ public class WhisStaffItem extends Item {
             timeTracker.dba$startReversing(200);
         }
 
-        // Slowness III for 5 seconds (100 ticks) — time distortion
-        target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 100, 2, false, true), attacker);
+        // Temporal Stasis — time distortion freeze
+        target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, 100, 0, false, true), attacker);
 
         if (attacker instanceof ServerPlayer serverPlayer) {
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
@@ -133,9 +134,8 @@ public class WhisStaffItem extends Item {
                     // Instant burst magic damage
                     target.hurtServer(serverLevel, serverLevel.damageSources().magic(), burstDamage);
 
-                    // Temporal Freeze: Slowness 127 (amplifier 126) for 3 seconds (60 ticks)
-                    // This effectively freezes the entity in place
-                    target.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 60, 126, false, false), player);
+                    // Temporal Stasis: Custom time paralysis for 3 seconds (60 ticks)
+                    target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, 60, 0, false, true), player);
 
                     // Time reversal for 15 seconds (300 ticks) — starts after freeze ends
                     if (target instanceof TimeTracker tracker) {
@@ -151,9 +151,8 @@ public class WhisStaffItem extends Item {
                 }
             }
 
-            // --- Self-Buff: Speed III + Resistance II for 10 seconds (200 ticks) ---
-            player.addEffect(new MobEffectInstance(MobEffects.SPEED, 200, 2, false, true));
-            player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, 200, 1, false, true));
+            // --- Self-Buff: Celestial Grace (Speed + Jump Boost + Resistance + Safe Fall) for 10 seconds (200 ticks) ---
+            player.addEffect(new MobEffectInstance(DbaEffects.CELESTIAL_GRACE_HOLDER, 200, 0, false, true));
 
             // --- Shimmering white/silver temporal sphere ---
             for (int i = 0; i < 150; i++) {

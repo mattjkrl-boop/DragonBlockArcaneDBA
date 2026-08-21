@@ -110,9 +110,10 @@ public class GrandSwordItem extends Item {
         player.yHeadRot = player.getYRot();
         player.yBodyRot = player.getYRot();
 
-        // Continuous forward drift in current facing direction as player rotates
+        // Continuous forward drift in current facing direction as player rotates (scaled by CC)
+        double ccMult = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
         Vec3 look = player.getLookAngle();
-        Vec3 drift = new Vec3(look.x, 0, look.z).normalize().scale(0.06);
+        Vec3 drift = new Vec3(look.x, 0, look.z).normalize().scale(0.06 * ccMult);
         player.setDeltaMovement(player.getDeltaMovement().add(drift.x, 0, drift.z));
         player.hurtMarked = true;
 
@@ -140,7 +141,7 @@ public class GrandSwordItem extends Item {
             e -> e.isAlive() && e != player
         );
         for (LivingEntity e : trackedEnemies) {
-            if (e.hasEffect(MobEffects.SLOWNESS)) {
+            if (e.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.VALOR_STUN_HOLDER)) {
                 e.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 40, 0, false, false, false
                 ), player);
@@ -256,5 +257,12 @@ public class GrandSwordItem extends Item {
             player.getCooldowns().addCooldown(stack, 20);
         }
         return true;
+    }
+
+    public static void onPlayerDisconnect(UUID playerUuid) {
+        ValorFieldEntity field = ACTIVE_VALOR_FIELDS.remove(playerUuid);
+        if (field != null && field.isAlive()) {
+            field.discard();
+        }
     }
 }

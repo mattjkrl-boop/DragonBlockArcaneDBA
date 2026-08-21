@@ -1,10 +1,12 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.DbaEntities;
 import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -91,7 +93,13 @@ public class KatanaItem extends Item {
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle();
 
-        AABB searchBox = player.getBoundingBox().inflate(16.0);
+        if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
+            player.sendSystemMessage(Component.literal("§cImmobilized! Cannot flash thrust."), true);
+            return;
+        }
+
+        double ccMult = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
+        AABB searchBox = player.getBoundingBox().inflate(16.0 * ccMult);
         List<LivingEntity> potential = level.getEntitiesOfClass(
             LivingEntity.class, searchBox,
             e -> e.isAlive() && e != player
@@ -131,8 +139,8 @@ public class KatanaItem extends Item {
             }
         }
 
-        // Tweak C: Invulnerability window during dash
-        player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, 20, 4, false, false));
+        // Blade Guard: Invulnerability stance during dash
+        player.addEffect(new MobEffectInstance(DbaEffects.BLADE_GUARD_HOLDER, 20, 0, false, false));
 
         Vec3 startPos = player.position();
 
@@ -167,8 +175,8 @@ public class KatanaItem extends Item {
                 });
             }
         } else {
-            // Freeform straight flash dash forward
-            Vec3 targetPos = startPos.add(look.scale(14.0));
+            // Freeform straight flash dash forward (scaled by CC / movement limiter)
+            Vec3 targetPos = startPos.add(look.scale(14.0 * ccMult));
             player.teleportTo(level, targetPos.x, targetPos.y, targetPos.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
         }
 

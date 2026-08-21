@@ -59,8 +59,8 @@ public class AzureDragonSwordItem extends Item {
 
     // Track players currently rushing with Azure Dragon Sword
     public static final Map<UUID, Boolean> IS_RUSHING_MAP = new ConcurrentHashMap<>();
-    // Track lock-on target for Tweak B
-    public static final Map<UUID, LivingEntity> LOCKED_TARGET_MAP = new ConcurrentHashMap<>();
+    // Track lock-on target UUID for Tweak B (using UUID to prevent object retention memory leaks)
+    public static final Map<UUID, UUID> LOCKED_TARGET_MAP = new ConcurrentHashMap<>();
 
     public AzureDragonSwordItem(Properties properties) {
         super(properties.attributes(
@@ -134,10 +134,31 @@ public class AzureDragonSwordItem extends Item {
         // Force Elytra / fall flying animation pose
         player.startFallFlying();
 
+        double movementMultiplier = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
+        if (movementMultiplier <= 0.0) {
+            stopDragonRush(player);
+            player.setDeltaMovement(Vec3.ZERO);
+            return;
+        }
+
         Vec3 look = player.getLookAngle();
-        // Speed: 1.85 normal, 0.75 if sneaking. Double rush = 3.7
-        double flightSpeed = isDoubleRushing ? 3.7 : (isSneaking ? 0.75 : 1.85);
-        Vec3 velocity = look.scale(flightSpeed);
+        // Speed: 1.85 normal, 0.75 if sneaking. Double rush = 3.7 (naturally scaled by all effects, attributes, & speed limiter)
+        double baseSpeed = isDoubleRushing ? 3.7 : (isSneaking ? 0.75 : 1.85);
+        double targetFlightSpeed = baseSpeed * movementMultiplier;
+        Vec3 targetVelocity = look.scale(targetFlightSpeed);
+
+        Vec3 currentVel = player.getDeltaMovement();
+
+        // Natural Aerodynamic Thrust & Momentum Blending:
+        // Smoothly accelerates towards target velocity while naturally preserving external forces (wind gusts, explosions, knockback).
+        Vec3 velocity;
+        if (currentVel.lengthSqr() < 0.01) {
+            velocity = targetVelocity.scale(0.5);
+        } else {
+            Vec3 thrust = targetVelocity.subtract(currentVel).scale(0.40);
+            velocity = currentVel.add(thrust);
+        }
+
         player.setDeltaMovement(velocity);
         player.fallDistance = 0.0f;
         player.hurtMarked = true;
@@ -325,7 +346,16 @@ public class AzureDragonSwordItem extends Item {
                 float radius = 10.0f + (chargeRatio * 20.0f); // 10 to 30 blocks radius
                 boolean isMaxCharge = (chargeRatio >= 0.95f);
 
-                LivingEntity target = LOCKED_TARGET_MAP.get(player.getUUID());
+                UUID targetUuid = LOCKED_TARGET_MAP.get(player.getUUID());
+                LivingEntity target = null;
+                if (targetUuid != null) {
+                    net.minecraft.world.entity.Entity ent = serverLevel.getEntity(targetUuid);
+                    if (ent instanceof LivingEntity le && le.isAlive()) {
+                        target = le;
+                    } else {
+                        LOCKED_TARGET_MAP.remove(player.getUUID());
+                    }
+                }
                 boolean followsPlayer = (target == null); // Tweak A (follows player) vs Tweak B (follows target)
 
                 Vec3 spawnPos = target != null ? target.position() : player.position();
@@ -342,5 +372,12 @@ public class AzureDragonSwordItem extends Item {
             }
         }
         return true;
+    }
+
+    public static void onPlayerDisconnect(UUID playerUuid) {
+        IS_RUSHING_MAP.remove(playerUuid);
+        DOUBLE_RUSHING_MAP.remove(playerUuid);
+        LAST_RUSH_START_TIME.remove(playerUuid);
+        LOCKED_TARGET_MAP.remove(playerUuid);
     }
 }

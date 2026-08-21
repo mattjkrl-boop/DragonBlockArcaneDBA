@@ -61,7 +61,7 @@ public class ShenronEntity extends Mob {
             case "immortality" -> {
                 player.addItem(new net.minecraft.world.item.ItemStack(com.dragonblockarcanedba.item.DbaItems.SENZU_BEAN, 16));
                 player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
-                    net.minecraft.world.effect.MobEffects.RESISTANCE, 12000, 2
+                    com.dragonblockarcanedba.effect.DbaEffects.CELESTIAL_GRACE_HOLDER, 12000, 0
                 ));
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal("\u00a76Shenron: \u00a7aYour wish for immortality has been granted."));
             }
