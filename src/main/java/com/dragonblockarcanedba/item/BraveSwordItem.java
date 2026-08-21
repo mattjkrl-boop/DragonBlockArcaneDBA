@@ -40,28 +40,39 @@ public class BraveSwordItem extends Item {
     public static final int MAX_RIGHT_CHARGE_TICKS = 160; // 8 seconds
 
     public BraveSwordItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        899.0, // 1 + 899 = 900 base damage
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -1.4, // Swift heroic swordplay
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    899.0, // 1 + 899 = 900 base damage
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -1.4, // Swift heroic swordplay
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Physics: Hero's Swift Stride & Acrobatic Glide
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("brave_hero_friction"), -0.60, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("brave_hero_drag"), -0.50, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- Combo Tracking ---
@@ -116,6 +127,15 @@ public class BraveSwordItem extends Item {
 
                 float finisherDmg = 900.0f + (strength * 4.0f);
                 target.hurtServer(level, level.damageSources().playerAttack(player), finisherDmg);
+
+                // MC 26.2 Physics: Finisher ricochet bounce
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    target,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("brave_finisher_bounce"),
+                    0.85,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                );
 
                 // Golden cross slash particles
                 level.sendParticles(ParticleTypes.EXPLOSION, target.getX(), target.getY() + 1.0, target.getZ(), 2, 0.2, 0.2, 0.2, 0);
@@ -242,6 +262,23 @@ public class BraveSwordItem extends Item {
             for (LivingEntity t : targets) {
                 t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
                 t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage);
+
+                // MC 26.2 Physics: Piercing dash launch and bounce
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    t,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("brave_dash_bounce"),
+                    0.80,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                );
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    t,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("brave_dash_drag"),
+                    -0.40,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
+
                 if (!t.isAlive()) {
                     anyKilled = true;
                 }

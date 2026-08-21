@@ -40,28 +40,39 @@ public class BlasterGunItem extends Item {
     public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
 
     public BlasterGunItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        449.0, // 1 + 449 = 450 base damage
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -2.0,
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    449.0, // 1 + 449 = 450 base damage
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -2.0,
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Target Acquisition: Tactical Recon Scope nameplate spotting range
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_recon_nameplate"), 64.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.MINI_NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_recon_mini_nameplate"), 30.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- Ammo & Heat Utilities ---
@@ -257,6 +268,22 @@ public class BlasterGunItem extends Item {
             for (LivingEntity t : targets) {
                 t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 25, 0, false, false, false), player);
                 t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage);
+
+                // MC 26.2 Physics: Concussive beam impulse
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    t,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_beam_bounce"),
+                    0.85,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                );
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    t,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_beam_drag"),
+                    -0.40,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
 
                 // Tweak B: Gravitational suction pulling enemies into centerline
                 Vec3 toCenter = start.add(look.scale(look.dot(t.position().subtract(start)))).subtract(t.position()).normalize().scale(0.8);

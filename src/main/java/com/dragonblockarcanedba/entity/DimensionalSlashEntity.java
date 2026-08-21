@@ -73,6 +73,22 @@ public class DimensionalSlashEntity extends Projectile {
             if (hitEntity instanceof LivingEntity living) {
                 living.hurtServer((net.minecraft.server.level.ServerLevel) this.level(), this.damageSources().mobProjectile(this, (LivingEntity) owner), damage);
                 living.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 1, false, true));
+
+                // MC 26.2 Physics: Spatial rift warp friction distortion
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    living,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dimensional_slash_friction"),
+                    -0.90,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    living,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dimensional_slash_drag"),
+                    -0.80,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
             }
         }
     }

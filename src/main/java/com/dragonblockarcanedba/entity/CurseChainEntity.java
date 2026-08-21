@@ -199,6 +199,23 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
                 int newAmp = (existingEffect != null) ? Math.min(9, existingEffect.getAmplifier() + 1) : 0;
                 target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 100, newAmp, false, true), owner);
 
+                // MC 26.2 Physics: Heavy spectral iron chains ground the target and increase drag
+                double chainWeight = 1.0 + (newAmp * 0.8);
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    target,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("curse_chain_friction"),
+                    chainWeight,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    target,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("curse_chain_drag"),
+                    chainWeight,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
+
                 // Small magic hit damage
                 target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, (LivingEntity) owner), 35.0f);
 

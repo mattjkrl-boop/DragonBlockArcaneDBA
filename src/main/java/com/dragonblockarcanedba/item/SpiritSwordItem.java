@@ -50,28 +50,39 @@ public class SpiritSwordItem extends Item {
     private static final double PULSE_RANGE = 32.0;
 
     public SpiritSwordItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        499.0, // +499 on top of base 1 = 500 total
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -1.0, // Fast legendary blade (effective 3.0 attacks/sec)
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    499.0, // +499 on top of base 1 = 500 total
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -1.0, // Fast legendary blade (effective 3.0 attacks/sec)
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Divine Presence & Physics: Radiant Divine Beacon & Celestial Glide
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("spirit_sword_beacon_nameplate"), 40.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("spirit_sword_air_drag"), -0.55, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- Left Click: Massive damage + Levitation III + Spirit Cleave + Disarm ---
@@ -80,6 +91,15 @@ public class SpiritSwordItem extends Item {
         // Apply Spirit Impale (mid-air suspension + damage weakness + divine Ki radiance)
         target.addEffect(new MobEffectInstance(DbaEffects.SPIRIT_IMPALE_HOLDER, 120, 0, false, true), attacker);
         target.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 120, 0, false, false, false), attacker);
+
+        // MC 26.2 Physics: Spirit blade kinetic radiance bounce
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            target,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("spirit_sword_hit_bounce"),
+            0.85,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+        );
 
         // Spirit Cleave: 2% of target's max HP as bonus magic damage
         if (attacker instanceof ServerPlayer serverPlayer) {
@@ -204,6 +224,15 @@ public class SpiritSwordItem extends Item {
 
                     // Apply Spirit Impale for 5 seconds (100 ticks)
                     livingTarget.addEffect(new MobEffectInstance(DbaEffects.SPIRIT_IMPALE_HOLDER, 100, 0, false, true), player);
+
+                    // MC 26.2 Physics: Spirit Cannon concussive pulse bounce
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        livingTarget,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("spirit_cannon_bounce"),
+                        0.80,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                    );
 
                     // Impact particle burst at hit entity — big cyan/white explosion
                     serverLevel.sendParticles(

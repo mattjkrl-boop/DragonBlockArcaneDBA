@@ -26,28 +26,39 @@ import com.dragonblockarcanedba.util.SwarmHelper;
 
 public class DevilTridentItem extends Item {
     public DevilTridentItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        749.0, // Late game damage (1 + 749 = 750)
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -2.2, // Slightly faster
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    749.0, // Late game damage (1 + 749 = 750)
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -2.2, // Slightly faster
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Physics: Demonic Overlord Stance & Hellish Grip
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("devil_trident_friction"), 0.60, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("devil_trident_bounce"), 0.25, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // Left Click: Three-Pronged Lasers or Targeting
@@ -165,6 +176,22 @@ public class DevilTridentItem extends Item {
                     t.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 300, 2, false, true), player);
                     t.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 300, 0, false, false, false), player);
                     
+                    // MC 26.2 Physics: Demonic ground slam kinetic bounce
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        t,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("devil_slam_bounce"),
+                        0.85,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                    );
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        t,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("devil_slam_drag"),
+                        -0.40,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                    );
+
                     // Ground pull
                     t.setDeltaMovement(t.getDeltaMovement().add(0, -2.0, 0));
                     t.hurtMarked = true;

@@ -56,28 +56,39 @@ public class GrandSwordItem extends Item {
     public static final Map<UUID, ValorFieldEntity> ACTIVE_VALOR_FIELDS = new ConcurrentHashMap<>();
 
     public GrandSwordItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        849.0, // 1 + 849 = 850 base damage
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -2.4, // Balanced heavy swing
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    849.0, // 1 + 849 = 850 base damage
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -2.4, // Balanced heavy swing
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Physics: Unshakable Valor Stance & Fortified Poise
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("grand_sword_valor_friction"), 0.75, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("grand_sword_valor_bounce"), 0.20, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- LEFT CLICK: Grand Cyclone Spin, Blade Shards & Finisher Slash ---
@@ -192,6 +203,15 @@ public class GrandSwordItem extends Item {
                     enemy.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                         com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false
                     ), player);
+
+                    // MC 26.2 Physics: Grand sweep knockback bounce
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        enemy,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("grand_sweep_bounce"),
+                        0.85,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                    );
 
                     Vec3 knock = look.scale(1.4);
                     enemy.setDeltaMovement(enemy.getDeltaMovement().add(knock.x, 0.3, knock.z));

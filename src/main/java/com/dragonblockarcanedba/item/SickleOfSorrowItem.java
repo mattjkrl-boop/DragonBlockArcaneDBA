@@ -46,28 +46,42 @@ public class SickleOfSorrowItem extends Item {
     private static final double AOE_RADIUS = 15.0;
 
     public SickleOfSorrowItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        749.0, // +749 on top of base 1 = 750 total
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -2.4, // Slightly faster than before (-2.8), still heavy
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    749.0, // +749 on top of base 1 = 750 total
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -2.4, // Slightly faster than before (-2.8), still heavy
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Stealth & Physics: Grim Reaper Void Shroud & Ethereal Glide
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("sickle_nameplate_stealth"), -60.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.MINI_NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("sickle_mini_nameplate_stealth"), -10.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("sickle_ethereal_drag"), -0.60, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- Left Click: Massive damage + Melting III + Soul Rend lifesteal + Darkness ---
@@ -141,6 +155,22 @@ public class SickleOfSorrowItem extends Item {
 
                     // Sorrow Rift for 10 seconds (200 ticks)
                     target.addEffect(new MobEffectInstance(DbaEffects.SORROW_RIFT_HOLDER, 200, 0, false, true), player);
+
+                    // MC 26.2 Physics: Sorrowful void ice friction & gravity well drag
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        target,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("sickle_rift_friction"),
+                        -0.80,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                    );
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        target,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("sickle_rift_drag"),
+                        3.0,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                    );
 
                     // Gravity Well: Pull target toward player
                     Vec3 pullDir = player.position().subtract(target.position()).normalize().scale(1.5);

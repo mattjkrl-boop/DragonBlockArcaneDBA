@@ -89,6 +89,22 @@ public class DarknessWaveEntity extends Projectile {
                 target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.PETRIFICATION_CURSE_HOLDER, 100, 0, false, true));
                 target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.DARK_FADED_HOLDER, 100, 0, false, true));
 
+                // MC 26.2 Physics: Void gravitational drag and creeping darkness friction
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    target,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("darkness_wave_drag"),
+                    3.0,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    target,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("darkness_wave_friction"),
+                    2.5,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
+
                 // Cinematic tracking buffer
                 if (owner instanceof LivingEntity livingOwner) {
                     target.addEffect(new MobEffectInstance(

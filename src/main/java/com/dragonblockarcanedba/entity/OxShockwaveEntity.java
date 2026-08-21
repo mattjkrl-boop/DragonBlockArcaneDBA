@@ -219,6 +219,22 @@ public class OxShockwaveEntity extends Projectile {
                         flatDir = flatDir.normalize();
                     }
 
+                    // MC 26.2 Physics: Groundbreaker violent shockwave bounce and low drag
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        target,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("ox_shockwave_bounce"),
+                        0.90,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                    );
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        target,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("ox_shockwave_drag"),
+                        -0.50,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                    );
+
                     double horizontalPower = 1.4 + (charge * 1.8);
                     double verticalPower = 0.6 + (charge * 0.7);
 

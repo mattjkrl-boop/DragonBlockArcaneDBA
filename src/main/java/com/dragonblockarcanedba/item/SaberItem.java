@@ -115,28 +115,39 @@ public class SaberItem extends Item {
     public static final Map<UUID, Long> PERFECT_DODGE_EXPIRE_TIME = new ConcurrentHashMap<>();
 
     public SaberItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        819.0, // 1 + 819 = 820 base damage
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        0.0, // Rapid swift strikes
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    819.0, // 1 + 819 = 820 base damage
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    0.0, // Rapid swift strikes
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Physics: Hyper-Agile Footwork & Zero-Drag Blitz Mobility
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("saber_blitz_friction"), -0.75, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("saber_blitz_drag"), -0.65, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- LEFT CLICK: Blitz Flurry ---
@@ -346,8 +357,7 @@ public class SaberItem extends Item {
             
             // Keep looking at the next target if it exists
             if (seq.nextTargetUuid != null) {
-                LivingEntity nextEntity = (LivingEntity) level.getEntity(seq.nextTargetUuid);
-                if (nextEntity != null && nextEntity.isAlive()) {
+                if (level.getEntity(seq.nextTargetUuid) instanceof LivingEntity nextEntity && nextEntity.isAlive()) {
                     Vec3 lookAtPos = nextEntity.getEyePosition();
                     player.connection.send(new net.minecraft.network.protocol.game.ClientboundPlayerLookAtPacket(
                         net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, lookAtPos.x, lookAtPos.y, lookAtPos.z
@@ -858,6 +868,15 @@ public class SaberItem extends Item {
                         ? level.damageSources().playerAttack(anim.player)
                         : level.damageSources().generic();
                     e.hurtServer(level, dmgSource, anim.damage);
+
+                    // MC 26.2 Physics: Best-fit line snap shockwave bounce
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        e,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("saber_finisher_bounce"),
+                        0.80,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                    );
                 }
                 
                 // Straight-line visual slash beam along the entire calculated best-fit line
@@ -920,12 +939,22 @@ public class SaberItem extends Item {
                 // 3. Manage Blitz Flurry continuation expiration & Finisher trigger
                 BlitzSequence seq = ACTIVE_BLITZ_MAP.get(playerUuid);
                 if (seq != null) {
-                    if (seq.inContinuationWindow) {
+                    if (!(player.getMainHandItem().getItem() instanceof SaberItem)) {
+                        ItemStack mainStack = player.getMainHandItem();
+                        executeBestFitLineFinisher(player, level, seq, mainStack);
+                        ACTIVE_BLITZ_MAP.remove(playerUuid);
+                        if (!player.isSpectator() && player.noPhysics) {
+                            player.noPhysics = false;
+                        }
+                    } else if (seq.inContinuationWindow) {
                         if (now - seq.releaseGameTime > 20) {
                             // Continuation buffer (20 ticks / 1.0s at normal speed) expired without re-holding!
                             ItemStack mainStack = player.getMainHandItem();
                             executeBestFitLineFinisher(player, level, seq, mainStack);
                             ACTIVE_BLITZ_MAP.remove(playerUuid);
+                            if (!player.isSpectator() && player.noPhysics) {
+                                player.noPhysics = false;
+                            }
                         }
                     }
                 } else {

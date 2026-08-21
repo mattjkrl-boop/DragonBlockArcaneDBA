@@ -88,6 +88,22 @@ public class EvilSpearProjectileEntity extends Projectile {
                     com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER, 160, 0, false, true
                 ), owner);
 
+                // MC 26.2 Physics: Spear impalement pin friction & drag
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    target,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_spear_hit_friction"),
+                    3.0,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    target,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_spear_hit_drag"),
+                    2.0,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
+
                 // Apply cinematic tracking holder
                 if (owner instanceof LivingEntity livingOwner) {
                     target.addEffect(new MobEffectInstance(

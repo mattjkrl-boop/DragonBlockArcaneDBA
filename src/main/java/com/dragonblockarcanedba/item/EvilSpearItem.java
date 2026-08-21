@@ -40,28 +40,42 @@ public class EvilSpearItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 120; // 6 seconds
 
     public EvilSpearItem(Properties properties) {
-        super(properties.attributes(
-            ItemAttributeModifiers.builder()
-                .add(
-                    Attributes.ATTACK_DAMAGE,
-                    new AttributeModifier(
-                        BASE_ATTACK_DAMAGE_ID,
-                        799.0, // 1 + 799 = 800 base damage
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .add(
-                    Attributes.ATTACK_SPEED,
-                    new AttributeModifier(
-                        BASE_ATTACK_SPEED_ID,
-                        -1.6, // Rapid thrusts
-                        AttributeModifier.Operation.ADD_VALUE
-                    ),
-                    EquipmentSlotGroup.MAINHAND
-                )
-                .build()
-        ));
+        super(properties.attributes(createModifiers()));
+    }
+
+    private static ItemAttributeModifiers createModifiers() {
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder()
+            .add(
+                Attributes.ATTACK_DAMAGE,
+                new AttributeModifier(
+                    BASE_ATTACK_DAMAGE_ID,
+                    799.0, // 1 + 799 = 800 base damage
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            )
+            .add(
+                Attributes.ATTACK_SPEED,
+                new AttributeModifier(
+                    BASE_ATTACK_SPEED_ID,
+                    -1.6, // Rapid thrusts
+                    AttributeModifier.Operation.ADD_VALUE
+                ),
+                EquipmentSlotGroup.MAINHAND
+            );
+
+        // MC 26.2 Stealth & Physics: Cursed Hunter Stealth & Throw Aerodynamics
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_spear_nameplate_stealth"), -48.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.MINI_NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_spear_mini_nameplate_stealth"), -8.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_spear_air_drag"), -0.40, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+
+        return builder.build();
     }
 
     // --- LEFT CLICK: Evil Impale (Charged Spectral Spear Throw) ---
@@ -242,6 +256,23 @@ public class EvilSpearItem extends Item {
             // Drive into ground with Movement Curse root (100 ticks = 5s)
             t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER, 100, 0, false, true));
             t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 100, 0, false, false, false), player);
+            
+            // MC 26.2 Physics: Ground impalement pin friction & violent shockwave bounce
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                t,
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+                com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_hunt_friction"),
+                4.0,
+                net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+            );
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                t,
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_hunt_bounce"),
+                0.80,
+                net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+            );
+
             t.hurtServer(level, level.damageSources().playerAttack(player), finalDmg);
 
             // Demonic crimson shockwave on ground impact

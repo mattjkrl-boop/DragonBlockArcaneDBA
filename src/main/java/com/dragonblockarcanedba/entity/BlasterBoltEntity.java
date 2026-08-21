@@ -104,6 +104,21 @@ public class BlasterBoltEntity extends Projectile {
 
                 if (isOvercharged) {
                     // Overcharged explosive detonation (Tweak C)
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        target,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_bolt_bounce"),
+                        0.75,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                    );
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        target,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_bolt_drag"),
+                        -0.30,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                    );
+
                     AABB aoe = target.getBoundingBox().inflate(3.0);
                     List<LivingEntity> splashTargets = serverLevel.getEntitiesOfClass(
                         LivingEntity.class, aoe, e -> e.isAlive() && e != owner && e != target

@@ -50,6 +50,22 @@ public class DelayedLaunchEntity extends Projectile {
                     Vec3 launchDir = target.position().subtract(this.centerPos).normalize().scale(1.2 + powerRatio * 1.8);
                     target.setDeltaMovement(target.getDeltaMovement().add(launchDir.x, 1.0 + powerRatio * 0.8, launchDir.z));
                     target.hurtMarked = true;
+
+                    // MC 26.2 Physics: Extreme gravitational launch bounce and reduced air drag
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        target,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("delayed_launch_bounce"),
+                        0.90,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
+                    );
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                        target,
+                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("delayed_launch_drag"),
+                        -0.50,
+                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                    );
                 }
             }
             this.discard();
