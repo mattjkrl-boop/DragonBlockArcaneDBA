@@ -215,6 +215,10 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                 player.setHealth(player.getMaxHealth());
                 player.removeAllEffects();
                 
+                // Add blindness for a smooth "passing out" fade to black transition
+                player.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.BLINDNESS, 80, 1, false, false, false));
+
+                
                 // Find otherworld
                 net.minecraft.server.level.ServerLevel otherworld = ((net.minecraft.server.level.ServerLevel)entity.level()).getServer().getLevel(
                     net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, id("otherworld"))
