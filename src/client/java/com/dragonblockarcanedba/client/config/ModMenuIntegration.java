@@ -3,6 +3,7 @@ package com.dragonblockarcanedba.client.config;
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
@@ -50,15 +51,24 @@ public class ModMenuIntegration implements ModMenuApi {
                 }
             ).bounds(x - 100, y - 65, 200, 20).build());
 
-            // Toggle First-Person 50% Transparency Button
-            addRenderableWidget(Button.builder(
-                Component.literal("First-Person 50% Opacity: " + (DbaConfig.firstPersonHalfTransparency ? "ON" : "OFF")),
-                btn -> {
-                    DbaConfig.firstPersonHalfTransparency = !DbaConfig.firstPersonHalfTransparency;
-                    btn.setMessage(Component.literal("First-Person 50% Opacity: " + (DbaConfig.firstPersonHalfTransparency ? "ON" : "OFF")));
+            // First Person Transparency Slider (0% to 100%)
+            addRenderableWidget(new AbstractSliderButton(
+                x - 100, y - 40, 200, 20,
+                Component.literal("First Person Transparency: " + DbaConfig.firstPersonTransparency + "%"),
+                DbaConfig.firstPersonTransparency / 100.0
+            ) {
+                @Override
+                protected void updateMessage() {
+                    int val = (int) Math.round(this.value * 100.0);
+                    this.setMessage(Component.literal("First Person Transparency: " + val + "%"));
+                }
+
+                @Override
+                protected void applyValue() {
+                    DbaConfig.firstPersonTransparency = (int) Math.round(this.value * 100.0);
                     DbaConfig.save();
                 }
-            ).bounds(x - 100, y - 40, 200, 20).build());
+            });
 
             // Cycle Ki Recovery Multiplier
             addRenderableWidget(Button.builder(

@@ -743,7 +743,8 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             if (speedAttr != null) {
                 double maxBonus = effectiveDex * 0.001;
                 double speedRatio = Math.max(1, Math.min(100, dbaSpeedPercent)) / 100.0;
-                speedAttr.setBaseValue(0.1 + (maxBonus * speedRatio));
+                double totalSpeed = (0.1 + maxBonus) * speedRatio;
+                speedAttr.setBaseValue(Math.max(0.005, totalSpeed));
             }
         }
     }

@@ -30,11 +30,13 @@ public class EntityRenderDispatcherMixin {
         SubmitNodeCollector collector,
         CameraRenderState cameraState
     ) {
-        if (DbaConfig.firstPersonHalfTransparency) {
+        int transparency = DbaConfig.firstPersonTransparency;
+        if (transparency > 0) {
             net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
             if (mc != null && mc.options != null && mc.options.getCameraType().isFirstPerson()) {
                 String pkg = renderer.getClass().getPackage().getName();
                 if (pkg.startsWith("com.dragonblockarcanedba.client.render")) {
+                    float alphaFactor = Math.max(0.0f, Math.min(1.0f, (100 - transparency) / 100.0f));
                     SubmitNodeCollector wrappedCollector = (SubmitNodeCollector) java.lang.reflect.Proxy.newProxyInstance(
                         SubmitNodeCollector.class.getClassLoader(),
                         new Class<?>[]{SubmitNodeCollector.class},
@@ -44,7 +46,7 @@ public class EntityRenderDispatcherMixin {
                                 RenderType r = (RenderType) args[1];
                                 SubmitNodeCollector.CustomGeometryRenderer origRenderer = (SubmitNodeCollector.CustomGeometryRenderer) args[2];
                                 collector.submitCustomGeometry(p, r, (pose, buffer) -> {
-                                    origRenderer.render(pose, new AlphaModulatingVertexConsumer(buffer, 0.5f));
+                                    origRenderer.render(pose, new AlphaModulatingVertexConsumer(buffer, alphaFactor));
                                 });
                                 return null;
                             }

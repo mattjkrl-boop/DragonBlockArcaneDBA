@@ -12,9 +12,8 @@ public final class MovementLimiterHelper {
     private MovementLimiterHelper() {}
 
     /**
-     * Calculates the overall movement multiplier (0.0 to 1.0) for an entity,
-     * taking into account all active custom CC / debuff status effects as well as
-     * player speed limiter percentages.
+     * Calculates the overall crowd-control movement multiplier (0.0 to 1.0) for an entity,
+     * taking into account all active custom CC / debuff status effects.
      */
     public static double getMovementMultiplier(LivingEntity entity) {
         if (entity == null || !entity.isAlive()) {
@@ -27,16 +26,6 @@ public final class MovementLimiterHelper {
         }
 
         double mult = 1.0;
-
-        // 1. Natural Movement Speed Attribute Scaling (Captures all custom effects, attribute modifiers, gear, buffs & debuffs)
-        if (entity.getAttributes().hasAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED)) {
-            double baseAttr = entity.getAttributeBaseValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
-            double currAttr = entity.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
-            if (baseAttr > 0.0) {
-                double attrRatio = currAttr / baseAttr;
-                mult *= Math.max(0.0, attrRatio);
-            }
-        }
 
         // Spirit Impale (mid-air pin)
         if (entity.hasEffect(DbaEffects.SPIRIT_IMPALE_HOLDER)) {
@@ -83,15 +72,6 @@ public final class MovementLimiterHelper {
             MobEffectInstance eff = entity.getEffect(DbaEffects.MOVEMENT_CURSE_HOLDER);
             int amp = eff != null ? eff.getAmplifier() : 0;
             mult *= Math.max(0.10, 1.0 - (amp + 1) * 0.10);
-        }
-
-        // Player speed percentage slider limit (1-100%)
-        if (entity instanceof Player player) {
-            PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
-            int speedPercent = accessor.dba$getSpeedPercent();
-            if (speedPercent > 0 && speedPercent < 100) {
-                mult *= (speedPercent / 100.0);
-            }
         }
 
         return Math.max(0.0, Math.min(1.0, mult));

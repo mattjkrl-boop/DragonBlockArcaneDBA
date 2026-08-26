@@ -15,7 +15,7 @@ public class DbaConfig {
     public static boolean chargeVisualsEnabled = true;
     public static double statGainMultiplier = 1.0;
     public static boolean use3dWeapons = false;
-    public static boolean firstPersonHalfTransparency = false;
+    public static int firstPersonTransparency = 0; // 0 to 100 (0% transparent = fully opaque)
 
     public static void load() {
         try {
@@ -27,7 +27,11 @@ public class DbaConfig {
                         chargeVisualsEnabled = data.chargeVisualsEnabled;
                         statGainMultiplier = data.statGainMultiplier;
                         use3dWeapons = data.use3dWeapons;
-                        firstPersonHalfTransparency = data.firstPersonHalfTransparency;
+                        firstPersonTransparency = data.firstPersonTransparency;
+                        // Migration support from legacy boolean setting
+                        if (firstPersonTransparency == 0 && data.firstPersonHalfTransparency) {
+                            firstPersonTransparency = 50;
+                        }
                     }
                 }
             } else {
@@ -41,7 +45,7 @@ public class DbaConfig {
     public static void save() {
         try {
             try (FileWriter writer = new FileWriter(FILE)) {
-                GSON.toJson(new ConfigData(baseKiRecoveryMultiplier, chargeVisualsEnabled, statGainMultiplier, use3dWeapons, firstPersonHalfTransparency), writer);
+                GSON.toJson(new ConfigData(baseKiRecoveryMultiplier, chargeVisualsEnabled, statGainMultiplier, use3dWeapons, firstPersonTransparency), writer);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -53,14 +57,15 @@ public class DbaConfig {
         boolean chargeVisualsEnabled;
         double statGainMultiplier;
         boolean use3dWeapons;
-        boolean firstPersonHalfTransparency;
+        int firstPersonTransparency;
+        boolean firstPersonHalfTransparency; // for backwards compatibility reading
 
-        ConfigData(double b, boolean c, double s, boolean u, boolean f) {
+        ConfigData(double b, boolean c, double s, boolean u, int f) {
             this.baseKiRecoveryMultiplier = b;
             this.chargeVisualsEnabled = c;
             this.statGainMultiplier = s;
             this.use3dWeapons = u;
-            this.firstPersonHalfTransparency = f;
+            this.firstPersonTransparency = f;
         }
     }
 }

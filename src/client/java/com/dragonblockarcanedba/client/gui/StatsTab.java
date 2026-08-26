@@ -23,9 +23,6 @@ public class StatsTab implements MenuTab {
     private long holdStartMs = 0;
     private long lastUpgradeMs = 0;
 
-    // Speed slider dragging
-    private boolean isDraggingSpeedSlider = false;
-
     public static String formatNumber(long num) {
         if (num >= 1_000_000_000L) {
             return String.format(Locale.US, "%.2fB", num / 1_000_000_000.0);
@@ -37,28 +34,11 @@ public class StatsTab implements MenuTab {
         return String.format(Locale.US, "%,d", num);
     }
 
-    private int getSliderX(int startX) {
-        return startX + 132;
-    }
-
-    private int getSliderY(int startY) {
-        return startY + 55 + 1 * 24 + 9;
-    }
-
-    private int getSliderW() {
-        return 92;
-    }
-
-    private int getSliderH() {
-        return 10;
-    }
-
     @Override
     public void init(DbaMenuScreen screen) {
         this.parent = screen;
         this.isMouseDown = false;
         this.heldStat = null;
-        this.isDraggingSpeedSlider = false;
     }
 
     @Override
@@ -210,40 +190,6 @@ public class StatsTab implements MenuTab {
             String apString = "Cost: " + formatNumber(apCost) + " AP";
             context.text(client.font, Component.literal(apString + reqString), barX, y + 10, textColor);
             
-            // If Dexterity: render the 1-100% Speed Control Slider cleanly on Line 2!
-            if ("dexterity".equals(statName)) {
-                int sliderX = getSliderX(startX);
-                int sliderY = getSliderY(startY);
-                int sliderW = getSliderW();
-                int sliderH = getSliderH();
-                int speedPct = accessor.dba$getSpeedPercent();
-                boolean hoverSlider = (mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY - 2 && mouseY <= sliderY + sliderH + 2);
-                
-                // Track background
-                context.fill(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH, 0x77000000);
-                
-                // Filled portion
-                int fillW = Math.max(2, (int)(sliderW * (speedPct / 100.0f)));
-                int fillColor = (hoverSlider || isDraggingSpeedSlider) ? 0xEE00E5FF : 0xAA00B0FF;
-                context.fill(sliderX, sliderY, sliderX + fillW, sliderY + sliderH, fillColor);
-                
-                // Borders
-                int borderCol = (hoverSlider || isDraggingSpeedSlider) ? 0xAA00E5FF : 0x55FFFFFF;
-                context.fill(sliderX - 1, sliderY - 1, sliderX + sliderW + 1, sliderY, borderCol);
-                context.fill(sliderX - 1, sliderY + sliderH, sliderX + sliderW + 1, sliderY + sliderH + 1, borderCol);
-                context.fill(sliderX - 1, sliderY, sliderX, sliderY + sliderH, borderCol);
-                context.fill(sliderX + sliderW, sliderY, sliderX + sliderW + 1, sliderY + sliderH, borderCol);
-                
-                // Knob
-                int knobX = sliderX + fillW;
-                context.fill(knobX - 2, sliderY - 1, knobX + 2, sliderY + sliderH + 1, 0xFFFFFFFF);
-                context.fill(knobX - 1, sliderY, knobX + 1, sliderY + sliderH, 0xFF00E5FF);
-                
-                // Centered text inside slider
-                String speedText = "Speed: " + speedPct + "%";
-                context.centeredText(client.font, Component.literal(speedText), sliderX + sliderW / 2, sliderY + 1, 0xFFFFFFFF);
-            }
-            
             // Custom Upgrade Button
             int btnY = y - 4;
             int btnW = 16;
@@ -281,22 +227,6 @@ public class StatsTab implements MenuTab {
         context.centeredText(client.font, Component.literal(kiString), startX + width / 2, kiPanelY + 4, 0xFF55FFFF);
     }
 
-    private void updateSpeedFromMouse(double mouseX, int sliderX, int sliderW, PlayerStatsAccessor accessor) {
-        float frac = (float)(mouseX - sliderX) / (float)sliderW;
-        int percent = Math.max(1, Math.min(100, Math.round(frac * 100.0f)));
-        if (percent != accessor.dba$getSpeedPercent()) {
-            accessor.dba$setSpeedPercent(percent);
-            sendSpeedPercent(percent);
-        }
-    }
-
-    private void sendSpeedPercent(int percent) {
-        CompoundTag nbt = new CompoundTag();
-        nbt.putString("action", "set_speed_percent");
-        nbt.putInt("percent", percent);
-        ClientPlayNetworking.send(new ActionPayload(nbt));
-    }
-
     private void sendUpgrade(String statName) {
         CompoundTag nbt = new CompoundTag();
         nbt.putString("action", "upgrade");
@@ -317,17 +247,6 @@ public class StatsTab implements MenuTab {
         
         double mouseX = event.x();
         double mouseY = event.y();
-
-        // Check Dexterity Speed Slider click
-        int sliderX = getSliderX(startX);
-        int sliderY = getSliderY(startY);
-        int sliderW = getSliderW();
-        int sliderH = getSliderH();
-        if (mouseX >= sliderX - 3 && mouseX <= sliderX + sliderW + 3 && mouseY >= sliderY - 2 && mouseY <= sliderY + sliderH + 2) {
-            this.isDraggingSpeedSlider = true;
-            updateSpeedFromMouse(mouseX, sliderX, sliderW, accessor);
-            return true;
-        }
         
         int btnX = startX + width - 28;
 
@@ -366,17 +285,6 @@ public class StatsTab implements MenuTab {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
-        if (this.isDraggingSpeedSlider) {
-            Minecraft client = Minecraft.getInstance();
-            if (client.player != null) {
-                PlayerStatsAccessor accessor = (PlayerStatsAccessor) client.player;
-                int startX = parent.getContentX();
-                int sliderX = getSliderX(startX);
-                int sliderW = getSliderW();
-                updateSpeedFromMouse(event.x(), sliderX, sliderW, accessor);
-            }
-            return true;
-        }
         this.isMouseDown = true;
         return false;
     }
@@ -385,10 +293,6 @@ public class StatsTab implements MenuTab {
     public boolean mouseReleased(MouseButtonEvent event) {
         this.isMouseDown = false;
         this.heldStat = null;
-        if (this.isDraggingSpeedSlider) {
-            this.isDraggingSpeedSlider = false;
-            return true;
-        }
         return false;
     }
 }
