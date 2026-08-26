@@ -1,1 +1,6 @@
-{ "parent": "minecraft:block/cube_all", "textures": { "all": "minecraft:block/red_nether_bricks" } }
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "dragonblockarcanedba:block/vegeta_stone"
+  }
+}
