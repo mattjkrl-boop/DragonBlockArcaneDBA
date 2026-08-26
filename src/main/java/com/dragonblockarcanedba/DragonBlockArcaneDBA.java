@@ -213,63 +213,25 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                 // 5. Sync stats to client
                 accessor.dba$syncStats();
                 
-                // Prevent normal death
+                // Reset player physical status
                 player.setHealth(player.getMaxHealth());
                 player.removeAllEffects();
+                player.resetFallDistance();
+                player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+                player.clearFire();
+                player.stopRiding();
                 
                 // Add blindness for a smooth "passing out" fade to black transition
                 player.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.BLINDNESS, 80, 1, false, false, false));
 
-                
                 // Find otherworld
                 net.minecraft.server.level.ServerLevel otherworld = ((net.minecraft.server.level.ServerLevel)entity.level()).getServer().getLevel(
                     net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, id("otherworld"))
                 );
                 
                 if (otherworld != null) {
-                    int startY = 100;
-                    net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(0, startY, 0);
-                    
-                    // Generate structure if floor isn't planks
-                    net.minecraft.core.BlockPos floor = pos.below();
-                    if (!otherworld.getBlockState(floor).is(net.minecraft.world.level.block.Blocks.OAK_PLANKS)) {
-                        for(int x = -3; x <= 3; x++) {
-                            for(int y = -1; y <= 4; y++) {
-                                for(int z = -3; z <= 3; z++) {
-                                    net.minecraft.core.BlockPos p = pos.offset(x, y, z);
-                                    if (y == -1 || y == 4 || x == -3 || x == 3 || z == -3 || z == 3) {
-                                        otherworld.setBlockAndUpdate(p, net.minecraft.world.level.block.Blocks.OAK_PLANKS.defaultBlockState());
-                                    } else {
-                                        otherworld.setBlockAndUpdate(p, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
-                                    }
-                                }
-                            }
-                        }
-                        // Entrance doorway
-                        otherworld.setBlockAndUpdate(pos.offset(0, 0, -3), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
-                        otherworld.setBlockAndUpdate(pos.offset(0, 1, -3), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
-                        
-                        // Glass Windows for natural light and view outside
-                        otherworld.setBlockAndUpdate(pos.offset(-3, 1, 0), net.minecraft.world.level.block.Blocks.GLASS.defaultBlockState());
-                        otherworld.setBlockAndUpdate(pos.offset(3, 1, 0), net.minecraft.world.level.block.Blocks.GLASS.defaultBlockState());
-                        
-                        // Desk
-                        otherworld.setBlockAndUpdate(pos.offset(0, 0, 1), net.minecraft.world.level.block.Blocks.SPRUCE_STAIRS.defaultBlockState());
-                        
-                        // Light sources (Lanterns)
-                        otherworld.setBlockAndUpdate(pos.offset(1, 1, 1), net.minecraft.world.level.block.Blocks.LANTERN.defaultBlockState());
-                        otherworld.setBlockAndUpdate(pos.offset(-1, 1, 1), net.minecraft.world.level.block.Blocks.LANTERN.defaultBlockState());
-                        otherworld.setBlockAndUpdate(pos.offset(0, 3, 0), net.minecraft.world.level.block.Blocks.LANTERN.defaultBlockState());
-                        
-                        // Spawn guide
-                        com.dragonblockarcanedba.entity.OtherworldGuideEntity guide = com.dragonblockarcanedba.entity.DbaEntities.OTHERWORLD_GUIDE.create(otherworld, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
-                        if (guide != null) {
-                            guide.setPos(0.5, startY, 2.5);
-                            otherworld.addFreshEntity(guide);
-                        }
-                    }
-                    
-                    player.teleportTo(otherworld, 0.5, startY, -1.5, java.util.Collections.emptySet(), 0, 0, false);
+                    net.minecraft.world.phys.Vec3 spawn = com.dragonblockarcanedba.dimension.OtherworldStationGenerator.ensureStationAndGetSpawn(otherworld);
+                    player.teleportTo(otherworld, spawn.x, spawn.y, spawn.z, java.util.Collections.emptySet(), 0.0f, 0.0f, false);
                     return false; // Cancel death only if safely teleported to Otherworld
                 }
                 return true; // Fallback to normal vanilla death if otherworld is unavailable

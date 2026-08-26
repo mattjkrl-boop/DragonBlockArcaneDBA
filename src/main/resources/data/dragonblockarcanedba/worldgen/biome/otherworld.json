@@ -3,10 +3,18 @@
   "temperature": 0.5,
   "downfall": 0.0,
   "effects": {
-    "fog_color": 16776960,
-    "sky_color": 16776960,
-    "water_color": 16776960,
-    "water_fog_color": 16776960
+    "fog_color": 16763972,
+    "sky_color": 16768340,
+    "water_color": 5294200,
+    "water_fog_color": 3442530,
+    "foliage_color": 15120384,
+    "grass_color": 15120384,
+    "particle": {
+      "options": {
+        "type": "minecraft:wax_on"
+      },
+      "probability": 0.008
+    }
   },
   "spawners": {},
   "spawn_costs": {},
@@ -21,12 +29,20 @@
     [],
     [],
     [],
-    [],
+    [
+      "dragonblockarcanedba:katchin_ore",
+      "dragonblockarcanedba:dragstone_ore",
+      "dragonblockarcanedba:aetherium_ore",
+      "dragonblockarcanedba:silver_ore",
+      "dragonblockarcanedba:tin_ore",
+      "dragonblockarcanedba:bauxite_ore",
+      "dragonblockarcanedba:otherworld_crystals"
+    ],
     [],
     [],
     [
-      "dragonblockarcanedba:otherworld_ceiling",
-      "dragonblockarcanedba:otherworld_surface"
+      "dragonblockarcanedba:otherworld_rock_spires",
+      "dragonblockarcanedba:otherworld_cloud_banks"
     ],
     []
   ]

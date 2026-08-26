@@ -33,6 +33,9 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     @Unique
     private int dba$hairColor = 0xFF1EB4FF;
 
+    @Unique
+    private boolean dba$isInOtherworld = false;
+
     @Override
     public void dba$extractFromPlayer(AbstractClientPlayer player, float partialTicks) {
         if (player instanceof PlayerStatsAccessor accessor) {
@@ -52,6 +55,8 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
             this.dba$skinColor = 0xFF8CC8FF;
             this.dba$hairColor = 0xFF1EB4FF;
         }
+
+        this.dba$isInOtherworld = player.level() != null && player.level().dimension().identifier().getPath().contains("otherworld");
         
         this.dba$tailAgeInTicks = player.tickCount + partialTicks;
         
@@ -113,5 +118,10 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     @Override
     public int dba$getHairColor() {
         return this.dba$hairColor;
+    }
+
+    @Override
+    public boolean dba$isInOtherworld() {
+        return this.dba$isInOtherworld;
     }
 }

@@ -30,6 +30,7 @@ public class RaceFeatureLayer extends RenderLayer<AvatarRenderState, EntityModel
     private final ModelPart saiyanArmor;
     private final ModelPart alienEars;
     private final ModelPart skinHeadOverlay;
+    private final ModelPart halo;
 
     public RaceFeatureLayer(RenderLayerParent<AvatarRenderState, EntityModel<AvatarRenderState>> renderer) {
         super(renderer);
@@ -44,6 +45,17 @@ public class RaceFeatureLayer extends RenderLayer<AvatarRenderState, EntityModel
         this.saiyanArmor = createSaiyanArmor();
         this.alienEars = createAlienEars();
         this.skinHeadOverlay = createSkinHeadOverlay();
+        this.halo = createHalo();
+    }
+
+    private ModelPart createHalo() {
+        CubeListBuilder builder = CubeListBuilder.create();
+        // Golden ring floating above the head at Y = -12.0F
+        builder.texOffs(0, 0).addBox(-3.5F, -12.0F, -3.5F, 7.0F, 0.8F, 1.0F);
+        builder.texOffs(0, 0).addBox(-3.5F, -12.0F, 2.5F, 7.0F, 0.8F, 1.0F);
+        builder.texOffs(0, 0).addBox(-3.5F, -12.0F, -2.5F, 1.0F, 0.8F, 5.0F);
+        builder.texOffs(0, 0).addBox(2.5F, -12.0F, -2.5F, 1.0F, 0.8F, 5.0F);
+        return bake(builder, "halo");
     }
 
     private ModelPart createSkinHeadOverlay() {
@@ -254,15 +266,12 @@ public class RaceFeatureLayer extends RenderLayer<AvatarRenderState, EntityModel
         }
 
         Identifier raceId = dbaState.dba$getRaceId();
-        if (raceId == null) {
-            return;
-        }
+        String path = raceId != null ? raceId.getPath().toLowerCase() : "human";
 
         if (!(this.getParentModel() instanceof HumanoidModel<?> humanoidModel)) {
             return;
         }
 
-        String path = raceId.getPath().toLowerCase();
         int skinColor = dbaState.dba$getSkinColor();
         int hairColor = dbaState.dba$getHairColor();
 
@@ -287,6 +296,20 @@ public class RaceFeatureLayer extends RenderLayer<AvatarRenderState, EntityModel
                     skinColor
             );
             stack.popPose();
+
+            // Render DBZ Golden Angel Halo when deceased in Otherworld
+            if (dbaState.dba$isInOtherworld()) {
+                stack.pushPose();
+                head.translateAndRotate(stack);
+                this.halo.render(
+                        stack,
+                        buffer,
+                        0x00F000F0, // Luminous celestial glow
+                        net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY,
+                        0xFFFFD700 // Pure golden yellow
+                );
+                stack.popPose();
+            }
 
             if (path.contains("saiyan")
                     || path.contains("human")

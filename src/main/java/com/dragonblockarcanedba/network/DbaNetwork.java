@@ -202,9 +202,12 @@ public class DbaNetwork {
                             SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.0f);
                     }
                 } else if ("revive".equals(action)) {
-                    net.minecraft.server.level.ServerLevel overworld = context.server().getLevel(net.minecraft.world.level.Level.OVERWORLD);
-                    if (overworld != null) {
-                        player.teleportTo(overworld, 0.5, 100, 0.5, java.util.Collections.emptySet(), 0, 0, false);
+                    player.resetFallDistance();
+                    player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+                    player.clearFire();
+                    boolean traveled = com.dragonblockarcanedba.dimension.DimensionTravel.travelTo(player, "overworld");
+                    if (traveled) {
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§e✨ You have been restored to life and returned to the physical realm!"));
                     }
                 } else if ("set_speed_percent".equals(action)) {
                     int percent = nbt.getIntOr("percent", 100);
