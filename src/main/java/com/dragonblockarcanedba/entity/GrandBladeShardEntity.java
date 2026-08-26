@@ -93,15 +93,6 @@ public class GrandBladeShardEntity extends Projectile {
             if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
                 Entity owner = this.getOwner();
 
-                // Subtle golden glint particles at blade position
-                if (this.tickCount % 6 == 0) {
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFFD700, 1.2f),
-                        this.getX(), this.getY() + 0.15, this.getZ(),
-                        1, 0.05, 0.05, 0.05, 0.01
-                    );
-                }
-
                 // Hazard detection radius: 0.9m horizontal, 1.0m vertical
                 AABB triggerBox = this.getBoundingBox().inflate(0.85, 0.4, 0.85);
                 List<LivingEntity> enemies = serverLevel.getEntitiesOfClass(
@@ -132,13 +123,11 @@ public class GrandBladeShardEntity extends Projectile {
                         victim.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), livingOwner);
                     }
 
-                    // Sound and shatter effect
+                    // Sound
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 1.6f);
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.ARMOR_STAND_HIT, SoundSource.PLAYERS, 1.2f, 1.2f);
-                    serverLevel.sendParticles(ParticleTypes.CRIT, this.getX(), this.getY() + 0.2, this.getZ(), 6, 0.2, 0.2, 0.2, 0.1);
-                    serverLevel.sendParticles(new DustParticleOptions(0xFFD700, 1.6f), this.getX(), this.getY() + 0.2, this.getZ(), 4, 0.1, 0.1, 0.1, 0.05);
 
                     this.discard();
                     return;
@@ -146,7 +135,6 @@ public class GrandBladeShardEntity extends Projectile {
 
                 // Disappear over time (10 seconds)
                 if (this.tickCount >= MAX_EMBEDDED_TICKS) {
-                    serverLevel.sendParticles(ParticleTypes.POOF, this.getX(), this.getY() + 0.1, this.getZ(), 3, 0.1, 0.1, 0.1, 0.01);
                     this.discard();
                 }
             }
@@ -155,15 +143,6 @@ public class GrandBladeShardEntity extends Projectile {
             Vec3 movement = this.getDeltaMovement();
             Vec3 start = this.position();
             Vec3 end = start.add(movement);
-
-            // Trailing golden sparks
-            if (this.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0xFFD700, 1.3f),
-                    this.getX(), this.getY(), this.getZ(),
-                    1, 0.02, 0.02, 0.02, 0.01
-                );
-            }
 
             // Direct entity hit detection while airborne
             if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
@@ -192,7 +171,6 @@ public class GrandBladeShardEntity extends Projectile {
                         victim.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), livingOwner);
                     }
 
-                    serverLevel.sendParticles(ParticleTypes.CRIT, this.getX(), this.getY() + 0.2, this.getZ(), 6, 0.2, 0.2, 0.2, 0.1);
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 1.4f);
                     this.discard();
                     return;
@@ -212,7 +190,6 @@ public class GrandBladeShardEntity extends Projectile {
 
                 if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
                     serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z, SoundEvents.ARROW_HIT, SoundSource.PLAYERS, 0.8f, 1.4f);
-                    serverLevel.sendParticles(new DustParticleOptions(0xFFD700, 1.4f), hitPos.x, hitPos.y + 0.1, hitPos.z, 3, 0.1, 0.1, 0.1, 0.02);
                 }
                 return;
             }

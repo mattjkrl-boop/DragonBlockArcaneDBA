@@ -118,9 +118,11 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem) {
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem) {
                     return net.minecraft.world.InteractionResult.FAIL;
                 }
+
             }
             return net.minecraft.world.InteractionResult.PASS;
         });
@@ -310,6 +312,8 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             com.dragonblockarcanedba.item.SaberItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.item.HollowsEdgeItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.item.GrandSwordItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.BraveSwordItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.DaburaSwordItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.ki.KiTechniqueHandler.onPlayerDisconnect(playerUuid);
         });
 

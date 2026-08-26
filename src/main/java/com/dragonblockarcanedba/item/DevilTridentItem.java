@@ -1,9 +1,8 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
-
+import com.dragonblockarcanedba.entity.DevilSlamShockwaveEntity;
 import com.dragonblockarcanedba.entity.TridentShardEntity;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -158,16 +157,14 @@ public class DevilTridentItem extends Item {
                 // Recall Shards
                 recallShards(serverLevel, player, stack, stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag());
             } else {
-                // Ground Slam & Shockwave
+                // Physical 3D Demonic Ground Slam & Shockwave
                 Vec3 pos = player.position();
-                for (int i = 0; i < 360; i += 5) {
-                    double angle = Math.toRadians(i);
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFF0000, 2.5F), // Red
-                        pos.x + Math.cos(angle) * 5.0, pos.y + 0.1, pos.z + Math.sin(angle) * 5.0,
-                        1, 0.0, 0.5, 0.0, 0.05
-                    );
-                }
+                DevilSlamShockwaveEntity slamEntity = new DevilSlamShockwaveEntity(serverLevel, player, pos, 5.0f);
+                serverLevel.addFreshEntity(slamEntity);
+
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(),
+                    net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.7f);
 
                 AABB aoe = player.getBoundingBox().inflate(5.0);
                 List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e != player && e.isAlive());

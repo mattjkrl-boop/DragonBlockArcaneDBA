@@ -191,6 +191,26 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("void_slash")))
     );
 
+    public static final EntityType<HollowChargeEntity> HOLLOW_CHARGE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("hollow_charge"),
+            EntityType.Builder.<HollowChargeEntity>of(HollowChargeEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 3.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("hollow_charge")))
+    );
+
+    public static final EntityType<HollowRushTrailEntity> HOLLOW_RUSH_TRAIL = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("hollow_rush_trail"),
+            EntityType.Builder.<HollowRushTrailEntity>of(HollowRushTrailEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("hollow_rush_trail")))
+    );
+
     public static final EntityType<AzureStormEntity> AZURE_STORM = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("azure_storm"),
@@ -218,6 +238,36 @@ public class DbaEntities {
                     .clientTrackingRange(16)
                     .updateInterval(1)
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("azure_tornado")))
+    );
+
+    public static final EntityType<AzureRushTrailEntity> AZURE_RUSH_TRAIL = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("azure_rush_trail"),
+            EntityType.Builder.<AzureRushTrailEntity>of(AzureRushTrailEntity::new, MobCategory.MISC)
+                    .sized(1.5f, 1.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("azure_rush_trail")))
+    );
+
+    public static final EntityType<AzureSonicQuakeEntity> AZURE_SONIC_QUAKE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("azure_sonic_quake"),
+            EntityType.Builder.<AzureSonicQuakeEntity>of(AzureSonicQuakeEntity::new, MobCategory.MISC)
+                    .sized(8.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("azure_sonic_quake")))
+    );
+
+    public static final EntityType<AzureTempestChannelEntity> AZURE_TEMPEST_CHANNEL = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("azure_tempest_channel"),
+            EntityType.Builder.<AzureTempestChannelEntity>of(AzureTempestChannelEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 4.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("azure_tempest_channel")))
     );
 
     public static final EntityType<OxShockwaveEntity> OX_SHOCKWAVE = Registry.register(
@@ -318,6 +368,436 @@ public class DbaEntities {
                     .clientTrackingRange(16)
                     .updateInterval(1)
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("brave_slash")))
+    );
+
+    public static final EntityType<BraveCrossSlashEntity> BRAVE_CROSS_SLASH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("brave_cross_slash"),
+            EntityType.Builder.<BraveCrossSlashEntity>of(BraveCrossSlashEntity::new, MobCategory.MISC)
+                    .sized(4.5f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("brave_cross_slash")))
+    );
+
+    public static final EntityType<BraveChargeEntity> BRAVE_CHARGE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("brave_charge"),
+            EntityType.Builder.<BraveChargeEntity>of(BraveChargeEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("brave_charge")))
+    );
+
+    public static final EntityType<BraveRushTrailEntity> BRAVE_RUSH_TRAIL = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("brave_rush_trail"),
+            EntityType.Builder.<BraveRushTrailEntity>of(BraveRushTrailEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("brave_rush_trail")))
+    );
+
+    public static final EntityType<BraveShockwaveEntity> BRAVE_SHOCKWAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("brave_shockwave"),
+            EntityType.Builder.<BraveShockwaveEntity>of(BraveShockwaveEntity::new, MobCategory.MISC)
+                    .sized(8.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("brave_shockwave")))
+    );
+
+    public static final EntityType<SorrowSlashEntity> SORROW_SLASH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("sorrow_slash"),
+            EntityType.Builder.<SorrowSlashEntity>of(SorrowSlashEntity::new, MobCategory.MISC)
+                    .sized(3.4f, 1.2f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("sorrow_slash")))
+    );
+
+    public static final EntityType<DimensionalRiftEntity> DIMENSIONAL_RIFT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("dimensional_rift"),
+            EntityType.Builder.<DimensionalRiftEntity>of(DimensionalRiftEntity::new, MobCategory.MISC)
+                    .sized(15.0f, 6.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("dimensional_rift")))
+    );
+
+    public static final EntityType<AbyssalDomainEntity> ABYSSAL_DOMAIN = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("abyssal_domain"),
+            EntityType.Builder.<AbyssalDomainEntity>of(AbyssalDomainEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("abyssal_domain")))
+    );
+
+    public static final EntityType<CurseTelegraphEntity> CURSE_TELEGRAPH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("curse_telegraph"),
+            EntityType.Builder.<CurseTelegraphEntity>of(CurseTelegraphEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 0.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("curse_telegraph")))
+    );
+
+    public static final EntityType<CurseGroundShatterEntity> CURSE_GROUND_SHATTER = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("curse_ground_shatter"),
+            EntityType.Builder.<CurseGroundShatterEntity>of(CurseGroundShatterEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 1.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("curse_ground_shatter")))
+    );
+
+    public static final EntityType<EvilSpearChargeEntity> EVIL_SPEAR_CHARGE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("evil_spear_charge"),
+            EntityType.Builder.<EvilSpearChargeEntity>of(EvilSpearChargeEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("evil_spear_charge")))
+    );
+
+    public static final EntityType<HellHuntImpactEntity> HELL_HUNT_IMPACT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("hell_hunt_impact"),
+            EntityType.Builder.<HellHuntImpactEntity>of(HellHuntImpactEntity::new, MobCategory.MISC)
+                    .sized(4.5f, 1.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("hell_hunt_impact")))
+    );
+
+    public static final EntityType<BanshoCycloneEntity> BANSHO_CYCLONE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("bansho_cyclone"),
+            EntityType.Builder.<BanshoCycloneEntity>of(BanshoCycloneEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 6.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("bansho_cyclone")))
+    );
+
+    public static final EntityType<BanshoShockwaveEntity> BANSHO_SHOCKWAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("bansho_shockwave"),
+            EntityType.Builder.<BanshoShockwaveEntity>of(BanshoShockwaveEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 1.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("bansho_shockwave")))
+    );
+
+    public static final EntityType<BanshoWindProjectileEntity> BANSHO_WIND_PROJECTILE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("bansho_wind_projectile"),
+            EntityType.Builder.<BanshoWindProjectileEntity>of(BanshoWindProjectileEntity::new, MobCategory.MISC)
+                    .sized(0.8f, 0.8f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("bansho_wind_projectile")))
+    );
+
+    public static final EntityType<GrandClashSparkEntity> GRAND_CLASH_SPARK = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("grand_clash_spark"),
+            EntityType.Builder.<GrandClashSparkEntity>of(GrandClashSparkEntity::new, MobCategory.MISC)
+                    .sized(1.5f, 1.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("grand_clash_spark")))
+    );
+
+    public static final EntityType<DevilSlamShockwaveEntity> DEVIL_SLAM_SHOCKWAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("devil_slam_shockwave"),
+            EntityType.Builder.<DevilSlamShockwaveEntity>of(DevilSlamShockwaveEntity::new, MobCategory.MISC)
+                    .sized(5.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("devil_slam_shockwave")))
+    );
+
+    public static final EntityType<SpiritImpaleEntity> SPIRIT_IMPALE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("spirit_impale"),
+            EntityType.Builder.<SpiritImpaleEntity>of(SpiritImpaleEntity::new, MobCategory.MISC)
+                    .sized(2.5f, 2.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("spirit_impale")))
+    );
+
+    public static final EntityType<SpiritCannonBeamEntity> SPIRIT_CANNON_BEAM = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("spirit_cannon_beam"),
+            EntityType.Builder.<SpiritCannonBeamEntity>of(SpiritCannonBeamEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("spirit_cannon_beam")))
+    );
+
+    public static final EntityType<SaberSlashEntity> SABER_SLASH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("saber_slash"),
+            EntityType.Builder.<SaberSlashEntity>of(SaberSlashEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 1.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("saber_slash")))
+    );
+
+    public static final EntityType<SaberDimensionalLineSlashEntity> SABER_LINE_SLASH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("saber_line_slash"),
+            EntityType.Builder.<SaberDimensionalLineSlashEntity>of(SaberDimensionalLineSlashEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 4.0f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("saber_line_slash")))
+    );
+
+    public static final EntityType<SaberVoidTearEntity> SABER_VOID_TEAR = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("saber_void_tear"),
+            EntityType.Builder.<SaberVoidTearEntity>of(SaberVoidTearEntity::new, MobCategory.MISC)
+                    .sized(2.5f, 2.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("saber_void_tear")))
+    );
+
+    public static final EntityType<SaberDodgeSparkEntity> SABER_DODGE_SPARK = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("saber_dodge_spark"),
+            EntityType.Builder.<SaberDodgeSparkEntity>of(SaberDodgeSparkEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("saber_dodge_spark")))
+    );
+
+    public static final EntityType<TimeShatterEntity> TIME_SHATTER = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("time_shatter"),
+            EntityType.Builder.<TimeShatterEntity>of(TimeShatterEntity::new, MobCategory.MISC)
+                    .sized(2.5f, 2.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("time_shatter")))
+    );
+
+    public static final EntityType<TemporalRiftEntity> TEMPORAL_RIFT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("temporal_rift"),
+            EntityType.Builder.<TemporalRiftEntity>of(TemporalRiftEntity::new, MobCategory.MISC)
+                    .sized(24.0f, 14.0f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("temporal_rift")))
+    );
+
+    public static final EntityType<PowerPoleWhirlwindEntity> POWER_POLE_WHIRLWIND = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("power_pole_whirlwind"),
+            EntityType.Builder.<PowerPoleWhirlwindEntity>of(PowerPoleWhirlwindEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 4.0f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("power_pole_whirlwind")))
+    );
+
+    public static final EntityType<PowerPoleExtensionEntity> POWER_POLE_EXTENSION = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("power_pole_extension"),
+            EntityType.Builder.<PowerPoleExtensionEntity>of(PowerPoleExtensionEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("power_pole_extension")))
+    );
+
+    public static final EntityType<PowerPoleImpactEntity> POWER_POLE_IMPACT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("power_pole_impact"),
+            EntityType.Builder.<PowerPoleImpactEntity>of(PowerPoleImpactEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 3.0f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("power_pole_impact")))
+    );
+
+    public static final EntityType<ErasureChargeOrbEntity> ERASURE_CHARGE_ORB = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("erasure_charge_orb"),
+            EntityType.Builder.<ErasureChargeOrbEntity>of(ErasureChargeOrbEntity::new, MobCategory.MISC)
+                    .sized(1.5f, 1.5f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("erasure_charge_orb")))
+    );
+
+    public static final EntityType<ErasureCannonBeamEntity> ERASURE_CANNON_BEAM = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("erasure_cannon_beam"),
+            EntityType.Builder.<ErasureCannonBeamEntity>of(ErasureCannonBeamEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 2.0f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("erasure_cannon_beam")))
+    );
+
+    public static final EntityType<DimensionalWarpRiftEntity> DIMENSIONAL_WARP_RIFT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("dimensional_warp_rift"),
+            EntityType.Builder.<DimensionalWarpRiftEntity>of(DimensionalWarpRiftEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 4.0f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("dimensional_warp_rift")))
+    );
+
+    public static final EntityType<DarknessChargeEntity> DARKNESS_CHARGE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("darkness_charge"),
+            EntityType.Builder.<DarknessChargeEntity>of(DarknessChargeEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("darkness_charge")))
+    );
+
+    public static final EntityType<DarknessDomainEntity> DARKNESS_DOMAIN = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("darkness_domain"),
+            EntityType.Builder.<DarknessDomainEntity>of(DarknessDomainEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("darkness_domain")))
+    );
+
+    public static final EntityType<DarknessShatterEntity> DARKNESS_SHATTER = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("darkness_shatter"),
+            EntityType.Builder.<DarknessShatterEntity>of(DarknessShatterEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 1.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("darkness_shatter")))
+    );
+
+    public static final EntityType<SwiftCrescentEntity> SWIFT_CRESCENT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("swift_crescent"),
+            EntityType.Builder.<SwiftCrescentEntity>of(SwiftCrescentEntity::new, MobCategory.MISC)
+                    .sized(2.5f, 1.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("swift_crescent")))
+    );
+
+    public static final EntityType<KatanaChargeEntity> KATANA_CHARGE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("katana_charge"),
+            EntityType.Builder.<KatanaChargeEntity>of(KatanaChargeEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 2.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("katana_charge")))
+    );
+
+    public static final EntityType<KatanaAimGuideEntity> KATANA_AIM_GUIDE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("katana_aim_guide"),
+            EntityType.Builder.<KatanaAimGuideEntity>of(KatanaAimGuideEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("katana_aim_guide")))
+    );
+
+    public static final EntityType<HeavenSplitterEntity> HEAVEN_SPLITTER = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("heaven_splitter"),
+            EntityType.Builder.<HeavenSplitterEntity>of(HeavenSplitterEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 8.0f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("heaven_splitter")))
+    );
+
+    public static final EntityType<OxChargeEntity> OX_CHARGE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ox_charge"),
+            EntityType.Builder.<OxChargeEntity>of(OxChargeEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 3.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ox_charge")))
+    );
+
+    public static final EntityType<OxStanceAuraEntity> OX_STANCE_AURA = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ox_stance_aura"),
+            EntityType.Builder.<OxStanceAuraEntity>of(OxStanceAuraEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 4.0f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ox_stance_aura")))
+    );
+
+    public static final EntityType<KingsSlamEntity> KINGS_SLAM = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("kings_slam"),
+            EntityType.Builder.<KingsSlamEntity>of(KingsSlamEntity::new, MobCategory.MISC)
+                    .sized(5.0f, 3.0f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("kings_slam")))
+    );
+
+    public static final EntityType<ZChargeEntity> Z_CHARGE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("z_charge"),
+            EntityType.Builder.<ZChargeEntity>of(ZChargeEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 3.0f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("z_charge")))
+    );
+
+    public static final EntityType<ZStanceAuraEntity> Z_STANCE_AURA = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("z_stance_aura"),
+            EntityType.Builder.<ZStanceAuraEntity>of(ZStanceAuraEntity::new, MobCategory.MISC)
+                    .sized(4.0f, 4.0f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("z_stance_aura")))
+    );
+
+    public static final EntityType<ZGravitySlamEntity> Z_GRAVITY_SLAM = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("z_gravity_slam"),
+            EntityType.Builder.<ZGravitySlamEntity>of(ZGravitySlamEntity::new, MobCategory.MISC)
+                    .sized(5.0f, 3.0f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("z_gravity_slam")))
     );
 
     public static void register() {

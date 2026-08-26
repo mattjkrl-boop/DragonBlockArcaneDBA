@@ -3,7 +3,10 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.AzureLightningEntity;
+import com.dragonblockarcanedba.entity.AzureRushTrailEntity;
+import com.dragonblockarcanedba.entity.AzureSonicQuakeEntity;
 import com.dragonblockarcanedba.entity.AzureStormEntity;
+import com.dragonblockarcanedba.entity.AzureTempestChannelEntity;
 import com.dragonblockarcanedba.entity.AzureTornadoEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -183,24 +186,10 @@ public class AzureDragonSwordItem extends Item {
         player.fallDistance = 0.0f;
         player.hurtMarked = true;
 
-        // Blue dragon wind trail behind player
-        for (int i = 0; i < (isDoubleRushing ? 8 : 4); i++) {
-            double offset = -0.5 - (i * 0.4);
-            Vec3 trailPos = player.position().add(look.scale(offset)).add(0, 0.5, 0);
-
-            level.sendParticles(
-                new DustParticleOptions(isDoubleRushing ? 0x00FF88 : 0x00E5FF, isDoubleRushing ? 2.5F : 1.8F), // Cyan to Greenish-Cyan for boost
-                trailPos.x + (level.getRandom().nextDouble() - 0.5) * 0.6,
-                trailPos.y + (level.getRandom().nextDouble() - 0.5) * 0.6,
-                trailPos.z + (level.getRandom().nextDouble() - 0.5) * 0.6,
-                1, 0.0, 0.05, 0.0, 0.01
-            );
-            level.sendParticles(
-                ParticleTypes.CLOUD,
-                trailPos.x, trailPos.y, trailPos.z,
-                1, 0.0, 0.02, 0.0, 0.02
-            );
-        }
+        // Physical 3D aerodynamic dragon wind trail and Mach shock cone
+        Vec3 trailPos = player.position().add(0, 0.4, 0);
+        AzureRushTrailEntity trail = new AzureRushTrailEntity(level, player, trailPos, player.getYRot(), player.getXRot(), isDoubleRushing, isDoubleRushing ? 1.5f : 1.0f);
+        level.addFreshEntity(trail);
 
         // Pushes nearby enemies away and deals pass-through damage
         AABB rushBox = player.getBoundingBox().inflate(isDoubleRushing ? 4.0 : 2.5, 1.5, isDoubleRushing ? 4.0 : 2.5);
@@ -276,23 +265,9 @@ public class AzureDragonSwordItem extends Item {
             target.hurtMarked = true;
         }
 
-        // Ground shockwave rings
-        for (int i = 0; i < 40; i++) {
-            double angle = Math.toRadians(i * 9);
-            double px = pos.x + Math.cos(angle) * (radius * 0.8);
-            double pz = pos.z + Math.sin(angle) * (radius * 0.8);
-
-            level.sendParticles(
-                new DustParticleOptions(0x00E5FF, 2.2F),
-                px, pos.y + 0.2, pz,
-                1, 0.0, 0.3, 0.0, 0.05
-            );
-            level.sendParticles(
-                ParticleTypes.EXPLOSION,
-                px, pos.y + 0.1, pz,
-                1, 0.0, 0.0, 0.0, 0.0
-            );
-        }
+        // Physical 3D supersonic ground shockwave and kinetic shatter geometry
+        AzureSonicQuakeEntity quake = new AzureSonicQuakeEntity(level, player, pos.add(0, 0.05, 0), (float) radius);
+        level.addFreshEntity(quake);
 
         level.playSound(null, pos.x, pos.y, pos.z,
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.8f);
@@ -323,40 +298,20 @@ public class AzureDragonSwordItem extends Item {
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_TEMPEST_CHARGE_TICKS);
 
-            // Channeling atmosphere: Massive swirling storm wind & intense electric charge around player
-            float intensity = 1.0f + (chargeRatio * 2.0f);
-            
-            // Dense swirling wind at feet and body
-            for (int i = 0; i < (int)(8 * intensity); i++) {
-                double angle = serverLevel.getRandom().nextDouble() * Math.PI * 2;
-                double r = 1.0 + serverLevel.getRandom().nextDouble() * (2.0 + chargeRatio * 4.0);
-                double px = player.getX() + Math.cos(angle) * r;
-                double pz = player.getZ() + Math.sin(angle) * r;
-                double py = player.getY() + serverLevel.getRandom().nextDouble() * 3.0;
-
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x00E5FF, 1.8F * intensity),
-                    px, py, pz,
-                    1, -Math.sin(angle) * 0.2, 0.1, Math.cos(angle) * 0.2, 0.05
-                );
-                
-                if (serverLevel.getRandom().nextFloat() < 0.3f) {
-                    serverLevel.sendParticles(
-                        ParticleTypes.CLOUD,
-                        px, py, pz,
-                        1, 0.0, 0.05, 0.0, 0.02
-                    );
-                }
+            // Manage physical 3D tempest channeling wind tunnel entity
+            List<AzureTempestChannelEntity> existingChannels = serverLevel.getEntitiesOfClass(
+                AzureTempestChannelEntity.class,
+                player.getBoundingBox().inflate(4.0),
+                c -> c.getCasterId() == player.getId() && c.isAlive()
+            );
+            AzureTempestChannelEntity channel;
+            if (existingChannels.isEmpty()) {
+                channel = new AzureTempestChannelEntity(serverLevel, player);
+                serverLevel.addFreshEntity(channel);
+            } else {
+                channel = existingChannels.get(0);
             }
-
-            // Occasional lightning crackles around player
-            if (heldTicks % 10 == 0) {
-                serverLevel.sendParticles(
-                    ParticleTypes.ELECTRIC_SPARK,
-                    player.getX(), player.getY() + 1.5, player.getZ(),
-                    10, 0.5, 1.0, 0.5, 0.2
-                );
-            }
+            channel.setChargeRatio(chargeRatio);
 
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -372,6 +327,16 @@ public class AzureDragonSwordItem extends Item {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - timeLeft;
+
+            // Discard tempest channeling entity
+            List<AzureTempestChannelEntity> existingChannels = serverLevel.getEntitiesOfClass(
+                AzureTempestChannelEntity.class,
+                player.getBoundingBox().inflate(6.0),
+                c -> c.getCasterId() == player.getId()
+            );
+            for (AzureTempestChannelEntity c : existingChannels) {
+                c.discard();
+            }
 
             if (heldTicks >= 10) {
                 float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_TEMPEST_CHARGE_TICKS);

@@ -3,8 +3,10 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.entity.KingsSlamEntity;
+import com.dragonblockarcanedba.entity.OxChargeEntity;
 import com.dragonblockarcanedba.entity.OxShockwaveEntity;
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.entity.OxStanceAuraEntity;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -13,7 +15,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -28,6 +29,9 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Ox King's Axe — Immovable powerhouse: knockback, ground destruction, massive AoE, and battlefield denial.
@@ -35,7 +39,7 @@ import java.util.List;
  * LEFT: Groundbreaker (Hold Left Click to Charge)
  * - Hold left click to repeatedly charge the axe (up to 10s / 200 ticks).
  * - Player becomes increasingly rooted: 0–2s (50%), 2–5s (80%), 5–10s (100% rooted).
- * - Black ground crack visuals beneath the player.
+ * - Physical 3D ground shatter decal, radiating magma fissure trenches, and levitating 3D basalt rock debris.
  * - Drains 2.5% max Ki per second.
  * - Release unleashes an enormous downward strike and 360-degree expanding ground shockwave (up to 24 blocks - Tweak A).
  * - Enemies hit are launched violently upward and outward.
@@ -44,14 +48,18 @@ import java.util.List;
  * 
  * RIGHT: Colossal Stance (Hold Right Click)
  * - Hold right click to become an immovable object (knockback immunity, stationary, Resistance IV).
+ * - Physical 3D King's Colossal Aura: Ethereal Titan Aegis avatar, 12-block repulsion boundary seal, and swirling heat dome.
  * - 12-block King's Force repulsion aura: heavily slows enemies (Slowness IV) and pushes them outward.
  * - Continuously builds King's Force; takes 3% current HP pressure damage/sec after 10s.
- * - Normal release (0.5s–14.0s) deals scaled AoE ground slam.
- * - Critical Peak Window (14.0s–15.0s): Flawless King's Slam deals 2000.0 + Strength * 5.0 in 20-block AoE.
+ * - Normal release (0.5s–14.0s) deals scaled AoE ground slam with physical 3D KingsSlamEntity shockwave.
+ * - Critical Peak Window (14.0s–15.0s): Flawless King's Slam deals 2000.0 + Strength * 5.0 in 20-block AoE with massive titan crags and vertical magma geysers.
  * - Failure State (> 15.0s): Stance collapses, deals 25% built-up damage as recoil self-damage, and inflicts 10s cooldown.
  */
 public class OxKingsAxeItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 200; // 10 seconds
+
+    private static final Map<UUID, OxChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
+    private static final Map<UUID, OxStanceAuraEntity> ACTIVE_STANCE_MAP = new ConcurrentHashMap<>();
 
     public OxKingsAxeItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -123,20 +131,14 @@ public class OxKingsAxeItem extends Item {
 
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
 
-        // Visual black ground cracks beneath player
-        double crackRadius = 1.0 + (chargeRatio * 2.5);
-        int points = 8 + (int) (chargeRatio * 16);
-        for (int i = 0; i < points; i++) {
-            double angle = (i / (double) points) * Math.PI * 2.0;
-            double px = player.getX() + Math.cos(angle) * crackRadius;
-            double pz = player.getZ() + Math.sin(angle) * crackRadius;
-
-            level.sendParticles(
-                new DustParticleOptions(0x000000, 2.0f),
-                px, player.getY() + 0.08, pz,
-                1, 0, 0.02, 0, 0.01
-            );
+        // Spawn / update physical 3D OxChargeEntity (dynamic ground shatter & levitating rock debris)
+        OxChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.get(player.getUUID());
+        if (chargeEntity == null || chargeEntity.isRemoved()) {
+            chargeEntity = new OxChargeEntity(level, player);
+            level.addFreshEntity(chargeEntity);
+            ACTIVE_CHARGE_MAP.put(player.getUUID(), chargeEntity);
         }
+        chargeEntity.setChargeRatio(chargeRatio);
 
         // Audio rumble
         if (chargeTicks % 20 == 0) {
@@ -149,6 +151,12 @@ public class OxKingsAxeItem extends Item {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
+        // Discard 3D charge entity
+        OxChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
+        if (chargeEntity != null && !chargeEntity.isRemoved()) {
+            chargeEntity.discard();
+        }
+
         float chargeRatio = Math.max(0.05f, Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS));
 
         // Damage formula: 350.0 + (chargeRatio * 850.0) + (Strength * 3.5 * chargeRatio)
@@ -156,7 +164,7 @@ public class OxKingsAxeItem extends Item {
         float strengthBonus = (float) (accessor.dba$getStrength() * 3.5f * chargeRatio);
         float totalDamage = baseDmg + strengthBonus;
 
-        // Spawn 360-degree expanding ground shockwave
+        // Spawn 360-degree expanding ground shockwave (towering 3D geometry)
         OxShockwaveEntity wave = new OxShockwaveEntity(level, player, chargeRatio, totalDamage, false);
         level.addFreshEntity(wave);
 
@@ -238,28 +246,15 @@ public class OxKingsAxeItem extends Item {
                 }
             }
 
-            // Fiery orange-red aura particles
-            if (heldTicks % 2 == 0) {
-                for (int i = 0; i < 14; i++) {
-                    double angle = serverLevel.getRandom().nextDouble() * Math.PI * 2.0;
-                    double dist = 2.0 + serverLevel.getRandom().nextDouble() * (auraRadius - 2.0);
-                    double px = player.getX() + Math.cos(angle) * dist;
-                    double pz = player.getZ() + Math.sin(angle) * dist;
-
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFF4500, 2.2f),
-                        px, player.getY() + 0.1, pz,
-                        1, 0, 0.3, 0, 0.02
-                    );
-                    if (i % 3 == 0) {
-                        serverLevel.sendParticles(
-                            ParticleTypes.FLAME,
-                            px, player.getY() + 0.1, pz,
-                            1, 0, 0.2, 0, 0.01
-                        );
-                    }
-                }
+            // Update physical 3D King's Colossal Aura Entity (translucent titan avatar, repulsion boundary & heat dome)
+            boolean isPeak = heldTicks >= 280 && heldTicks <= 300;
+            OxStanceAuraEntity stanceEntity = ACTIVE_STANCE_MAP.get(player.getUUID());
+            if (stanceEntity == null || stanceEntity.isRemoved()) {
+                stanceEntity = new OxStanceAuraEntity(serverLevel, player);
+                serverLevel.addFreshEntity(stanceEntity);
+                ACTIVE_STANCE_MAP.put(player.getUUID(), stanceEntity);
             }
+            stanceEntity.updateStance(heldTicks, isPeak);
 
             // 3. Pressure damage after 10s (heldTicks >= 200): 3% current HP per second
             if (heldTicks >= 200) {
@@ -268,7 +263,7 @@ public class OxKingsAxeItem extends Item {
             }
 
             // 4. Critical Peak Window (14.0s – 15.0s / 280–300 ticks)
-            if (heldTicks >= 280 && heldTicks <= 300) {
+            if (isPeak) {
                 if (heldTicks % 5 == 0) {
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.WARDEN_SONIC_CHARGE, SoundSource.PLAYERS, 1.2f, 1.8f);
@@ -277,6 +272,11 @@ public class OxKingsAxeItem extends Item {
 
             // 5. Failure State (> 15.0s / > 300 ticks): Overload recoil
             if (heldTicks > 300) {
+                OxStanceAuraEntity rem = ACTIVE_STANCE_MAP.remove(player.getUUID());
+                if (rem != null && !rem.isRemoved()) {
+                    rem.discard();
+                }
+
                 PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
                 float maxSlamDamage = 2000.0f + (float) (accessor.dba$getStrength() * 5.0f);
                 float recoilDamage = maxSlamDamage * 0.25f;
@@ -302,6 +302,12 @@ public class OxKingsAxeItem extends Item {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - timeLeft;
+
+            // Discard 3D stance entity
+            OxStanceAuraEntity stanceEntity = ACTIVE_STANCE_MAP.remove(player.getUUID());
+            if (stanceEntity != null && !stanceEntity.isRemoved()) {
+                stanceEntity.discard();
+            }
 
             if (heldTicks >= 10 && heldTicks <= 300) {
                 PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
@@ -331,21 +337,11 @@ public class OxKingsAxeItem extends Item {
                         }
                     }
 
-                    // Enormous visual explosion & ground shockwave rings
-                    serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, player.getX(), player.getY() + 0.5, player.getZ(), 5, 1.0, 0.2, 1.0, 0);
-                    for (double r = 2.0; r <= slamRadius; r += 2.0) {
-                        for (int i = 0; i < 48; i++) {
-                            double angle = Math.toRadians(i * 7.5);
-                            double px = player.getX() + Math.cos(angle) * r;
-                            double pz = player.getZ() + Math.sin(angle) * r;
+                    // Spawn physical 3D KingsSlamEntity (20-block radiating canyon trenches, colossal basalt crags & vertical magma geysers)
+                    KingsSlamEntity slam = new KingsSlamEntity(serverLevel, player, player.position(), (float) slamRadius, true);
+                    serverLevel.addFreshEntity(slam);
 
-                            serverLevel.sendParticles(
-                                new DustParticleOptions(0xFF2200, 2.5f),
-                                px, player.getY() + 0.2, pz,
-                                1, 0, 0.4, 0, 0.05
-                            );
-                        }
-                    }
+                    serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, player.getX(), player.getY() + 0.5, player.getZ(), 3, 0.5, 0.2, 0.5, 0);
 
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 3.0f, 0.5f);
@@ -381,20 +377,9 @@ public class OxKingsAxeItem extends Item {
                         }
                     }
 
-                    // Expanding dust rings
-                    for (double r = 2.0; r <= slamRadius; r += 2.5) {
-                        for (int i = 0; i < 36; i++) {
-                            double angle = Math.toRadians(i * 10);
-                            double px = player.getX() + Math.cos(angle) * r;
-                            double pz = player.getZ() + Math.sin(angle) * r;
-
-                            serverLevel.sendParticles(
-                                new DustParticleOptions(0xFF6600, 2.0f),
-                                px, player.getY() + 0.2, pz,
-                                1, 0, 0.2, 0, 0.02
-                            );
-                        }
-                    }
+                    // Spawn physical 3D KingsSlamEntity (10-block ground shatter, basalt monoliths & volcanic shockwave dome)
+                    KingsSlamEntity slam = new KingsSlamEntity(serverLevel, player, player.position(), (float) slamRadius, false);
+                    serverLevel.addFreshEntity(slam);
 
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.7f);

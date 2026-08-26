@@ -1,7 +1,6 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -79,24 +78,9 @@ public class VoidSlashEntity extends Projectile {
                 // Inflict Dark Faded
                 target.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 80, 1, false, true));
 
-                // Sound & impact particles
+                // Sound
                 serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
                     SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 0.6f);
-
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x8A2BE2, 2.0F),
-                    target.getX(), target.getY() + 1.0, target.getZ(),
-                    10, 0.3, 0.5, 0.3, 0.1
-                );
-            }
-
-            // Dark crescent particle trail
-            if (this.tickCount % 2 == 0) {
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x110022, 1.6F),
-                    this.getX(), this.getY(), this.getZ(),
-                    3, 0.2, 0.2, 0.2, 0.01
-                );
             }
 
             if (this.tickCount > 40) {

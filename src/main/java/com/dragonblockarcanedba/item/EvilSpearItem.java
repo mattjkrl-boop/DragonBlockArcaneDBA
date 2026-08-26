@@ -3,9 +3,9 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.entity.EvilSpearChargeEntity;
 import com.dragonblockarcanedba.entity.EvilSpearProjectileEntity;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.entity.HellHuntImpactEntity;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,7 +14,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -30,7 +29,10 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Evil Spear — Cursed Hunter Weapon.
@@ -38,6 +40,9 @@ import java.util.Set;
  */
 public class EvilSpearItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 120; // 6 seconds
+
+    // Track active charging EvilSpearChargeEntity per player
+    public static final Map<UUID, EvilSpearChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
 
     public EvilSpearItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -105,19 +110,14 @@ public class EvilSpearItem extends Item {
 
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
 
-        // Crimson energy gathering particles around the spear tip
-        int count = 2 + (int) (chargeRatio * 6);
-        for (int i = 0; i < count; i++) {
-            double ox = (level.getRandom().nextDouble() - 0.5) * 1.0;
-            double oy = level.getRandom().nextDouble() * 1.5;
-            double oz = (level.getRandom().nextDouble() - 0.5) * 1.0;
-
-            level.sendParticles(
-                new DustParticleOptions(0xFF0033, 1.5f + chargeRatio * 0.5f),
-                player.getX() + ox, player.getY() + oy, player.getZ() + oz,
-                1, 0, 0.05, 0, 0.01
-            );
+        // Spawn / update physical 3D Evil Spear Charge Entity (no particle spam)
+        EvilSpearChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.get(player.getUUID());
+        if (chargeEntity == null || !chargeEntity.isAlive()) {
+            chargeEntity = new EvilSpearChargeEntity(level, player);
+            level.addFreshEntity(chargeEntity);
+            ACTIVE_CHARGE_MAP.put(player.getUUID(), chargeEntity);
         }
+        chargeEntity.setChargeRatio(chargeRatio);
 
         if (chargeTicks % 20 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -128,6 +128,12 @@ public class EvilSpearItem extends Item {
     public static void onLeftClickRelease(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+        // Discard active charge entity
+        EvilSpearChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
+        if (chargeEntity != null && chargeEntity.isAlive()) {
+            chargeEntity.discard();
+        }
 
         float chargeRatio = Math.max(0.1f, Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS));
 
@@ -275,9 +281,12 @@ public class EvilSpearItem extends Item {
 
             t.hurtServer(level, level.damageSources().playerAttack(player), finalDmg);
 
-            // Demonic crimson shockwave on ground impact
-            level.sendParticles(new DustParticleOptions(0xFF0033, 2.0f), t.getX(), t.getY() + 0.2, t.getZ(), 20, 1.2, 0.1, 1.2, 0.05);
-            level.sendParticles(ParticleTypes.CRIT, t.getX(), t.getY() + 1.0, t.getZ(), 15, 0.4, 0.4, 0.4, 0.2);
+            // Spawn Physical 3D Hell Hunt Impact Entity (Tectonic Fissures, Obsidian Spikes, Execution Pillar)
+            HellHuntImpactEntity impact = new HellHuntImpactEntity(
+                level, player, t.position().add(0, 0.05, 0), isFinal ? 4.5f : 3.0f, isFinal
+            );
+            level.addFreshEntity(impact);
+
             level.playSound(null, t.getX(), t.getY(), t.getZ(), SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.8f, 0.5f);
         }
 

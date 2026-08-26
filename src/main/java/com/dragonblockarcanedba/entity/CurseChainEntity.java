@@ -1,7 +1,6 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -104,13 +103,6 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
     public boolean hurtServer(ServerLevel level, DamageSource source, float amount) {
         if (!this.isRemoved()) {
             this.health -= amount;
-
-            // Spawn chain shattering particles
-            level.sendParticles(
-                new DustParticleOptions(0x800080, 1.6F),
-                this.getX(), this.getY(), this.getZ(),
-                10, 0.2, 0.2, 0.2, 0.05
-            );
 
             if (this.health <= 0) {
                 // Remove one stack from the target if attached
@@ -247,13 +239,6 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
             } else {
                 Vec3 step = dir.normalize().scale(1.6);
                 this.setPos(currentPos.x + step.x, currentPos.y + step.y, currentPos.z + step.z);
-
-                // Chain flight particles
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x2E0854, 1.4F),
-                    currentPos.x, currentPos.y, currentPos.z,
-                    2, 0.05, 0.05, 0.05, 0.01
-                );
             }
         } else {
             // Attached state: orbit/wrap tightly around target's torso/limbs
@@ -272,15 +257,6 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
             double oz = Math.sin(angle) * radius;
 
             this.setPos(target.getX() + ox, target.getY() + heightOffset, target.getZ() + oz);
-
-            // Dark spectral link particles
-            if (this.tickCount % 2 == 0) {
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x4B0082, 1.0F),
-                    this.getX(), this.getY(), this.getZ(),
-                    1, 0.02, 0.02, 0.02, 0.0
-                );
-            }
         }
     }
 }

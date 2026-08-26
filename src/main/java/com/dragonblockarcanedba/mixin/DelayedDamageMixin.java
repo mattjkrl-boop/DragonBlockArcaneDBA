@@ -74,7 +74,14 @@ public abstract class DelayedDamageMixin {
                 || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.POLE_STUN_HOLDER)
                 || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.FISSURE_STUN_HOLDER)
                 || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.PETRIFICATION_CURSE_HOLDER)
-                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.SORROW_RIFT_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.DEVILS_HANDS_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.SILENT_MARK_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.EARTH_SHATTER_HOLDER)
+                || self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.ANCIENT_WEIGHT_HOLDER);
+
 
             if (isCinematicallyLocked) {
                 // Keep the buffer at exactly 0.5s (10 ticks) so it pops immediately after the effect wears off

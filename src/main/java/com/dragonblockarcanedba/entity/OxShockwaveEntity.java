@@ -2,7 +2,6 @@ package com.dragonblockarcanedba.entity;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -142,39 +141,20 @@ public class OxShockwaveEntity extends Projectile {
                 }
             }
 
-            // 1. Particle expanding ring
-            int particlePoints = Math.max(16, (int) (currentRadius * 6));
-            for (int i = 0; i < particlePoints; i++) {
-                double angle = (i / (double) particlePoints) * Math.PI * 2.0;
-                double px = center.x + Math.cos(angle) * currentRadius;
-                double pz = center.z + Math.sin(angle) * currentRadius;
-                double py = center.y + 0.15;
-
-                // Dust particles: fiery orange-red and black ground cracks
-                int color = subWave ? 0xFFA500 : (charge >= 0.9f ? 0xFF2200 : 0xFF6600);
-                serverLevel.sendParticles(
-                    new DustParticleOptions(color, 2.0f),
-                    px, py, pz,
-                    1, 0.0, 0.2, 0.0, 0.02
-                );
-
-                if (i % 4 == 0) {
-                    serverLevel.sendParticles(
-                        ParticleTypes.SMOKE,
-                        px, py, pz,
-                        1, 0.0, 0.15, 0.0, 0.01
-                    );
-                }
-
-                // Tweak C: Terrain destruction along wave path at max charge
-                if (charge >= 0.95f && !subWave) {
+            // Terrain destruction along wave path at max charge
+            if (charge >= 0.95f && !subWave) {
+                int destroyPoints = Math.max(8, (int) (currentRadius * 2));
+                for (int i = 0; i < destroyPoints; i++) {
+                    double angle = (i / (double) destroyPoints) * Math.PI * 2.0;
+                    double px = center.x + Math.cos(angle) * currentRadius;
+                    double pz = center.z + Math.sin(angle) * currentRadius;
                     BlockPos bPos = BlockPos.containing(px, center.y, pz);
                     checkAndDestroyWeakBlock(serverLevel, bPos);
                     checkAndDestroyWeakBlock(serverLevel, bPos.above());
                 }
             }
 
-            // 2. Hit detection in current annular ring
+            // Hit detection in current annular ring
             double innerR = Math.max(0.0, currentRadius - 1.8);
             double outerR = currentRadius + 1.8;
 

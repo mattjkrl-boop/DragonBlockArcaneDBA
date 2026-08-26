@@ -5,8 +5,6 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.CurseChainEntity;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -171,27 +169,21 @@ public class CurseBladeItem extends Item {
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float stormRatio = Math.min(1.0f, heldTicks / (float) MAX_ECLIPSE_CHANNEL_TICKS);
             double domainRadius = 10.0 + (stormRatio * 20.0); // 10 to 30 blocks radius
-            // 1. Tweak B: Localized supernatural storm atmosphere (Handled by ClientLevelWeatherMixin)
 
-            // Dense swirling vortex wind particles around the domain
-            for (int i = 0; i < (int) (8 + stormRatio * 16); i++) {
-                double angle = serverLevel.getRandom().nextDouble() * Math.PI * 2;
-                double r = serverLevel.getRandom().nextDouble() * domainRadius;
-                double px = player.getX() + Math.cos(angle) * r;
-                double pz = player.getZ() + Math.sin(angle) * r;
-                double py = player.getY() + serverLevel.getRandom().nextDouble() * 6.0;
-
-                // Swirling vortex wind & dark ash
-                serverLevel.sendParticles(
-                    ParticleTypes.SMOKE,
-                    px, py, pz,
-                    1, -Math.sin(angle) * 0.4, 0.05, Math.cos(angle) * 0.4, 0.05
-                );
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x2E0854, 1.5F), // Cursed purple
-                    px, py, pz,
-                    1, 0.0, 0.1, 0.0, 0.02
-                );
+            // 1. Manage Physical 3D Abyssal Domain Void Storm Entity (Atmosphere & Void Dome)
+            List<com.dragonblockarcanedba.entity.AbyssalDomainEntity> existingDomains = serverLevel.getEntitiesOfClass(
+                com.dragonblockarcanedba.entity.AbyssalDomainEntity.class,
+                player.getBoundingBox().inflate(6.0),
+                d -> d.getCasterId() == player.getId() && d.isAlive()
+            );
+            com.dragonblockarcanedba.entity.AbyssalDomainEntity domain;
+            if (existingDomains.isEmpty()) {
+                domain = new com.dragonblockarcanedba.entity.AbyssalDomainEntity(serverLevel, player, player.position(), (float) domainRadius);
+                serverLevel.addFreshEntity(domain);
+            } else {
+                domain = existingDomains.get(0);
+                domain.setRadius((float) domainRadius);
+                domain.refreshLifetime();
             }
 
             // 2. Wind Force & Disarm Mechanics on enemies inside domain
@@ -242,18 +234,12 @@ public class CurseBladeItem extends Item {
                 if (lightningTarget != null) {
                     Vec3 targetPos = lightningTarget.position();
 
-                    // Telegraph warning right before strike
-                    if (heldTicks % 40 >= 0 && heldTicks % 40 < 20) {
-                        if (heldTicks % 5 == 0) {
-                            // Red warning circle on ground
-                            for (int i = 0; i < 20; i++) {
-                                double angle = (i / 20.0) * Math.PI * 2;
-                                double r = 1.5;
-                                serverLevel.sendParticles(new DustParticleOptions(0xFF0000, 1.2F),
-                                    targetPos.x + Math.cos(angle) * r, targetPos.y + 0.1, targetPos.z + Math.sin(angle) * r,
-                                    1, 0, 0, 0, 0);
-                            }
-                        }
+                    // Telegraph warning right before strike (Spawns 3D Runic Decal 20 ticks before detonation)
+                    if (heldTicks % 40 == 0) {
+                        com.dragonblockarcanedba.entity.CurseTelegraphEntity telegraph = new com.dragonblockarcanedba.entity.CurseTelegraphEntity(
+                            serverLevel, player, targetPos.add(0, 0.05, 0), 1.8f, 20
+                        );
+                        serverLevel.addFreshEntity(telegraph);
                     }
 
                     // Actual Strike
@@ -343,11 +329,12 @@ public class CurseBladeItem extends Item {
                         // 3 seconds complete root (amp 9)
                         enemy.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 60, 9, false, true), player);
                         enemy.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), player);
-                        serverLevel.sendParticles(
-                            ParticleTypes.LARGE_SMOKE,
-                            enemy.getX(), enemy.getY() + 0.5, enemy.getZ(),
-                            10, 0.3, 0.5, 0.3, 0.05
+
+                        // Physical 3D Tectonic Fissure Trenches & Shattered Obsidian Slabs
+                        com.dragonblockarcanedba.entity.CurseGroundShatterEntity shatter = new com.dragonblockarcanedba.entity.CurseGroundShatterEntity(
+                            serverLevel, player, enemy.position().add(0, 0.05, 0), 3.5f
                         );
+                        serverLevel.addFreshEntity(shatter);
                     }
                 }
             }

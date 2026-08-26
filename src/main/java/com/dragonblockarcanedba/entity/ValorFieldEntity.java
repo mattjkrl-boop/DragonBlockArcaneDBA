@@ -165,28 +165,7 @@ public class ValorFieldEntity extends Projectile {
                 }
             }
 
-            // 2. Translucent golden dome particles
-            if (this.tickCount % 2 == 0) {
-                for (int i = 0; i < 16; i++) {
-                    double u = serverLevel.getRandom().nextDouble();
-                    double v = serverLevel.getRandom().nextDouble();
-                    double theta = u * 2.0 * Math.PI;
-                    double phi = Math.acos(2.0 * v - 1.0);
-                    double sinPhi = Math.sin(phi);
-
-                    double px = center.x + FIELD_RADIUS * sinPhi * Math.cos(theta);
-                    double py = center.y + 1.0 + FIELD_RADIUS * Math.cos(phi);
-                    double pz = center.z + FIELD_RADIUS * sinPhi * Math.sin(theta);
-
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFFD700, 1.6f),
-                        px, py, pz,
-                        1, 0, 0, 0, 0
-                    );
-                }
-            }
-
-            // 3. Projectile Stasis & Suspension
+            // 2. Projectile Stasis & Suspension
             AABB projBox = new AABB(
                 center.x - FIELD_RADIUS, center.y - FIELD_RADIUS, center.z - FIELD_RADIUS,
                 center.x + FIELD_RADIUS, center.y + FIELD_RADIUS, center.z + FIELD_RADIUS
@@ -241,15 +220,6 @@ public class ValorFieldEntity extends Projectile {
                 data.suspendedTicks++;
                 p.setDeltaMovement(0, 0, 0);
 
-                // Pulsing golden stasis particles around suspended projectile
-                if (data.suspendedTicks % 2 == 0) {
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFFD700, 1.5f),
-                        p.getX(), p.getY() + 0.1, p.getZ(),
-                        2, 0.15, 0.15, 0.15, 0.02
-                    );
-                }
-
                 // Check collision with ANY living entity (deals full-speed normal projectile damage if someone walks into it)
                 AABB pBox = p.getBoundingBox().inflate(0.4);
                 List<LivingEntity> colliders = serverLevel.getEntitiesOfClass(
@@ -273,10 +243,8 @@ public class ValorFieldEntity extends Projectile {
                     victim.hurtServer(serverLevel, dmgSource, fullSpeedDmg);
 
                     if (p instanceof KiBlastEntity kiBlast) {
-                        serverLevel.sendParticles(new DustParticleOptions(kiBlast.getColor(), 2.0f), p.getX(), p.getY() + 0.2, p.getZ(), 10, 0.5, 0.5, 0.5, 0.1);
                         serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.9f, 1.5f);
                     } else {
-                        serverLevel.sendParticles(ParticleTypes.CRIT, p.getX(), p.getY() + 0.2, p.getZ(), 8, 0.2, 0.2, 0.2, 0.1);
                         serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.ARROW_HIT, SoundSource.PLAYERS, 1.0f, 1.0f);
                     }
                     p.discard();
@@ -286,7 +254,6 @@ public class ValorFieldEntity extends Projectile {
 
                 // 10-Second Stasis Timer (200 ticks): Breaks, falls down, and disappears after 10s
                 if (data.suspendedTicks >= 200) {
-                    serverLevel.sendParticles(ParticleTypes.POOF, p.getX(), p.getY(), p.getZ(), 6, 0.1, 0.1, 0.1, 0.05);
                     serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.ITEM_BREAK.value(), SoundSource.PLAYERS, 0.8f, 1.2f);
                     p.discard();
                     it.remove();

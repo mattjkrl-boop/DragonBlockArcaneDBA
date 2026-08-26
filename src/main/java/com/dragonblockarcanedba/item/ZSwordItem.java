@@ -3,9 +3,10 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.entity.ZChargeEntity;
+import com.dragonblockarcanedba.entity.ZGravitySlamEntity;
 import com.dragonblockarcanedba.entity.ZShockwaveEntity;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.entity.ZStanceAuraEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -13,7 +14,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -28,6 +28,9 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Z-Sword — Divine Heavy Weapon.
@@ -35,20 +38,24 @@ import java.util.List;
  * LEFT: Z Shockwave (Charge-to-Fire)
  * - Hold left click to channel power (up to 15s / 300 ticks).
  * - Drains ~5% Ki/sec, slows movement.
- * - Release sends gigantic horizontal golden energy wave.
+ * - Spawns 3D ZChargeEntity (golden geometric vortex, counter-rotating energy rings & sacred crystal prisms).
+ * - Release sends gigantic 3D volumetric horizontal golden energy wave (ZShockwaveEntity).
  * - Recoil knocks player backward based on charge.
  * - Tweak A: Spawns trailing slower sub-waves at max charge.
  * - Tweak B: Ignores terrain and passes through blocks at max charge.
  * - Tweak C: Roots enemies 2 blocks into the ground, dealing head crush damage.
  * 
  * RIGHT: Katchin Weight (Divine Heavy Stance & Gravity Slam)
- * - Hold right click: Knockback immunity, near-total movement restriction, 80% damage reduction.
- * - Accumulates Weight Power with gravitational particles (Tweak B).
- * - Release unleashes massive circular gravity shockwave.
+ * - Hold right click: Knockback immunity, near-total movement restriction, heavy damage reduction.
+ * - Spawns 3D ZStanceAuraEntity (gravity suction field, Katchin weight monoliths & contracting event horizon rings).
+ * - Release unleashes massive physical 3D ZGravitySlamEntity (6 to 18 blocks wide ground shatter, canyon fissures & erupted monoliths).
  * - Tweak A: Completely roots enemies for 2s, then violently launches them up and outward.
  */
 public class ZSwordItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 300; // 15 seconds
+
+    public static final Map<UUID, ZChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
+    public static final Map<UUID, ZStanceAuraEntity> ACTIVE_STANCE_MAP = new ConcurrentHashMap<>();
 
     public ZSwordItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -109,23 +116,16 @@ public class ZSwordItem extends Item {
         // Heavy movement slowdown & grounding while charging
         player.addEffect(new MobEffectInstance(DbaEffects.ANCIENT_WEIGHT_HOLDER, 10, 0, false, false));
 
-        // Visual charge effects: Golden spiraling dust into the sword
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
-        int particleCount = 2 + (int) (chargeRatio * 8);
 
-        for (int i = 0; i < particleCount; i++) {
-            double angle = level.getRandom().nextDouble() * Math.PI * 2;
-            double dist = 1.5 + (1.0 - chargeRatio) * 2.0;
-            double px = player.getX() + Math.cos(angle) * dist;
-            double pz = player.getZ() + Math.sin(angle) * dist;
-            double py = player.getY() + 0.5 + level.getRandom().nextDouble() * 1.5;
-
-            level.sendParticles(
-                new DustParticleOptions(0xFFD700, 1.6F + chargeRatio * 0.8F),
-                px, py, pz,
-                1, (player.getX() - px) * 0.1, (player.getY() + 1.0 - py) * 0.1, (player.getZ() - pz) * 0.1, 0.08
-            );
+        // Physical 3D ZChargeEntity (dynamic golden vortex, counter-rotating energy rings & sacred crystal prisms)
+        ZChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.get(player.getUUID());
+        if (chargeEntity == null || chargeEntity.isRemoved()) {
+            chargeEntity = new ZChargeEntity(level, player);
+            level.addFreshEntity(chargeEntity);
+            ACTIVE_CHARGE_MAP.put(player.getUUID(), chargeEntity);
         }
+        chargeEntity.setChargeRatio(chargeRatio);
 
         // Audio hum
         if (chargeTicks % 20 == 0) {
@@ -138,6 +138,12 @@ public class ZSwordItem extends Item {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
+        // Discard 3D charge entity
+        ZChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
+        if (chargeEntity != null && !chargeEntity.isRemoved()) {
+            chargeEntity.discard();
+        }
+
         float chargeRatio = Math.max(0.1f, Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS));
 
         // Stat-scaled damage: 300 base scaling up to 1200 + (Strength * 3.5)
@@ -145,7 +151,7 @@ public class ZSwordItem extends Item {
         float strengthBonus = (float) (accessor.dba$getStrength() * 3.5 * chargeRatio);
         float totalDamage = baseDmg + strengthBonus;
 
-        // Spawn massive horizontal shockwave
+        // Spawn massive 3D volumetric horizontal shockwave
         ZShockwaveEntity wave = new ZShockwaveEntity(level, player, chargeRatio, totalDamage, false);
         Vec3 look = player.getLookAngle();
         double speed = 1.4 + (chargeRatio * 1.4);
@@ -201,22 +207,14 @@ public class ZSwordItem extends Item {
             // 2. Heavy divine damage reduction and grounding (Ancient Weight)
             player.addEffect(new MobEffectInstance(DbaEffects.ANCIENT_WEIGHT_HOLDER, 10, 1, false, false));
 
-            // 3. Tweak B: Gravitational particles and screen atmosphere
-            if (heldTicks % 2 == 0) {
-                double radius = 2.0 + (stanceRatio * 4.0);
-                for (int i = 0; i < (int) (6 + stanceRatio * 12); i++) {
-                    double angle = serverLevel.getRandom().nextDouble() * Math.PI * 2;
-                    double px = player.getX() + Math.cos(angle) * radius;
-                    double pz = player.getZ() + Math.sin(angle) * radius;
-
-                    // Purple/Black gravity suction pulling inward
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0x4B0082, 1.8F), // Indigo
-                        px, player.getY() + 0.1, pz,
-                        1, (player.getX() - px) * 0.15, 0.05, (player.getZ() - pz) * 0.15, 0.05
-                    );
-                }
+            // 3. Physical 3D ZStanceAuraEntity (gravity suction field, Katchin weight monoliths & contracting event horizon rings)
+            ZStanceAuraEntity stanceEntity = ACTIVE_STANCE_MAP.get(player.getUUID());
+            if (stanceEntity == null || stanceEntity.isRemoved()) {
+                stanceEntity = new ZStanceAuraEntity(serverLevel, player);
+                serverLevel.addFreshEntity(stanceEntity);
+                ACTIVE_STANCE_MAP.put(player.getUUID(), stanceEntity);
             }
+            stanceEntity.updateStance(heldTicks, stanceRatio);
 
             // Gravity pulse sound
             if (heldTicks % 30 == 0) {
@@ -231,6 +229,12 @@ public class ZSwordItem extends Item {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - timeLeft;
+
+            // Discard 3D stance entity
+            ZStanceAuraEntity stanceEntity = ACTIVE_STANCE_MAP.remove(player.getUUID());
+            if (stanceEntity != null && !stanceEntity.isRemoved()) {
+                stanceEntity.discard();
+            }
 
             if (heldTicks >= 10) {
                 float powerRatio = Math.min(1.0f, heldTicks / 200.0f);
@@ -268,25 +272,11 @@ public class ZSwordItem extends Item {
                     serverLevel.addFreshEntity(delayEntity);
                 }
 
-                // Expanding ground shockwave rings
-                for (double r = 2.0; r <= aoeRadius; r += 2.5) {
-                    for (int i = 0; i < 60; i++) {
-                        double angle = Math.toRadians(i * 6);
-                        double px = player.getX() + Math.cos(angle) * r;
-                        double pz = player.getZ() + Math.sin(angle) * r;
-
-                        serverLevel.sendParticles(
-                            new DustParticleOptions(0xFFD700, 2.5F),
-                            px, player.getY() + 0.2, pz,
-                            1, 0.0, 0.3, 0.0, 0.02
-                        );
-                        serverLevel.sendParticles(
-                            ParticleTypes.EXPLOSION,
-                            px, player.getY() + 0.1, pz,
-                            1, 0.0, 0.0, 0.0, 0.0
-                        );
-                    }
-                }
+                // Spawn physical 3D ZGravitySlamEntity (radiating canyon trenches, erupted Katchin monoliths & expanding shockwave dome)
+                ZGravitySlamEntity slam = new ZGravitySlamEntity(
+                    serverLevel, player, player.position(), (float) aoeRadius, powerRatio
+                );
+                serverLevel.addFreshEntity(slam);
 
                 // Sound
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),

@@ -2,11 +2,13 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.entity.TemporalRiftEntity;
+import com.dragonblockarcanedba.entity.TimeShatterEntity;
 import com.dragonblockarcanedba.util.TimeTracker;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -31,12 +33,13 @@ import java.util.List;
  *   - Time reversal for 10 seconds (200 ticks)
  *   - Temporal Shatter: 1.5% of target's max HP as bonus magic damage
  *   - Slowness III for 5 seconds (time distortion)
+ *   - Physical 3D Time Shatter entity (prismatic tumbling glass shards & fractured chrono-mirror)
  * 
  * Right-click: "Temporal Rift" — 12-block radius AOE.
  *   - All entities: Temporal Freeze (Slowness 127 = frozen) for 3 seconds, then 15-second reversal
  *   - Instant 400 + (Spirit × 1.5) magic damage to all entities in range
- *   - Self-Buff: Speed III + Resistance II for 10 seconds
- *   - Shimmering white/silver temporal sphere particles
+ *   - Self-Buff: Celestial Grace for 10 seconds
+ *   - Physical 3D Translucent Celestial Dome & 3D Rotating Clock Astrolabe Entity
  *   - 5-second cooldown
  * 
  * Passive: Auto-Dodge — 50% chance to negate incoming damage while held in mainhand.
@@ -123,16 +126,25 @@ public class WhisStaffItem extends Item {
             float temporalDamage = target.getMaxHealth() * 0.015f;
             target.hurtServer(serverLevel, serverLevel.damageSources().magic(), temporalDamage);
 
-            // White/silver impact particles — temporal distortion
-            serverLevel.sendParticles(
-                new DustParticleOptions(0xE0E0FF, 2.0F),
-                target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-                15, 0.4, 0.4, 0.4, 0.1
+            // Physical 3D Time Shatter Entity — Prismatic Glass & Chrono-Mirror Burst
+            TimeShatterEntity shatter = new TimeShatterEntity(
+                serverLevel,
+                serverPlayer,
+                target.position().add(0, target.getBbHeight() * 0.5, 0),
+                1.2f
             );
-            serverLevel.sendParticles(
-                ParticleTypes.END_ROD,
-                target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-                5, 0.3, 0.3, 0.3, 0.05
+            serverLevel.addFreshEntity(shatter);
+
+            // Crisp glass & temporal distortion sound
+            serverLevel.playSound(
+                null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.PLAYERS,
+                1.2f, 1.6f
+            );
+            serverLevel.playSound(
+                null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS,
+                0.9f, 1.9f
             );
         }
     }
@@ -167,60 +179,32 @@ public class WhisStaffItem extends Item {
                     if (target instanceof TimeTracker tracker) {
                         tracker.dba$startReversing(300);
                     }
-
-                    // Per-target temporal distortion particles
-                    serverLevel.sendParticles(
-                        ParticleTypes.END_ROD,
-                        target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-                        8, 0.3, 0.5, 0.3, 0.05
-                    );
                 }
             }
 
             // --- Self-Buff: Celestial Grace (Speed + Jump Boost + Resistance + Safe Fall) for 10 seconds (200 ticks) ---
             player.addEffect(new MobEffectInstance(DbaEffects.CELESTIAL_GRACE_HOLDER, 200, 0, false, true));
 
-            // --- Shimmering celestial silver/cyan temporal sphere ---
-            for (int i = 0; i < 220; i++) {
-                double theta = Math.random() * Math.PI * 2;
-                double phi = Math.random() * Math.PI;
-                double r = AOE_RADIUS;
-                double px = player.getX() + Math.sin(phi) * Math.cos(theta) * r;
-                double py = player.getY() + 1.0 + Math.cos(phi) * r;
-                double pz = player.getZ() + Math.sin(phi) * Math.sin(theta) * r;
-                serverLevel.sendParticles(
-                    new DustParticleOptions(i % 3 == 0 ? 0xFFFFFF : (i % 3 == 1 ? 0x88EEFF : 0xDDCCFF), 1.8F),
-                    px, py, pz,
-                    1, 0.0, 0.02, 0.0, 0.01
-                );
-            }
-
-            // Concentric celestial clock face rotating particle rings at player's feet
-            for (int ring = 1; ring <= 3; ring++) {
-                double ringR = ring * 3.5;
-                int count = ring * 36;
-                for (int i = 0; i < count; i++) {
-                    double angle = Math.toRadians((i * (360.0 / count)));
-                    double px = player.getX() + Math.cos(angle) * ringR;
-                    double pz = player.getZ() + Math.sin(angle) * ringR;
-                    serverLevel.sendParticles(
-                        ring == 2 ? ParticleTypes.END_ROD : new DustParticleOptions(0x88FFFF, 1.5F),
-                        px, player.getY() + 0.15, pz,
-                        1, 0.0, 0.05, 0.0, 0.01
-                    );
-                }
-            }
-
-            // Central celestial flare
-            serverLevel.sendParticles(
-                new DustParticleOptions(0xFFFFFF, 3.0F),
-                player.getX(), player.getY() + 1.5, player.getZ(),
-                12, 0.3, 0.3, 0.3, 0.05
+            // Physical 3D Geometric Temporal Rift Entity (Volumetric Celestial Dome + 3D Rotating Clock Astrolabe)
+            TemporalRiftEntity rift = new TemporalRiftEntity(
+                serverLevel,
+                player,
+                player.position(),
+                (float) AOE_RADIUS,
+                60
             );
-            serverLevel.sendParticles(
-                ParticleTypes.END_ROD,
-                player.getX(), player.getY() + 1.5, player.getZ(),
-                15, 0.4, 0.4, 0.4, 0.1
+            serverLevel.addFreshEntity(rift);
+
+            // Resonant celestial time activation audio
+            serverLevel.playSound(
+                null, player.getX(), player.getY() + 1.0, player.getZ(),
+                SoundEvents.BEACON_POWER_SELECT, SoundSource.PLAYERS,
+                1.4f, 1.2f
+            );
+            serverLevel.playSound(
+                null, player.getX(), player.getY() + 1.0, player.getZ(),
+                SoundEvents.EVOKER_PREPARE_SUMMON, SoundSource.PLAYERS,
+                1.0f, 1.6f
             );
         }
 

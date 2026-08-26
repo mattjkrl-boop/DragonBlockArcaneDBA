@@ -2,8 +2,6 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -145,25 +143,6 @@ public class ZShockwaveEntity extends Projectile {
                         ? serverLevel.damageSources().indirectMagic(this, livingOwner)
                         : serverLevel.damageSources().inWall();
                     target.hurtServer(serverLevel, crushSource, 250.0f);
-                }
-            }
-
-            // Particle wave front on server
-            if (this.tickCount % 2 == 0) {
-                Vec3 look = movement.normalize();
-                Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
-                int particleCount = (int) (halfWidth * 3);
-
-                for (int i = -particleCount; i <= particleCount; i++) {
-                    double offset = (i / (double) particleCount) * halfWidth;
-                    Vec3 pPos = this.position().add(right.scale(offset));
-
-                    // Golden & Divine White Sparks
-                    serverLevel.sendParticles(
-                        subWave ? new DustParticleOptions(0xFFA500, 1.5F) : new DustParticleOptions(0xFFD700, 2.2F),
-                        pPos.x, pPos.y, pPos.z,
-                        1, 0.05, 0.1, 0.05, 0.02
-                    );
                 }
             }
 

@@ -3,9 +3,9 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.BlasterBoltEntity;
+import com.dragonblockarcanedba.entity.ErasureCannonBeamEntity;
+import com.dragonblockarcanedba.entity.ErasureChargeOrbEntity;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -15,7 +15,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -26,11 +25,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Blaster Gun — Energy Firearm.
@@ -38,6 +41,7 @@ import java.util.List;
  */
 public class BlasterGunItem extends Item {
     public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
+    public static final Map<UUID, ErasureChargeOrbEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
 
     public BlasterGunItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -206,23 +210,14 @@ public class BlasterGunItem extends Item {
             // Energy Overcharge: recoil stabilization & aiming focus
             player.addEffect(new MobEffectInstance(DbaEffects.ENERGY_OVERCHARGE_HOLDER, 10, 0, false, false));
 
-            // Expanding energy sphere particles around the muzzle
-            Vec3 eye = player.getEyePosition();
-            Vec3 look = player.getLookAngle();
-            Vec3 muzzle = eye.add(look.scale(1.2));
-
-            int count = 2 + (int) (chargeRatio * 10);
-            for (int i = 0; i < count; i++) {
-                double ox = (serverLevel.getRandom().nextDouble() - 0.5) * (0.4 + chargeRatio * 0.8);
-                double oy = (serverLevel.getRandom().nextDouble() - 0.5) * (0.4 + chargeRatio * 0.8);
-                double oz = (serverLevel.getRandom().nextDouble() - 0.5) * (0.4 + chargeRatio * 0.8);
-
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x00FFFF, 1.5f + chargeRatio * 1.0f),
-                    muzzle.x + ox, muzzle.y + oy, muzzle.z + oz,
-                    1, 0, 0, 0, 0
-                );
+            // Physical 3D geometric expanding energy orb at the muzzle
+            ErasureChargeOrbEntity chargeEntity = ACTIVE_CHARGE_MAP.get(player.getUUID());
+            if (chargeEntity == null || !chargeEntity.isAlive()) {
+                chargeEntity = new ErasureChargeOrbEntity(serverLevel, player);
+                serverLevel.addFreshEntity(chargeEntity);
+                ACTIVE_CHARGE_MAP.put(player.getUUID(), chargeEntity);
             }
+            chargeEntity.setChargeRatio(chargeRatio);
 
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -236,6 +231,12 @@ public class BlasterGunItem extends Item {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
             ServerLevel serverLevel = (ServerLevel) level;
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+            // Discard active muzzle charge orb
+            ErasureChargeOrbEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
+            if (chargeEntity != null && chargeEntity.isAlive()) {
+                chargeEntity.discard();
+            }
 
             int heldTicks = getUseDuration(stack, living) - timeLeft;
             float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
@@ -251,73 +252,25 @@ public class BlasterGunItem extends Item {
             // Erasure Cannon straight 48-meter piercing beam
             Vec3 start = player.getEyePosition();
             Vec3 look = player.getLookAngle();
-            double beamLength = 48.0;
-            Vec3 end = start.add(look.scale(beamLength));
+            double maxBeamLength = 48.0;
+            Vec3 end = start.add(look.scale(maxBeamLength));
+
+            // Raycast against solid blocks to find physical beam contact point
+            BlockHitResult blockHit = serverLevel.clip(new ClipContext(
+                start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player
+            ));
+            float beamLength = (float) maxBeamLength;
+            if (blockHit.getType() != HitResult.Type.MISS) {
+                beamLength = (float) start.distanceTo(blockHit.getLocation());
+            }
 
             float baseDamage = 900.0f + (chargeRatio * 1400.0f);
             float spiritBonus = accessor.dba$getSpirit() * 4.0f;
             float totalDamage = baseDamage + spiritBonus;
 
-            // Hitbox along the beam
-            AABB beamBox = new AABB(start, end).inflate(1.5 + chargeRatio * 1.5);
-            List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
-                LivingEntity.class, beamBox,
-                e -> e.isAlive() && e != player
-            );
-
-            for (LivingEntity t : targets) {
-                t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 25, 0, false, false, false), player);
-                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage);
-
-                // MC 26.2 Physics: Concussive beam impulse
-                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                    t,
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
-                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_beam_bounce"),
-                    0.85,
-                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
-                );
-                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                    t,
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
-                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_beam_drag"),
-                    -0.40,
-                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
-                );
-
-                // Tweak B: Gravitational suction pulling enemies into centerline
-                Vec3 toCenter = start.add(look.scale(look.dot(t.position().subtract(start)))).subtract(t.position()).normalize().scale(0.8);
-                t.setDeltaMovement(t.getDeltaMovement().add(toCenter.x, 0.2, toCenter.z));
-                t.hurtMarked = true;
-            }
-
-            // Beam line particles (Bright Cyan & Pure White core)
-            for (double d = 0; d <= beamLength; d += 0.6) {
-                Vec3 p = start.add(look.scale(d));
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x00FFFF, 2.5f + chargeRatio * 1.5f),
-                    p.x, p.y, p.z,
-                    1, 0, 0, 0, 0
-                );
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0xFFFFFF, 1.8f),
-                    p.x, p.y, p.z,
-                    1, 0, 0, 0, 0
-                );
-            }
-
-            // Tweak C: Max charge endpoint explosion
-            if (chargeRatio >= 0.9f) {
-                serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, end.x, end.y, end.z, 3, 0.5, 0.5, 0.5, 0);
-                AABB endAoe = new AABB(end.subtract(4, 4, 4), end.add(4, 4, 4));
-                List<LivingEntity> endTargets = serverLevel.getEntitiesOfClass(LivingEntity.class, endAoe, e -> e.isAlive() && e != player);
-                for (LivingEntity et : endTargets) {
-                    et.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage * 0.5f);
-                }
-            }
-
-            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.2f, 0.6f);
+            // Spawn physical 3D Erasure Cannon beam entity
+            ErasureCannonBeamEntity beam = new ErasureCannonBeamEntity(serverLevel, player, totalDamage, chargeRatio, beamLength);
+            serverLevel.addFreshEntity(beam);
 
             player.getCooldowns().addCooldown(stack, 120); // 6-second cooldown
         }

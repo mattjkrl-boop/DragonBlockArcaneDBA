@@ -11,9 +11,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
-import com.dragonblockarcanedba.entity.ITrackedSwarmEntity;
 import com.dragonblockarcanedba.util.SwarmHelper;
-
 
 public class TridentShardEntity extends Projectile implements ITrackedSwarmEntity {
     private int shardIndex = 0;
@@ -36,7 +34,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
-        // No specific synched data needed right now
+        // Projectile base handles position and rotation syncing
     }
 
     public void recall() {
@@ -74,7 +72,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
 
     public void intercept(Projectile proj) {
         proj.discard();
-        this.health -= 50.0f; // Arbitrary damage from projectile
+        this.health -= 50.0f;
         this.updateHealthState();
         if (this.health <= 0) {
             this.discard();
@@ -88,7 +86,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
 
     @Override
     public boolean hurtServer(ServerLevel level, net.minecraft.world.damagesource.DamageSource source, float amount) {
-        if (!this.isRemoved()) { // Changed from isInvulnerableTo because the shard should be damageable
+        if (!this.isRemoved()) {
             this.health -= amount;
             this.updateHealthState();
             if (this.health <= 0) {
@@ -102,6 +100,16 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
     public int getOwnerId() {
         Entity owner = this.getOwner();
         return owner != null ? owner.getId() : -1;
+    }
+
+    private void updateHeading(Vec3 motion) {
+        if (motion.lengthSqr() > 0.0001) {
+            double horiz = Math.sqrt(motion.x * motion.x + motion.z * motion.z);
+            float yRot = (float) (Math.atan2(motion.z, motion.x) * (180.0 / Math.PI)) - 90.0f;
+            float xRot = (float) -(Math.atan2(motion.y, horiz) * (180.0 / Math.PI));
+            this.setYRot(yRot);
+            this.setXRot(xRot);
+        }
     }
 
     @Override
@@ -126,13 +134,14 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
             if (dir.lengthSqr() < 1.0) {
                 this.discard();
             } else {
-                this.setPos(this.getX() + dir.normalize().x, this.getY() + dir.normalize().y, this.getZ() + dir.normalize().z);
+                Vec3 step = dir.normalize().scale(1.8);
+                updateHeading(step);
+                this.setPos(this.getX() + step.x, this.getY() + step.y, this.getZ() + step.z);
             }
             return;
         }
 
-        // Note: AI behavior is managed by DevilTridentItem.manageShardSwarm, which sets `target`
-
+        // AI behavior is managed by DevilTridentItem.manageShardSwarm, which sets `target`
         if (target != null && target.isAlive()) {
             Vec3 targetPos = target.position().add(0, target.getBbHeight() / 2, 0);
             
@@ -140,7 +149,8 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
             Vec3 currentPos = this.position();
             Vec3 dir = targetPos.subtract(currentPos);
             if (dir.lengthSqr() > 0.1) {
-                Vec3 move = dir.normalize().scale(2.5); // Very fast attack speed (increased from 1.5)
+                Vec3 move = dir.normalize().scale(2.5); // Very fast attack speed
+                updateHeading(move);
                 this.setPos(currentPos.x + move.x, currentPos.y + move.y, currentPos.z + move.z);
             }
 
@@ -152,7 +162,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
                 target.hurtServer((ServerLevel) this.level(), shardSource, 100.0f);
                 target.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 60, 0, false, false), this.getOwner());
                 
-                // Recoil
+                // Recoil / degradation
                 this.health -= 100.0f;
                 this.updateHealthState();
                 if (this.health <= 0) {
@@ -161,16 +171,19 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
             }
         } else {
             // Orbit owner with zero delay
-            double orbitRadius = 2.0;
-            double speed = this.lifeTime * 0.4; // Spin faster around owner when idle
+            double orbitRadius = 2.2;
+            double speed = this.lifeTime * 0.4;
             double angle = speed + (shardIndex * (Math.PI * 2 / 10.0));
             
-            // Creates an angled, vertical orbit
             double offsetX = Math.cos(angle) * orbitRadius;
-            double offsetY = Math.sin(angle) * orbitRadius; // Vertical movement
-            double offsetZ = Math.sin(angle) * orbitRadius; // Angled depth
+            double offsetY = Math.sin(angle * 1.5) * 0.75 + 0.3; // Gentle vertical wave
+            double offsetZ = Math.sin(angle) * orbitRadius;
 
-            this.setPos(owner.getX() + offsetX, owner.getY() + owner.getBbHeight() / 2 + offsetY, owner.getZ() + offsetZ);
+            Vec3 nextPos = new Vec3(owner.getX() + offsetX, owner.getY() + owner.getBbHeight() * 0.5 + offsetY, owner.getZ() + offsetZ);
+            Vec3 motion = nextPos.subtract(this.position());
+            updateHeading(motion);
+
+            this.setPos(nextPos.x, nextPos.y, nextPos.z);
         }
     }
 }

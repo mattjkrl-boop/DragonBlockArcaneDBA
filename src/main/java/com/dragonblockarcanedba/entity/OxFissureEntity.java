@@ -1,6 +1,5 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
@@ -49,23 +48,15 @@ public class OxFissureEntity extends Projectile {
             Vec3 pos = this.position();
             LivingEntity owner = this.getOwner() instanceof LivingEntity living ? living : null;
 
-            // Particles: black dust ground crack & magma/flame embers
-            if (this.tickCount % 2 == 0) {
-                for (int i = 0; i < 4; i++) {
-                    double ox = (serverLevel.getRandom().nextDouble() - 0.5) * 3.0;
-                    double oz = (serverLevel.getRandom().nextDouble() - 0.5) * 3.0;
-
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0x111111, 2.2f),
-                        pos.x + ox, pos.y + 0.1, pos.z + oz,
-                        1, 0, 0.05, 0, 0.01
-                    );
-                    serverLevel.sendParticles(
-                        ParticleTypes.FLAME,
-                        pos.x + ox, pos.y + 0.1, pos.z + oz,
-                        1, 0, 0.03, 0, 0.01
-                    );
-                }
+            // Ambient magma/flame embers
+            if (this.tickCount % 4 == 0) {
+                double ox = (serverLevel.getRandom().nextDouble() - 0.5) * 2.5;
+                double oz = (serverLevel.getRandom().nextDouble() - 0.5) * 2.5;
+                serverLevel.sendParticles(
+                    ParticleTypes.FLAME,
+                    pos.x + ox, pos.y + 0.1, pos.z + oz,
+                    1, 0, 0.03, 0, 0.01
+                );
             }
 
             if (this.tickCount % 10 == 0) {

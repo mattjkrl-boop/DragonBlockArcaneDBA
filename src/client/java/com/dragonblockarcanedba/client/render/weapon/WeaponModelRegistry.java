@@ -68,27 +68,50 @@ public class WeaponModelRegistry {
     private static void registerDevilTrident() {
         ModelPart trident = new ModelPart();
 
-        ModelPart shaft = new CylinderPart(0.8f, 24.0f, 8).setColor(0xFF333333);
-        shaft.setPos(0, -12.0f, 0);
+        // Dark obsidian pole shaft
+        ModelPart shaft = new CylinderPart(0.7f, 26.0f, 8).setColor(0xFF181818);
+        shaft.setPos(0, -13.0f, 0);
 
-        // Center prong
-        ModelPart centerProng = new ConePart(0.6f, 6.0f, 4).setColor(0xFFFF0000);
-        centerProng.setPos(0, 12.0f, 0);
+        // Pommel spike at base
+        ModelPart pommel = new ConePart(0.9f, 2.5f, 6).setColor(0xFF8B0000);
+        pommel.setPos(0, -13.0f, 0);
+        pommel.setRot((float) Math.PI, 0, 0);
 
-        // Left prong
-        ModelPart leftProng = new ConePart(0.5f, 4.0f, 4).setColor(0xFFFF0000);
-        leftProng.setPos(-2.4f, 12.0f, 0);
-        leftProng.setRot(0, 0, 0.2f); // Angled out slightly
+        // Demonic collar / crossguard
+        ModelPart guard = new BoxPart(5.2f, 0.8f, 1.2f).setColor(0xFF2E0814);
+        guard.setPos(0, 13.0f, 0);
 
-        // Right prong
-        ModelPart rightProng = new ConePart(0.5f, 4.0f, 4).setColor(0xFFFF0000);
-        rightProng.setPos(2.4f, 12.0f, 0);
-        rightProng.setRot(0, 0, -0.2f); // Angled out slightly
+        // Central Demonic Spear Blade
+        ModelPart centerBlade = new BladePart(1.6f, 0.4f, 10.0f, 0.2f, 0.05f).setColor(0xFF8B0000);
+        centerBlade.setPos(0, 13.4f, 0);
+
+        // Center blood fuller
+        ModelPart centerFuller = new BoxPart(0.4f, 8.0f, 0.5f).setColor(0xFFFF0033);
+        centerFuller.setPos(0, 17.0f, 0);
+
+        // Left barbed prong
+        ModelPart leftBlade = new BladePart(1.0f, 0.3f, 7.5f, 0.1f, 0.05f).setColor(0xFFA00000);
+        leftBlade.setPos(-2.2f, 13.4f, 0);
+        leftBlade.setRot(0, 0, 0.15f);
+
+        // Right barbed prong
+        ModelPart rightBlade = new BladePart(1.0f, 0.3f, 7.5f, 0.1f, 0.05f).setColor(0xFFA00000);
+        rightBlade.setPos(2.2f, 13.4f, 0);
+        rightBlade.setRot(0, 0, -0.15f);
+
+        // Glowing Demonic Halo Ring at collar
+        ModelPart demonicRing = new RingPart(1.2f, 2.0f, 0.2f, 12).setColor(0xFFFF0022);
+        demonicRing.setPos(0, 13.0f, 0);
+        demonicRing.setRot((float) Math.PI / 4f, 0, 0);
 
         trident.addChild(shaft);
-        trident.addChild(centerProng);
-        trident.addChild(leftProng);
-        trident.addChild(rightProng);
+        trident.addChild(pommel);
+        trident.addChild(guard);
+        trident.addChild(centerBlade);
+        trident.addChild(centerFuller);
+        trident.addChild(leftBlade);
+        trident.addChild(rightBlade);
+        trident.addChild(demonicRing);
 
         WEAPON_MODELS.put("devil_trident", trident);
     }

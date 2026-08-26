@@ -1,7 +1,5 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -127,20 +125,13 @@ public class EvilSpearProjectileEntity extends Projectile {
                     n.hurtMarked = true;
                 }
 
-                // Crimson burst particles & impalement sound
-                serverLevel.sendParticles(new DustParticleOptions(0xFF0033, 2.2f), target.getX(), target.getY() + 1.0, target.getZ(), 20, 0.4, 0.5, 0.4, 0.1);
-                serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.TRIDENT_HIT, SoundSource.PLAYERS, 1.8f, 0.6f);
-            }
-
-            // Trailing crimson spear beam particles
-            Vec3 dir = movement.normalize();
-            for (double d = 0; d < movement.length(); d += 0.5) {
-                Vec3 p = this.position().subtract(dir.scale(d));
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0xFF0033, 1.8f),
-                    p.x, p.y, p.z,
-                    1, 0, 0, 0, 0
+                // Spawn physical 3D impact shatter & spikes
+                HellHuntImpactEntity impact = new HellHuntImpactEntity(
+                    serverLevel, owner instanceof LivingEntity l ? l : null, target.position().add(0, 0.05, 0), 2.6f, false
                 );
+                serverLevel.addFreshEntity(impact);
+
+                serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.TRIDENT_HIT, SoundSource.PLAYERS, 1.8f, 0.6f);
             }
 
             if (this.tickCount > 40) {

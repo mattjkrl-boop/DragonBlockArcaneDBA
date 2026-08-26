@@ -91,27 +91,7 @@ public class BraveSlashEntity extends Projectile {
                 serverLevel.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1.0, target.getZ(), 10, 0.3, 0.5, 0.3, 0.15);
             }
 
-            // Trailing golden and cyan sparks
-            if (this.tickCount % 2 == 0) {
-                Vec3 look = movement.normalize();
-                Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
 
-                for (int i = -5; i <= 5; i++) {
-                    double offset = (i / 5.0) * width;
-                    Vec3 pPos = this.position().add(right.scale(offset));
-
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFFD700, 1.8f),
-                        pPos.x, pPos.y, pPos.z,
-                        1, 0, 0.02, 0, 0.01
-                    );
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0x00FFFF, 1.4f),
-                        pPos.x, pPos.y, pPos.z,
-                        1, 0, 0.01, 0, 0.01
-                    );
-                }
-            }
 
             if (this.tickCount > 40) {
                 this.discard();

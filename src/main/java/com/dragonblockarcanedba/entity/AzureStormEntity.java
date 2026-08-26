@@ -127,37 +127,7 @@ public class AzureStormEntity extends Projectile {
                     SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 2.5f, 1.0f);
             }
 
-            // Swirling storm cloud particles
-            for (int i = 0; i < (int) (15 + radius * 1.5); i++) {
-                double angle = serverLevel.getRandom().nextDouble() * Math.PI * 2;
-                double r = serverLevel.getRandom().nextDouble() * radius;
-                double px = center.x + Math.cos(angle) * r;
-                double pz = center.z + Math.sin(angle) * r;
-                double py = center.y + 2.0 + serverLevel.getRandom().nextDouble() * 10.0;
 
-                // Rain
-                serverLevel.sendParticles(
-                    ParticleTypes.RAIN,
-                    px, py, pz,
-                    3, 0.0, -0.5, 0.0, 0.1
-                );
-                
-                // Deep sky blue wind
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x00BFFF, 1.8F), 
-                    px, py, pz,
-                    2, -Math.sin(angle) * 0.4, -0.1, Math.cos(angle) * 0.4, 0.05
-                );
-
-                // Dark storm clouds
-                if (serverLevel.getRandom().nextFloat() < 0.2f) {
-                    serverLevel.sendParticles(
-                        ParticleTypes.LARGE_SMOKE,
-                        px, py, pz,
-                        1, 0.1, 0.0, 0.1, 0.02
-                    );
-                }
-            }
 
             // Ambient storm sound
             if (this.tickCount % 40 == 0) {

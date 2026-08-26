@@ -4,11 +4,11 @@ import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
+import com.dragonblockarcanedba.entity.HollowChargeEntity;
+import com.dragonblockarcanedba.entity.HollowRushTrailEntity;
 import com.dragonblockarcanedba.entity.VoidRiftEntity;
 import com.dragonblockarcanedba.entity.VoidSlashEntity;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,7 +17,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -67,6 +66,8 @@ public class HollowsEdgeItem extends Item {
     public static final Map<UUID, Integer> DASH_COUNT_MAP = new ConcurrentHashMap<>();
     // Track active charging VoidRiftEntity per player
     public static final Map<UUID, VoidRiftEntity> ACTIVE_RIFT_MAP = new ConcurrentHashMap<>();
+    // Track active charging HollowChargeEntity per player
+    public static final Map<UUID, HollowChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
 
     public HollowsEdgeItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -132,23 +133,16 @@ public class HollowsEdgeItem extends Item {
         player.setDeltaMovement(vel.x * 0.3, vel.y, vel.z * 0.3);
         player.hurtMarked = true;
 
-        // Dark void particles converging into blade
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
-        int particleCount = 2 + (int) (chargeRatio * 6);
 
-        for (int i = 0; i < particleCount; i++) {
-            double angle = level.getRandom().nextDouble() * Math.PI * 2;
-            double dist = 1.2 + (1.0 - chargeRatio) * 1.5;
-            double px = player.getX() + Math.cos(angle) * dist;
-            double pz = player.getZ() + Math.sin(angle) * dist;
-            double py = player.getY() + 0.5 + level.getRandom().nextDouble() * 1.2;
-
-            level.sendParticles(
-                new DustParticleOptions(0x4B0082, 1.4F),
-                px, py, pz,
-                1, (player.getX() - px) * 0.15, (player.getY() + 0.8 - py) * 0.15, (player.getZ() - pz) * 0.15, 0.05
-            );
+        // Spawn / update physical 3D Hollow Charge Entity
+        HollowChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.get(player.getUUID());
+        if (chargeEntity == null || !chargeEntity.isAlive()) {
+            chargeEntity = new HollowChargeEntity(level, player);
+            level.addFreshEntity(chargeEntity);
+            ACTIVE_CHARGE_MAP.put(player.getUUID(), chargeEntity);
         }
+        chargeEntity.setChargeRatio(chargeRatio);
 
         if (chargeTicks % 20 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -166,18 +160,19 @@ public class HollowsEdgeItem extends Item {
         ACTIVE_RUSH_EXPIRE_TIME.put(player.getUUID(), expireTime);
         DASH_COUNT_MAP.put(player.getUUID(), 0);
 
+        // Discard active 3D charge entity
+        HollowChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
+        if (chargeEntity != null && chargeEntity.isAlive()) {
+            chargeEntity.discard();
+        }
+
         // Notify player of active sequence
         int seconds = durationTicks / 20;
         player.sendSystemMessage(Component.literal("§d✦ Hollow Rush Active (" + seconds + "s) — Left-Click to Dash! ✦"), true);
 
-        // Sound & void surge particles
+        // Sound & surge impact
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.WARDEN_HEARTBEAT, SoundSource.PLAYERS, 1.2f, 1.4f);
-        level.sendParticles(
-            ParticleTypes.PORTAL,
-            player.getX(), player.getY() + 1.0, player.getZ(),
-            30, 0.5, 0.5, 0.5, 0.2
-        );
     }
 
     public static void onLeftClickDash(ServerPlayer player, ItemStack stack, boolean holdingBackward) {
@@ -244,12 +239,16 @@ public class HollowsEdgeItem extends Item {
         HollowAfterimageEntity afterimage = new HollowAfterimageEntity(level, player);
         level.addFreshEntity(afterimage);
 
-        // Disappearing particles at origin
-        level.sendParticles(
-            ParticleTypes.PORTAL,
-            startPos.x, startPos.y + 1.0, startPos.z,
-            20, 0.3, 0.5, 0.3, 0.1
-        );
+        // Spawn physical 3D Hollow Rush Trail Entity connecting startPos to destination
+        Vec3 dashVec = destination.subtract(startPos);
+        float trailLen = (float) dashVec.length();
+        if (trailLen > 0.1f) {
+            double dx = dashVec.x, dy = dashVec.y, dz = dashVec.z;
+            float yaw = (float) (Math.atan2(dz, dx) * (180.0 / Math.PI)) - 90.0f;
+            float pitch = (float) (-(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)) * (180.0 / Math.PI)));
+            HollowRushTrailEntity trail = new HollowRushTrailEntity(level, player, startPos.add(0, 0.8, 0), yaw, pitch, trailLen, isThirdDash);
+            level.addFreshEntity(trail);
+        }
 
         // Perform Teleport
         player.teleportTo(destination.x, destination.y, destination.z);
@@ -269,12 +268,6 @@ public class HollowsEdgeItem extends Item {
             enemy.hurtServer(level, level.damageSources().mobAttack(player), baseDmg);
             enemy.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 80, 0, false, true));
             enemy.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 80, 0, false, false, false), player);
-
-            level.sendParticles(
-                new DustParticleOptions(0x4B0082, 1.8F),
-                enemy.getX(), enemy.getY() + 1.0, enemy.getZ(),
-                12, 0.3, 0.5, 0.3, 0.05
-            );
         }
 
         // Tweak A: Every 3rd dash unleashes a massive Void Slash wave at destination
@@ -287,12 +280,6 @@ public class HollowsEdgeItem extends Item {
                 SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.5f);
         }
 
-        // Reappearing particles & sounds
-        level.sendParticles(
-            ParticleTypes.REVERSE_PORTAL,
-            destination.x, destination.y + 1.0, destination.z,
-            25, 0.4, 0.6, 0.4, 0.05
-        );
         level.playSound(null, destination.x, destination.y, destination.z,
             SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.2f, 1.1f);
     }
@@ -399,6 +386,10 @@ public class HollowsEdgeItem extends Item {
         VoidRiftEntity rift = ACTIVE_RIFT_MAP.remove(playerUuid);
         if (rift != null && rift.isAlive()) {
             rift.discard();
+        }
+        HollowChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(playerUuid);
+        if (chargeEntity != null && chargeEntity.isAlive()) {
+            chargeEntity.discard();
         }
     }
 }

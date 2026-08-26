@@ -1,6 +1,5 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -44,14 +43,6 @@ public class KiBlastEntity extends ThrowableProjectile {
     @Override
     public void tick() {
         super.tick();
-        
-        // Spawn trail particles on client side
-        if (this.level().isClientSide() && this.tickCount > 1) {
-            int c = getColor();
-            this.level().addParticle(new DustParticleOptions(c, 1.0f),
-                    this.getX(), this.getY(), this.getZ(),
-                    0, 0, 0);
-        }
     }
 
     @Override
@@ -75,13 +66,6 @@ public class KiBlastEntity extends ThrowableProjectile {
     }
 
     private void explode() {
-        int c = getColor();
-        // Spawn explosion particles
-        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-            serverLevel.sendParticles(new DustParticleOptions(c, 2.0f), 
-                this.getX(), this.getY(), this.getZ(), 10, 0.5, 0.5, 0.5, 0.1);
-        }
-        
         this.discard();
     }
 }

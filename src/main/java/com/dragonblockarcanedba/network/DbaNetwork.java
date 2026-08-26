@@ -399,7 +399,10 @@ public class DbaNetwork {
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem) {
                     if (player.getCooldowns().isOnCooldown(stack)) return;
                     com.dragonblockarcanedba.item.BraveSwordItem.onLeftClickAssaultTick(player, stack, payload.chargeTicks());
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem) {
+                    com.dragonblockarcanedba.item.SickleOfSorrowItem.performSorrowSlash(player, stack);
                 }
+
             });
         });
     }

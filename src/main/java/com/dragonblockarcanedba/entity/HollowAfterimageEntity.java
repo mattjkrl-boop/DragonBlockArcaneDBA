@@ -2,8 +2,6 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -102,24 +100,6 @@ public class HollowAfterimageEntity extends Projectile {
                 for (LivingEntity enemy : enemies) {
                     enemy.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 60, 0, false, true));
                 }
-            }
-
-            // Dark aura particles
-            if (this.tickCount % 3 == 0) {
-                double px = this.getX() + (serverLevel.getRandom().nextDouble() - 0.5) * 0.8;
-                double py = this.getY() + serverLevel.getRandom().nextDouble() * 1.8;
-                double pz = this.getZ() + (serverLevel.getRandom().nextDouble() - 0.5) * 0.8;
-
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x110022, 1.3F),
-                    px, py, pz,
-                    1, 0.0, 0.03, 0.0, 0.01
-                );
-                serverLevel.sendParticles(
-                    ParticleTypes.SMOKE,
-                    px, py, pz,
-                    1, 0.0, 0.02, 0.0, 0.01
-                );
             }
 
             // Discard after 5 seconds (100 ticks)

@@ -98,29 +98,7 @@ public class AzureTornadoEntity extends Projectile {
                 }
             }
 
-            // Swirling wind particles
-            int particleCount = giant ? 16 : 6;
-            for (int i = 0; i < particleCount; i++) {
-                double progress = serverLevel.getRandom().nextDouble();
-                double curHeight = progress * height;
-                double curRadius = (0.5 + progress * 0.8) * radius;
-                double pAngle = this.tickCount * 0.4 + progress * Math.PI * 4 + i * (Math.PI * 2 / particleCount);
 
-                double px = center.x + Math.cos(pAngle) * curRadius;
-                double pz = center.z + Math.sin(pAngle) * curRadius;
-                double py = center.y + curHeight;
-
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x00E5FF, 1.5F), // Cyan dragon wind
-                    px, py, pz,
-                    1, -Math.sin(pAngle) * 0.3, 0.2, Math.cos(pAngle) * 0.3, 0.05
-                );
-                serverLevel.sendParticles(
-                    ParticleTypes.CLOUD,
-                    px, py, pz,
-                    1, 0.0, 0.1, 0.0, 0.02
-                );
-            }
 
             // Giant tornado periodic lightning (Tweak C)
             if (giant && this.tickCount % 20 == 0) {

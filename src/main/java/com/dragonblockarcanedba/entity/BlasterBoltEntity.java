@@ -1,7 +1,8 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -21,12 +22,13 @@ import java.util.Set;
 
 /**
  * Blaster Bolt Entity — Laser projectile fired by the Blaster Gun.
- * Rapid projectile with piercing, heat scaling, and explosive Overcharged Blast.
+ * Rapid physical 3D energy projectile with piercing, heat scaling, and explosive Overcharged Blast.
  */
 public class BlasterBoltEntity extends Projectile {
+    private static final EntityDataAccessor<Boolean> IS_OVERCHARGED = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Float> HEAT_RATIO = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.FLOAT);
+
     private float damage = 250.0f;
-    private boolean isOvercharged = false;
-    private float heatRatio = 0.0f;
     private final Set<Integer> hitEntityIds = new HashSet<>();
 
     public BlasterBoltEntity(EntityType<? extends Projectile> entityType, Level level) {
@@ -45,21 +47,23 @@ public class BlasterBoltEntity extends Projectile {
             this.setXRot(owner.getXRot());
         }
         this.damage = damage;
-        this.isOvercharged = isOvercharged;
-        this.heatRatio = heatRatio;
+        this.entityData.set(IS_OVERCHARGED, isOvercharged);
+        this.entityData.set(HEAT_RATIO, heatRatio);
         this.noPhysics = true;
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        builder.define(IS_OVERCHARGED, false);
+        builder.define(HEAT_RATIO, 0.0f);
     }
 
     public boolean isOvercharged() {
-        return this.isOvercharged;
+        return this.entityData.get(IS_OVERCHARGED);
     }
 
     public float getHeatRatio() {
-        return this.heatRatio;
+        return this.entityData.get(HEAT_RATIO);
     }
 
     @Override
@@ -78,7 +82,9 @@ public class BlasterBoltEntity extends Projectile {
                 ? serverLevel.damageSources().playerAttack(playerOwner)
                 : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
 
-            double hitRadius = isOvercharged ? 1.5 : (0.6 + heatRatio * 0.4);
+            boolean overcharged = isOvercharged();
+            float heat = getHeatRatio();
+            double hitRadius = overcharged ? 1.5 : (0.6 + heat * 0.4);
             AABB hitbox = this.getBoundingBox().inflate(hitRadius, hitRadius, hitRadius);
 
             List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
@@ -98,12 +104,12 @@ public class BlasterBoltEntity extends Projectile {
                 }
 
                 // Knockback
-                Vec3 knockback = movement.normalize().scale(isOvercharged ? 1.5 : 0.6);
+                Vec3 knockback = movement.normalize().scale(overcharged ? 1.5 : 0.6);
                 target.setDeltaMovement(target.getDeltaMovement().add(knockback.x, 0.2, knockback.z));
                 target.hurtMarked = true;
 
-                if (isOvercharged) {
-                    // Overcharged explosive detonation (Tweak C)
+                if (overcharged) {
+                    // Overcharged explosive detonation
                     com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
                         target,
                         com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
@@ -129,20 +135,6 @@ public class BlasterBoltEntity extends Projectile {
                     serverLevel.sendParticles(ParticleTypes.EXPLOSION, target.getX(), target.getY() + 1.0, target.getZ(), 1, 0, 0, 0, 0);
                     serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.4f);
                 }
-            }
-
-            // Trailing laser particles (Yellow/Orange for normal, Bright Red/White for overcharged)
-            int color = isOvercharged ? 0xFF0033 : (heatRatio > 0.6f ? 0xFF4500 : 0xFFD700);
-            float scale = isOvercharged ? 2.5f : (1.2f + heatRatio * 0.8f);
-
-            Vec3 dir = movement.normalize();
-            for (double d = 0; d < movement.length(); d += 0.8) {
-                Vec3 p = this.position().subtract(dir.scale(d));
-                serverLevel.sendParticles(
-                    new DustParticleOptions(color, scale),
-                    p.x, p.y, p.z,
-                    1, 0, 0, 0, 0
-                );
             }
 
             if (this.tickCount > 30) {

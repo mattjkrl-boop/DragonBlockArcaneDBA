@@ -94,6 +94,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.DimensionalSlashRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DIMENSIONAL_WARP_RIFT,
+            com.dragonblockarcanedba.client.render.DimensionalWarpRiftRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.TRIDENT_SHARD,
             com.dragonblockarcanedba.client.render.TridentShardRenderer::new
         );
@@ -126,6 +130,14 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.VoidSlashRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.HOLLOW_CHARGE,
+            com.dragonblockarcanedba.client.render.HollowChargeRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.HOLLOW_RUSH_TRAIL,
+            com.dragonblockarcanedba.client.render.HollowRushTrailRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.AZURE_STORM,
             com.dragonblockarcanedba.client.render.AzureStormRenderer::new
         );
@@ -138,12 +150,36 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.AzureTornadoRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.AZURE_RUSH_TRAIL,
+            com.dragonblockarcanedba.client.render.AzureRushTrailRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.AZURE_SONIC_QUAKE,
+            com.dragonblockarcanedba.client.render.AzureSonicQuakeRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.AZURE_TEMPEST_CHANNEL,
+            com.dragonblockarcanedba.client.render.AzureTempestChannelRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.OX_SHOCKWAVE,
             com.dragonblockarcanedba.client.render.OxShockwaveRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.OX_FISSURE,
             com.dragonblockarcanedba.client.render.OxFissureRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.OX_CHARGE,
+            com.dragonblockarcanedba.client.render.OxChargeRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.OX_STANCE_AURA,
+            com.dragonblockarcanedba.client.render.OxStanceAuraRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.KINGS_SLAM,
+            com.dragonblockarcanedba.client.render.KingsSlamRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.GRAND_CRESCENT_WAVE,
@@ -166,6 +202,18 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.DarknessBladeRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DARKNESS_CHARGE,
+            com.dragonblockarcanedba.client.render.DarknessChargeRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DARKNESS_DOMAIN,
+            com.dragonblockarcanedba.client.render.DarknessDomainRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DARKNESS_SHATTER,
+            com.dragonblockarcanedba.client.render.DarknessShatterRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.EVIL_SPEAR_PROJECTILE,
             com.dragonblockarcanedba.client.render.EvilSpearProjectileRenderer::new
         );
@@ -177,6 +225,151 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.entity.DbaEntities.BRAVE_SLASH,
             com.dragonblockarcanedba.client.render.BraveSlashRenderer::new
         );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BRAVE_CROSS_SLASH,
+            com.dragonblockarcanedba.client.render.BraveCrossSlashRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BRAVE_CHARGE,
+            com.dragonblockarcanedba.client.render.BraveChargeRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BRAVE_RUSH_TRAIL,
+            com.dragonblockarcanedba.client.render.BraveRushTrailRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BRAVE_SHOCKWAVE,
+            com.dragonblockarcanedba.client.render.BraveShockwaveRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SORROW_SLASH,
+            com.dragonblockarcanedba.client.render.SorrowSlashRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DIMENSIONAL_RIFT,
+            com.dragonblockarcanedba.client.render.DimensionalRiftRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.ABYSSAL_DOMAIN,
+            com.dragonblockarcanedba.client.render.AbyssalDomainRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.CURSE_TELEGRAPH,
+            com.dragonblockarcanedba.client.render.CurseTelegraphRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.CURSE_GROUND_SHATTER,
+            com.dragonblockarcanedba.client.render.CurseGroundShatterRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.EVIL_SPEAR_CHARGE,
+            com.dragonblockarcanedba.client.render.EvilSpearChargeRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.HELL_HUNT_IMPACT,
+            com.dragonblockarcanedba.client.render.HellHuntImpactRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BANSHO_CYCLONE,
+            com.dragonblockarcanedba.client.render.BanshoCycloneRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BANSHO_SHOCKWAVE,
+            com.dragonblockarcanedba.client.render.BanshoShockwaveRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BANSHO_WIND_PROJECTILE,
+            com.dragonblockarcanedba.client.render.BanshoWindProjectileRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.GRAND_CLASH_SPARK,
+            com.dragonblockarcanedba.client.render.GrandClashSparkRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DEVIL_SLAM_SHOCKWAVE,
+            com.dragonblockarcanedba.client.render.DevilSlamShockwaveRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SPIRIT_IMPALE,
+            com.dragonblockarcanedba.client.render.SpiritImpaleRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SPIRIT_CANNON_BEAM,
+            com.dragonblockarcanedba.client.render.SpiritCannonBeamRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SABER_SLASH,
+            com.dragonblockarcanedba.client.render.SaberSlashRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SABER_LINE_SLASH,
+            com.dragonblockarcanedba.client.render.SaberDimensionalLineSlashRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SABER_VOID_TEAR,
+            com.dragonblockarcanedba.client.render.SaberVoidTearRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SABER_DODGE_SPARK,
+            com.dragonblockarcanedba.client.render.SaberDodgeSparkRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.TIME_SHATTER,
+            com.dragonblockarcanedba.client.render.TimeShatterRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.TEMPORAL_RIFT,
+            com.dragonblockarcanedba.client.render.TemporalRiftRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.POWER_POLE_WHIRLWIND,
+            com.dragonblockarcanedba.client.render.PowerPoleWhirlwindRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.POWER_POLE_EXTENSION,
+            com.dragonblockarcanedba.client.render.PowerPoleExtensionRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.POWER_POLE_IMPACT,
+            com.dragonblockarcanedba.client.render.PowerPoleImpactRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.ERASURE_CHARGE_ORB,
+            com.dragonblockarcanedba.client.render.ErasureChargeOrbRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.ERASURE_CANNON_BEAM,
+            com.dragonblockarcanedba.client.render.ErasureCannonBeamRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SWIFT_CRESCENT,
+            com.dragonblockarcanedba.client.render.SwiftCrescentRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.KATANA_CHARGE,
+            com.dragonblockarcanedba.client.render.KatanaChargeRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.KATANA_AIM_GUIDE,
+            com.dragonblockarcanedba.client.render.KatanaAimGuideRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.HEAVEN_SPLITTER,
+            com.dragonblockarcanedba.client.render.HeavenSplitterRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.Z_CHARGE,
+            com.dragonblockarcanedba.client.render.ZChargeRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.Z_STANCE_AURA,
+            com.dragonblockarcanedba.client.render.ZStanceAuraRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.Z_GRAVITY_SLAM,
+            com.dragonblockarcanedba.client.render.ZGravitySlamRenderer::new
+        );
+
 
         net.minecraft.client.renderer.special.SpecialModelRenderers.ID_MAPPER.put(
             com.dragonblockarcanedba.DragonBlockArcaneDBA.id("procedural_weapon"),
@@ -589,7 +782,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
                         }
                     } else if (braveAssaultTicks > 0) {
-                        blasterBarrageTicks = 0;
+                        braveAssaultTicks = 0;
                     }
                 } else {
                     if (braveAssaultTicks > 0) {
@@ -600,12 +793,13 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem)) {
                     // Fallback for standard weapons detecting air click
                     if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
-                        if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) { // If there are other weapons
+                        if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem || stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem) {
                             ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                                 com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
                                 0
                             ));
                         }
+
                     }
                 }
             }

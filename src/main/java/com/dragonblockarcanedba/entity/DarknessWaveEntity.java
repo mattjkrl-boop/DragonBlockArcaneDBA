@@ -117,37 +117,12 @@ public class DarknessWaveEntity extends Projectile {
                 target.setDeltaMovement(target.getDeltaMovement().add(knockback.x, 0.25, knockback.z));
                 target.hurtMarked = true;
 
-                // Impact dark void particles
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x1A0033, 2.0f),
-                    target.getX(), target.getY() + 1.0, target.getZ(),
-                    15, 0.3, 0.5, 0.3, 0.1
-                );
+                // Impact feedback
+                serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
+                    net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.6f);
             }
 
-            // Trailing darkness & purple smoke particles along the crescent
-            if (this.tickCount % 2 == 0) {
-                Vec3 look = movement.normalize();
-                Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
-
-                for (int i = -5; i <= 5; i++) {
-                    double offset = (i / 5.0) * width;
-                    Vec3 pPos = this.position().add(right.scale(offset));
-
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0x3B0066, 1.8f),
-                        pPos.x, pPos.y, pPos.z,
-                        1, 0.0, 0.02, 0.0, 0.01
-                    );
-                    serverLevel.sendParticles(
-                        ParticleTypes.SMOKE,
-                        pPos.x, pPos.y, pPos.z,
-                        1, 0.0, 0.01, 0.0, 0.01
-                    );
-                }
-            }
-
-            // Wave passes through terrain (Tweak B), expires after 32 blocks / 40 ticks
+            // Wave passes through terrain, expires after 32 blocks / 40 ticks
             if (this.tickCount > 40) {
                 this.discard();
             }

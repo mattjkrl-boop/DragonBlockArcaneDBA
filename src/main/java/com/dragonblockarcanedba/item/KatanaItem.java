@@ -3,9 +3,11 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.DbaEntities;
+import com.dragonblockarcanedba.entity.HeavenSplitterEntity;
 import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.entity.KatanaAimGuideEntity;
+import com.dragonblockarcanedba.entity.KatanaChargeEntity;
+import com.dragonblockarcanedba.entity.SwiftCrescentEntity;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,7 +16,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -31,14 +32,21 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Katana — Supreme Speed Weapon.
  * Precision swordsmanship, instant movement, enemy tagging, and cinematic multi-target execution.
  */
 public class KatanaItem extends Item {
+    public static final int MAX_LEFT_CHARGE_TICKS = 100; // 5 seconds
     public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
+
+    private static final Map<UUID, KatanaChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
+    private static final Map<UUID, KatanaAimGuideEntity> ACTIVE_AIM_MAP = new ConcurrentHashMap<>();
 
     public KatanaItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -80,23 +88,32 @@ public class KatanaItem extends Item {
 
     public static void onLeftClickChargeTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
-        // Drawing stance: silver sparks around sheathed hilt
-        if (chargeTicks % 2 == 0) {
-            double ox = (level.getRandom().nextDouble() - 0.5) * 0.6;
-            double oy = 0.6 + level.getRandom().nextDouble() * 0.4;
-            double oz = (level.getRandom().nextDouble() - 0.5) * 0.6;
+        float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
 
-            level.sendParticles(
-                new DustParticleOptions(0xFFFFFF, 1.4f),
-                player.getX() + ox, player.getY() + oy, player.getZ() + oz,
-                1, 0, 0.02, 0, 0.01
-            );
+        // Maintain physical 3D Katana Charge Entity (iaido stance ground focus rings & hilt sparks)
+        KatanaChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.get(player.getUUID());
+        if (chargeEntity == null || !chargeEntity.isAlive()) {
+            chargeEntity = new KatanaChargeEntity(level, player);
+            level.addFreshEntity(chargeEntity);
+            ACTIVE_CHARGE_MAP.put(player.getUUID(), chargeEntity);
+        }
+        chargeEntity.setChargeRatio(chargeRatio);
+
+        if (chargeTicks % 20 == 0) {
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 0.7f, 1.4f + chargeRatio * 0.4f);
         }
     }
 
     public static void onLeftClickRelease(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+        // Discard active drawing charge entity
+        KatanaChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
+        if (chargeEntity != null && chargeEntity.isAlive()) {
+            chargeEntity.discard();
+        }
 
         if (player.getCooldowns().isOnCooldown(stack)) return;
 
@@ -158,7 +175,9 @@ public class KatanaItem extends Item {
         if (!chain.isEmpty()) {
             for (int i = 0; i < chain.size(); i++) {
                 LivingEntity t = chain.get(i);
-                // Leave afterimage entity at intermediate spot
+                final int targetIndex = i;
+
+                // Leave high-quality 3D ghost afterimage at intermediate spot
                 HollowAfterimageEntity afterimage = new HollowAfterimageEntity(level, player);
                 afterimage.setPos(player.getX(), player.getY(), player.getZ());
                 level.addFreshEntity(afterimage);
@@ -180,9 +199,22 @@ public class KatanaItem extends Item {
                 // Delayed simultaneous strike 0.3s (6 ticks) later
                 level.getServer().execute(() -> {
                     finalTarget.hurtServer(level, level.damageSources().playerAttack(player), finalDamage);
-                    level.sendParticles(ParticleTypes.SWEEP_ATTACK, finalTarget.getX(), finalTarget.getY() + 1.0, finalTarget.getZ(), 2, 0.2, 0.2, 0.2, 0);
-                    level.sendParticles(new DustParticleOptions(0xFFFFFF, 1.8f), finalTarget.getX(), finalTarget.getY() + 1.0, finalTarget.getZ(), 10, 0.3, 0.5, 0.3, 0.1);
-                    level.playSound(null, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ(), SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.5f, 1.6f);
+
+                    // Spawn physical 3D Swift Crescent model & cross-cleave speed cuts on target
+                    Vec3 impactPos = finalTarget.position().add(0, finalTarget.getBbHeight() * 0.5, 0);
+                    float tiltAngle = (targetIndex % 2 == 0 ? 35.0f : -35.0f) + (targetIndex * 15.0f);
+                    float slashScale = 1.0f + (targetIndex * 0.15f);
+                    int variant = targetIndex % 2;
+
+                    SwiftCrescentEntity crescent = new SwiftCrescentEntity(
+                        level, player, impactPos,
+                        player.getYRot(), player.getXRot(),
+                        tiltAngle, slashScale, variant, 10
+                    );
+                    level.addFreshEntity(crescent);
+
+                    level.playSound(null, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ(),
+                        SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.6f, 1.5f + (targetIndex * 0.1f));
                 });
             }
         } else {
@@ -227,17 +259,14 @@ public class KatanaItem extends Item {
             player.setDeltaMovement(0, player.getDeltaMovement().y > 0 ? 0 : player.getDeltaMovement().y * 0.5, 0);
             player.hurtMarked = true;
 
-            // Thin glowing white-cyan aim guide line extending forward up to 24 blocks
-            Vec3 eye = player.getEyePosition();
-            Vec3 look = player.getLookAngle();
-            for (double d = 1.0; d <= 24.0; d += 1.5) {
-                Vec3 p = eye.add(look.scale(d));
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x00FFFF, 1.2f + chargeRatio * 0.6f),
-                    p.x, p.y, p.z,
-                    1, 0, 0, 0, 0
-                );
+            // Maintain sleek, physical 3D laser guide & geometric targeting beam up to 24 blocks
+            KatanaAimGuideEntity aimGuide = ACTIVE_AIM_MAP.get(player.getUUID());
+            if (aimGuide == null || !aimGuide.isAlive()) {
+                aimGuide = new KatanaAimGuideEntity(serverLevel, player, 24.0f);
+                serverLevel.addFreshEntity(aimGuide);
+                ACTIVE_AIM_MAP.put(player.getUUID(), aimGuide);
             }
+            aimGuide.setChargeRatio(chargeRatio);
 
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -251,6 +280,12 @@ public class KatanaItem extends Item {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
             ServerLevel serverLevel = (ServerLevel) level;
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+            // Discard active aim guide entity
+            KatanaAimGuideEntity aimGuide = ACTIVE_AIM_MAP.remove(player.getUUID());
+            if (aimGuide != null && aimGuide.isAlive()) {
+                aimGuide.discard();
+            }
 
             int heldTicks = getUseDuration(stack, living) - timeLeft;
             float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
@@ -286,17 +321,12 @@ public class KatanaItem extends Item {
                 }
             }
 
-            // Giant vertical particle slash line
-            for (double d = 0; d <= dashDist; d += 1.0) {
-                Vec3 p = start.add(look.scale(d));
-                for (double y = 0; y <= 6.0; y += 1.0) {
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFFFFFF, 2.2f),
-                        p.x, p.y + y, p.z,
-                        1, 0, 0.05, 0, 0.02
-                    );
-                }
-            }
+            // Spawn towering physical 3D dimensional slash entity across raycast path
+            HeavenSplitterEntity heavenSplitter = new HeavenSplitterEntity(
+                serverLevel, player, start.add(0, 0.5, 0), look,
+                (float) dashDist, 1.0f + chargeRatio * 0.5f, 20
+            );
+            serverLevel.addFreshEntity(heavenSplitter);
 
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.0f, 1.8f);

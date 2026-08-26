@@ -2,13 +2,16 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.entity.DbaEntities;
+import com.dragonblockarcanedba.entity.SpiritCannonBeamEntity;
+import com.dragonblockarcanedba.entity.SpiritImpaleEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EquipmentSlotGroup;
@@ -31,17 +34,16 @@ import java.util.Optional;
  * Spirit Sword — The Annihilator Blade. Endgame legendary weapon.
  * 
  * Left-click: 500 + (Strength × 2) damage.
- *   - Applies Levitation III for 6 seconds
+ *   - Applies Spirit Impale (mid-air suspension, weakness, divine Ki radiance)
  *   - Deals bonus 2% of target's max HP as magic damage (Spirit Cleave)
- *   - Applies Glowing for 10 seconds (target can't hide)
  *   - 20% chance to Disarm (target drops held item)
+ *   - Spawns physical 3D Spirit Impale entity (6 ethereal celestial swords, 3 ground seals, ascending divine pillar)
  * 
- * Right-click (hold): Spirit Cannon — continuous beam (32-block range).
+ * Right-click (hold): Spirit Cannon — continuous physical 3D geometric beam (32-block range).
  *   - Pierces through ALL entities in line
  *   - 200 + (Spirit × 1.5) damage per pulse (every 10 ticks)
  *   - Each pulse also deals 2% of target's max HP as magic damage
- *   - Applies Weakness II for 5 seconds
- *   - Alternating cyan/white particle beam with impact explosions
+ *   - Continuous multi-layered prismatic beam model with quad rotating helical energy drills and muzzle/terminus geometry
  *   - On release: 1-second cooldown
  * 
  * Unbreakable legendary weapon. No durability.
@@ -85,7 +87,7 @@ public class SpiritSwordItem extends Item {
         return builder.build();
     }
 
-    // --- Left Click: Massive damage + Levitation III + Spirit Cleave + Disarm ---
+    // --- Left Click: Massive damage + Spirit Impale + Spirit Cleave + Disarm ---
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
         // Apply Spirit Impale (mid-air suspension + damage weakness + divine Ki radiance)
@@ -123,12 +125,15 @@ public class SpiritSwordItem extends Item {
                 }
             }
 
-            // Impact particles — cyan burst at target
-            serverLevel.sendParticles(
-                new DustParticleOptions(0x00FFFF, 2.5F),
-                target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-                15, 0.4, 0.4, 0.4, 0.1
-            );
+            // Physical 3D Spirit Impale Entity (6 celestial swords, 3 ground seals, ascending divine pillar)
+            SpiritImpaleEntity impale = new SpiritImpaleEntity(serverLevel, serverPlayer, target, 1.0f);
+            serverLevel.addFreshEntity(impale);
+
+            // High-impact divine sounds
+            serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
+                SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, 1.3f, 1.15f);
+            serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
+                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.1f, 1.35f);
         }
     }
 
@@ -157,45 +162,22 @@ public class SpiritSwordItem extends Item {
         int ticksUsed = getUseDuration(stack, livingEntity) - remainingUseDuration;
         ServerLevel serverLevel = (ServerLevel) level;
 
+        // Manage physical 3D geometric Spirit Cannon beam entity
+        List<SpiritCannonBeamEntity> existingBeams = serverLevel.getEntitiesOfClass(
+            SpiritCannonBeamEntity.class,
+            player.getBoundingBox().inflate(6.0),
+            b -> b.getCasterId() == player.getId() && b.isAlive()
+        );
+        SpiritCannonBeamEntity beam;
+        if (existingBeams.isEmpty()) {
+            beam = new SpiritCannonBeamEntity(serverLevel, player);
+            serverLevel.addFreshEntity(beam);
+        } else {
+            beam = existingBeams.get(0);
+        }
+
         Vec3 eyePos = player.getEyePosition();
         Vec3 lookVec = player.getViewVector(1.0f);
-
-        // --- Continuous dense core beam + outer spiraling energy drill rings every tick ---
-        boolean useCyan = (ticksUsed % 2 == 0);
-        Vec3 up = new Vec3(0, 1, 0);
-        Vec3 right = lookVec.cross(up).normalize();
-        if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
-        Vec3 orthoUp = right.cross(lookVec).normalize();
-
-        for (double d = 1.0; d <= PULSE_RANGE; d += 0.5) {
-            Vec3 point = eyePos.add(lookVec.scale(d));
-
-            // Dense Core
-            serverLevel.sendParticles(
-                new DustParticleOptions(useCyan ? 0x00FFFF : 0xFFFFFF, 1.6F),
-                point.x, point.y, point.z,
-                1, 0.01, 0.01, 0.01, 0.0
-            );
-
-            // Double spiraling energy drill helix
-            double spiralAngle1 = (ticksUsed * 0.4) + (d * 0.8);
-            double spiralAngle2 = spiralAngle1 + Math.PI;
-            double spiralRadius = 0.45;
-
-            Vec3 offset1 = right.scale(Math.cos(spiralAngle1) * spiralRadius).add(orthoUp.scale(Math.sin(spiralAngle1) * spiralRadius));
-            Vec3 offset2 = right.scale(Math.cos(spiralAngle2) * spiralRadius).add(orthoUp.scale(Math.sin(spiralAngle2) * spiralRadius));
-
-            serverLevel.sendParticles(
-                new DustParticleOptions(0x00E5FF, 1.2F),
-                point.x + offset1.x, point.y + offset1.y, point.z + offset1.z,
-                1, 0.0, 0.0, 0.0, 0.0
-            );
-            serverLevel.sendParticles(
-                new DustParticleOptions(0xFFFFFF, 1.0F),
-                point.x + offset2.x, point.y + offset2.y, point.z + offset2.z,
-                1, 0.0, 0.0, 0.0, 0.0
-            );
-        }
 
         // Fire pulse damage every 10 ticks (0.5 seconds)
         if (ticksUsed > 0 && ticksUsed % 10 == 0) {
@@ -234,26 +216,38 @@ public class SpiritSwordItem extends Item {
                         net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
                     );
 
-                    // Impact particle burst at hit entity — big cyan/white explosion
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0x00FFFF, 2.5F),
-                        livingTarget.getX(), livingTarget.getY() + livingTarget.getBbHeight() * 0.5, livingTarget.getZ(),
-                        12, 0.4, 0.4, 0.4, 0.08
-                    );
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFFFFFF, 3.0F),
-                        livingTarget.getX(), livingTarget.getY() + livingTarget.getBbHeight() * 0.5, livingTarget.getZ(),
-                        3, 0.1, 0.1, 0.1, 0.0
-                    );
+                    // Physical 3D Spirit Impale impact at hit entity
+                    SpiritImpaleEntity hitImpale = new SpiritImpaleEntity(serverLevel, player, livingTarget, 0.75f);
+                    serverLevel.addFreshEntity(hitImpale);
+
+                    // Impact sound
+                    serverLevel.playSound(null, livingTarget.getX(), livingTarget.getY(), livingTarget.getZ(),
+                        SoundEvents.BEACON_POWER_SELECT, SoundSource.PLAYERS, 1.2f, 1.5f);
                 }
             }
+
+            // Beam pulse resonance sound at caster
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0f, 1.6f);
         }
     }
 
-    // --- On release: apply 1-second cooldown ---
+    // --- On release: discard beam entity and apply 1-second cooldown ---
     @Override
     public boolean releaseUsing(ItemStack stack, Level level, LivingEntity entity, int timeLeft) {
-        if (entity instanceof Player player) {
+        if (!level.isClientSide() && entity instanceof ServerPlayer player) {
+            ServerLevel serverLevel = (ServerLevel) level;
+
+            // Discard active beam entity
+            List<SpiritCannonBeamEntity> existingBeams = serverLevel.getEntitiesOfClass(
+                SpiritCannonBeamEntity.class,
+                player.getBoundingBox().inflate(6.0),
+                b -> b.getCasterId() == player.getId()
+            );
+            for (SpiritCannonBeamEntity b : existingBeams) {
+                b.discard();
+            }
+
             // 1-second cooldown after releasing the cannon (20 ticks)
             player.getCooldowns().addCooldown(stack, 20);
         }

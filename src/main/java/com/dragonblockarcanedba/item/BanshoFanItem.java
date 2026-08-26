@@ -2,9 +2,13 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.entity.BanshoCycloneEntity;
+import com.dragonblockarcanedba.entity.BanshoShockwaveEntity;
+import com.dragonblockarcanedba.entity.BanshoWindProjectileEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -13,15 +17,12 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.WindCharge;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 
 import java.util.List;
 
@@ -29,15 +30,17 @@ import java.util.List;
  * Bansho Fan — The Storm Emperor. Endgame legendary weapon.
  * 
  * Left-click: 400 + (Strength × 1.5) damage.
- *   - Gale Force: Launches target 10 blocks with strong upward velocity
+ *   - Gale Force: Launches target 10 blocks with strong upward velocity & physics modifiers
  *   - Applies Bleeding II for 15 seconds (wind cuts)
- *   - Cyclone Slash: 30% chance to AOE hit all entities within 3 blocks of target
- *     for 50% of main hit's damage
+ *   - Spawns physical 3D emerald impact shockwave
+ *   - Cyclone Slash: 30% chance to summon a physical 3D geometric emerald cyclone entity that
+ *     swirls, lifts, and shreds nearby enemies for 50% damage
  * 
  * Right-click: "Tempest Barrage"
- *   - Fires 5 enhanced wind charges in a spread pattern
- *   - Each deals 300 + (Spirit × 1) damage on impact (via WindChargeMixin)
- *   - Wind charges apply Bleeding III for 20 seconds
+ *   - Spawns a physical 3D conical launch shockwave
+ *   - Fires 5 custom physical 3D BanshoWindProjectile entities in a spread pattern
+ *   - Each deals 300 + (Spirit × 1) damage on impact, applies Bleeding III for 20 seconds,
+ *     and spawns physical 3D impact shockwaves
  *   - 3× velocity (4.5F), perfect accuracy
  *   - 2-second cooldown
  * 
@@ -77,7 +80,7 @@ public class BanshoFanItem extends Item {
         return builder.build();
     }
 
-    // --- Left Click: Massive knockback + Bleeding II + Cyclone Slash ---
+    // --- Left Click: Massive knockback + Bleeding II + Physical 3D Cyclone Slash ---
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
         // Gale Force: Launch target 10 blocks with strong upward velocity & MC 26.2 catapult physics
@@ -113,9 +116,19 @@ public class BanshoFanItem extends Item {
                 target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), strengthBonus);
             }
 
-            // Cyclone Slash: 30% chance to AOE all entities within 3 blocks of target
+            // Cyclone Slash: 30% chance to summon a physical 3D emerald cyclone entity
             if (serverLevel.getRandom().nextFloat() < 0.30f) {
                 float cycloneDamage = (400.0f + strengthBonus) * 0.5f; // 50% of main hit
+                
+                // Spawn physical 3D geometric emerald cyclone at target location
+                BanshoCycloneEntity cyclone = new BanshoCycloneEntity(
+                    serverLevel,
+                    serverPlayer,
+                    target.position(),
+                    cycloneDamage
+                );
+                serverLevel.addFreshEntity(cyclone);
+
                 AABB cycloneArea = target.getBoundingBox().inflate(3.0);
                 List<LivingEntity> nearbyTargets = serverLevel.getEntitiesOfClass(
                     LivingEntity.class, cycloneArea,
@@ -132,75 +145,79 @@ public class BanshoFanItem extends Item {
                     // Apply Bleeding I to cyclone targets
                     nearby.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 200, 0, false, true), serverPlayer);
                 }
-
-                // Cyclone particle effect — multi-layered emerald & jade swirling vortex around target
-                for (int i = 0; i < 90; i++) {
-                    double angle = Math.toRadians(i * 8);
-                    double r = 3.5 * (1.0 - (i / 90.0));
-                    double height = i * 0.06;
-                    double px = target.getX() + Math.cos(angle) * r;
-                    double pz = target.getZ() + Math.sin(angle) * r;
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(i % 2 == 0 ? 0x00FF88 : 0x88FFCC, 1.8F),
-                        px, target.getY() + height, pz,
-                        1, -Math.sin(angle) * 0.2, 0.08, Math.cos(angle) * 0.2, 0.02
-                    );
-                }
             }
 
-            // Standard impact wind burst & sweep particles
-            serverLevel.sendParticles(
-                new DustParticleOptions(0x00FF99, 2.2F),
-                target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-                20, 0.6, 0.4, 0.6, 0.18
+            // Physical 3D impact shockwave on every Gale Force strike (0 particles)
+            BanshoShockwaveEntity impactWave = new BanshoShockwaveEntity(
+                serverLevel,
+                serverPlayer,
+                target.position().add(0, target.getBbHeight() * 0.5, 0),
+                attacker.getYRot(),
+                attacker.getXRot(),
+                3.2f,
+                false // Radial impact shockwave
             );
-            serverLevel.sendParticles(
-                net.minecraft.core.particles.ParticleTypes.SWEEP_ATTACK,
-                target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-                3, 0.2, 0.2, 0.2, 0.0
-            );
+            serverLevel.addFreshEntity(impactWave);
+
+            serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
+                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.2f, 1.2f);
         }
     }
 
-    // --- Right Click: Tempest Barrage — 5 wind charges in a spread ---
+    // --- Right Click: Tempest Barrage — Physical 3D launch shockwave + 5 custom wind projectiles ---
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack itemStack = player.getItemInHand(hand);
 
-        // Play wind charge sound
+        // Play tempest release sound
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.WIND_CHARGE_THROW, SoundSource.NEUTRAL,
-            0.9F, 0.5F / (level.getRandom().nextFloat() * 0.4F + 0.8F));
+            1.2F, 0.9F);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS,
+            1.0F, 1.5F);
 
         if (!level.isClientSide() && level instanceof ServerLevel serverLevel) {
-            // Emerald launch burst at player eye position
             Vec3 eye = player.getEyePosition();
             Vec3 look = player.getLookAngle();
-            for (int i = 0; i < 25; i++) {
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x00FFAA, 1.6F),
-                    eye.x + look.x * 0.8 + (serverLevel.getRandom().nextDouble() - 0.5) * 0.6,
-                    eye.y + look.y * 0.8 + (serverLevel.getRandom().nextDouble() - 0.5) * 0.6,
-                    eye.z + look.z * 0.8 + (serverLevel.getRandom().nextDouble() - 0.5) * 0.6,
-                    1, look.x * 0.4, look.y * 0.4, look.z * 0.4, 0.08
-                );
+
+            // Spawn physical 3D directional launch shockwave at player nozzle/eye position
+            BanshoShockwaveEntity launchWave = new BanshoShockwaveEntity(
+                serverLevel,
+                player,
+                eye.add(look.scale(0.8)),
+                player.getYRot(),
+                player.getXRot(),
+                3.5f,
+                true // Directional conical launch shockwave
+            );
+            serverLevel.addFreshEntity(launchWave);
+
+            // Projectile damage: 300 + (Spirit × 1)
+            float projectileDamage = 300.0f;
+            if (player instanceof PlayerStatsAccessor accessor) {
+                projectileDamage += (float) accessor.dba$getSpirit();
             }
 
-            // Fire 5 wind charges in a spread pattern
+            // Fire 5 physical 3D wind projectiles in a spread pattern
             float[] yawOffsets = { -8.0f, -4.0f, 0.0f, 4.0f, 8.0f };
             float[] pitchOffsets = { 2.0f, -1.0f, 0.0f, -1.0f, 2.0f };
 
             for (int i = 0; i < 5; i++) {
-                WindCharge windCharge = new WindCharge(player, level,
-                    player.getX(), player.getEyeY(), player.getZ());
-                windCharge.shootFromRotation(player,
+                BanshoWindProjectileEntity projectile = new BanshoWindProjectileEntity(
+                    serverLevel,
+                    player,
+                    projectileDamage
+                );
+                projectile.shootFromRotation(
+                    player,
                     player.getXRot() + pitchOffsets[i],
                     player.getYRot() + yawOffsets[i],
-                    0.0F, 4.5F, 0.0F); // 3× velocity, perfect accuracy
-                if (windCharge instanceof com.dragonblockarcanedba.util.BanshoWindChargeMarker marker) {
-                    marker.dba$setFromBanshoFan(true);
-                }
-                level.addFreshEntity(windCharge);
+                    0.0F,
+                    4.5F, // 3× velocity
+                    0.0F  // Perfect accuracy
+                );
+                serverLevel.addFreshEntity(projectile);
             }
         }
 

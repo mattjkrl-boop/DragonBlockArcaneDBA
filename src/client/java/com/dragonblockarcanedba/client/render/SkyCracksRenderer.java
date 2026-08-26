@@ -16,6 +16,14 @@ import org.joml.Matrix4f;
 
 import java.util.Random;
 
+/**
+ * Entity Renderer for Sky Cracks in Minecraft 26.2.
+ * Renders a cosmic 3D celestial tear tearing through the atmosphere:
+ * - 12 Procedural fractal void fissure branches extending hundreds of blocks
+ * - 16 Hovering 3D tumbling crystalline void shards in the stratosphere
+ * - Volumetric multi-layered spatial tear net with pulsing core
+ * - Dual-layer rendering: Textured emissive celestial rift + Inner incandescent plasma beams
+ */
 public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracksRenderer.SkyCracksRenderState> {
     private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/environment/sky_cracks.png");
 
@@ -49,40 +57,58 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
     public void submit(SkyCracksRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
-        float pulse = 0.8f + 0.2f * (float) Math.sin(state.age * 0.15f);
+        float pulse = 0.85f + 0.15f * (float) Math.sin(state.age * 0.18f);
 
         // 1. Base Emissive Celestial Texture Quad
         collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucentEmissive(TEXTURE), (pose, buffer) -> {
             Matrix4f matrix4f = pose.pose();
-            float size = 450.0f;
+            float size = 480.0f;
 
-            buffer.addVertex(matrix4f, -size, 0, -size).setColor(255, 255, 255, (int)(220 * pulse)).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            buffer.addVertex(matrix4f, size, 0, -size).setColor(255, 255, 255, (int)(220 * pulse)).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            buffer.addVertex(matrix4f, size, 0, size).setColor(255, 255, 255, (int)(220 * pulse)).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            buffer.addVertex(matrix4f, -size, 0, size).setColor(255, 255, 255, (int)(220 * pulse)).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            buffer.addVertex(matrix4f, -size, 0, -size).setColor(255, 255, 255, (int) (240 * pulse)).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            buffer.addVertex(matrix4f, size, 0, -size).setColor(255, 255, 255, (int) (240 * pulse)).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            buffer.addVertex(matrix4f, size, 0, size).setColor(255, 255, 255, (int) (240 * pulse)).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            buffer.addVertex(matrix4f, -size, 0, size).setColor(255, 255, 255, (int) (240 * pulse)).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         });
 
-        // 2. Glowing Procedural Cosmic Void Fissure Rays
+        // 2. Glowing Procedural Cosmic Void Fissure Rays & Hovering Void Crystals
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiRenderType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
 
-            int rayCount = 8;
+            // A. 12 Major Procedural Void Fracture Branches
+            int rayCount = 12;
             for (int r = 0; r < rayCount; r++) {
-                double angle = (r / (double) rayCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.4);
-                float rayLen = 120.0f + rng.nextFloat() * 180.0f;
+                double angle = (r / (double) rayCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.35);
+                float rayLen = 140.0f + rng.nextFloat() * 220.0f;
 
                 float curX = 0, curZ = 0;
-                int steps = 6;
+                int steps = 7;
                 for (int s = 0; s < steps; s++) {
-                    float nxtX = curX + (float) Math.cos(angle) * (rayLen / steps) + (rng.nextFloat() - 0.5f) * 18.0f;
-                    float nxtZ = curZ + (float) Math.sin(angle) * (rayLen / steps) + (rng.nextFloat() - 0.5f) * 18.0f;
+                    float nxtX = curX + (float) Math.cos(angle) * (rayLen / steps) + (rng.nextFloat() - 0.5f) * 22.0f;
+                    float nxtZ = curZ + (float) Math.sin(angle) * (rayLen / steps) + (rng.nextFloat() - 0.5f) * 22.0f;
 
-                    drawSkyRay(matrix, buffer, curX, curZ, nxtX, nxtZ, 2.5f * (1.0f - (s / (float) steps)), 0.85f, 0.05f, 0.25f, 0.75f * pulse);
-                    drawSkyRay(matrix, buffer, curX, curZ, nxtX, nxtZ, 0.9f * (1.0f - (s / (float) steps)), 1.0f, 0.9f, 0.95f, 0.95f * pulse);
+                    float width = 3.2f * (1.0f - (s / (float) steps));
+
+                    // Outer Corrupted Crimson/Violet Core
+                    drawSkyRay(matrix, buffer, curX, curZ, nxtX, nxtZ, width, 0.95f, 0.05f, 0.25f, 0.85f * pulse);
+                    // Inner Incandescent Arc
+                    drawSkyRay(matrix, buffer, curX, curZ, nxtX, nxtZ, width * 0.35f, 1.0f, 0.90f, 0.95f, 0.98f * pulse);
 
                     curX = nxtX; curZ = nxtZ;
                 }
+            }
+
+            // B. 16 Hovering 3D Crystalline Void Shards in Stratosphere
+            int shardCount = 16;
+            for (int i = 0; i < shardCount; i++) {
+                double sAngle = (i / (double) shardCount) * Math.PI * 2.0 + (state.age * 0.02);
+                float sRadius = 25.0f + (i * 12.0f);
+                float sx = (float) Math.cos(sAngle) * sRadius;
+                float sz = (float) Math.sin(sAngle) * sRadius;
+                float sy = (float) Math.sin(state.age * 0.1f + i) * 6.0f;
+
+                float shardSize = 3.5f + (i % 3) * 2.0f;
+                drawSkyVoidShard(matrix, buffer, sx, sy, sz, shardSize, state.age * 12.0f + i * 45.0f, pulse);
             }
         });
     }
@@ -99,5 +125,26 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
         consumer.addVertex(matrix, x1 + nx, -0.5f, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x2 + nx, -0.5f, z2 + nz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x2 - nx, -0.5f, z2 - nz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+    }
+
+    private static void drawSkyVoidShard(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float s, float rotDeg, float pulse) {
+        double rad = Math.toRadians(rotDeg);
+        float cos = (float) Math.cos(rad) * s;
+        float sin = (float) Math.sin(rad) * s;
+
+        // 3D Octahedron crystal
+        float[][] pts = { {cos,0,sin}, {-sin,0,cos}, {-cos,0,-sin}, {sin,0,-cos} };
+        for (int i = 0; i < 4; i++) {
+            int nxt = (i + 1) % 4;
+            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.65f, 0.02f, 0.95f, 0.85f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.65f, 0.02f, 0.95f, 0.85f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx, cy + s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx, cy + s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.65f, 0.02f, 0.95f, 0.85f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.65f, 0.02f, 0.95f, 0.85f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx, cy - s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx, cy - s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        }
     }
 }

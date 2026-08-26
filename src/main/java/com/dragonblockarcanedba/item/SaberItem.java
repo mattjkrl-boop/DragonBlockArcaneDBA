@@ -5,6 +5,10 @@ import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
+import com.dragonblockarcanedba.entity.SaberDodgeSparkEntity;
+import com.dragonblockarcanedba.entity.SaberDimensionalLineSlashEntity;
+import com.dragonblockarcanedba.entity.SaberSlashEntity;
+import com.dragonblockarcanedba.entity.SaberVoidTearEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -275,22 +279,28 @@ public class SaberItem extends Item {
                     level.playSound(null, currentTarget.getX(), currentTarget.getY(), currentTarget.getZ(),
                         SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.0f, 1.5f);
                     
-                    // Cross slash particles at arrival point
-                    level.sendParticles(
-                        ParticleTypes.SWEEP_ATTACK,
-                        currentTarget.getX(), currentTarget.getY() + 1.0, currentTarget.getZ(), 
-                        30, 0.5, 0.5, 0.5, 0.2);
-                        
-                    // Silver flurry particles
-                    for (int i = 0; i < 8; i++) {
-                        double ox = (level.getRandom().nextDouble() - 0.5) * 0.8;
-                        double oy = level.getRandom().nextDouble() * currentTarget.getBbHeight();
-                        double oz = (level.getRandom().nextDouble() - 0.5) * 0.8;
-                        level.sendParticles(
-                            new DustParticleOptions(0xFFFFFF, 1.4F),
-                            currentTarget.getX() + ox, currentTarget.getY() + oy, currentTarget.getZ() + oz,
-                            1, 0.0, 0.05, 0.0, 0.02
+                    // Spawn Physical 3D Saber Crescent Slashes
+                    boolean isStrong = (seq.totalHits + 1) >= seq.nextStrongSlashThreshold;
+                    if (isStrong) {
+                        seq.nextStrongSlashThreshold = seq.totalHits + 6 + level.getRandom().nextInt(6);
+                    }
+
+                    float hitYaw = player.getYRot() + (level.getRandom().nextFloat() - 0.5f) * 20.0f;
+                    float hitPitch = player.getXRot();
+                    float tilt1 = (level.getRandom().nextBoolean() ? 40.0f : -40.0f) + (level.getRandom().nextFloat() - 0.5f) * 15.0f;
+                    Vec3 slashPos = currentTarget.position().add(0, currentTarget.getBbHeight() * 0.55, 0);
+
+                    SaberSlashEntity slash1 = new SaberSlashEntity(
+                        level, player, slashPos, hitYaw, hitPitch, tilt1, isStrong ? 1.4f : 1.0f, isStrong, 10
+                    );
+                    level.addFreshEntity(slash1);
+
+                    if (isStrong || level.getRandom().nextBoolean()) {
+                        float tilt2 = -tilt1;
+                        SaberSlashEntity slash2 = new SaberSlashEntity(
+                            level, player, slashPos, hitYaw, hitPitch, tilt2, isStrong ? 1.3f : 0.85f, false, 8
                         );
+                        level.addFreshEntity(slash2);
                     }
                     
                     applyEscalatingSpeedBuff(player, seq.totalHits + 1);
@@ -699,12 +709,11 @@ public class SaberItem extends Item {
         HollowAfterimageEntity afterimage = new HollowAfterimageEntity(level, player);
         level.addFreshEntity(afterimage);
 
-        // Origin particles
-        level.sendParticles(
-            ParticleTypes.PORTAL,
-            startPos.x, startPos.y + 1.0, startPos.z,
-            15, 0.3, 0.5, 0.3, 0.05
+        // Spawn physical 3D void tear & sonic shock rings at origin
+        SaberVoidTearEntity originTear = new SaberVoidTearEntity(
+            level, player, startPos.add(0, 1.0, 0), player.getYRot(), player.getXRot(), 1.0f, false, 12
         );
+        level.addFreshEntity(originTear);
 
         // Perform instant teleport
         player.teleportTo(destination.x, destination.y, destination.z);
@@ -713,17 +722,17 @@ public class SaberItem extends Item {
             player.setXRot(targetedEnemy.getXRot());
         }
 
-        // Destination particles & sound
+        // Spawn physical 3D void tear & sonic shock rings at destination
+        SaberVoidTearEntity destTear = new SaberVoidTearEntity(
+            level, player, destination.add(0, 1.0, 0), player.getYRot(), player.getXRot(), 1.15f, true, 12
+        );
+        level.addFreshEntity(destTear);
+
+        // Destination sound
         level.playSound(null, destination.x, destination.y, destination.z,
             SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.2f, 1.4f);
         level.playSound(null, destination.x, destination.y, destination.z,
             SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 1.8f);
-
-        level.sendParticles(
-            new DustParticleOptions(0x00E5FF, 1.8F),
-            destination.x, destination.y + 1.0, destination.z,
-            20, 0.3, 0.5, 0.3, 0.05
-        );
 
         // Path Damage to enemies crossed during dash
         AABB pathBox = new AABB(startPos, destination).inflate(1.2);
@@ -732,11 +741,11 @@ public class SaberItem extends Item {
         float pathDamage = 400.0f + (float) (accessor.dba$getStrength() * 2.0);
         for (LivingEntity enemy : crossedEnemies) {
             enemy.hurtServer(level, level.damageSources().playerAttack(player), pathDamage);
-            level.sendParticles(
-                ParticleTypes.SWEEP_ATTACK,
-                enemy.getX(), enemy.getY() + enemy.getBbHeight() * 0.5, enemy.getZ(),
-                1, 0.0, 0.0, 0.0, 0.0
+            Vec3 enemySlashPos = enemy.position().add(0, enemy.getBbHeight() * 0.55, 0);
+            SaberSlashEntity pathSlash = new SaberSlashEntity(
+                level, player, enemySlashPos, player.getYRot(), player.getXRot(), 25.0f, 1.1f, false, 8
             );
+            level.addFreshEntity(pathSlash);
         }
 
         player.sendSystemMessage(Component.literal("§b✦ Flash Step [" + (charges - 1) + "/3 Charges] ✦"), true);
@@ -783,22 +792,17 @@ public class SaberItem extends Item {
         ServerLevel level = (ServerLevel) player.level();
         resetCharges(player);
 
-        // Counter sound & particles
+        // Counter sound & 3D geometric spark burst
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.SHIELD_BLOCK, SoundSource.PLAYERS, 2.0f, 1.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 2.0f, 1.8f);
 
-        for (int i = 0; i < 15; i++) {
-            double ox = (level.getRandom().nextDouble() - 0.5) * 1.5;
-            double oy = level.getRandom().nextDouble() * player.getBbHeight();
-            double oz = (level.getRandom().nextDouble() - 0.5) * 1.5;
-            level.sendParticles(
-                new DustParticleOptions(0xFFD700, 2.0F), // Gold flash
-                player.getX() + ox, player.getY() + oy, player.getZ() + oz,
-                1, 0.0, 0.1, 0.0, 0.05
-            );
-        }
+        Vec3 sparkPos = player.position().add(0, player.getBbHeight() * 0.55, 0);
+        SaberDodgeSparkEntity dodgeSpark = new SaberDodgeSparkEntity(
+            level, player, sparkPos, 1.25f, 14
+        );
+        level.addFreshEntity(dodgeSpark);
 
         player.sendSystemMessage(Component.literal("§6✦ PERFECT DODGE! Flash Step Charges Restored! ✦"), true);
     }
@@ -848,16 +852,28 @@ public class SaberItem extends Item {
                 // Animation finished: Trigger explosion, damage, and visual slash beam!
                 ServerLevel level = anim.level;
                 
+                // Spawn physical 3D dimensional line cut entity along calculated best-fit line!
+                double lineLength = Math.max(8.0, (anim.maxT - anim.minT) + 4.0);
+                SaberDimensionalLineSlashEntity lineSlash = new SaberDimensionalLineSlashEntity(
+                    level, anim.player, anim.centroid, anim.direction, (float) lineLength, 1.2f, 22
+                );
+                level.addFreshEntity(lineSlash);
+
                 for (LivingEntity e : anim.targets) {
                     if (e == null || !e.isAlive() || e.isRemoved()) continue;
                     e.noPhysics = false;
                     
-                    // Violent fracture particles at each snapped mob
-                    level.sendParticles(
-                        ParticleTypes.CRIT,
-                        e.getX(), e.getY() + e.getBbHeight() * 0.5, e.getZ(),
-                        20, 0.4, 0.4, 0.4, 0.2
+                    // Spawn physical 3D micro cross-burst slash on each snapped mob
+                    Vec3 mobSlashPos = e.position().add(0, e.getBbHeight() * 0.5, 0);
+                    SaberSlashEntity mobSlash1 = new SaberSlashEntity(
+                        level, anim.player, mobSlashPos, 0, 0, 45.0f, 1.3f, true, 12
                     );
+                    level.addFreshEntity(mobSlash1);
+                    
+                    SaberSlashEntity mobSlash2 = new SaberSlashEntity(
+                        level, anim.player, mobSlashPos, 0, 0, -45.0f, 1.1f, false, 10
+                    );
+                    level.addFreshEntity(mobSlash2);
                     
                     // Remove the crowd control effect to initiate the Cinematic Damage pop (0.5s delay)
                     e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
@@ -876,25 +892,6 @@ public class SaberItem extends Item {
                         com.dragonblockarcanedba.DragonBlockArcaneDBA.id("saber_finisher_bounce"),
                         0.80,
                         net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
-                    );
-                }
-                
-                // Straight-line visual slash beam along the entire calculated best-fit line
-                double lineLength = anim.maxT - anim.minT + 2.0;
-                int particleSteps = Math.max(10, (int) (lineLength * 6));
-
-                for (int i = 0; i <= particleSteps; i++) {
-                    double t = (anim.minT - 1.0) + (lineLength * i / (double) particleSteps);
-                    Vec3 point = anim.centroid.add(anim.direction.scale(t));
-                    level.sendParticles(
-                        new DustParticleOptions(0x00E5FF, 2.0F),
-                        point.x, point.y + 0.5, point.z,
-                        1, 0.0, 0.0, 0.0, 0.0
-                    );
-                    level.sendParticles(
-                        new DustParticleOptions(0xFFFFFF, 1.6F),
-                        point.x, point.y + 0.5, point.z,
-                        1, 0.0, 0.0, 0.0, 0.0
                     );
                 }
 

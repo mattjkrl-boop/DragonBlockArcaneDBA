@@ -91,35 +91,6 @@ public class GrandCrescentWaveEntity extends Projectile {
                 Vec3 knockback = movement.normalize().scale(1.5);
                 target.setDeltaMovement(target.getDeltaMovement().add(knockback.x, 0.3, knockback.z));
                 target.hurtMarked = true;
-
-                // Slash impact sparks
-                serverLevel.sendParticles(
-                    ParticleTypes.CRIT,
-                    target.getX(), target.getY() + 1.0, target.getZ(),
-                    8, 0.3, 0.5, 0.3, 0.2
-                );
-            }
-
-            // Trailing golden and white crescent blade sparks
-            if (this.tickCount % 2 == 0) {
-                Vec3 look = movement.normalize();
-                Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
-
-                for (int i = -6; i <= 6; i++) {
-                    double offset = (i / 6.0) * halfWidth;
-                    Vec3 pPos = this.position().add(right.scale(offset));
-
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFFD700, 1.8f),
-                        pPos.x, pPos.y, pPos.z,
-                        1, 0.02, 0.05, 0.02, 0.01
-                    );
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFFFFFF, 1.5f),
-                        pPos.x, pPos.y, pPos.z,
-                        1, 0.01, 0.02, 0.01, 0.01
-                    );
-                }
             }
 
             // Check solid block collision

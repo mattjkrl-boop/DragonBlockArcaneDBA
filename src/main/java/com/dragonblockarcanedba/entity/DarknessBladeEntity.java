@@ -49,16 +49,6 @@ public class DarknessBladeEntity extends Projectile {
         this.setPos(this.getX() + movement.x, this.getY() + movement.y, this.getZ() + movement.z);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
-            // Dark particle trail as the blade falls
-            for (int i = 0; i < 4; i++) {
-                double py = this.getY() + (i * 1.5);
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0x1A0033, 2.2f),
-                    this.getX(), py, this.getZ(),
-                    1, 0.1, 0.1, 0.1, 0.02
-                );
-            }
-
             // Impact check: ground or 40 ticks life
             if (this.onGround() || !this.level().getBlockState(this.blockPosition()).isAir() || this.tickCount > 40) {
                 // Impact detonation!
@@ -74,9 +64,12 @@ public class DarknessBladeEntity extends Projectile {
                     t.hurtServer(serverLevel, damageSource, this.damage);
                 }
 
-                // Explosive dark impact particles and sound
-                serverLevel.sendParticles(ParticleTypes.EXPLOSION, this.getX(), this.getY() + 0.5, this.getZ(), 2, 0, 0, 0, 0);
-                serverLevel.sendParticles(new DustParticleOptions(0x3B0066, 2.5f), this.getX(), this.getY() + 0.5, this.getZ(), 20, 0.8, 0.5, 0.8, 0.1);
+                // Physical 3D Void Shatter Shockwave & Ground Fissures
+                DarknessShatterEntity shatter = new DarknessShatterEntity(
+                    serverLevel, owner, this.position().add(0, 0.05, 0), 2.8f
+                );
+                serverLevel.addFreshEntity(shatter);
+
                 serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 0.6f);
 
                 this.discard();

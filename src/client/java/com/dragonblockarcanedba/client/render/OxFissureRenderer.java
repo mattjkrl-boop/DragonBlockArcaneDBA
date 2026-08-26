@@ -16,7 +16,7 @@ import java.util.Random;
 
 /**
  * Entity Renderer for Ox King's Ground Fissure in Minecraft 26.2.
- * Renders jagged subterranean magma fracture trenches and rising subterranean heat glow.
+ * Renders jagged subterranean magma fracture trenches, erupting stone fissure teeth, and glowing volcanic core.
  */
 public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissureRenderer.OxFissureRenderState> {
     public OxFissureRenderer(EntityRendererProvider.Context context) {
@@ -26,6 +26,11 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
     public static class OxFissureRenderState extends EntityRenderState {
         public float ageInTicks = 0;
         public long seed = 0;
+    }
+
+    @Override
+    public boolean shouldRender(OxFissureEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
     }
 
     @Override
@@ -45,6 +50,7 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         float pulse = 0.75f + 0.25f * (float) Math.sin(state.ageInTicks * 0.25f);
+        float fade = Math.max(0.0f, 1.0f - (state.ageInTicks / (float) OxFissureEntity.MAX_LIFETIME));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -69,9 +75,26 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
                 float x2 = fx[i + 1], z2 = fz[i + 1];
 
                 // Magma Trench Base
-                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.45f, 1.0f, 0.25f * pulse, 0.0f, 0.95f);
+                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.45f, 1.0f, 0.25f * pulse, 0.0f, 0.95f * fade);
                 // Glowing Heat Core
-                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.18f, 1.0f, 0.90f * pulse, 0.2f, 1.0f);
+                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.18f, 1.0f, 0.90f * pulse, 0.2f, 1.0f * fade);
+
+                // Small 3D stone fissure teeth along edges
+                if (i % 2 == 0) {
+                    float side = (i % 4 == 0) ? 1.0f : -1.0f;
+                    float toothW = 0.25f;
+                    float toothH = (0.3f + rng.nextFloat() * 0.35f) * Math.min(1.0f, state.ageInTicks * 0.2f);
+                    float toothX = (x1 + x2) * 0.5f + side * 0.3f;
+                    float toothZ = (z1 + z2) * 0.5f;
+
+                    drawRockTooth(matrix, buffer,
+                        toothX - toothW * 0.5f, 0.05f, toothZ,
+                        toothX + toothW * 0.5f, 0.05f, toothZ,
+                        toothX, toothH, toothZ + side * 0.15f,
+                        1.0f, 0.35f, 0.05f, 0.95f * fade,
+                        0.25f, 0.20f, 0.16f, 1.0f * fade
+                    );
+                }
             }
         });
 
@@ -90,5 +113,17 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
         consumer.addVertex(matrix, x1 + nx, 0.04f, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x2 + nx, 0.04f, z2 + nz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x2 - nx, 0.04f, z2 - nz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+    }
+
+    private static void drawRockTooth(Matrix4f matrix, VertexConsumer consumer,
+                                      float x1, float y1, float z1,
+                                      float x2, float y2, float z2,
+                                      float tipX, float tipY, float tipZ,
+                                      float rBase, float gBase, float bBase, float aBase,
+                                      float rTip, float gTip, float bTip, float aTip) {
+        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 }

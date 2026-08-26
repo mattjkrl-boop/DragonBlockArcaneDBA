@@ -170,7 +170,10 @@ public class GrandSwordItem extends Item {
             p.setOwner(player); // Take ownership so deflected projectiles/ki damage enemies!
             p.setDeltaMovement(p.getDeltaMovement().scale(-1.4));
             p.hurtMarked = true;
-            level.sendParticles(ParticleTypes.CRIT, p.getX(), p.getY(), p.getZ(), 4, 0.2, 0.2, 0.2, 0.1);
+            com.dragonblockarcanedba.entity.GrandClashSparkEntity clash = new com.dragonblockarcanedba.entity.GrandClashSparkEntity(
+                level, player, p.position(), 1.0f
+            );
+            level.addFreshEntity(clash);
             level.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.SHIELD_BLOCK.value(), SoundSource.PLAYERS, 0.8f, 1.5f);
         }
     }

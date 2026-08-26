@@ -2,9 +2,12 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.entity.BraveChargeEntity;
+import com.dragonblockarcanedba.entity.BraveCrossSlashEntity;
+import com.dragonblockarcanedba.entity.BraveRushTrailEntity;
+import com.dragonblockarcanedba.entity.BraveShockwaveEntity;
 import com.dragonblockarcanedba.entity.BraveSlashEntity;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -15,7 +18,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -31,13 +33,20 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Brave Sword — Heroic Legendary Sword (Tapion's Sword).
- * Relentless sword assault, escalating Brave Power, high-speed finishing strikes, and concentrated heroic energy.
+ * Relentless sword assault, escalating Brave Power, physical 3D cruciform cross slashes,
+ * supersonic heroic rush flight trails, and geometric valor shockwaves.
  */
 public class BraveSwordItem extends Item {
     public static final int MAX_RIGHT_CHARGE_TICKS = 160; // 8 seconds
+
+    // Track active charging BraveChargeEntity per player
+    public static final Map<UUID, BraveChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
 
     public BraveSwordItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -121,7 +130,8 @@ public class BraveSwordItem extends Item {
             float strength = accessor.dba$getStrength();
 
             if (combo >= 10) {
-                // Brave Finisher (Tweak C): Dash forward & unleash massive cross-slash
+                // Brave Finisher (Tweak C): Dash forward & unleash massive physical 3D cross-slash
+                Vec3 targetCenter = target.position().add(0, target.getBbHeight() * 0.5, 0);
                 Vec3 past = target.position().add(look.scale(2.0));
                 player.teleportTo(level, past.x, past.y, past.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
 
@@ -137,9 +147,13 @@ public class BraveSwordItem extends Item {
                     net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
                 );
 
-                // Golden cross slash particles
-                level.sendParticles(ParticleTypes.EXPLOSION, target.getX(), target.getY() + 1.0, target.getZ(), 2, 0.2, 0.2, 0.2, 0);
-                level.sendParticles(new DustParticleOptions(0xFFD700, 2.5f), target.getX(), target.getY() + 1.0, target.getZ(), 25, 0.6, 0.6, 0.6, 0.1);
+                // Spawn physical 3D volumetric golden-cyan cross slash entity
+                BraveCrossSlashEntity crossSlash = new BraveCrossSlashEntity(
+                    level, player, targetCenter, player.getYRot(), player.getXRot(), finisherDmg, 1.25f
+                );
+                level.addFreshEntity(crossSlash);
+
+                level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.6f);
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.8f, 1.2f);
 
                 setCombo(stack, 0); // Reset combo
@@ -193,26 +207,14 @@ public class BraveSwordItem extends Item {
             // Heroic Focus: courageous stance, armor & jump power
             player.addEffect(new MobEffectInstance(DbaEffects.HEROIC_FOCUS_HOLDER, 10, 0, false, false));
 
-            // Concentrated golden & cyan particles gathering around the sword
-            int count = 2 + (int) (chargeRatio * 8);
-            for (int i = 0; i < count; i++) {
-                double ox = (serverLevel.getRandom().nextDouble() - 0.5) * (0.8 + chargeRatio * 0.4);
-                double oy = serverLevel.getRandom().nextDouble() * 1.5;
-                double oz = (serverLevel.getRandom().nextDouble() - 0.5) * (0.8 + chargeRatio * 0.4);
-
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0xFFD700, 1.6f + chargeRatio * 0.6f),
-                    player.getX() + ox, player.getY() + oy, player.getZ() + oz,
-                    1, 0, 0.05, 0, 0.01
-                );
-                if (i % 2 == 0) {
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0x00FFFF, 1.4f),
-                        player.getX() + ox, player.getY() + oy, player.getZ() + oz,
-                        1, 0, 0.03, 0, 0.01
-                    );
-                }
+            // Manage physical 3D Brave Charge Entity
+            BraveChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.get(player.getUUID());
+            if (chargeEntity == null || !chargeEntity.isAlive()) {
+                chargeEntity = new BraveChargeEntity(serverLevel, player);
+                serverLevel.addFreshEntity(chargeEntity);
+                ACTIVE_CHARGE_MAP.put(player.getUUID(), chargeEntity);
             }
+            chargeEntity.setChargeRatio(chargeRatio);
 
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -229,6 +231,12 @@ public class BraveSwordItem extends Item {
 
             int heldTicks = getUseDuration(stack, living) - timeLeft;
             float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
+
+            // Clean up 3D charge entity
+            BraveChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
+            if (chargeEntity != null && chargeEntity.isAlive()) {
+                chargeEntity.discard();
+            }
 
             if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
                 player.sendSystemMessage(Component.literal("§cImmobilized! Cannot dash."), true);
@@ -249,6 +257,19 @@ public class BraveSwordItem extends Item {
                 LivingEntity.class, pathBox,
                 e -> e.isAlive() && e != player
             );
+
+            // Spawn physical 3D supersonic rush flight trail connecting start to end
+            Vec3 dashVec = end.subtract(start);
+            float trailLen = (float) dashVec.length();
+            if (trailLen > 0.1f) {
+                double dx = dashVec.x, dy = dashVec.y, dz = dashVec.z;
+                float yaw = (float) (Math.atan2(dz, dx) * (180.0 / Math.PI)) - 90.0f;
+                float pitch = (float) (-(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)) * (180.0 / Math.PI)));
+                BraveRushTrailEntity trail = new BraveRushTrailEntity(
+                    serverLevel, player, start.add(0, 0.8, 0), yaw, pitch, trailLen, 1.0f + chargeRatio * 0.5f
+                );
+                serverLevel.addFreshEntity(trail);
+            }
 
             // Teleport player
             player.teleportTo(serverLevel, end.x, end.y, end.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
@@ -284,26 +305,22 @@ public class BraveSwordItem extends Item {
                 }
             }
 
-            // Tweak C: If any enemy killed, or max charge, trigger secondary radial heroic shockwave
+            // Tweak C: If any enemy killed, or max charge, trigger secondary physical radial heroic shockwave
             if (anyKilled || chargeRatio >= 0.9f) {
-                AABB shockAoe = player.getBoundingBox().inflate(6.0);
+                float shockRadius = (float) (6.0 + chargeRatio * 2.5);
+                AABB shockAoe = player.getBoundingBox().inflate(shockRadius);
                 List<LivingEntity> shockTargets = serverLevel.getEntitiesOfClass(
                     LivingEntity.class, shockAoe, e -> e.isAlive() && e != player && !targets.contains(e)
                 );
                 for (LivingEntity st : shockTargets) {
                     st.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage * 0.4f);
                 }
-                serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, player.getX(), player.getY() + 1.0, player.getZ(), 2, 0.5, 0.5, 0.5, 0);
-            }
 
-            // Golden beam trail along the entire path
-            for (double d = 0; d <= dashDist; d += 0.8) {
-                Vec3 p = start.add(look.scale(d));
-                serverLevel.sendParticles(
-                    new DustParticleOptions(0xFFD700, 2.2f),
-                    p.x, p.y + 1.0, p.z,
-                    1, 0, 0, 0, 0
-                );
+                BraveShockwaveEntity shockwave = new BraveShockwaveEntity(serverLevel, player, player.position().add(0, 0.05, 0), shockRadius);
+                serverLevel.addFreshEntity(shockwave);
+
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.9f);
             }
 
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -312,5 +329,12 @@ public class BraveSwordItem extends Item {
             player.getCooldowns().addCooldown(stack, 100); // 5-second cooldown
         }
         return true;
+    }
+
+    public static void onPlayerDisconnect(UUID playerUuid) {
+        BraveChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(playerUuid);
+        if (chargeEntity != null && chargeEntity.isAlive()) {
+            chargeEntity.discard();
+        }
     }
 }

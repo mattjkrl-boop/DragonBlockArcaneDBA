@@ -3,8 +3,6 @@ package com.dragonblockarcanedba.entity;
 import net.minecraft.world.damagesource.DamageSource;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -97,21 +95,6 @@ public class VoidRiftEntity extends Projectile {
                     }
                 }
 
-                // Inward particles
-                for (int i = 0; i < 15; i++) {
-                    double angle = serverLevel.getRandom().nextDouble() * Math.PI * 2;
-                    double r = serverLevel.getRandom().nextDouble() * suctionRadius;
-                    double px = center.x + Math.cos(angle) * r;
-                    double pz = center.z + Math.sin(angle) * r;
-                    double py = center.y + (serverLevel.getRandom().nextDouble() - 0.5) * 3.0;
-
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0x4B0082, 1.8F),
-                        px, py, pz,
-                        1, (center.x - px) * 0.2, (center.y - py) * 0.2, (center.z - pz) * 0.2, 0.1
-                    );
-                }
-
                 if (this.implosionTimer == 0) {
                     // Phase 2: Massive Outward Implosion Burst!
                     AABB blastBox = this.getBoundingBox().inflate(radius * 2.2);
@@ -130,24 +113,6 @@ public class VoidRiftEntity extends Projectile {
 
                         // Apply Dark Faded effect
                         victim.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 100, 1, false, true), owner);
-                    }
-
-                    // Explosion visuals & sounds
-                    serverLevel.sendParticles(
-                        ParticleTypes.EXPLOSION_EMITTER,
-                        center.x, center.y, center.z,
-                        3, 0.5, 0.5, 0.5, 0.1
-                    );
-                    for (int i = 0; i < 60; i++) {
-                        double angle = Math.toRadians(i * 6);
-                        double px = center.x + Math.cos(angle) * (radius * 1.8);
-                        double pz = center.z + Math.sin(angle) * (radius * 1.8);
-
-                        serverLevel.sendParticles(
-                            new DustParticleOptions(0x8A2BE2, 2.5F),
-                            px, center.y + 0.2, pz,
-                            1, 0.0, 0.4, 0.0, 0.05
-                        );
                     }
 
                     serverLevel.playSound(null, center.x, center.y, center.z,
@@ -189,28 +154,6 @@ public class VoidRiftEntity extends Projectile {
                                 : serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : living);
                             living.hurtServer(serverLevel, source, 25.0f);
                         }
-                    }
-                }
-
-                // Ambient rift particles
-                if (this.tickCount % 2 == 0) {
-                    for (int i = 0; i < (int) (4 + radius * 2); i++) {
-                        double angle = serverLevel.getRandom().nextDouble() * Math.PI * 2;
-                        double r = 0.5 + serverLevel.getRandom().nextDouble() * radius;
-                        double px = center.x + Math.cos(angle) * r;
-                        double pz = center.z + Math.sin(angle) * r;
-                        double py = center.y + (serverLevel.getRandom().nextDouble() - 0.5) * 1.5;
-
-                        serverLevel.sendParticles(
-                            new DustParticleOptions(0x4B0082, 1.4F),
-                            px, py, pz,
-                            1, -Math.sin(angle) * 0.1, 0.05, Math.cos(angle) * 0.1, 0.02
-                        );
-                        serverLevel.sendParticles(
-                            ParticleTypes.PORTAL,
-                            px, py, pz,
-                            1, 0.0, 0.0, 0.0, 0.02
-                        );
                     }
                 }
 

@@ -1,18 +1,21 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.entity.PowerPoleExtensionEntity;
+import com.dragonblockarcanedba.entity.PowerPoleImpactEntity;
+import com.dragonblockarcanedba.entity.PowerPoleWhirlwindEntity;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
@@ -22,7 +25,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.entity.projectile.ProjectileUtil;
 
 import java.util.List;
 
@@ -63,6 +65,7 @@ public class PowerPoleItem extends Item {
 
         return builder.build();
     }
+
     // Left Click: Whirlwind Staff (AoE Knockback and Damage)
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
@@ -127,38 +130,17 @@ public class PowerPoleItem extends Item {
                 }
             }
 
-            // Wind & Gale Particles in an expanding conical hurricane vortex
-            for (double d = 1.0; d <= maxRange; d += 2.0) {
-                Vec3 ringCenter = eyePos.add(lookDir.scale(d));
-                double ringRadius = d * Math.tan(Math.toRadians(32.0));
-                
-                Vec3 up = new Vec3(0, 1, 0);
-                if (Math.abs(lookDir.y) > 0.9) up = new Vec3(1, 0, 0);
-                Vec3 right = lookDir.cross(up).normalize();
-                Vec3 upOrthogonal = right.cross(lookDir).normalize();
-
-                int ringCount = Math.min(24, (int)(ringRadius * 6));
-                for (int i = 0; i < ringCount; i++) {
-                    double angle = (i / (double) ringCount) * Math.PI * 2;
-                    Vec3 particlePos = ringCenter
-                            .add(right.scale(Math.cos(angle) * ringRadius))
-                            .add(upOrthogonal.scale(Math.sin(angle) * ringRadius));
-                    
-                    // Outer hurricane wind swirl
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(i % 2 == 0 ? 0xDDFFFF : 0x00FF88, 1.6F),
-                        particlePos.x, particlePos.y, particlePos.z,
-                        1, -lookDir.x * 0.1, 0.05, -lookDir.z * 0.1, 0.02
-                    );
-                }
-            }
-
-            // Radial blast at spinner
-            serverLevel.sendParticles(
-                net.minecraft.core.particles.ParticleTypes.SWEEP_ATTACK,
-                eyePos.x + lookDir.x * 1.5, eyePos.y + lookDir.y * 1.5, eyePos.z + lookDir.z * 1.5,
-                3, 0.4, 0.4, 0.4, 0.0
+            // Spawn Physical 3D Conical Aerodynamic Hurricane Vortex Entity
+            PowerPoleWhirlwindEntity whirlwind = new PowerPoleWhirlwindEntity(
+                serverLevel, player, eyePos, player.getYRot(), player.getXRot(), (float) maxRange, 35.0f
             );
+            serverLevel.addFreshEntity(whirlwind);
+
+            // Auditory feedback
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.3f);
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.WIND_CHARGE_THROW, SoundSource.PLAYERS, 1.0f, 1.1f);
         }
     }
 
@@ -201,17 +183,6 @@ public class PowerPoleItem extends Item {
                     int stunDuration = 60 + serverLevel.getRandom().nextInt(41); // 3-5 seconds
                     living.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, stunDuration, 1, false, false));
                 }
-
-                // Impact kinetic detonation ring at hit target
-                for (int i = 0; i < 36; i++) {
-                    double angle = Math.toRadians(i * 10);
-                    double ringR = 2.2;
-                    serverLevel.sendParticles(
-                        new DustParticleOptions(0xFFD700, 2.0F),
-                        hitVec.x + Math.cos(angle) * ringR, hitVec.y + 0.3, hitVec.z + Math.sin(angle) * ringR,
-                        1, 0, 0.05, 0, 0.01
-                    );
-                }
             } else {
                 HitResult blockHit = getPlayerPOVHitResult(level, player, ClipContext.Fluid.NONE);
                 if (blockHit.getType() != HitResult.Type.MISS) {
@@ -219,17 +190,27 @@ public class PowerPoleItem extends Item {
                 }
             }
             
-            // Visual Extension: Thick Glowing Crimson Staff with Gold Caps
             double dist = eyePos.distanceTo(hitVec);
-            for (double d = 0; d < dist; d += 0.35) {
-                Vec3 p = eyePos.add(look.scale(d));
-                boolean isTip = (d >= dist - 1.2);
-                serverLevel.sendParticles(
-                    new DustParticleOptions(isTip ? 0xFFD700 : 0xD51818, isTip ? 2.5F : 2.0F),
-                    p.x, p.y, p.z,
-                    1, 0.0, 0.0, 0.0, 0.0
-                );
-            }
+
+            // Spawn Physical 3D Stretching Power Pole Model
+            PowerPoleExtensionEntity extension = new PowerPoleExtensionEntity(
+                serverLevel, player, eyePos, player.getYRot(), player.getXRot(), (float) dist
+            );
+            serverLevel.addFreshEntity(extension);
+
+            // Spawn Physical 3D Kinetic Impact Shockwave & Shatter Entity
+            PowerPoleImpactEntity impact = new PowerPoleImpactEntity(
+                serverLevel, player, hitVec, player.getYRot(), player.getXRot(), 2.4f
+            );
+            serverLevel.addFreshEntity(impact);
+
+            // High-impact auditory feedback
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.TRIDENT_THROW.value(), SoundSource.PLAYERS, 1.4f, 1.4f);
+            serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,
+                SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.2f, 1.6f);
+            serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,
+                SoundEvents.HEAVY_CORE_HIT, SoundSource.PLAYERS, 1.3f, 1.2f);
             
             player.getCooldowns().addCooldown(stack, 40); // 2 second cooldown
             return InteractionResult.SUCCESS;
