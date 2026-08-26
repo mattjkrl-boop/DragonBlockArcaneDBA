@@ -158,24 +158,25 @@ public class ShenronModel extends EntityModel<ShenronRenderer.ShenronRenderState
     public void setupAnim(ShenronRenderer.ShenronRenderState state) {
         super.setupAnim(state);
         
-        // Idle animation timer
+        // Idle animation timer & slow celestial spiral spin
         float idleTime = state.ageInTicks * 0.05F; 
+        float spin = state.ageInTicks * 0.015F; // Slow majestic spiral body rotation
         
         // 1. HEAD POSITION & ROTATION: Staring down, bobbing slightly
         this.head.x = 0.0F;
         this.head.y = -152.0F + (float)Math.sin(idleTime) * 3.0F;
         this.head.z = -10.0F;
-        this.head.yRot = 0.0F;
+        this.head.yRot = (float) Math.sin(idleTime * 0.3F) * 0.06F; // Gentle head sway
         this.head.xRot = 0.2F + (float)Math.sin(idleTime * 0.5F) * 0.05F;
 
         // Jaw breathes slowly
         this.jaw.xRot = 0.1F + (float)Math.sin(state.ageInTicks * 0.1) * 0.1F;
         
-        // Iterate through all segments to create a perfect Idle Spiral
+        // Iterate through all segments to create a continuously undulating and slowly spinning celestial spiral
         for (int i = 0; i < NUM_SEGMENTS; i++) {
             ModelPart currentSegment = this.segments[i];
             
-            float angle = i * 0.45F;
+            float angle = i * 0.45F + spin;
             float aliveOffset = (float)Math.sin(idleTime + i * 0.5F) * 1.5F;
             
             // Gradually transition from radius 0 (head) to radius 40 (main coil), expanding at the bottom
@@ -194,7 +195,7 @@ public class ShenronModel extends EntityModel<ShenronRenderer.ShenronRenderState
             float currentZ = (float)Math.cos(angle) * radius;
             
             // Calculate previous point to perfectly align segment tangency
-            float prevAngle = (i - 1) * 0.45F;
+            float prevAngle = (i - 1) * 0.45F + spin;
             float prevI = i - 1;
             float prevRadius = 40.0F;
             if (prevI < 4) {
