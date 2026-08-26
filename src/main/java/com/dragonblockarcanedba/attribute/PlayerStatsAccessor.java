@@ -80,5 +80,9 @@ public interface PlayerStatsAccessor {
     int dba$getSpeedPercent();
     void dba$setSpeedPercent(int percent);
 
+    boolean dba$hasTail();
+    boolean dba$isTailSevered();
+    void dba$setTailSevered(boolean severed);
+
     void dba$copyFrom(PlayerStatsAccessor original);
 }

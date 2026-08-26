@@ -36,17 +36,29 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     @Unique
     private boolean dba$isInOtherworld = false;
 
+    @Unique
+    private boolean dba$isSprinting = false;
+
+    @Unique
+    private boolean dba$isCrouching = false;
+
+    @Unique
+    private boolean dba$isSwimming = false;
+
+    @Unique
+    private boolean dba$isFlying = false;
+
+    @Unique
+    private float dba$horizontalSpeed = 0.0F;
+
+    @Unique
+    private float dba$yawVelocity = 0.0F;
+
     @Override
     public void dba$extractFromPlayer(AbstractClientPlayer player, float partialTicks) {
         if (player instanceof PlayerStatsAccessor accessor) {
             this.dba$raceId = accessor.dba$getRaceId();
-            if (this.dba$raceId != null) {
-                String path = this.dba$raceId.getPath();
-                this.dba$hasTail = path.equals("saiyan") || path.equals("arcosian") || path.equals("half_saiyan") || path.equals("bio_android");
-            } else {
-                this.dba$hasTail = false;
-            }
-
+            this.dba$hasTail = accessor.dba$hasTail();
             this.dba$skinColor = parseHexColor(accessor.dba$getSkinColor(), 0xFF8CC8FF);
             this.dba$hairColor = parseHexColor(accessor.dba$getHairColor(), 0xFF1EB4FF);
         } else {
@@ -57,11 +69,22 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
         }
 
         this.dba$isInOtherworld = player.level() != null && player.level().dimension().identifier().getPath().contains("otherworld");
-        
         this.dba$tailAgeInTicks = player.tickCount + partialTicks;
-        
+
+        this.dba$isSprinting = player.isSprinting();
+        this.dba$isCrouching = player.isCrouching();
+        this.dba$isSwimming = player.isSwimming() || player.isInWater();
+        this.dba$isFlying = player.getAbilities().flying || player.isFallFlying();
+
+        var delta = player.getDeltaMovement();
+        this.dba$horizontalSpeed = (float) Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+
+        float prevYRot = (float) this.dba$tailPositions[this.dba$tailRingBufferIndex][0];
+        float currYRot = player.getYRot();
+        this.dba$yawVelocity = Mth.wrapDegrees(currYRot - prevYRot);
+
         this.dba$tailRingBufferIndex = (this.dba$tailRingBufferIndex + 1) % 64;
-        this.dba$tailPositions[this.dba$tailRingBufferIndex][0] = player.getYRot();
+        this.dba$tailPositions[this.dba$tailRingBufferIndex][0] = currYRot;
         this.dba$tailPositions[this.dba$tailRingBufferIndex][1] = player.getY();
         this.dba$tailPositions[this.dba$tailRingBufferIndex][2] = player.getXRot();
     }
@@ -103,6 +126,36 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
         currentPos[2] = this.dba$tailPositions[prevIndex][2] + (this.dba$tailPositions[targetIndex][2] - this.dba$tailPositions[prevIndex][2]) * (double)partialTicks;
         
         return currentPos;
+    }
+
+    @Override
+    public boolean dba$isSprinting() {
+        return this.dba$isSprinting;
+    }
+
+    @Override
+    public boolean dba$isCrouching() {
+        return this.dba$isCrouching;
+    }
+
+    @Override
+    public boolean dba$isSwimming() {
+        return this.dba$isSwimming;
+    }
+
+    @Override
+    public boolean dba$isFlying() {
+        return this.dba$isFlying;
+    }
+
+    @Override
+    public float dba$getHorizontalSpeed() {
+        return this.dba$horizontalSpeed;
+    }
+
+    @Override
+    public float dba$getYawVelocity() {
+        return this.dba$yawVelocity;
     }
 
     @Override

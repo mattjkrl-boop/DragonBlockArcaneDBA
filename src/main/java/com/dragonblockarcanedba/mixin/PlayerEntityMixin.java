@@ -32,6 +32,8 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     private boolean dbaHasSelectedRace = false;
     @Unique
+    private boolean dbaTailSevered = false;
+    @Unique
     private double dbaCurrentKi = 100.0;
     @Unique
     private double dbaCurrentStamina = 100.0;
@@ -88,6 +90,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         dbaOut.putString("skinColor", dbaSkinColor);
         dbaOut.putString("hairColor", dbaHairColor);
         dbaOut.putBoolean("hasSelectedRace", dbaHasSelectedRace);
+        dbaOut.putBoolean("tailSevered", dbaTailSevered);
         dbaOut.putDouble("currentKi", dbaCurrentKi);
         dbaOut.putDouble("currentStamina", dbaCurrentStamina);
         dbaOut.putInt("level", dbaLevel);
@@ -141,6 +144,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         dbaSkinColor = dbaIn.getStringOr("skinColor", "");
         dbaHairColor = dbaIn.getStringOr("hairColor", "");
         dbaHasSelectedRace = dbaIn.getBooleanOr("hasSelectedRace", false);
+        dbaTailSevered = dbaIn.getBooleanOr("tailSevered", false);
         dbaCurrentKi = dbaIn.getDoubleOr("currentKi", 100.0);
         dbaCurrentStamina = dbaIn.getDoubleOr("currentStamina", 100.0);
         dbaLevel = dbaIn.getIntOr("level", 1);
@@ -346,6 +350,24 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Override
     public void dba$setRaceId(Identifier id) {
         this.dbaRaceId = id;
+    }
+
+    @Unique
+    @Override
+    public boolean dba$hasTail() {
+        return !dbaTailSevered && com.dragonblockarcanedba.tail.TailHelper.isTailedRace(dbaRaceId);
+    }
+
+    @Unique
+    @Override
+    public boolean dba$isTailSevered() {
+        return dbaTailSevered;
+    }
+
+    @Unique
+    @Override
+    public void dba$setTailSevered(boolean severed) {
+        this.dbaTailSevered = severed;
     }
 
     @Unique
@@ -659,6 +681,8 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         dbaNbt.putString("skinColor", dbaSkinColor);
         dbaNbt.putString("hairColor", dbaHairColor);
         dbaNbt.putBoolean("hasSelectedRace", dbaHasSelectedRace);
+        dbaNbt.putBoolean("tailSevered", dbaTailSevered);
+        dbaNbt.putBoolean("hasTail", dba$hasTail());
         dbaNbt.putDouble("currentKi", dbaCurrentKi);
         dbaNbt.putDouble("currentStamina", dbaCurrentStamina);
         dbaNbt.putInt("level", dbaLevel);
@@ -790,6 +814,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         this.dbaSkinColor = old.dbaSkinColor;
         this.dbaHairColor = old.dbaHairColor;
         this.dbaHasSelectedRace = old.dbaHasSelectedRace;
+        this.dbaTailSevered = old.dbaTailSevered;
         this.dbaLevel = old.dbaLevel;
         this.dbaXp = old.dbaXp;
         this.dbaAp = old.dbaAp;

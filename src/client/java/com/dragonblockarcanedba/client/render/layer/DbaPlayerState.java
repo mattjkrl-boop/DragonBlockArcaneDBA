@@ -9,6 +9,13 @@ public interface DbaPlayerState {
     float dba$getTailAgeInTicks();
     double[] dba$getTailLatencyPos(int bufferOffset, float partialTicks);
 
+    boolean dba$isSprinting();
+    boolean dba$isCrouching();
+    boolean dba$isSwimming();
+    boolean dba$isFlying();
+    float dba$getHorizontalSpeed();
+    float dba$getYawVelocity();
+
     Identifier dba$getRaceId();
     int dba$getSkinColor();
     int dba$getHairColor();

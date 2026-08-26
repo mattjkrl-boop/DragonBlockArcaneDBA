@@ -444,7 +444,10 @@ public class DbaNetwork {
         TransformBroadcastPayload payload = new TransformBroadcastPayload(
             player.getId(),
             raceId != null ? raceId.toString() : "",
-            formId != null ? formId.toString() : ""
+            formId != null ? formId.toString() : "",
+            accessor.dba$isTailSevered(),
+            accessor.dba$getSkinColor() != null ? accessor.dba$getSkinColor() : "",
+            accessor.dba$getHairColor() != null ? accessor.dba$getHairColor() : ""
         );
 
         // Send to all players in the same level
@@ -466,7 +469,10 @@ public class DbaNetwork {
         TransformBroadcastPayload payload = new TransformBroadcastPayload(
             sourcePlayer.getId(),
             raceId != null ? raceId.toString() : "",
-            formId != null ? formId.toString() : ""
+            formId != null ? formId.toString() : "",
+            accessor.dba$isTailSevered(),
+            accessor.dba$getSkinColor() != null ? accessor.dba$getSkinColor() : "",
+            accessor.dba$getHairColor() != null ? accessor.dba$getHairColor() : ""
         );
 
         ServerPlayNetworking.send(targetPlayer, payload);

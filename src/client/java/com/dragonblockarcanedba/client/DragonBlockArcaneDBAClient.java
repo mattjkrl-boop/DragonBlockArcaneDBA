@@ -818,6 +818,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     accessor.dba$setXp(nbt.getIntOr("xp", 0));
                     accessor.dba$setStatPoints(nbt.getIntOr("ap", 0));
                     accessor.dba$setSpeedPercent(nbt.getIntOr("speedPercent", 100));
+                    accessor.dba$setTailSevered(nbt.getBooleanOr("tailSevered", false));
                     accessor.dba$setSkinColor(nbt.getStringOr("skinColor", ""));
                     accessor.dba$setHairColor(nbt.getStringOr("hairColor", ""));
 
@@ -942,6 +943,13 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             String raceStr = payload.raceId();
                             if (!raceStr.isEmpty()) {
                                 accessor.dba$setRaceId(Identifier.parse(raceStr));
+                            }
+                            accessor.dba$setTailSevered(payload.tailSevered());
+                            if (!payload.skinColor().isEmpty()) {
+                                accessor.dba$setSkinColor(payload.skinColor());
+                            }
+                            if (!payload.hairColor().isEmpty()) {
+                                accessor.dba$setHairColor(payload.hairColor());
                             }
                         }
                     }

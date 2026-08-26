@@ -47,6 +47,7 @@ public class DbaCommand {
                     context.getSource().sendSuccess(() -> Component.literal("§e/dba xp <add|set|remove> <player> <amount> [levels|points]§f - Modify XP or Levels"), false);
                     context.getSource().sendSuccess(() -> Component.literal("§e/dba level <add|set|remove> <player> <amount>§f - Modify Level"), false);
                     context.getSource().sendSuccess(() -> Component.literal("§e/dba technique <unlock|toggle> <player> <technique>§f - Modify Techniques"), false);
+                    context.getSource().sendSuccess(() -> Component.literal("§e/dba tail <get|sever|regrow> <player>§f - Check, sever, or regrow a player's tail"), false);
                     return 1;
                 })
             )
@@ -229,6 +230,51 @@ public class DbaCommand {
                     context.getSource().sendSuccess(() -> Component.literal("Toggled technique " + technique + " for " + target.getName().getString() + " to " + !currentState), true);
                     return 1;
                 }))))
+            )
+            .then(Commands.literal("tail")
+                .then(Commands.literal("get").then(Commands.argument("player", EntityArgument.player()).executes(context -> {
+                    ServerPlayer target = EntityArgument.getPlayer(context, "player");
+                    PlayerStatsAccessor accessor = (PlayerStatsAccessor) target;
+                    boolean isTailed = com.dragonblockarcanedba.tail.TailHelper.isTailedRace(accessor.dba$getRaceId());
+                    boolean hasTail = accessor.dba$hasTail();
+                    boolean severed = accessor.dba$isTailSevered();
+                    context.getSource().sendSuccess(() -> Component.literal(
+                        "§6" + target.getName().getString() + "§f Tail Status: " +
+                        (isTailed ? (hasTail ? "§aIntact" : "§cSevered") : "§7None (Non-tailed race)") +
+                        " §8[Tailed Race: " + isTailed + ", Severed: " + severed + "]"
+                    ), false);
+                    return 1;
+                })))
+                .then(Commands.literal("sever").then(Commands.argument("player", EntityArgument.player()).executes(context -> {
+                    ServerPlayer target = EntityArgument.getPlayer(context, "player");
+                    PlayerStatsAccessor accessor = (PlayerStatsAccessor) target;
+                    if (!com.dragonblockarcanedba.tail.TailHelper.isTailedRace(accessor.dba$getRaceId())) {
+                        context.getSource().sendFailure(Component.literal(target.getName().getString() + " belongs to a non-tailed race."));
+                        return 0;
+                    }
+                    if (accessor.dba$isTailSevered()) {
+                        context.getSource().sendFailure(Component.literal(target.getName().getString() + "'s tail is already severed."));
+                        return 0;
+                    }
+                    com.dragonblockarcanedba.tail.TailHelper.severTail(target, target.damageSources().generic());
+                    context.getSource().sendSuccess(() -> Component.literal("Severed tail of " + target.getName().getString()), true);
+                    return 1;
+                })))
+                .then(Commands.literal("regrow").then(Commands.argument("player", EntityArgument.player()).executes(context -> {
+                    ServerPlayer target = EntityArgument.getPlayer(context, "player");
+                    PlayerStatsAccessor accessor = (PlayerStatsAccessor) target;
+                    if (!com.dragonblockarcanedba.tail.TailHelper.isTailedRace(accessor.dba$getRaceId())) {
+                        context.getSource().sendFailure(Component.literal(target.getName().getString() + " belongs to a non-tailed race."));
+                        return 0;
+                    }
+                    if (!accessor.dba$isTailSevered()) {
+                        context.getSource().sendFailure(Component.literal(target.getName().getString() + "'s tail is already intact."));
+                        return 0;
+                    }
+                    com.dragonblockarcanedba.tail.TailHelper.regrowTail(target);
+                    context.getSource().sendSuccess(() -> Component.literal("Regrew tail of " + target.getName().getString()), true);
+                    return 1;
+                })))
             )
         );
     }

@@ -40,14 +40,23 @@ public abstract class PlayerEntityRendererMixin {
     @Unique
     private static final Set<Identifier> dba$checkedMissing = new HashSet<>();
 
+    private static final Identifier DEFAULT_STEVE = Identifier.parse("minecraft:textures/entity/player/wide/steve.png");
+
     @Inject(method = "getTextureLocation", at = @At("HEAD"), cancellable = true)
     private void dba$getTextureLocation(AvatarRenderState state, CallbackInfoReturnable<Identifier> cir) {
-        // Custom texture override based on active Form or Race in Minecraft 26.2
         var level = Minecraft.getInstance().level;
         if (level != null) {
             net.minecraft.world.entity.Entity entity = level.getEntity(state.id);
             if (entity instanceof PlayerStatsAccessor accessor) {
-                // Check form override texture first
+                Identifier raceId = accessor.dba$getRaceId();
+                String racePath = raceId != null ? raceId.getPath().toLowerCase() : "human";
+
+                // Human pick always uses player's own skin
+                if ("human".equals(racePath)) {
+                    return; // Let vanilla return state.skin.texture()
+                }
+
+                // Check form override texture first if available
                 Identifier formId = accessor.dba$getActiveFormId();
                 if (formId != null) {
                     Form form = DbaRegistries.getForm(formId);
@@ -59,16 +68,19 @@ public abstract class PlayerEntityRendererMixin {
                         }
                     }
                 }
-                
-                // Check race texture
-                Identifier raceId = accessor.dba$getRaceId();
+
+                // Check custom race texture if available
                 Race race = DbaRegistries.getRace(raceId);
                 if (race != null && race.getBaseTexture() != null) {
                     Identifier tex = race.getBaseTexture();
                     if (dba$isTextureAvailable(tex)) {
                         cir.setReturnValue(tex);
+                        return;
                     }
                 }
+
+                // Non-human placeholder: default MC person (Steve)
+                cir.setReturnValue(DEFAULT_STEVE);
             }
         }
     }

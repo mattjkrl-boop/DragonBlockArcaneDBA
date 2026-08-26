@@ -115,6 +115,15 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
         return amount;
     }
 
+    // ========== Tail Detachment on Combat Hit ==========
+
+    @Inject(method = "hurtServer", at = @At("RETURN"))
+    private void dba$onHurtServerTailCheck(net.minecraft.server.level.ServerLevel level, DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
+        if (Boolean.TRUE.equals(cir.getReturnValue()) && (Object) this instanceof net.minecraft.server.level.ServerPlayer player) {
+            com.dragonblockarcanedba.tail.TailHelper.trySeverTailOnHit(player, source, amount);
+        }
+    }
+
     // ========== Arcosian Underwater Breathing ==========
 
     @Inject(method = "canBreatheUnderwater", at = @At("HEAD"), cancellable = true)
