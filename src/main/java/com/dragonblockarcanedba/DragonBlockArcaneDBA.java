@@ -248,6 +248,9 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                 net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, new com.dragonblockarcanedba.network.RaceSelectOpenPayload());
             }
 
+            // Purge any orphan/lingering physics modifiers (e.g. bugged bounce attributes from older sessions)
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.purgeAllDbaModifiers(player);
+
             // Broadcast joining player's transformation state to others
             com.dragonblockarcanedba.network.DbaNetwork.broadcastTransformState(player);
             // Send existing players' active transformation states to the newly joined player
@@ -277,6 +280,7 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             com.dragonblockarcanedba.item.BraveSwordItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.item.DaburaSwordItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.ki.KiTechniqueHandler.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.onPlayerDisconnect(playerUuid);
         });
 
         // Copy DBA data across death/respawn so race, stats, and level are preserved
@@ -289,8 +293,13 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
             com.dragonblockarcanedba.attribute.PlayerStatsAccessor newAccessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) newPlayer;
             newAccessor.dba$syncStats();
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.purgeAllDbaModifiers(newPlayer);
         });
 
+        // Ticker for timed physical attributes (e.g. temporary ricochets, launch air drag)
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(server -> {
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.tick();
+        });
     }
 
     public static Identifier id(String path) {

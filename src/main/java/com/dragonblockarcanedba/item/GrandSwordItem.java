@@ -84,9 +84,6 @@ public class GrandSwordItem extends Item {
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
             builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("grand_sword_valor_friction"), 0.75, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
         );
-        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID).ifPresent(h ->
-            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("grand_sword_valor_bounce"), 0.20, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
-        );
 
         return builder.build();
     }

@@ -15,9 +15,16 @@ public interface DbaPlayerState {
     boolean dba$isFlying();
     float dba$getHorizontalSpeed();
     float dba$getYawVelocity();
+    float dba$getBodyYawVelocity();
+    float dba$getLocalVelocityX();
+    float dba$getLocalVelocityZ();
+    float dba$getLocalVelocityY();
+    float dba$getHeadYawRel();
 
     Identifier dba$getRaceId();
+    Identifier dba$getActiveFormId();
     int dba$getSkinColor();
     int dba$getHairColor();
     boolean dba$isInOtherworld();
 }
+

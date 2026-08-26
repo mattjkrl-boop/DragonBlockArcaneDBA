@@ -28,6 +28,9 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     private Identifier dba$raceId = null;
 
     @Unique
+    private Identifier dba$activeFormId = null;
+
+    @Unique
     private int dba$skinColor = 0xFF8CC8FF;
 
     @Unique
@@ -54,16 +57,33 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     @Unique
     private float dba$yawVelocity = 0.0F;
 
+    @Unique
+    private float dba$bodyYawVelocity = 0.0F;
+
+    @Unique
+    private float dba$localVelocityX = 0.0F;
+
+    @Unique
+    private float dba$localVelocityZ = 0.0F;
+
+    @Unique
+    private float dba$localVelocityY = 0.0F;
+
+    @Unique
+    private float dba$headYawRel = 0.0F;
+
     @Override
     public void dba$extractFromPlayer(AbstractClientPlayer player, float partialTicks) {
         if (player instanceof PlayerStatsAccessor accessor) {
             this.dba$raceId = accessor.dba$getRaceId();
             this.dba$hasTail = accessor.dba$hasTail();
+            this.dba$activeFormId = accessor.dba$getActiveFormId();
             this.dba$skinColor = parseHexColor(accessor.dba$getSkinColor(), 0xFF8CC8FF);
             this.dba$hairColor = parseHexColor(accessor.dba$getHairColor(), 0xFF1EB4FF);
         } else {
             this.dba$hasTail = false;
             this.dba$raceId = null;
+            this.dba$activeFormId = null;
             this.dba$skinColor = 0xFF8CC8FF;
             this.dba$hairColor = 0xFF1EB4FF;
         }
@@ -77,14 +97,36 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
         this.dba$isFlying = player.getAbilities().flying || player.isFallFlying();
 
         var delta = player.getDeltaMovement();
-        this.dba$horizontalSpeed = (float) Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        double dx = delta.x;
+        double dy = delta.y;
+        double dz = delta.z;
+        this.dba$horizontalSpeed = (float) Math.sqrt(dx * dx + dz * dz);
+        this.dba$localVelocityY = (float) dy;
 
-        float prevYRot = (float) this.dba$tailPositions[this.dba$tailRingBufferIndex][0];
-        float currYRot = player.getYRot();
-        this.dba$yawVelocity = Mth.wrapDegrees(currYRot - prevYRot);
+        // Accurate body yaw and angular velocity
+        float bodyYaw = Mth.rotLerp(partialTicks, player.yBodyRotO, player.yBodyRot);
+        this.dba$bodyYawVelocity = Mth.wrapDegrees(player.yBodyRot - player.yBodyRotO);
+
+        // Head yaw relative to body
+        float headYaw = Mth.rotLerp(partialTicks, player.yRotO, player.getYRot());
+        this.dba$headYawRel = Mth.wrapDegrees(headYaw - bodyYaw);
+
+        // Overall look yaw turning rate
+        this.dba$yawVelocity = Mth.wrapDegrees(player.getYRot() - player.yRotO);
+
+        // Transform world velocity vector into local torso coordinate space
+        // Facing bodyYaw: 0 = south (+Z), 90 = west (-X), 180 = north (-Z), 270 = east (+X)
+        float bodyRad = bodyYaw * ((float) Math.PI / 180.0F);
+        float sinB = Mth.sin(bodyRad);
+        float cosB = Mth.cos(bodyRad);
+
+        // Local X (strafe): positive = strafe right, negative = strafe left
+        this.dba$localVelocityX = (float) (-dx * cosB - dz * sinB);
+        // Local Z (forward/backward): positive = forward, negative = backward
+        this.dba$localVelocityZ = (float) (-dx * sinB + dz * cosB);
 
         this.dba$tailRingBufferIndex = (this.dba$tailRingBufferIndex + 1) % 64;
-        this.dba$tailPositions[this.dba$tailRingBufferIndex][0] = currYRot;
+        this.dba$tailPositions[this.dba$tailRingBufferIndex][0] = bodyYaw;
         this.dba$tailPositions[this.dba$tailRingBufferIndex][1] = player.getY();
         this.dba$tailPositions[this.dba$tailRingBufferIndex][2] = player.getXRot();
     }
@@ -159,8 +201,38 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     }
 
     @Override
+    public float dba$getBodyYawVelocity() {
+        return this.dba$bodyYawVelocity;
+    }
+
+    @Override
+    public float dba$getLocalVelocityX() {
+        return this.dba$localVelocityX;
+    }
+
+    @Override
+    public float dba$getLocalVelocityZ() {
+        return this.dba$localVelocityZ;
+    }
+
+    @Override
+    public float dba$getLocalVelocityY() {
+        return this.dba$localVelocityY;
+    }
+
+    @Override
+    public float dba$getHeadYawRel() {
+        return this.dba$headYawRel;
+    }
+
+    @Override
     public Identifier dba$getRaceId() {
         return this.dba$raceId;
+    }
+
+    @Override
+    public Identifier dba$getActiveFormId() {
+        return this.dba$activeFormId;
     }
 
     @Override
@@ -178,3 +250,4 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
         return this.dba$isInOtherworld;
     }
 }
+

@@ -82,12 +82,9 @@ public class ZSwordItem extends Item {
                 EquipmentSlotGroup.MAINHAND
             );
 
-        // MC 26.2 Physics: Immovable Sacred Blade Weight (increased friction) & Heavy Rebound
+        // MC 26.2 Physics: Immovable Sacred Blade Weight (increased friction)
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
             builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("z_sword_weight_friction"), 0.80, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
-        );
-        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID).ifPresent(h ->
-            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("z_sword_rebound_bounce"), 0.15, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
         );
 
         return builder.build();

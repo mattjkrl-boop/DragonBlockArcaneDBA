@@ -184,21 +184,47 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         boolean isCrouching = dbaState.dba$isCrouching();
         boolean isSwimming = dbaState.dba$isSwimming();
         boolean isFlying = dbaState.dba$isFlying();
-        float yawVelocity = dbaState.dba$getYawVelocity();
 
-        // Effective speed multiplier (0.0 to 1.0+)
+        // Local velocities and turning physics
+        float bodyYawVelocity = dbaState.dba$getBodyYawVelocity();
+        float localVx = dbaState.dba$getLocalVelocityX();
+        float localVz = dbaState.dba$getLocalVelocityZ();
+        float localVy = dbaState.dba$getLocalVelocityY();
+        float headYawRel = dbaState.dba$getHeadYawRel();
+
+        // Effective speed multiplier (0.0 to 1.5+)
         float speedFactor = Math.min(1.5F, (isSprinting || isFlying ? 1.0F : speed * 4.0F));
+
+        // Form identification for dynamic tail transformations
+        Identifier formId = dbaState.dba$getActiveFormId();
+        String formStr = formId != null ? formId.getPath().toLowerCase() : "";
 
         // Tail base color determination
         int baseTailColor;
         if (race.contains("arcosian")) {
-            int skin = dbaState.dba$getSkinColor();
-            baseTailColor = skin != 0 ? skin : 0xFFE5D0FF; // Arcosian customized skin or lavender pearl
+            if (formStr.contains("golden")) {
+                baseTailColor = 0xFFFFD700; // Radiant Golden Form
+            } else {
+                int skin = dbaState.dba$getSkinColor();
+                baseTailColor = skin != 0 ? skin : 0xFFE5D0FF; // Arcosian customized skin or lavender pearl
+            }
         } else if (race.contains("bio_android") || race.contains("cell")) {
-            baseTailColor = 0xFF4FBC5A; // Bio-Android emerald
+            baseTailColor = 0xFF4FBC5A; // Bio-Android emerald carapace
         } else {
-            baseTailColor = 0xFF8A5A38; // Saiyan natural monkey fur brown
+            if (formStr.contains("ssj4") || formStr.contains("super_saiyan_4") || formStr.contains("ozaru")) {
+                baseTailColor = 0xFFBA1B2B; // Super Saiyan 4 primal crimson fur
+            } else {
+                baseTailColor = 0xFF8A5A38; // Saiyan natural monkey fur brown
+            }
         }
+
+        // Thread-safe capture of current body part orientation
+        final float bodyX = body.x;
+        final float bodyY = body.y;
+        final float bodyZ = body.z;
+        final float bodyXRot = body.xRot;
+        final float bodyYRot = body.yRot;
+        final float bodyZRot = body.zRot;
 
         RenderType renderType = RenderTypes.entitySolid(WHITE_TEXTURE);
 
@@ -208,7 +234,18 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
             stack.last().normal().set(pose.normal());
 
             stack.pushPose();
-            body.translateAndRotate(stack);
+
+            // Transform relative to humanoid torso
+            stack.translate(bodyX / 16.0F, bodyY / 16.0F, bodyZ / 16.0F);
+            if (bodyZRot != 0.0F) {
+                stack.mulPose(com.mojang.math.Axis.ZP.rotation(bodyZRot));
+            }
+            if (bodyYRot != 0.0F) {
+                stack.mulPose(com.mojang.math.Axis.YP.rotation(bodyYRot));
+            }
+            if (bodyXRot != 0.0F) {
+                stack.mulPose(com.mojang.math.Axis.XP.rotation(bodyXRot));
+            }
 
             // Anchor tail accurately to the lower base of the spine/pelvis (meters)
             stack.translate(0.0F, 0.58F, 0.14F);
@@ -226,39 +263,68 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                 float pitch = 0.0F;
                 float roll = 0.0F;
 
+                // --- 1. Dynamic Physical Forces (Turning Lag, Strafe Drag, Velocity Stream) ---
+                // Torso turning inertia: tail lags behind rapid body rotation
+                float turningLag = -bodyYawVelocity * 0.024F * (0.25F + progress * 0.75F);
+
+                // Strafe drag: strafing pushes tail in opposite lateral direction
+                float strafeDrag = -localVx * 1.6F * progress;
+
+                // Forward/Backward movement stream: moving forward tilts tail backward/up into wind
+                float forwardDrag = -localVz * 1.4F * (0.3F + progress * 0.7F);
+
+                // Vertical lift/fall: jumping pushes down, falling lifts up
+                float verticalDrag = localVy * 0.6F * progress;
+
+                // Head counter-balance: looking sideways slightly swivels tail in sympathy
+                float headCounter = -headYawRel * 0.006F * progress;
+
+                // Stride counter-oscillation during walking/running
+                float strideSway = Mth.sin(limbSwing * 0.6662F) * limbSwingAmount * 0.18F * (0.3F + progress * 0.7F);
+
+                // Wind flutter in high-velocity flight or sprint
+                float windFlutterYaw = Mth.sin(age * 0.55F - i * 0.75F) * (0.04F + speedFactor * 0.09F) * progress;
+                float windFlutterPitch = Mth.cos(age * 0.50F - i * 0.65F) * (0.03F + speedFactor * 0.07F) * progress;
+
                 if (isSwimming) {
                     // Serpentine undulating swim wave
-                    yaw = Mth.sin(age * 0.28F - progress * 3.5F) * 0.22F;
-                    pitch = -0.15F + Mth.cos(age * 0.18F - progress * 2.0F) * 0.08F;
-                    roll = Mth.sin(age * 0.20F + progress) * 0.05F;
+                    yaw = Mth.sin(age * 0.28F - progress * 3.5F) * 0.24F + strafeDrag * 0.5F;
+                    pitch = -0.15F + Mth.cos(age * 0.18F - progress * 2.0F) * 0.08F + forwardDrag * 0.4F;
+                    roll = Mth.sin(age * 0.20F + progress) * 0.06F;
                 } else if (isCrouching) {
-                    // Crouching: alert tail arching upward & inward
-                    yaw = Mth.sin(age * 0.10F + i * 0.4F) * 0.08F;
-                    pitch = (i == 0 ? -0.75F : -0.22F - progress * 0.15F);
+                    // Crouching: alert tail arching upward & inward over lower back
+                    yaw = Mth.sin(age * 0.10F + i * 0.4F) * 0.07F + turningLag * 0.6F + strafeDrag * 0.4F;
+                    pitch = (i == 0 ? -0.75F : -0.22F - progress * 0.15F) + forwardDrag * 0.3F;
                     roll = Mth.cos(age * 0.08F + i * 0.3F) * 0.04F;
                 } else if (speedFactor > 0.35F) {
-                    // Running / Sprinting / Flying: aerodynamic backward streaming with high-frequency flutter
-                    float flutter = Mth.sin(age * 0.45F - i * 0.7F) * (0.06F + speedFactor * 0.08F);
-                    yaw = flutter - (yawVelocity * 0.015F) * (1.0F - progress);
-                    pitch = (i == 0 ? -0.35F - speedFactor * 0.35F : -0.12F - speedFactor * 0.10F);
-                    roll = flutter * 0.5F;
+                    // High-Speed Running / Sprinting / Flying: Aerodynamic backward stream
+                    yaw = turningLag + strafeDrag + headCounter + strideSway + windFlutterYaw;
+                    pitch = (i == 0 ? -0.38F - speedFactor * 0.30F : -0.10F - speedFactor * 0.12F)
+                            + forwardDrag + verticalDrag + windFlutterPitch;
+                    roll = (turningLag + strafeDrag) * 0.35F + windFlutterYaw * 0.5F;
                 } else {
                     // Idle & Walking: Organic breathing sway + stride oscillation + turning inertia
-                    float breathWave = Mth.sin(age * 0.08F + i * 0.45F) * (0.06F + progress * 0.12F);
-                    float sideSway = Mth.cos(age * 0.06F + i * 0.55F) * (0.08F + progress * 0.15F);
+                    float breathWave = Mth.sin(age * 0.08F + i * 0.45F) * (0.05F + progress * 0.10F);
+                    float sideSway = Mth.cos(age * 0.06F + i * 0.55F) * (0.07F + progress * 0.14F);
 
                     if (race.contains("arcosian")) {
-                        // Sleek sinuous whip motion
-                        yaw = sideSway * 1.2F + Mth.sin(age * 0.10F + i * 0.7F) * 0.08F - (yawVelocity * 0.02F) * (1.0F - progress);
-                        pitch = (i == 0 ? -0.40F : -0.18F - progress * 0.08F + breathWave);
+                        // Sleek sinuous reptilian whip motion
+                        float whipWave = Mth.sin(age * 0.12F - progress * 2.6F) * (0.09F + progress * 0.14F);
+                        yaw = sideSway * 1.1F + whipWave + turningLag + strafeDrag + headCounter + strideSway;
+                        pitch = (i == 0 ? -0.38F : -0.16F - progress * 0.07F + breathWave) + forwardDrag + verticalDrag;
+                        roll = (whipWave + turningLag) * 0.3F;
                     } else if (race.contains("bio_android") || race.contains("cell")) {
                         // Heavy mechanical / chitinous posture with poised stinger
-                        yaw = breathWave * 0.8F - (yawVelocity * 0.015F) * (1.0F - progress);
-                        pitch = (i == 0 ? -0.55F : -0.15F - progress * 0.12F + Mth.cos(age * 0.07F + i * 0.3F) * 0.04F);
+                        yaw = breathWave * 0.7F + turningLag + strafeDrag + headCounter + strideSway * 0.7F;
+                        pitch = (i == 0 ? -0.58F : -0.16F - progress * 0.10F + Mth.cos(age * 0.07F + i * 0.3F) * 0.04F)
+                                + forwardDrag + verticalDrag;
+                        roll = turningLag * 0.25F;
                     } else {
-                        // Saiyan: classic curled S-shape monkey tail with relaxed breathing
-                        yaw = sideSway + Mth.sin(age * 0.12F + i * 0.6F) * 0.09F - (yawVelocity * 0.02F) * (1.0F - progress);
-                        pitch = (i == 0 ? -0.48F : (i < 4 ? -0.22F : 0.18F)) + breathWave * 0.8F;
+                        // Saiyan: classic curled S-shape monkey tail with relaxed breathing & lively twitches
+                        float tipFlick = (i >= 5 ? Mth.sin(age * 0.15F + i * 0.7F) * 0.08F : 0.0F);
+                        yaw = sideSway + tipFlick + turningLag + strafeDrag + headCounter + strideSway;
+                        pitch = (i == 0 ? -0.46F : (i < 4 ? -0.22F : 0.18F)) + breathWave * 0.8F + forwardDrag + verticalDrag;
+                        roll = (sideSway + turningLag) * 0.25F;
                     }
                 }
 
@@ -298,3 +364,4 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         });
     }
 }
+

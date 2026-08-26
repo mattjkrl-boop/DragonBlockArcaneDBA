@@ -642,16 +642,38 @@ public class RaceSelectionScreen extends Screen {
             localPlayer.yHeadRot = spinAngle;
             localPlayer.setXRot(0f);
 
-            int scale = Math.min(40, this.height / 5);
-            net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(
-                    context,
-                    previewX - 40, previewY - 60,
-                    previewX + 40, previewY + 70,
-                    scale,
-                    0f,
-                    (float) mouseX, (float) mouseY,
-                    localPlayer
-            );
+            int x0 = previewX - 45;
+            int y0 = previewY - 70;
+            int x1 = previewX + 45;
+            int y1 = previewY + 75;
+            int scale = Math.min(45, this.height / 4);
+
+            float midX = (float) (x0 + x1) / 2.0F;
+            float midY = (float) (y0 + y1) / 2.0F;
+            float lookX = (float) Math.atan((midX - (float) mouseX) / 50.0F);
+            float lookY = (float) Math.atan((midY - (float) mouseY) / 50.0F);
+
+            org.joml.Quaternionf rotZ = new org.joml.Quaternionf().rotateZ((float) Math.PI);
+            org.joml.Quaternionf rotX = new org.joml.Quaternionf().rotateX(lookY * 20.0F * 0.017453292F);
+            rotZ.mul(rotX);
+
+            var dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
+            var renderer = dispatcher.getRenderer(localPlayer);
+            net.minecraft.client.renderer.entity.state.EntityRenderState renderState = renderer.createRenderState(localPlayer, 1.0F);
+            renderState.shadowPieces.clear();
+            renderState.outlineColor = 0;
+
+            if (renderState instanceof net.minecraft.client.renderer.entity.state.LivingEntityRenderState livingState) {
+                livingState.bodyRot = spinAngle;
+                livingState.yRot = spinAngle + lookX * 25.0F;
+                livingState.xRot = -lookY * 20.0F;
+                livingState.boundingBoxWidth /= livingState.scale;
+                livingState.boundingBoxHeight /= livingState.scale;
+                livingState.scale = 1.0F;
+            }
+
+            org.joml.Vector3f offset = new org.joml.Vector3f(0.0F, renderState.boundingBoxHeight / 2.0F, 0.0F);
+            context.entity(renderState, (float) scale, offset, rotZ, null, x0, y0, x1, y1);
 
             localPlayer.setYRot(savedYRot);
             localPlayer.yBodyRot = savedYBodyRot;
@@ -663,6 +685,7 @@ public class RaceSelectionScreen extends Screen {
                 accessor.dba$setHairColor(savedHair);
             }
         }
+
 
         super.extractRenderState(context, mouseX, mouseY, delta);
     }

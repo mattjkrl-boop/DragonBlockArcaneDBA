@@ -55,10 +55,7 @@ public class PowerPoleItem extends Item {
                 EquipmentSlotGroup.MAINHAND
             );
 
-        // MC 26.2 Physics: Acrobatic Pole Vaulting Spring & Aerodynamic Glide
-        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID).ifPresent(h ->
-            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("power_pole_spring_bounce"), 0.50, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
-        );
+        // MC 26.2 Physics: Aerodynamic Glide
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
             builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("power_pole_air_drag"), -0.40, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
         );
