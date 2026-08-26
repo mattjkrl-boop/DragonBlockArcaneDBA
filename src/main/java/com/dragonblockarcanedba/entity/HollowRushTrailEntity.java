@@ -15,6 +15,7 @@ import net.minecraft.world.phys.Vec3;
 public class HollowRushTrailEntity extends Projectile {
     private static final EntityDataAccessor<Float> LENGTH = SynchedEntityData.defineId(HollowRushTrailEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> IS_THIRD_DASH = SynchedEntityData.defineId(HollowRushTrailEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(HollowRushTrailEntity.class, EntityDataSerializers.INT);
 
     private int maxLifetime = 14;
 
@@ -32,12 +33,20 @@ public class HollowRushTrailEntity extends Projectile {
         this.noPhysics = true;
         this.entityData.set(LENGTH, length);
         this.entityData.set(IS_THIRD_DASH, isThirdDash);
+        if (owner != null) {
+            this.entityData.set(CASTER_ID, owner.getId());
+        }
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(LENGTH, 5.0f);
         builder.define(IS_THIRD_DASH, false);
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
     }
 
     public float getTrailLength() {

@@ -118,16 +118,27 @@ public class DevilTridentItem extends Item {
 
     public static void fireLasers(Player player) {
         if (!player.level().isClientSide()) {
+            Vec3 look = player.getLookAngle();
+            Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
+            if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
+            Vec3 up = right.cross(look).normalize();
+
+            boolean isRightHanded = (player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (player.getOffhandItem().getItem() instanceof DevilTridentItem && 
+                !(player.getMainHandItem().getItem() instanceof DevilTridentItem));
+            boolean onRight = isRightHanded ? !isOffhand : isOffhand;
+            float sideSign = onRight ? 1.0f : -1.0f;
+
+            Vec3 handOrigin = player.getEyePosition().add(look.scale(0.8)).add(right.scale(sideSign * 0.35)).add(up.scale(-0.25));
+
             for (int i = -1; i <= 1; i++) {
                 com.dragonblockarcanedba.entity.KiBlastEntity laser = new com.dragonblockarcanedba.entity.KiBlastEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_BLAST, player.level());
                 laser.setOwner(player);
                 laser.setDamage(250.0f); // 3 * 250 = 750
                 laser.setColor(0xFF0000);
                 
-                Vec3 look = player.getLookAngle();
-                Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
-                Vec3 offset = right.scale(i * 0.5);
-                Vec3 start = player.getEyePosition().add(offset);
+                Vec3 offset = right.scale(i * 0.25);
+                Vec3 start = handOrigin.add(offset);
                 
                 laser.setPos(start.x, start.y, start.z);
                 laser.shoot(look.x, look.y, look.z, 2.5f, 0.0f);

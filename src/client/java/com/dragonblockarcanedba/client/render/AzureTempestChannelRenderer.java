@@ -29,6 +29,7 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
         public float chargeRatio = 0.0f;
         public float age = 0;
         public long seed = 0;
+        public boolean isFirstPersonOwner = false;
     }
 
     @Override
@@ -47,6 +48,11 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
         state.chargeRatio = entity.getChargeRatio();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
     }
 
     @Override
@@ -55,9 +61,9 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
         float charge = state.chargeRatio;
         float age = state.age;
 
-        float tunnelRadius = 1.6f + (charge * 2.2f);
+        float tunnelRadius = (state.isFirstPersonOwner ? 2.4f : 1.6f) + (charge * 2.2f);
         float tunnelHeight = 3.2f + (charge * 2.4f);
-        float baseAlpha = 0.55f + (charge * 0.35f);
+        float baseAlpha = (state.isFirstPersonOwner ? 0.35f : 0.55f) + (charge * 0.35f);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

@@ -15,6 +15,7 @@ import net.minecraft.world.phys.Vec3;
 public class BraveRushTrailEntity extends Projectile {
     private static final EntityDataAccessor<Float> TRAIL_SCALE = SynchedEntityData.defineId(BraveRushTrailEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> TRAIL_LENGTH = SynchedEntityData.defineId(BraveRushTrailEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(BraveRushTrailEntity.class, EntityDataSerializers.INT);
 
     private int maxLifetime = 14;
 
@@ -32,12 +33,20 @@ public class BraveRushTrailEntity extends Projectile {
         this.noPhysics = true;
         this.entityData.set(TRAIL_SCALE, scale);
         this.entityData.set(TRAIL_LENGTH, length);
+        if (owner != null) {
+            this.entityData.set(CASTER_ID, owner.getId());
+        }
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(TRAIL_SCALE, 1.0f);
         builder.define(TRAIL_LENGTH, 10.0f);
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
     }
 
     public float getTrailScale() {

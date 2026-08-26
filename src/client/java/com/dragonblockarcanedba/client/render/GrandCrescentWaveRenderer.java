@@ -32,6 +32,7 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         public float yRot = 0;
         public float xRot = 0;
         public float ageInTicks = 0;
+        public boolean isFirstPersonOwner = false;
     }
 
     @Override
@@ -50,6 +51,11 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.ageInTicks = entity.tickCount + partialTicks;
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
     }
 
     @Override
@@ -64,8 +70,11 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
 
-        float span = 4.8f;
-        float chord = 1.6f;
+        float fpScale = (state.isFirstPersonOwner && state.ageInTicks < 6.0f) 
+            ? (0.55f + (state.ageInTicks / 6.0f) * 0.45f) 
+            : 1.0f;
+        float span = 4.8f * fpScale;
+        float chord = 1.6f * fpScale;
         int segments = 22;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {

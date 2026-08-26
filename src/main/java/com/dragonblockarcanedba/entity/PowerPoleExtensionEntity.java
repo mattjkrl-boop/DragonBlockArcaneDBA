@@ -18,6 +18,7 @@ public class PowerPoleExtensionEntity extends Projectile {
     private static final EntityDataAccessor<Float> YAW = SynchedEntityData.defineId(PowerPoleExtensionEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> PITCH = SynchedEntityData.defineId(PowerPoleExtensionEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> MAX_LENGTH = SynchedEntityData.defineId(PowerPoleExtensionEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(PowerPoleExtensionEntity.class, EntityDataSerializers.INT);
 
     private int maxLifetime = 12;
 
@@ -35,6 +36,9 @@ public class PowerPoleExtensionEntity extends Projectile {
         this.setEntityPitch(pitch);
         this.setMaxLength(maxLength);
         this.maxLifetime = 12;
+        if (owner != null) {
+            this.entityData.set(CASTER_ID, owner.getId());
+        }
     }
 
     @Override
@@ -42,6 +46,15 @@ public class PowerPoleExtensionEntity extends Projectile {
         builder.define(YAW, 0.0f);
         builder.define(PITCH, 0.0f);
         builder.define(MAX_LENGTH, 30.0f);
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
+    }
+
+    public void setCasterId(int id) {
+        this.entityData.set(CASTER_ID, id);
     }
 
     public float getEntityYaw() {

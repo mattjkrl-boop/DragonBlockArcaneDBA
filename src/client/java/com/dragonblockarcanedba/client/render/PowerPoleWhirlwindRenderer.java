@@ -35,6 +35,8 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         public float coneAngle = 35.0f;
         public float age = 0.0f;
         public int maxLifetime = 8;
+        public boolean isFirstPersonOwner = false;
+        public boolean onRight = true;
     }
 
     @Override
@@ -56,6 +58,17 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         state.coneAngle = entity.getConeAngle();
         state.age = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
+        if (mc.player != null) {
+            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem && 
+                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem));
+            state.onRight = isRightHanded ? !isOffhand : isOffhand;
+        }
     }
 
     @Override
@@ -83,13 +96,17 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
 
+        float fpScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Staff Origin Kinetic Whirling Sweep Disc (Rapid staff spinning plane at base)
             float spinRot = age * 65.0f * (float) (Math.PI / 180.0);
-            drawOriginDisc(matrix, buffer, 0.4f, 2.2f, 20, spinRot, 0.0f, 1.0f, 0.75f, 0.70f * finalAlpha);
-            drawOriginDisc(matrix, buffer, 0.8f, 1.6f, 16, -spinRot * 1.3f, 1.0f, 0.85f, 0.2f, 0.60f * finalAlpha);
+            float discR1 = 2.2f * fpScale;
+            float discR2 = 1.6f * fpScale;
+            drawOriginDisc(matrix, buffer, 0.4f, discR1, 20, spinRot, 0.0f, 1.0f, 0.75f, 0.70f * finalAlpha);
+            drawOriginDisc(matrix, buffer, 0.8f, discR2, 16, -spinRot * 1.3f, 1.0f, 0.85f, 0.2f, 0.60f * finalAlpha);
 
             // 2. Multi-Tiered Conical Aerodynamic Hurricane Vortex Tunnel
             int tiers = 12;

@@ -34,6 +34,8 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         public float xRot = 0.0f;
         public float chargeRatio = 1.0f;
         public float age = 0.0f;
+        public boolean isFirstPersonOwner = false;
+        public boolean onRight = true;
     }
 
     @Override
@@ -54,6 +56,17 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         state.xRot = entity.getBeamXRot();
         state.chargeRatio = entity.getChargeRatio();
         state.age = entity.tickCount + partialTicks;
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
+        if (mc.player != null) {
+            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem && 
+                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem));
+            state.onRight = isRightHanded ? !isOffhand : isOffhand;
+        }
     }
 
     @Override
@@ -73,7 +86,8 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         float alpha = Math.max(0.0f, 1.0f - (float) Math.pow(progress, 1.8f));
 
         float pulse = (1.0f + 0.06f * (float) Math.sin(age * 1.8f)) * scaleIn;
-        float baseRadius = (0.35f + charge * 0.45f) * pulse;
+        // Scaled down smaller in first person
+        float baseRadius = (0.35f + charge * 0.45f) * pulse * (state.isFirstPersonOwner ? 0.50f : 1.0f);
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
@@ -81,21 +95,29 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
 
+        if (state.isFirstPersonOwner) {
+            // Anchor beam origin to the Blaster Gun muzzle: way lower and on weapon hand side
+            float sideSign = state.onRight ? -1.0f : 1.0f;
+            poseStack.translate(sideSign * 0.38f, -0.46f, 0.40f);
+        }
+
+        float zStart = state.isFirstPersonOwner ? 0.20f : 0.0f;
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Multi-Layered Continuous 3D Cylindrical Laser Core
             // Layer A: Superdense White-Hot Inner Core Cylinder (12 sides)
             float innerRadius = baseRadius * 0.30f;
-            drawPrismBeam(matrix, buffer, innerRadius, beamLength, 12, age * 6.0f, 1.0f, 1.0f, 1.0f, alpha * 0.98f);
+            drawPrismBeam(matrix, buffer, innerRadius, zStart, beamLength, 12, age * 6.0f, 1.0f, 1.0f, 1.0f, alpha * 0.98f);
 
             // Layer B: Fluted Radiant Cyan Synchrotron Plasma Shroud (12 sides)
             float midRadius = baseRadius * 0.65f;
-            drawPrismBeam(matrix, buffer, midRadius, beamLength, 12, -age * 10.0f, 0.0f, 0.95f, 1.0f, alpha * 0.75f);
+            drawPrismBeam(matrix, buffer, midRadius, zStart, beamLength, 12, -age * 10.0f, 0.0f, 0.95f, 1.0f, alpha * 0.75f);
 
             // Layer C: Hexagonal Outer Synchrotron Containment Sheath (6 sides)
             float outerRadius = baseRadius * 1.05f;
-            drawPrismBeam(matrix, buffer, outerRadius, beamLength, 6, age * 4.0f, 0.05f, 0.70f, 1.0f, alpha * 0.35f);
+            drawPrismBeam(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 4.0f, 0.05f, 0.70f, 1.0f, alpha * 0.35f);
 
             // 2. Quad Helical Synchrotron Energy Drill Ribbons
             int segments = Math.min((int) (beamLength * 3.5f), 128);
@@ -157,7 +179,7 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         poseStack.popPose();
     }
 
-    private static void drawPrismBeam(Matrix4f matrix, VertexConsumer consumer, float radius, float length, int sides, float rotDeg, float r, float g, float b, float a) {
+    private static void drawPrismBeam(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float length, int sides, float rotDeg, float r, float g, float b, float a) {
         double rotRad = Math.toRadians(rotDeg);
         for (int i = 0; i < sides; i++) {
             double a1 = (i / (double) sides) * Math.PI * 2.0 + rotRad;
@@ -169,8 +191,8 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
             float y2 = (float) Math.sin(a2) * radius;
 
             drawQuad(matrix, consumer,
-                x1, y1, 0,
-                x2, y2, 0,
+                x1, y1, zStart,
+                x2, y2, zStart,
                 x2, y2, length,
                 x1, y1, length,
                 r, g, b, a

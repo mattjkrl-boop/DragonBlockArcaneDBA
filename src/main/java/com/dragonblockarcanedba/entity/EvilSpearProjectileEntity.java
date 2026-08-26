@@ -1,5 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -26,6 +28,8 @@ public class EvilSpearProjectileEntity extends Projectile {
     private float damage = 450.0f;
     private final Set<Integer> hitEntityIds = new HashSet<>();
 
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(EvilSpearProjectileEntity.class, EntityDataSerializers.INT);
+
     public EvilSpearProjectileEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
         this.noPhysics = true;
@@ -35,9 +39,23 @@ public class EvilSpearProjectileEntity extends Projectile {
         super(DbaEntities.EVIL_SPEAR_PROJECTILE, level);
         this.setOwner(owner);
         if (owner != null) {
-            this.setPos(owner.getX(), owner.getEyeY() - 0.2, owner.getZ());
+            Vec3 eye = owner.getEyePosition();
+            Vec3 look = owner.getLookAngle();
+            Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
+            if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
+            Vec3 up = right.cross(look).normalize();
+
+            boolean isRightHanded = (owner.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (owner.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem && 
+                !(owner.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem));
+            boolean onRight = isRightHanded ? !isOffhand : isOffhand;
+            float sideSign = onRight ? 1.0f : -1.0f;
+
+            Vec3 spawnPos = eye.add(look.scale(0.8)).add(right.scale(sideSign * 0.35)).add(up.scale(-0.25));
+            this.setPos(spawnPos.x, spawnPos.y, spawnPos.z);
             this.setYRot(owner.getYRot());
             this.setXRot(owner.getXRot());
+            this.entityData.set(CASTER_ID, owner.getId());
         }
         this.damage = damage;
         this.noPhysics = true;
@@ -45,6 +63,11 @@ public class EvilSpearProjectileEntity extends Projectile {
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
     }
 
     @Override

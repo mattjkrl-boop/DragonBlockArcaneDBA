@@ -29,6 +29,8 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
         public float age = 0;
         public float yRot = 0;
         public float xRot = 0;
+        public boolean isFirstPersonOwner = false;
+        public boolean onRight = true;
     }
 
     @Override
@@ -49,6 +51,17 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
         state.age = entity.tickCount + partialTicks;
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
+        if (mc.player != null) {
+            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem && 
+                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem));
+            state.onRight = isRightHanded ? !isOffhand : isOffhand;
+        }
     }
 
     @Override
@@ -59,7 +72,8 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
 
         float alpha = (1.0f - progress) * (state.isThirdDash ? 0.95f : 0.80f);
         float len = Math.max(0.5f, state.length);
-        float widthScale = state.isThirdDash ? 1.4f : 1.0f;
+        float fpScale = state.isFirstPersonOwner ? 0.50f : 1.0f;
+        float widthScale = (state.isThirdDash ? 1.4f : 1.0f) * fpScale;
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 

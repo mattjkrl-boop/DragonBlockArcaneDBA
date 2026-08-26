@@ -22,6 +22,7 @@ import net.minecraft.world.phys.Vec3;
 
 public class DimensionalSlashEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> TILT = SynchedEntityData.defineId(DimensionalSlashEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(DimensionalSlashEntity.class, EntityDataSerializers.INT);
     private float damage = 750.0f;
 
     public DimensionalSlashEntity(EntityType<? extends Projectile> entityType, Level level) {
@@ -32,9 +33,25 @@ public class DimensionalSlashEntity extends Projectile {
     public DimensionalSlashEntity(Level level, LivingEntity owner, boolean tiltRight, float damage) {
         super(DbaEntities.DIMENSIONAL_SLASH, level);
         this.setOwner(owner);
-        this.setPos(owner.getX(), owner.getEyeY() - 0.1, owner.getZ());
-        this.setYRot(owner.getYRot());
-        this.setXRot(owner.getXRot());
+        if (owner != null) {
+            Vec3 eye = owner.getEyePosition();
+            Vec3 look = owner.getLookAngle();
+            Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
+            if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
+            Vec3 up = right.cross(look).normalize();
+
+            boolean isRightHanded = (owner.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (owner.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem && 
+                !(owner.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem));
+            boolean onRight = isRightHanded ? !isOffhand : isOffhand;
+            float sideSign = onRight ? 1.0f : -1.0f;
+
+            Vec3 spawnPos = eye.add(look.scale(0.8)).add(right.scale(sideSign * 0.35)).add(up.scale(-0.25));
+            this.setPos(spawnPos.x, spawnPos.y, spawnPos.z);
+            this.setYRot(owner.getYRot());
+            this.setXRot(owner.getXRot());
+            this.entityData.set(CASTER_ID, owner.getId());
+        }
         this.entityData.set(TILT, tiltRight);
         this.damage = damage;
         this.noPhysics = true;
@@ -43,6 +60,11 @@ public class DimensionalSlashEntity extends Projectile {
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(TILT, false);
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
     }
 
     public boolean getTilt() {

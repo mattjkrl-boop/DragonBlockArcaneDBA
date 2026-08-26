@@ -15,6 +15,7 @@ import net.minecraft.world.phys.Vec3;
 public class AzureRushTrailEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> IS_DOUBLE_RUSH = SynchedEntityData.defineId(AzureRushTrailEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Float> TRAIL_SCALE = SynchedEntityData.defineId(AzureRushTrailEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(AzureRushTrailEntity.class, EntityDataSerializers.INT);
 
     private int maxLifetime = 12;
 
@@ -32,12 +33,24 @@ public class AzureRushTrailEntity extends Projectile {
         this.noPhysics = true;
         this.entityData.set(IS_DOUBLE_RUSH, isDoubleRush);
         this.entityData.set(TRAIL_SCALE, scale);
+        if (owner != null) {
+            this.entityData.set(CASTER_ID, owner.getId());
+        }
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(IS_DOUBLE_RUSH, false);
         builder.define(TRAIL_SCALE, 1.0f);
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
+    }
+
+    public void setCasterId(int id) {
+        this.entityData.set(CASTER_ID, id);
     }
 
     public boolean isDoubleRush() {

@@ -2,6 +2,8 @@ package com.dragonblockarcanedba.entity;
 
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
@@ -28,6 +30,8 @@ public class DarknessWaveEntity extends Projectile {
     private final Set<Integer> hitEntityIds = new HashSet<>();
     private boolean isSecondary = false;
 
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(DarknessWaveEntity.class, EntityDataSerializers.INT);
+
     public DarknessWaveEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
         this.noPhysics = true;
@@ -37,9 +41,23 @@ public class DarknessWaveEntity extends Projectile {
         super(DbaEntities.DARKNESS_WAVE, level);
         this.setOwner(owner);
         if (owner != null) {
-            this.setPos(owner.getX(), owner.getY() + 1.0, owner.getZ());
+            Vec3 eye = owner.getEyePosition();
+            Vec3 look = owner.getLookAngle();
+            Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
+            if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
+            Vec3 up = right.cross(look).normalize();
+
+            boolean isRightHanded = (owner.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (owner.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem && 
+                !(owner.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem));
+            boolean onRight = isRightHanded ? !isOffhand : isOffhand;
+            float sideSign = onRight ? 1.0f : -1.0f;
+
+            Vec3 spawnPos = eye.add(look.scale(0.8)).add(right.scale(sideSign * 0.35)).add(up.scale(-0.25));
+            this.setPos(spawnPos.x, spawnPos.y, spawnPos.z);
             this.setYRot(owner.getYRot());
             this.setXRot(owner.getXRot());
+            this.entityData.set(CASTER_ID, owner.getId());
         }
         this.damage = damage;
         this.isSecondary = isSecondary;
@@ -48,6 +66,11 @@ public class DarknessWaveEntity extends Projectile {
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
     }
 
     public boolean isSecondary() {

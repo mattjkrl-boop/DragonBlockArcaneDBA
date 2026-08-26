@@ -34,6 +34,9 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         public float xRot = 0.0f;
         public float maxLength = 30.0f;
         public float age = 0.0f;
+        public int casterId = -1;
+        public boolean isFirstPersonOwner = false;
+        public boolean onRight = true;
     }
 
     @Override
@@ -53,6 +56,18 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         state.xRot = entity.getEntityPitch();
         state.maxLength = entity.getMaxLength();
         state.age = entity.tickCount + partialTicks;
+        state.casterId = entity.getCasterId();
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
+        if (mc.player != null) {
+            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem && 
+                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem));
+            state.onRight = isRightHanded ? !isOffhand : isOffhand;
+        }
     }
 
     @Override
@@ -87,22 +102,31 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
 
+        if (state.isFirstPersonOwner) {
+            // Anchor extending pole to the hand: way lower and on the weapon hand side (screen right)
+            float sideSign = state.onRight ? -1.0f : 1.0f;
+            poseStack.translate(sideSign * 0.38f, -0.48f, 0.20f);
+        }
+
+        float baseZStart = state.isFirstPersonOwner ? 0.20f : 0.0f;
+        float fpScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // 1. Solid 3D Crimson Shaft (12-sided faceted cylinder)
-            float shaftRadius = 0.13f;
-            draw12SidedShaft(matrix, buffer, shaftRadius, 0.4f, currentLength - 0.4f,
+            // 1. Solid 3D Crimson Shaft (scaled down in first person)
+            float shaftRadius = 0.13f * fpScale;
+            draw12SidedShaft(matrix, buffer, shaftRadius, Math.max(baseZStart, 0.4f), currentLength - 0.4f,
                 0.85f, 0.08f, 0.08f, finalAlpha);
 
             // Inner glowing red power core
-            draw12SidedShaft(matrix, buffer, shaftRadius * 0.55f, 0.2f, currentLength - 0.2f,
+            draw12SidedShaft(matrix, buffer, shaftRadius * 0.55f, Math.max(baseZStart, 0.2f), currentLength - 0.2f,
                 1.0f, 0.35f, 0.25f, finalAlpha * 0.85f);
 
             // 2. Metallic 3D Gold Caps & Beveled Collars
-            float capRadius = 0.165f;
-            // Base Gold Fitting (Z = 0.0 to 0.6)
-            draw12SidedShaft(matrix, buffer, capRadius, 0.0f, 0.6f, 1.0f, 0.82f, 0.12f, finalAlpha);
+            float capRadius = 0.165f * fpScale;
+            // Base Gold Fitting (Z = baseZStart to 0.6)
+            draw12SidedShaft(matrix, buffer, capRadius, baseZStart, 0.6f, 1.0f, 0.82f, 0.12f, finalAlpha);
             drawBevelRing(matrix, buffer, capRadius * 1.15f, 0.6f, 1.0f, 0.92f, 0.25f, finalAlpha);
 
             // Tip Gold Fitting & Heavy Strike Cap (Z = currentLength - 0.9 to currentLength)
@@ -126,13 +150,13 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
                     double a1 = strandOffset + (z1 * 1.6) + (age * 0.2);
                     double a2 = strandOffset + (z2 * 1.6) + (age * 0.2);
 
-                    float r = shaftRadius + 0.02f;
+                    float r = shaftRadius + 0.02f * fpScale;
                     float x1 = (float) Math.cos(a1) * r;
                     float y1 = (float) Math.sin(a1) * r;
                     float x2 = (float) Math.cos(a2) * r;
                     float y2 = (float) Math.sin(a2) * r;
 
-                    float bandW = 0.045f;
+                    float bandW = 0.045f * fpScale;
                     float tx1 = (float) -Math.sin(a1) * bandW;
                     float ty1 = (float) Math.cos(a1) * bandW;
                     float tx2 = (float) -Math.sin(a2) * bandW;
@@ -155,8 +179,8 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
                     float shockProgress = ((age * 0.45f) + (s / (float) shockCount)) % 1.0f;
                     float shockZ = shockProgress * currentLength;
                     if (shockZ > 0.5f && shockZ < currentLength - 0.5f) {
-                        float shockRadius = 0.65f * (1.0f - (shockZ / currentLength) * 0.3f);
-                        float coneLen = 0.75f;
+                        float shockRadius = 0.65f * (1.0f - (shockZ / currentLength) * 0.3f) * fpScale;
+                        float coneLen = 0.75f * fpScale;
                         float shockAlpha = (1.0f - shockProgress) * 0.65f * finalAlpha;
 
                         drawMachCone(matrix, buffer, shockZ, shockZ - coneLen, shockRadius,
@@ -168,7 +192,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             // 5. Leading-Edge Thrust Starburst Corona
             if (currentLength > 1.0f) {
                 float tipZ = currentLength;
-                float starR = 0.55f * (1.0f + 0.15f * (float) Math.sin(age * 3.0f));
+                float starR = 0.55f * (1.0f + 0.15f * (float) Math.sin(age * 3.0f)) * fpScale;
                 drawStarburst(matrix, buffer, tipZ, starR, 1.0f, 0.95f, 0.4f, 0.90f * finalAlpha);
             }
         });

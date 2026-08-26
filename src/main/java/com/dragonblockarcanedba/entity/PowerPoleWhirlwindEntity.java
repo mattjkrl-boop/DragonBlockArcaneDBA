@@ -19,6 +19,7 @@ public class PowerPoleWhirlwindEntity extends Projectile {
     private static final EntityDataAccessor<Float> PITCH = SynchedEntityData.defineId(PowerPoleWhirlwindEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> RANGE = SynchedEntityData.defineId(PowerPoleWhirlwindEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> CONE_ANGLE = SynchedEntityData.defineId(PowerPoleWhirlwindEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(PowerPoleWhirlwindEntity.class, EntityDataSerializers.INT);
 
     private int maxLifetime = 8;
 
@@ -36,6 +37,9 @@ public class PowerPoleWhirlwindEntity extends Projectile {
         this.setEntityPitch(pitch);
         this.setRange(range);
         this.setConeAngle(coneAngle);
+        if (owner != null) {
+            this.entityData.set(CASTER_ID, owner.getId());
+        }
         this.maxLifetime = 8;
     }
 
@@ -45,6 +49,11 @@ public class PowerPoleWhirlwindEntity extends Projectile {
         builder.define(PITCH, 0.0f);
         builder.define(RANGE, 25.0f);
         builder.define(CONE_ANGLE, 35.0f);
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
     }
 
     public float getEntityYaw() {

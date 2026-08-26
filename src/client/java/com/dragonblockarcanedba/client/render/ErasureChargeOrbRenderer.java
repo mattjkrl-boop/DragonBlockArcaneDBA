@@ -33,6 +33,8 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         public float yRot = 0.0f;
         public float xRot = 0.0f;
         public float age = 0.0f;
+        public boolean isFirstPersonOwner = false;
+        public boolean onRight = true;
     }
 
     @Override
@@ -52,6 +54,17 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
+        if (mc.player != null) {
+            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem && 
+                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem));
+            state.onRight = isRightHanded ? !isOffhand : isOffhand;
+        }
     }
 
     @Override
@@ -62,7 +75,8 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         float age = state.age;
         float pulse = 0.92f + 0.08f * (float) Math.sin(age * 0.65f);
 
-        float orbRadius = (0.22f + charge * 0.95f) * pulse;
+        // Scaled down smaller in first person
+        float orbRadius = (0.22f + charge * 0.95f) * pulse * (state.isFirstPersonOwner ? 0.45f : 1.0f);
         float alpha = 0.75f + charge * 0.25f;
 
         RenderType renderType = KiRenderHelper.kiRenderType();
@@ -70,6 +84,12 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         poseStack.pushPose();
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+
+        if (state.isFirstPersonOwner) {
+            // Anchor orb realistically to the Blaster Gun muzzle: way lower and on the weapon hand side
+            float sideSign = state.onRight ? -1.0f : 1.0f;
+            poseStack.translate(sideSign * 0.42f, -0.48f, -0.60f);
+        }
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

@@ -9,7 +9,8 @@
 		"MeltingOverlayMixin",
 		"AvatarRenderStateMixin",
 		"AbstractContainerScreenMixin",
-		"ItemModelResolverMixin"
+		"ItemModelResolverMixin",
+		"EntityRenderDispatcherMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

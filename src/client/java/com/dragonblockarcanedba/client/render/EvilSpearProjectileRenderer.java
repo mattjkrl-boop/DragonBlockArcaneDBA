@@ -27,6 +27,7 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         public float yRot = 0;
         public float xRot = 0;
         public float age = 0;
+        public boolean isFirstPersonOwner = false;
     }
 
     @Override
@@ -45,6 +46,11 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
     }
 
     @Override
@@ -56,6 +62,9 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
         poseStack.mulPose(Axis.ZP.rotationDegrees(age * 30.0f)); // Continuous high-speed spiral spin
+
+        float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
+        poseStack.scale(fpScale, fpScale, fpScale);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

@@ -30,6 +30,8 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         public float age = 0;
         public float yRot = 0;
         public float xRot = 0;
+        public boolean isFirstPersonOwner = false;
+        public boolean onRight = true;
     }
 
     @Override
@@ -50,6 +52,17 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         state.age = entity.tickCount + partialTicks;
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
+        if (mc.player != null) {
+            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem && 
+                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem));
+            state.onRight = isRightHanded ? !isOffhand : isOffhand;
+        }
     }
 
     @Override
@@ -59,7 +72,7 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         if (progress >= 1.0f) return;
 
         float alpha = (1.0f - (progress * progress)) * 0.90f;
-        float scale = state.trailScale * (1.0f + progress * 0.4f);
+        float scale = state.trailScale * (1.0f + progress * 0.4f) * (state.isFirstPersonOwner ? 0.45f : 1.0f);
         float len = state.trailLength;
 
         RenderType renderType = KiRenderHelper.kiRenderType();
@@ -74,9 +87,10 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
             // 1. Supersonic 3D Heroic Mach Cone (Faceted aerodynamic cone expanding backwards)
             int coneSegments = 16;
             float coneLength = 3.6f * scale;
-            float coneBaseRadius = 1.2f * scale;
-            float tipZ = 0.6f * scale;
+            float coneBaseRadius = (state.isFirstPersonOwner ? 1.45f : 1.2f) * scale;
+            float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
             float baseZ = tipZ - coneLength;
+            float coneAlpha = state.isFirstPersonOwner ? (alpha * 0.35f) : (alpha * 0.75f);
 
             for (int i = 0; i < coneSegments; i++) {
                 double a1 = (i / (double) coneSegments) * Math.PI * 2.0;
@@ -88,9 +102,9 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
                 float y2 = (float) Math.sin(a2) * coneBaseRadius;
 
                 // Outer golden cone face
-                drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, 1.0f, 0.84f, 0.0f, alpha * 0.75f);
+                drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, 1.0f, 0.84f, 0.0f, coneAlpha);
                 // Inner cyan accent cone face
-                drawTriangle(matrix, buffer, 0, 0, tipZ * 0.8f, x1 * 0.7f, y1 * 0.7f, baseZ * 0.8f, x2 * 0.7f, y2 * 0.7f, baseZ * 0.8f, 0.0f, 0.95f, 1.0f, alpha * 0.85f);
+                drawTriangle(matrix, buffer, 0, 0, tipZ * 0.8f, x1 * 0.7f, y1 * 0.7f, baseZ * 0.8f, x2 * 0.7f, y2 * 0.7f, baseZ * 0.8f, 0.0f, 0.95f, 1.0f, coneAlpha * 1.1f);
             }
 
             // 2. Twin Helical Golden Valor Streamlines / Wing Vanes

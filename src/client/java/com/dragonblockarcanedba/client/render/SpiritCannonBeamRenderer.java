@@ -35,6 +35,8 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         public float xRot = 0.0f;
         public float age = 0.0f;
         public int casterId = -1;
+        public boolean isFirstPersonOwner = false;
+        public boolean onRight = true;
     }
 
     @Override
@@ -55,6 +57,17 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         state.xRot = entity.getBeamXRot();
         state.age = entity.tickCount + partialTicks;
         state.casterId = entity.getCasterId();
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
+        if (mc.player != null) {
+            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem && 
+                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem));
+            state.onRight = isRightHanded ? !isOffhand : isOffhand;
+        }
     }
 
     @Override
@@ -72,26 +85,35 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
 
+        if (state.isFirstPersonOwner) {
+            // Anchor beam origin to the Spirit Sword blade tip: way lower and on weapon hand side
+            float sideSign = state.onRight ? -1.0f : 1.0f;
+            poseStack.translate(sideSign * 0.40f, -0.46f, 0.35f);
+        }
+
+        float zStart = state.isFirstPersonOwner ? 0.25f : 0.0f;
+        float fpScale = state.isFirstPersonOwner ? 0.50f : 1.0f;
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // 1. Multi-Layered Prismatic Core Beam
+            // 1. Multi-Layered Prismatic Core Beam (scaled down in first person)
             // Layer A: Superdense White-Cyan Inner Core (8 sides)
-            float innerRadius = 0.13f * pulse;
-            drawPrismBeam(matrix, buffer, innerRadius, beamLength, 8, age * 5.0f, 1.0f, 1.0f, 1.0f, 0.95f);
+            float innerRadius = 0.13f * pulse * fpScale;
+            drawPrismBeam(matrix, buffer, innerRadius, zStart, beamLength, 8, age * 5.0f, 1.0f, 1.0f, 1.0f, 0.95f);
 
             // Layer B: Fluted Radiant Cyan Shroud (8 sides)
-            float midRadius = 0.26f * pulse;
-            drawPrismBeam(matrix, buffer, midRadius, beamLength, 8, -age * 8.0f, 0.0f, 0.92f, 1.0f, 0.65f);
+            float midRadius = 0.26f * pulse * fpScale;
+            drawPrismBeam(matrix, buffer, midRadius, zStart, beamLength, 8, -age * 8.0f, 0.0f, 0.92f, 1.0f, 0.65f);
 
             // Layer C: Hexagonal Outer Energy Sheath with Traveling Wave (6 sides)
-            float outerRadius = 0.42f * pulse;
-            drawPrismBeam(matrix, buffer, outerRadius, beamLength, 6, age * 3.0f, 0.05f, 0.70f, 1.0f, 0.30f);
+            float outerRadius = 0.42f * pulse * fpScale;
+            drawPrismBeam(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 3.0f, 0.05f, 0.70f, 1.0f, 0.30f);
 
             // 2. Quad Helical Energy Drill Ribbons
             int segments = Math.min((int) (beamLength * 3.0f), 96);
-            float spiralRadius = 0.48f * pulse;
-            float ribbonSize = 0.065f;
+            float spiralRadius = 0.48f * pulse * fpScale;
+            float ribbonSize = 0.065f * fpScale;
             float spiralSpeed = age * 0.35f;
 
             for (int h = 0; h < 4; h++) {
@@ -103,8 +125,8 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
                 float aCol = isGold ? 0.85f : 0.75f;
 
                 for (int i = 0; i < segments; i++) {
-                    float z1 = (i / (float) segments) * beamLength;
-                    float z2 = ((i + 1) / (float) segments) * beamLength;
+                    float z1 = (i / (float) segments) * (beamLength - zStart) + zStart;
+                    float z2 = ((i + 1) / (float) segments) * (beamLength - zStart) + zStart;
 
                     float p1 = z1 / beamLength;
                     float p2 = z2 / beamLength;
@@ -129,16 +151,18 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
 
             // 3. Orbital Ki Ring Nodes (Planar Pulsing Reticles along Beam Length)
             int ringCount = Math.max(3, (int) (beamLength / 4.0f));
+            float minRingZ = state.isFirstPersonOwner ? 1.6f : 0.5f;
             for (int k = 1; k <= ringCount; k++) {
                 float z = (k / (float) (ringCount + 1)) * beamLength;
+                if (z < minRingZ) continue;
                 float ringPhase = (float) Math.sin(age * 0.4f + k * 1.2f);
-                float ringR = (0.55f + ringPhase * 0.12f) * pulse;
+                float ringR = (0.55f + ringPhase * 0.12f) * pulse * fpScale;
 
                 drawPlaneRing(matrix, buffer, 0, 0, z, ringR, ringR * 0.82f, 16, age * (15.0f + k * 4.0f),
                     0.0f, 0.95f, 1.0f, 0.70f);
             }
 
-            // 4. Muzzle Celestial Emitter Array (at Caster Origin Z=0)
+            // 4. Muzzle Celestial Emitter Array (at Blade Tip Origin)
             drawMuzzleEmitter(matrix, buffer, age, pulse);
 
             // 5. Terminus Impact Geometry (at Hit Point Z=beamLength)
@@ -148,7 +172,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         poseStack.popPose();
     }
 
-    private static void drawPrismBeam(Matrix4f matrix, VertexConsumer consumer, float radius, float length, int sides, float rotDeg, float r, float g, float b, float a) {
+    private static void drawPrismBeam(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float length, int sides, float rotDeg, float r, float g, float b, float a) {
         double rotRad = Math.toRadians(rotDeg);
         for (int i = 0; i < sides; i++) {
             double a1 = (i / (double) sides) * Math.PI * 2.0 + rotRad;
@@ -160,8 +184,8 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
             float y2 = (float) Math.sin(a2) * radius;
 
             drawQuad(matrix, consumer,
-                x1, y1, 0,
-                x2, y2, 0,
+                x1, y1, zStart,
+                x2, y2, zStart,
                 x2, y2, length,
                 x1, y1, length,
                 r, g, b, a

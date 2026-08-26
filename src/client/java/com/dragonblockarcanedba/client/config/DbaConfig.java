@@ -15,6 +15,7 @@ public class DbaConfig {
     public static boolean chargeVisualsEnabled = true;
     public static double statGainMultiplier = 1.0;
     public static boolean use3dWeapons = false;
+    public static boolean firstPersonHalfTransparency = false;
 
     public static void load() {
         try {
@@ -26,6 +27,7 @@ public class DbaConfig {
                         chargeVisualsEnabled = data.chargeVisualsEnabled;
                         statGainMultiplier = data.statGainMultiplier;
                         use3dWeapons = data.use3dWeapons;
+                        firstPersonHalfTransparency = data.firstPersonHalfTransparency;
                     }
                 }
             } else {
@@ -39,7 +41,7 @@ public class DbaConfig {
     public static void save() {
         try {
             try (FileWriter writer = new FileWriter(FILE)) {
-                GSON.toJson(new ConfigData(baseKiRecoveryMultiplier, chargeVisualsEnabled, statGainMultiplier, use3dWeapons), writer);
+                GSON.toJson(new ConfigData(baseKiRecoveryMultiplier, chargeVisualsEnabled, statGainMultiplier, use3dWeapons, firstPersonHalfTransparency), writer);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -51,12 +53,14 @@ public class DbaConfig {
         boolean chargeVisualsEnabled;
         double statGainMultiplier;
         boolean use3dWeapons;
+        boolean firstPersonHalfTransparency;
 
-        ConfigData(double b, boolean c, double s, boolean u) {
+        ConfigData(double b, boolean c, double s, boolean u, boolean f) {
             this.baseKiRecoveryMultiplier = b;
             this.chargeVisualsEnabled = c;
             this.statGainMultiplier = s;
             this.use3dWeapons = u;
+            this.firstPersonHalfTransparency = f;
         }
     }
 }

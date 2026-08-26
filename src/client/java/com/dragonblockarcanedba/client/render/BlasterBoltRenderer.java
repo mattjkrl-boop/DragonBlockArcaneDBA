@@ -33,6 +33,7 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         public boolean isOvercharged = false;
         public float heatRatio = 0.0f;
         public float age = 0.0f;
+        public boolean isFirstPersonOwner = false;
     }
 
     @Override
@@ -48,6 +49,11 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         state.isOvercharged = entity.isOvercharged();
         state.heatRatio = entity.getHeatRatio();
         state.age = entity.tickCount + partialTicks;
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
     }
 
     @Override
@@ -64,9 +70,10 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         boolean overcharged = state.isOvercharged;
         float heat = state.heatRatio;
 
-        float radius = overcharged ? 0.36f * pulse : (0.18f + heat * 0.12f) * pulse;
-        float headLength = overcharged ? 1.4f : (0.85f + heat * 0.35f);
-        float tailLength = overcharged ? 3.4f : (2.0f + heat * 1.0f);
+        float fpScale = state.isFirstPersonOwner ? 0.60f : 1.0f;
+        float radius = (overcharged ? 0.36f * pulse : (0.18f + heat * 0.12f) * pulse) * fpScale;
+        float headLength = (overcharged ? 1.4f : (0.85f + heat * 0.35f)) * fpScale;
+        float tailLength = (overcharged ? 3.4f : (2.0f + heat * 1.0f)) * fpScale;
 
         // Color palette based on heat / overcharge
         float r, g, b;

@@ -28,6 +28,7 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
         public float yRot = 0;
         public float xRot = 0;
         public float ageInTicks = 0;
+        public boolean isFirstPersonOwner = false;
     }
 
     @Override
@@ -46,6 +47,11 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.ageInTicks = entity.tickCount + partialTicks;
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
     }
 
     @Override
@@ -57,14 +63,15 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
 
         float age = state.ageInTicks;
+        float fpScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. High-Speed Spinning Aerodynamic Wind Drill (Central conical core)
             int drillSegments = 12;
-            float drillLength = 1.35f;
-            float drillRadius = 0.32f;
+            float drillLength = 1.35f * fpScale;
+            float drillRadius = 0.32f * fpScale;
             float drillRot = age * 45.0f * (float) (Math.PI / 180.0);
 
             for (int i = 0; i < drillSegments; i++) {

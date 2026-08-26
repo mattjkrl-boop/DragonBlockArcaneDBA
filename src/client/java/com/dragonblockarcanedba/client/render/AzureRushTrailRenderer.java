@@ -29,6 +29,8 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
         public float age = 0;
         public float yRot = 0;
         public float xRot = 0;
+        public boolean isFirstPersonOwner = false;
+        public boolean onRight = true;
     }
 
     @Override
@@ -49,6 +51,17 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
         state.age = entity.tickCount + partialTicks;
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
+        if (mc.player != null) {
+            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem && 
+                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem));
+            state.onRight = isRightHanded ? !isOffhand : isOffhand;
+        }
     }
 
     @Override
@@ -58,7 +71,7 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
         if (progress >= 1.0f) return;
 
         float alpha = (1.0f - progress) * (state.isDoubleRush ? 0.90f : 0.75f);
-        float scale = state.trailScale * (1.0f + progress * 0.5f);
+        float scale = state.trailScale * (1.0f + progress * 0.5f) * (state.isFirstPersonOwner ? 0.45f : 1.0f);
 
         float r = state.isDoubleRush ? 0.0f : 0.0f;
         float g = state.isDoubleRush ? 1.0f : 0.85f;
@@ -76,9 +89,11 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
             // 1. Supersonic 3D Mach Cone (Faceted aerodynamic cone expanding backwards)
             int coneSegments = 16;
             float coneLength = 3.2f * scale;
-            float coneBaseRadius = 1.1f * scale;
-            float tipZ = 0.6f * scale;
+            // In first person, shift the cone tip behind the camera plane and widen slightly for cockpit peripheral windstream
+            float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
             float baseZ = tipZ - coneLength;
+            float coneBaseRadius = (state.isFirstPersonOwner ? 1.45f : 1.1f) * scale;
+            float coneAlpha = state.isFirstPersonOwner ? (alpha * 0.35f) : (alpha * 0.70f);
 
             for (int i = 0; i < coneSegments; i++) {
                 double a1 = (i / (double) coneSegments) * Math.PI * 2.0;
@@ -90,7 +105,7 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
                 float y2 = (float) Math.sin(a2) * coneBaseRadius;
 
                 // Outer cone face
-                drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, r, g, b, alpha * 0.70f);
+                drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, r, g, b, coneAlpha);
             }
 
             // 2. Twin Helical Dragon Streamlines / Wing Vanes (Counter-spiraling aerodynamic ribbons)
@@ -104,8 +119,9 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
                     float z1 = tipZ - (t1 * coneLength * 1.3f);
                     float z2 = tipZ - (t2 * coneLength * 1.3f);
 
-                    float r1 = (0.2f + t1 * 1.2f) * scale;
-                    float r2 = (0.2f + t2 * 1.2f) * scale;
+                    // Push ribbons out into screen periphery in first person for thrilling flight feel without blocking crosshair
+                    float r1 = (state.isFirstPersonOwner ? (0.85f + t1 * 1.25f) : (0.2f + t1 * 1.2f)) * scale;
+                    float r2 = (state.isFirstPersonOwner ? (0.85f + t2 * 1.25f) : (0.2f + t2 * 1.2f)) * scale;
 
                     double ang1 = strandOffset + (t1 * Math.PI * 1.8) + (state.age * 0.2);
                     double ang2 = strandOffset + (t2 * Math.PI * 1.8) + (state.age * 0.2);
@@ -130,7 +146,8 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
 
             // 3. Ultra-Dense Kinetic Thrust Core Spike
             float coreLen = coneLength * 0.8f;
-            drawBeam(matrix, buffer, 0, 0, tipZ + 0.2f, 0, 0, tipZ - coreLen, 0.12f * scale, 0.95f, 1.0f, 1.0f, alpha * 0.95f);
+            float coreStart = state.isFirstPersonOwner ? (tipZ - 0.2f) : (tipZ + 0.2f);
+            drawBeam(matrix, buffer, 0, 0, coreStart, 0, 0, tipZ - coreLen, 0.12f * scale, 0.95f, 1.0f, 1.0f, alpha * 0.95f);
 
             // 4. Expanding Wake Vortex Ring
             float ringZ = baseZ - 0.4f * scale;

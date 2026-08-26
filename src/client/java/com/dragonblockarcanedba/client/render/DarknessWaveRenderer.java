@@ -29,6 +29,7 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         public float xRot = 0;
         public float age = 0;
         public boolean isSecondary = false;
+        public boolean isFirstPersonOwner = false;
     }
 
     @Override
@@ -48,6 +49,11 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.isSecondary = entity.isSecondary();
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
     }
 
     @Override
@@ -58,9 +64,10 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
 
-        float span = state.isSecondary ? 3.0f : 4.4f;
-        float chord = state.isSecondary ? 1.0f : 1.5f;
-        float height = state.isSecondary ? 1.4f : 2.0f;
+        float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.55f + (state.age / 5.0f) * 0.45f) : 1.0f;
+        float span = (state.isSecondary ? 3.0f : 4.4f) * fpScale;
+        float chord = (state.isSecondary ? 1.0f : 1.5f) * fpScale;
+        float height = (state.isSecondary ? 1.4f : 2.0f) * fpScale;
         int segments = 24;
         float age = state.age;
 

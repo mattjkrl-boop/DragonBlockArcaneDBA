@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -29,6 +31,7 @@ import java.util.Set;
  * physical 3D wind drills, Bleeding III infliction, and physical impact shockwave bursts.
  */
 public class BanshoWindProjectileEntity extends Projectile {
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(BanshoWindProjectileEntity.class, EntityDataSerializers.INT);
     private float damage = 300.0f;
     private final Set<Integer> hitEntityIds = new HashSet<>();
 
@@ -42,9 +45,22 @@ public class BanshoWindProjectileEntity extends Projectile {
         this.setOwner(owner);
         if (owner != null) {
             Vec3 eye = owner.getEyePosition();
-            this.setPos(eye.x, eye.y - 0.15, eye.z);
+            Vec3 look = owner.getLookAngle();
+            Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
+            if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
+            Vec3 up = right.cross(look).normalize();
+
+            boolean isRightHanded = (owner.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (owner.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem && 
+                !(owner.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem));
+            boolean onRight = isRightHanded ? !isOffhand : isOffhand;
+            float sideSign = onRight ? 1.0f : -1.0f;
+
+            Vec3 spawnPos = eye.add(look.scale(0.5)).add(right.scale(sideSign * 0.35)).add(up.scale(-0.25));
+            this.setPos(spawnPos.x, spawnPos.y, spawnPos.z);
             this.setYRot(owner.getYRot());
             this.setXRot(owner.getXRot());
+            this.entityData.set(CASTER_ID, owner.getId());
         }
         this.damage = damage;
         this.noPhysics = true;
@@ -52,6 +68,11 @@ public class BanshoWindProjectileEntity extends Projectile {
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
     }
 
     public void shootFromRotation(Entity shooter, float pitch, float yaw, float roll, float speed, float inaccuracy) {

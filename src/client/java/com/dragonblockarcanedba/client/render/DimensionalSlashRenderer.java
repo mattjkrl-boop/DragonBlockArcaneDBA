@@ -33,6 +33,7 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         public float yRot = 0;
         public float xRot = 0;
         public float age = 0;
+        public boolean isFirstPersonOwner = false;
     }
 
     @Override
@@ -52,6 +53,11 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
     }
 
     @Override
@@ -67,6 +73,9 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         } else {
             poseStack.mulPose(Axis.ZP.rotationDegrees(-35.0f));
         }
+
+        float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
+        poseStack.scale(fpScale, fpScale, fpScale);
 
         // Forward spin along movement vector
         poseStack.mulPose(Axis.YP.rotationDegrees((float) Math.sin(state.age * 0.4f) * 6.0f));

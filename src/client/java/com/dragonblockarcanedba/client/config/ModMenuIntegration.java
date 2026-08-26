@@ -40,12 +40,22 @@ public class ModMenuIntegration implements ModMenuApi {
             int x = this.width / 2;
             int y = this.height / 2;
 
-            // Toggle Visuals Button
+            // Toggle Aura Visuals Button
             addRenderableWidget(Button.builder(
                 Component.literal("Aura Visuals: " + (DbaConfig.chargeVisualsEnabled ? "ON" : "OFF")),
                 btn -> {
                     DbaConfig.chargeVisualsEnabled = !DbaConfig.chargeVisualsEnabled;
                     btn.setMessage(Component.literal("Aura Visuals: " + (DbaConfig.chargeVisualsEnabled ? "ON" : "OFF")));
+                    DbaConfig.save();
+                }
+            ).bounds(x - 100, y - 65, 200, 20).build());
+
+            // Toggle First-Person 50% Transparency Button
+            addRenderableWidget(Button.builder(
+                Component.literal("First-Person 50% Opacity: " + (DbaConfig.firstPersonHalfTransparency ? "ON" : "OFF")),
+                btn -> {
+                    DbaConfig.firstPersonHalfTransparency = !DbaConfig.firstPersonHalfTransparency;
+                    btn.setMessage(Component.literal("First-Person 50% Opacity: " + (DbaConfig.firstPersonHalfTransparency ? "ON" : "OFF")));
                     DbaConfig.save();
                 }
             ).bounds(x - 100, y - 40, 200, 20).build());
@@ -66,7 +76,7 @@ public class ModMenuIntegration implements ModMenuApi {
                     btn.setMessage(Component.literal("Ki Recovery: " + DbaConfig.baseKiRecoveryMultiplier + "x"));
                     DbaConfig.save();
                 }
-            ).bounds(x - 100, y - 10, 200, 20).build());
+            ).bounds(x - 100, y - 15, 200, 20).build());
 
             // Cycle Stat Gain Multiplier
             addRenderableWidget(Button.builder(
@@ -84,7 +94,7 @@ public class ModMenuIntegration implements ModMenuApi {
                     btn.setMessage(Component.literal("Stat Gain: " + DbaConfig.statGainMultiplier + "x"));
                     DbaConfig.save();
                 }
-            ).bounds(x - 100, y + 20, 200, 20).build());
+            ).bounds(x - 100, y + 10, 200, 20).build());
 
             // Toggle 3D Weapons
             addRenderableWidget(Button.builder(
@@ -94,7 +104,7 @@ public class ModMenuIntegration implements ModMenuApi {
                     btn.setMessage(Component.literal("3D Weapons: " + (DbaConfig.use3dWeapons ? "ON" : "OFF")));
                     DbaConfig.save();
                 }
-            ).bounds(x - 100, y + 50, 200, 20).build());
+            ).bounds(x - 100, y + 35, 200, 20).build());
 
             // Save & Close Button
             addRenderableWidget(Button.builder(
@@ -104,7 +114,7 @@ public class ModMenuIntegration implements ModMenuApi {
                         this.minecraft.setScreenAndShow(parent);
                     }
                 }
-            ).bounds(x - 100, y + 80, 200, 20).build());
+            ).bounds(x - 100, y + 65, 200, 20).build());
         }
 
         @Override

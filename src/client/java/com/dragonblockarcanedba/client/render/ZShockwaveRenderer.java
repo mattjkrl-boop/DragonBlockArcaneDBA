@@ -32,6 +32,7 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         public float xRot = 0;
         public float age = 0;
         public long seed = 0;
+        public boolean isFirstPersonOwner = false;
     }
 
     @Override
@@ -53,6 +54,11 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
     }
 
     @Override
@@ -67,10 +73,11 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         boolean sub = state.isSubWave;
         float age = state.age;
 
-        float span = sub ? (3.2f + charge * 3.2f) : (4.8f + charge * 6.2f);
-        float chord = sub ? (1.0f + charge * 0.6f) : (1.6f + charge * 1.4f);
-        float height = sub ? (0.9f + charge * 0.8f) : (1.5f + charge * 1.8f);
-        float thickness = sub ? (0.22f + charge * 0.15f) : (0.38f + charge * 0.32f);
+        float fpScale = (state.isFirstPersonOwner && state.age < 6.0f) ? (0.55f + (state.age / 6.0f) * 0.45f) : 1.0f;
+        float span = (sub ? (3.2f + charge * 3.2f) : (4.8f + charge * 6.2f)) * fpScale;
+        float chord = (sub ? (1.0f + charge * 0.6f) : (1.6f + charge * 1.4f)) * fpScale;
+        float height = (sub ? (0.9f + charge * 0.8f) : (1.5f + charge * 1.8f)) * fpScale;
+        float thickness = (sub ? (0.22f + charge * 0.15f) : (0.38f + charge * 0.32f)) * fpScale;
         int segments = 28;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {

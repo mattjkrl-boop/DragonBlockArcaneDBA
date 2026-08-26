@@ -27,6 +27,7 @@ import java.util.Set;
 public class BlasterBoltEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> IS_OVERCHARGED = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Float> HEAT_RATIO = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.INT);
 
     private float damage = 250.0f;
     private final Set<Integer> hitEntityIds = new HashSet<>();
@@ -42,9 +43,21 @@ public class BlasterBoltEntity extends Projectile {
         if (owner != null) {
             Vec3 eye = owner.getEyePosition();
             Vec3 look = owner.getLookAngle();
-            this.setPos(eye.x + look.x * 0.5, eye.y + look.y * 0.5 - 0.1, eye.z + look.z * 0.5);
+            Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
+            if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
+            Vec3 up = right.cross(look).normalize();
+
+            boolean isRightHanded = (owner.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (owner.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem && 
+                !(owner.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem));
+            boolean onRight = isRightHanded ? !isOffhand : isOffhand;
+            float sideSign = onRight ? 1.0f : -1.0f;
+
+            Vec3 spawnPos = eye.add(look.scale(0.5)).add(right.scale(sideSign * 0.32)).add(up.scale(-0.25));
+            this.setPos(spawnPos.x, spawnPos.y, spawnPos.z);
             this.setYRot(owner.getYRot());
             this.setXRot(owner.getXRot());
+            this.entityData.set(CASTER_ID, owner.getId());
         }
         this.damage = damage;
         this.entityData.set(IS_OVERCHARGED, isOvercharged);
@@ -56,6 +69,11 @@ public class BlasterBoltEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(IS_OVERCHARGED, false);
         builder.define(HEAT_RATIO, 0.0f);
+        builder.define(CASTER_ID, -1);
+    }
+
+    public int getCasterId() {
+        return this.entityData.get(CASTER_ID);
     }
 
     public boolean isOvercharged() {

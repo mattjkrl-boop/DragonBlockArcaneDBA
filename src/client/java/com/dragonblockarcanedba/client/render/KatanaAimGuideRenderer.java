@@ -30,6 +30,8 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         public float yRot = 0;
         public float xRot = 0;
         public float age = 0;
+        public boolean isFirstPersonOwner = false;
+        public boolean onRight = true;
     }
 
     @Override
@@ -50,6 +52,17 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
+
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        state.isFirstPersonOwner = (mc.player != null && 
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+            mc.options.getCameraType().isFirstPerson());
+        if (mc.player != null) {
+            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.KatanaItem && 
+                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.KatanaItem));
+            state.onRight = isRightHanded ? !isOffhand : isOffhand;
+        }
     }
 
     @Override
@@ -65,21 +78,29 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
         poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
 
+        if (state.isFirstPersonOwner) {
+            float sideSign = state.onRight ? -1.0f : 1.0f;
+            poseStack.translate(sideSign * 0.35f, -0.46f, 0.30f);
+        }
+
+        float zStart = state.isFirstPersonOwner ? 0.25f : 0.4f;
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Sleek Outer Cyan Laser Sheath (Volumetric quad beam)
             float sheathRadius = 0.035f + (charge * 0.025f);
-            drawLaserBeam(matrix, buffer, 0.4f, range, sheathRadius, 0.0f, 0.85f, 1.0f, alpha * 0.65f);
+            drawLaserBeam(matrix, buffer, zStart, range, sheathRadius, 0.0f, 0.85f, 1.0f, alpha * 0.65f);
 
             // 2. Blinding White-Hot Razor Cutting Core
             float coreRadius = 0.012f + (charge * 0.008f);
-            drawLaserBeam(matrix, buffer, 0.4f, range, coreRadius, 1.0f, 1.0f, 1.0f, alpha * 0.95f);
+            drawLaserBeam(matrix, buffer, zStart, range, coreRadius, 1.0f, 1.0f, 1.0f, alpha * 0.95f);
 
             // 3. Calibrating Concentric Reticle Rings along the guide line (every 6 blocks)
             int stationCount = (int) (range / 6.0f);
             for (int s = 1; s <= stationCount; s++) {
                 float dist = s * 6.0f;
+                if (state.isFirstPersonOwner && dist < 3.0f) continue;
                 float ringR = (0.18f + charge * 0.12f) * (1.0f + 0.1f * (float) Math.sin(age * 0.3f + s));
                 float ringRot = age * (15.0f + s * 10.0f);
                 drawRingZ(matrix, buffer, dist, ringR, ringR * 0.80f, 16, ringRot, 0.1f, 0.9f, 1.0f, alpha * 0.75f);
