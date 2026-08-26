@@ -51,6 +51,10 @@ public class KiDiskEntity extends ThrowableProjectile {
             if (result.getEntity() instanceof LivingEntity target) {
                 target.hurtServer((net.minecraft.server.level.ServerLevel) this.level(), 
                         this.damageSources().indirectMagic(this, this.getOwner()), getDamage());
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.5f);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    net.minecraft.sounds.SoundEvents.ANVIL_LAND, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.8f);
             }
         }
         // Destructo Disk DOES NOT discard on hit entity! It keeps going!
@@ -64,6 +68,10 @@ public class KiDiskEntity extends ThrowableProjectile {
                 serverLevel.sendParticles(new DustParticleOptions(getColor(), 2.0f), 
                     this.getX(), this.getY(), this.getZ(), 10, 0.5, 0.5, 0.5, 0.1);
             }
+            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(), net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.6f);
+            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                net.minecraft.sounds.SoundEvents.ITEM_BREAK.value(), net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.2f);
             this.discard();
         }
     }

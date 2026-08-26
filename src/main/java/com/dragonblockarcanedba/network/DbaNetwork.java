@@ -6,6 +6,8 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.resources.Identifier;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.ki.KiTechnique;
 import com.dragonblockarcanedba.ki.KiTechniqueType;
@@ -80,8 +82,6 @@ public class DbaNetwork {
                         int cost = com.dragonblockarcanedba.attribute.PlayerStats.getUpgradeCost(raceId, stat, currentUpgrades);
                         int gain = com.dragonblockarcanedba.attribute.PlayerStats.getStatGain(raceId, stat);
                         
-                        // Milestone checking can be based on upgrades now. 
-                        // e.g. you need Level = upgradeCount * 2
                         int milestone = (currentUpgrades / 5) * 5;
                         int reqLvl = milestone * 2;
                         
@@ -97,26 +97,29 @@ public class DbaNetwork {
                             accessor.dba$setStatUpgradeCount(stat, currentUpgrades + 1);
                             accessor.dba$setStatPoints(ap - cost);
                             accessor.dba$syncStats();
+                            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                                SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 0.8f, 1.3f);
                         }
                     }
                 } else if ("transform".equals(action)) {
                     String formStr = nbt.getStringOr("form", "");
                     if ("none".equals(formStr)) {
                         accessor.dba$setActiveFormId(null);
+                        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                            SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 1.2f, 1.2f);
+                        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                            SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 1.0f, 0.8f);
                     } else {
                         Identifier formId = Identifier.parse(formStr);
                         Form form = DbaRegistries.getForm(formId);
                         if (form != null && form.getCompatibleRaces().contains(accessor.dba$getRaceId())) {
-                            // Form Unlock Validation
                             Form.UnlockRequirements reqs = form.getUnlockRequirements();
                             boolean meetsRequirements = true;
                             
-                            // Check minimum level
                             if (accessor.dba$getLevel() < reqs.minLevel()) {
                                 meetsRequirements = false;
                             }
                             
-                            // Check minimum stats
                             if (meetsRequirements) {
                                 com.dragonblockarcanedba.attribute.Attributes minStats = reqs.minStats();
                                 if (accessor.dba$getStrength() < minStats.strength()
@@ -130,6 +133,12 @@ public class DbaNetwork {
                             
                             if (meetsRequirements) {
                                 accessor.dba$setActiveFormId(formId);
+                                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                                    SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.8f, 1.0f);
+                                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                                    SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 1.2f);
+                                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.0f, 1.5f);
                             }
                         }
                     }
@@ -137,6 +146,10 @@ public class DbaNetwork {
                     broadcastTransformState(player);
                 } else if ("untransform".equals(action)) {
                     accessor.dba$setActiveFormId(null);
+                    player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 1.2f, 1.2f);
+                    player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 1.0f, 0.8f);
                     accessor.dba$syncStats();
                     broadcastTransformState(player);
                 } else if ("select_race".equals(action)) {
@@ -149,7 +162,6 @@ public class DbaNetwork {
                         accessor.dba$setHairColor(nbt.getStringOr("hair_color", ""));
                         
                         if (!wasAlreadySelected) {
-                            // Initial race selection: fresh start
                             accessor.dba$setLevel(1);
                             accessor.dba$setXp(0);
                             accessor.dba$setStatPoints(0);
@@ -163,7 +175,6 @@ public class DbaNetwork {
                                 accessor.dba$setStatUpgradeCount(stat, 0);
                             }
                         } else {
-                            // Changing race later: 75% stats gone (retain 25%)
                             accessor.dba$setLevel(Math.max(1, (int) Math.round(accessor.dba$getLevel() * 0.25)));
                             accessor.dba$setXp((int) Math.round(accessor.dba$getXp() * 0.25));
                             accessor.dba$setStatPoints((int) Math.round(accessor.dba$getStatPoints() * 0.25));
@@ -180,16 +191,15 @@ public class DbaNetwork {
                         
                         accessor.dba$setActiveFormId(null);
                         
-                        // Sync stats first to update the player's Max Health attribute based on their new race
                         accessor.dba$syncStats();
                         
-                        // Heal to max stats on creation / change
                         accessor.dba$setCurrentKi(com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(player));
                         accessor.dba$setCurrentStamina(com.dragonblockarcanedba.attribute.PlayerStats.getMaxStamina(player));
                         player.setHealth(player.getMaxHealth());
                         
-                        // Sync stats again so the client receives the filled Ki and Stamina bars
                         accessor.dba$syncStats();
+                        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                            SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.0f);
                     }
                 } else if ("revive".equals(action)) {
                     net.minecraft.server.level.ServerLevel overworld = context.server().getLevel(net.minecraft.world.level.Level.OVERWORLD);
@@ -226,6 +236,8 @@ public class DbaNetwork {
                         accessor.dba$setStatPoints(accessor.dba$getStatPoints() - tech.apCost());
                         accessor.dba$setTechniqueUnlocked(techniqueId, true);
                         accessor.dba$syncStats();
+                        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                            SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
                     }
                 }
             });
@@ -241,6 +253,8 @@ public class DbaNetwork {
                 if (accessor.dba$hasTechnique(techniqueId) || techniqueId.isEmpty()) {
                     accessor.dba$setEquippedTechnique(slot, techniqueId);
                     accessor.dba$syncStats();
+                    player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.ARMOR_EQUIP_GENERIC.value(), SoundSource.PLAYERS, 1.0f, 1.0f);
                 }
             });
         });
@@ -256,6 +270,8 @@ public class DbaNetwork {
                     boolean isActive = accessor.dba$isTechniqueActive(tech);
                     accessor.dba$setTechniqueActive(tech, !isActive);
                     accessor.dba$syncStats();
+                    player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.8f, !isActive ? 1.2f : 0.8f);
                 }
             });
         });
@@ -272,6 +288,8 @@ public class DbaNetwork {
                     KiTechnique kiTech = new KiTechnique(type, pct, payload.color(), payload.isBarrage());
                     accessor.dba$setKiTechniqueSlot(slot, kiTech);
                     accessor.dba$syncStats();
+                    player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 1.0f, 1.4f);
                     player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                         "\u00a7aSaved \u00a7b" + kiTech.displayName() + "\u00a7a to slot " + (slot + 1)
                     ), true);

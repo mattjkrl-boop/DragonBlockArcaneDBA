@@ -58,6 +58,8 @@ public class FlyingNimbusEntity extends Mob {
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (!this.level().isClientSide()) {
             player.startRiding(this);
+            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                net.minecraft.sounds.SoundEvents.WOOL_PLACE, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
             return InteractionResult.SUCCESS;
         }
         return InteractionResult.PASS;
@@ -67,6 +69,10 @@ public class FlyingNimbusEntity extends Mob {
     public boolean hurtServer(net.minecraft.server.level.ServerLevel level, DamageSource source, float amount) {
         if (!this.isRemoved() && !this.droppedItem) {
             this.droppedItem = true;
+            level.playSound(null, this.getX(), this.getY(), this.getZ(),
+                net.minecraft.sounds.SoundEvents.WOOL_BREAK, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.2f);
+            level.playSound(null, this.getX(), this.getY(), this.getZ(),
+                net.minecraft.sounds.SoundEvents.ITEM_PICKUP, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.2f);
             this.discard();
             if (source.getEntity() instanceof Player player && !player.getAbilities().instabuild) {
                 this.spawnAtLocation(level, DbaItems.FLYING_NIMBUS);

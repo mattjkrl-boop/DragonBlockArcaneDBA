@@ -77,6 +77,12 @@ public class DimensionTravel {
         // Ensure minimum Y of 64 if dimension is freshly generated
         if (safeY < 1) safeY = 64;
 
+        // Launch sounds at origin
+        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+            net.minecraft.sounds.SoundEvents.FIREWORK_ROCKET_LAUNCH, net.minecraft.sounds.SoundSource.PLAYERS, 2.0f, 0.6f);
+        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+            net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(), net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 0.8f);
+
         player.teleportTo(
             targetLevel,
             0.5,
@@ -87,6 +93,12 @@ public class DimensionTravel {
             player.getXRot(),
             false
         );
+
+        // Arrival sounds at destination
+        targetLevel.playSound(null, 0.5, safeY, 0.5,
+            net.minecraft.sounds.SoundEvents.PORTAL_TRAVEL, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.2f);
+        targetLevel.playSound(null, 0.5, safeY, 0.5,
+            net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.4f);
 
         DragonBlockArcaneDBA.LOGGER.info("Player {} traveled to {}", player.getName().getString(), destination);
         return true;

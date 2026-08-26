@@ -4,6 +4,8 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
@@ -94,6 +96,11 @@ public class KiTechniqueHandler {
         Vec3 look = player.getLookAngle();
         blast.shoot(look.x, look.y, look.z, 2.0f, 0.0f);
         level.addFreshEntity(blast);
+
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.2f, 1.6f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.6f, 1.8f);
     }
 
     // =========== BARRAGE: 8 smaller blasts with spread ===========
@@ -115,7 +122,13 @@ public class KiTechniqueHandler {
             
             blast.shoot(dir.x, dir.y, dir.z, 2.0f, 0.0f);
             level.addFreshEntity(blast);
+
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 0.7f, 1.6f + (float) (level.getRandom().nextFloat() * 0.4));
         }
+
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.FIREWORK_ROCKET_BLAST, SoundSource.PLAYERS, 1.2f, 1.7f);
     }
 
     // =========== BEAM: continuous line of damage along look direction ===========
@@ -145,6 +158,13 @@ public class KiTechniqueHandler {
             com.dragonblockarcanedba.entity.KiBeamEntity beam = new com.dragonblockarcanedba.entity.KiBeamEntity(level, player, (float) hitLength, color);
             level.addFreshEntity(beam);
         }
+
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.8f, 1.4f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 1.5f, 1.8f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 0.8f);
     }
 
     // =========== DISK: horizontal disk that travels forward ===========
@@ -161,6 +181,11 @@ public class KiTechniqueHandler {
         
         disk.shoot(look.x, look.y, look.z, 1.5f, 0.0f);
         level.addFreshEntity(disk);
+
+        level.playSound(null, player.getX(), player.getY() + player.getBbHeight(), player.getZ(),
+            SoundEvents.TRIDENT_THROW.value(), SoundSource.PLAYERS, 1.5f, 1.6f);
+        level.playSound(null, player.getX(), player.getY() + player.getBbHeight(), player.getZ(),
+            SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.2f, 1.8f);
     }
 
     // =========== LASER: twin rapid eye beams ===========
@@ -195,6 +220,11 @@ public class KiTechniqueHandler {
             laser.setPos(start.x, start.y, start.z);
             level.addFreshEntity(laser);
         }
+
+        level.playSound(null, player.getX(), player.getEyeY(), player.getZ(),
+            SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 1.4f, 2.0f);
+        level.playSound(null, player.getX(), player.getEyeY(), player.getZ(),
+            SoundEvents.GUARDIAN_ATTACK, SoundSource.PLAYERS, 1.2f, 1.8f);
     }
 
     // =========== EXPLOSION: AoE last resort ===========
@@ -237,6 +267,13 @@ public class KiTechniqueHandler {
         explosion.setColor(color);
         explosion.setRadius((float) radius);
         level.addFreshEntity(explosion);
+
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 3.0f, 0.6f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.5f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 2.0f, 0.6f);
 
         player.sendSystemMessage(
             Component.literal("§4§lKI EXPLOSION! §7— §c" + (int) totalDamage + " dmg §7(radius " + (int) radius + ") §4Self: " + (int) selfDamage),

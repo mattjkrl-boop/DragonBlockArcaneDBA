@@ -85,6 +85,10 @@ public class EarthDragonBallBlock extends Block {
                     // Set weather to thunderstorm
                     serverLevel.getServer().setWeatherParameters(0, 12000, true, true);
                     
+                    // Dragon roar sound
+                    serverLevel.playSound(null, pos.getX(), pos.getY(), pos.getZ(),
+                        net.minecraft.sounds.SoundEvents.ENDER_DRAGON_GROWL, net.minecraft.sounds.SoundSource.HOSTILE, 2.5f, 0.8f);
+
                     // Broadcast message
                     serverLevel.getServer().getPlayerList().broadcastSystemMessage(
                         net.minecraft.network.chat.Component.literal("\u00a76Shenron: \u00a7eI am the Eternal Dragon Shenron. Speak your wish!"), false

@@ -35,6 +35,14 @@ public class SenzuBeanItem extends Item {
                 if (!player.getAbilities().instabuild) {
                     itemStack.shrink(1);
                 }
+
+                // Sound feedback
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sounds.SoundEvents.PLAYER_BURP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.2f);
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.5f);
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sounds.SoundEvents.BEACON_POWER_SELECT, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.6f);
             }
             return InteractionResult.SUCCESS;
         }

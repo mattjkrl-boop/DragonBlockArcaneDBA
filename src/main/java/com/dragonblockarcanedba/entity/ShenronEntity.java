@@ -80,6 +80,17 @@ public class ShenronEntity extends Mob {
                 lightning.setPos(this.getX(), this.getY(), this.getZ());
                 serverLevel.addFreshEntity(lightning);
             }
+
+            // Audio cues for wish fulfillment & departure
+            serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
+                net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, net.minecraft.sounds.SoundSource.NEUTRAL, 2.0f, 1.2f);
+            serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
+                net.minecraft.sounds.SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, net.minecraft.sounds.SoundSource.NEUTRAL, 1.5f, 1.0f);
+            serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
+                net.minecraft.sounds.SoundEvents.ENDER_DRAGON_FLAP, net.minecraft.sounds.SoundSource.HOSTILE, 1.8f, 0.8f);
+            serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
+                net.minecraft.sounds.SoundEvents.PORTAL_TRAVEL, net.minecraft.sounds.SoundSource.NEUTRAL, 1.5f, 0.7f);
+
             serverLevel.getServer().getPlayerList().broadcastSystemMessage(
                 net.minecraft.network.chat.Component.literal("\u00a76Shenron: \u00a7eFarewell!"), false
             );

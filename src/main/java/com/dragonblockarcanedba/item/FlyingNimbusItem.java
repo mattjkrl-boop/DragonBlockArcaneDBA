@@ -33,6 +33,11 @@ public class FlyingNimbusItem extends Item {
                 if (!player.getAbilities().instabuild) {
                     context.getItemInHand().shrink(1);
                 }
+
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sounds.SoundEvents.WOOL_PLACE, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sounds.SoundEvents.ELYTRA_FLYING, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.5f);
                 return InteractionResult.SUCCESS;
             }
         }
@@ -55,6 +60,11 @@ public class FlyingNimbusItem extends Item {
                 if (!player.getAbilities().instabuild) {
                     stack.shrink(1);
                 }
+
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sounds.SoundEvents.WOOL_PLACE, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    net.minecraft.sounds.SoundEvents.ELYTRA_FLYING, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.5f);
                 return InteractionResult.SUCCESS;
             }
         }
