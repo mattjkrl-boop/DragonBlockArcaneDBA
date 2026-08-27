@@ -125,19 +125,47 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
             drawShockRingZ(matrix, buffer, halfLen, ringR * 1.4f, ringR * 1.05f, 20, -state.age * 30.0f, 1.0f, 1.0f, 1.0f, fade * 0.95f);
             drawShockRingZ(matrix, buffer, len, ringR * 1.6f, ringR * 1.20f, 20, state.age * 40.0f, 0.0f, 0.95f, 1.0f, fade * 0.90f);
 
-            // 7. Ascending Disintegrating Speed-Line Phantom Motes
-            int moteCount = (int) (len * 1.5f);
-            for (int m = 0; m < moteCount; m++) {
-                float mz = rng.nextFloat() * len;
-                float my = (rng.nextFloat() - 0.2f) * slashHeight;
-                float mx = (rng.nextFloat() - 0.5f) * 1.8f * scale;
-                float mSize = 0.08f * (1.0f - progress);
-                drawDiamondSpark(matrix, buffer, mx, my, mz, mSize, 0.85f, 0.98f, 1.0f, fade * 0.85f);
+            // 8. Cascading Angled 3D Spatial Cross-Cleave Crescent Blades along dash corridor
+            int slashArcCount = Math.max(5, (int) (len / 3.0f));
+            for (int s = 0; s <= slashArcCount; s++) {
+                float z = len * (s / (float) slashArcCount);
+                float angle = (s % 2 == 0 ? 45.0f : -45.0f) + ((s % 3) * 15.0f);
+                float arcSpan = (2.4f + 0.4f * (float) Math.sin(s * 1.5f)) * scale;
+                drawAngledCrossCleave(matrix, buffer, z, arcSpan, angle,
+                    0.0f, 0.90f, 1.0f, fade * 0.75f);
             }
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void drawAngledCrossCleave(Matrix4f matrix, VertexConsumer consumer, float z, float span, float angleDeg, float r, float g, float b, float a) {
+        float rad = (float) Math.toRadians(angleDeg);
+        float cos = (float) Math.cos(rad);
+        float sin = (float) Math.sin(rad);
+
+        float x1 = -span * cos;
+        float y1 = -span * sin + 1.0f;
+        float x2 = span * cos;
+        float y2 = span * sin + 1.0f;
+
+        float chord = span * 0.35f;
+        float cx = 0;
+        float cy = 1.0f + chord;
+        float thick = 0.10f;
+
+        // Front face
+        consumer.addVertex(matrix, x1, y1 - thick, z).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, cx, cy, z).setColor(1.0f, 1.0f, 1.0f, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, x2, y2 - thick, z).setColor(r, g, b, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, 0, 1.0f - chord * 0.5f, z).setColor(r, g, b, a * 0.5f).setUv(0.5f, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+
+        // Back face
+        consumer.addVertex(matrix, 0, 1.0f - chord * 0.5f, z).setColor(r, g, b, a * 0.5f).setUv(0.5f, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
+        consumer.addVertex(matrix, x2, y2 - thick, z).setColor(r, g, b, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
+        consumer.addVertex(matrix, cx, cy, z).setColor(1.0f, 1.0f, 1.0f, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
+        consumer.addVertex(matrix, x1, y1 - thick, z).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
     }
 
     private static void drawVerticalBladeWall(Matrix4f matrix, VertexConsumer consumer, float zStart, float zEnd, float height, float thickness, float r, float g, float b, float a) {

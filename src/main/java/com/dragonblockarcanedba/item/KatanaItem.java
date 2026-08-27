@@ -296,6 +296,14 @@ public class KatanaItem extends Item {
             double dashDist = 16.0 + (chargeRatio * 8.0);
             Vec3 end = start.add(look.scale(dashDist));
 
+            // Blade Guard: Brief invulnerability during execution
+            player.addEffect(new MobEffectInstance(DbaEffects.BLADE_GUARD_HOLDER, 20, 0, false, false));
+
+            // Leave ghost afterimage at original starting location
+            HollowAfterimageEntity originAfterimage = new HollowAfterimageEntity(serverLevel, player);
+            originAfterimage.setPos(start.x, start.y, start.z);
+            serverLevel.addFreshEntity(originAfterimage);
+
             // Hit entities along the line
             AABB lineBox = new AABB(start, end).inflate(2.0 + chargeRatio * 2.0); // Tweak A: wider with charge
             List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
@@ -306,6 +314,32 @@ public class KatanaItem extends Item {
             // Teleport player to destination
             player.teleportTo(serverLevel, end.x, end.y, end.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
 
+            // Spawn cascading physical 3D Swift Crescent slashes all along the teleport path from start to end
+            int slashCount = Math.max(7, (int) (dashDist / 2.2));
+            float slashScale = 1.35f + chargeRatio * 0.55f;
+            float[] tiltAngles = { 45.0f, -40.0f, 75.0f, -65.0f, 20.0f, -80.0f, 60.0f, -30.0f, 90.0f, -50.0f };
+            Vec3 rightVec = look.cross(new Vec3(0, 1, 0)).normalize();
+
+            for (int i = 0; i <= slashCount; i++) {
+                float fraction = i / (float) slashCount;
+                Vec3 slashPos = start.add(look.scale(dashDist * fraction)).add(0, player.getBbHeight() * 0.5, 0);
+
+                // Add subtle lateral zig-zag offset for anime-style dimensional iaido slashes
+                float lateralOffset = ((i % 3) - 1) * 0.35f;
+                slashPos = slashPos.add(rightVec.scale(lateralOffset));
+
+                float tilt = tiltAngles[i % tiltAngles.length];
+                int variant = i % 2;
+                int lifetime = 14 + (i % 4);
+
+                SwiftCrescentEntity crescent = new SwiftCrescentEntity(
+                    serverLevel, player, slashPos,
+                    player.getYRot(), player.getXRot(),
+                    tilt, slashScale * (0.95f + (i % 3) * 0.15f), variant, lifetime
+                );
+                serverLevel.addFreshEntity(crescent);
+            }
+
             // Delayed massive vertical energy cut (0.5s / 10 ticks)
             float baseDamage = 1000.0f + (chargeRatio * 1000.0f);
             float strDamage = (float) (accessor.dba$getStrength() * 4.0f * chargeRatio);
@@ -314,6 +348,21 @@ public class KatanaItem extends Item {
             for (LivingEntity t : targets) {
                 t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
                 t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage);
+
+                // Cross-cleave physical crescent slashes centered on the target
+                Vec3 targetPos = t.position().add(0, t.getBbHeight() * 0.5, 0);
+                SwiftCrescentEntity targetCrescent1 = new SwiftCrescentEntity(
+                    serverLevel, player, targetPos,
+                    player.getYRot(), player.getXRot(),
+                    40.0f, slashScale * 1.25f, 0, 14
+                );
+                SwiftCrescentEntity targetCrescent2 = new SwiftCrescentEntity(
+                    serverLevel, player, targetPos,
+                    player.getYRot(), player.getXRot(),
+                    -40.0f, slashScale * 1.25f, 1, 14
+                );
+                serverLevel.addFreshEntity(targetCrescent1);
+                serverLevel.addFreshEntity(targetCrescent2);
 
                 // Tweak C: If target dies, reset Flashdraw cooldown
                 if (!t.isAlive()) {
@@ -328,8 +377,15 @@ public class KatanaItem extends Item {
             );
             serverLevel.addFreshEntity(heavenSplitter);
 
+            // Multi-layered audio feedback: origin cut sweep, speed strike, thunder crack, and katana sheathing ring
+            serverLevel.playSound(null, start.x, start.y, start.z,
+                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.8f, 1.6f);
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 2.0f, 1.4f);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.0f, 1.8f);
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 0.9f, 1.9f);
 
             player.getCooldowns().addCooldown(stack, 80); // 4-second cooldown
         }
