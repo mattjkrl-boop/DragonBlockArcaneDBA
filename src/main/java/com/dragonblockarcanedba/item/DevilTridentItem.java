@@ -22,6 +22,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 import java.util.Map;
 import com.dragonblockarcanedba.util.SwarmHelper;
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
 
 public class DevilTridentItem extends Item {
     public DevilTridentItem(Properties properties) {
@@ -150,7 +151,7 @@ public class DevilTridentItem extends Item {
             shard.recall();
         }
         SwarmHelper.recallSwarm(stack);
-        player.getCooldowns().addCooldown(stack, 200); // 10 second repair cooldown
+        player.getCooldowns().addCooldown(stack, 3600); // 3-minute cooldown (3600 ticks)
     }
 
     // Right Click: Deployment / Recall
@@ -211,7 +212,7 @@ public class DevilTridentItem extends Item {
 
                 SwarmHelper.deploySwarm(stack, 10, 15000.0f); // 15000 is default health
                 
-                player.getCooldowns().addCooldown(stack, 40); // 2 second buffer before recall
+                player.getCooldowns().addCooldown(stack, 20); // 1 second buffer before recall
             }
             return InteractionResult.SUCCESS;
         }
@@ -261,18 +262,15 @@ public class DevilTridentItem extends Item {
 
             net.minecraft.nbt.CompoundTag tag = trident.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
             
-            // Ki Drain logic
+            // Ki Drain logic: 20% per minute (all shards die when Ki is exhausted)
             if (tag.getBoolean("isDeployed").orElse(false)) {
-                com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
-                double maxKi = com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(player);
-                double drainAmount = maxKi * 0.01 / 1200.0; // 1% per minute (1200 ticks)
-                double currentKi = accessor.dba$getCurrentKi();
-                
-                if (currentKi >= drainAmount) {
-                    accessor.dba$addKi(-drainAmount);
-                } else {
-                    // Out of Ki! Recall automatically!
-                    recallShards(world, player, trident, tag);
+                if (!WeaponDrainHelper.drainKiPerTick(player, 20.0)) {
+                    // Out of Ki! All shards die immediately and swarm is recalled
+                    for (TridentShardEntity shard : activeShards) {
+                        shard.discard();
+                    }
+                    SwarmHelper.recallSwarm(trident);
+                    player.getCooldowns().addCooldown(trident, 3600); // 3-minute cooldown (3600 ticks)
                     return; // Stop processing swarm
                 }
             }

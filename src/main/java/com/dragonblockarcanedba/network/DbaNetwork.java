@@ -422,6 +422,12 @@ public class DbaNetwork {
                     com.dragonblockarcanedba.item.BraveSwordItem.onLeftClickAssaultTick(player, stack, payload.chargeTicks());
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem) {
                     com.dragonblockarcanedba.item.SickleOfSorrowItem.performSorrowSlash(player, stack);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem) {
+                    com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiDiscrete(player, 55.0, 7);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem) {
+                    com.dragonblockarcanedba.util.WeaponDrainHelper.drainStaminaDiscrete(player, 45.0, 10);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
+                    com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiDiscrete(player, 100.0, 13);
                 }
 
             });

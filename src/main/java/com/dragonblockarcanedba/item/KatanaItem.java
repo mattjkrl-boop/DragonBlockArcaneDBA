@@ -29,6 +29,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -39,14 +41,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Katana — Supreme Speed Weapon.
- * Precision swordsmanship, instant movement, enemy tagging, and cinematic multi-target execution.
+ * 
+ * Ki Drain: 30% per minute (smooth).
  */
 public class KatanaItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 100; // 5 seconds
     public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
 
-    private static final Map<UUID, KatanaChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
-    private static final Map<UUID, KatanaAimGuideEntity> ACTIVE_AIM_MAP = new ConcurrentHashMap<>();
+    // Track active charging KatanaChargeEntity per player
+    public static final Map<UUID, KatanaChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
+    // Track active aim guide KatanaAimGuideEntity per player
+    public static final Map<UUID, KatanaAimGuideEntity> ACTIVE_AIM_MAP = new ConcurrentHashMap<>();
 
     public KatanaItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -58,7 +63,7 @@ public class KatanaItem extends Item {
                 Attributes.ATTACK_DAMAGE,
                 new AttributeModifier(
                     BASE_ATTACK_DAMAGE_ID,
-                    779.0, // 1 + 779 = 780 base damage
+                    749.0, // 1 + 749 = 750 base damage
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
@@ -67,15 +72,15 @@ public class KatanaItem extends Item {
                 Attributes.ATTACK_SPEED,
                 new AttributeModifier(
                     BASE_ATTACK_SPEED_ID,
-                    0.5, // Ultra swift swings (+0.5 over base)
+                    -1.0, // Fast fluid iaido strikes
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
             );
 
-        // MC 26.2 Physics: Samurai Iaido ground sliding friction & reduced air drag
-        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
-            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("katana_iaido_friction"), -0.75, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        // MC 26.2 Stealth: Silent Blade Concealment
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.NAME_PLATE_DIST_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("katana_nameplate_stealth"), -48.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
         );
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
             builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("katana_air_drag"), -0.50, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
@@ -84,10 +89,27 @@ public class KatanaItem extends Item {
         return builder.build();
     }
 
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainKiDiscrete(player, 30.0, 7);
+        }
+    }
+
     // --- LEFT CLICK: Flashdraw (Multi-target Instant Dash Execution) ---
 
     public static void onLeftClickChargeTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
+
+        // Drain Ki: 30% per minute (smooth)
+        if (!WeaponDrainHelper.drainKiPerTick(player, 30.0)) {
+            onLeftClickRelease(player, stack, chargeTicks);
+            return;
+        }
+        if (chargeTicks % 5 == 0) {
+            ((PlayerStatsAccessor) player).dba$syncStats();
+        }
+
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
 
         // Maintain physical 3D Katana Charge Entity (iaido stance ground focus rings & hilt sparks)
@@ -234,6 +256,9 @@ public class KatanaItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasKi(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
     }
@@ -251,6 +276,12 @@ public class KatanaItem extends Item {
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            // Drain Ki: 30% per minute (smooth)
+            if (!WeaponDrainHelper.drainKiPerTick(player, 30.0)) {
+                player.stopUsingItem();
+                return;
+            }
+
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);

@@ -84,5 +84,8 @@ public interface PlayerStatsAccessor {
     boolean dba$isTailSevered();
     void dba$setTailSevered(boolean severed);
 
+    void dba$pauseKiRecovery(int ticks);
+    void dba$pauseStaminaRecovery(int ticks);
+
     void dba$copyFrom(PlayerStatsAccessor original);
 }

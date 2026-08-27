@@ -28,6 +28,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,11 +38,13 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Ox King's Axe — Immovable powerhouse: knockback, ground destruction, massive AoE, and battlefield denial.
  * 
+ * Stamina Drain: 125% per minute (smooth).
+ * 
  * LEFT: Groundbreaker (Hold Left Click to Charge)
  * - Hold left click to repeatedly charge the axe (up to 10s / 200 ticks).
  * - Player becomes increasingly rooted: 0–2s (50%), 2–5s (80%), 5–10s (100% rooted).
  * - Physical 3D ground shatter decal, radiating magma fissure trenches, and levitating 3D basalt rock debris.
- * - Drains 2.5% max Ki per second.
+ * - Drains 125% stamina per minute.
  * - Release unleashes an enormous downward strike and 360-degree expanding ground shockwave (up to 24 blocks - Tweak A).
  * - Enemies hit are launched violently upward and outward.
  * - Tweak B: Secondary concentric echo waves at >= 50% charge.
@@ -58,8 +62,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class OxKingsAxeItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 200; // 10 seconds
 
-    private static final Map<UUID, OxChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
-    private static final Map<UUID, OxStanceAuraEntity> ACTIVE_STANCE_MAP = new ConcurrentHashMap<>();
+    public static final Map<UUID, OxChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
+    public static final Map<UUID, OxStanceAuraEntity> ACTIVE_STANCE_MAP = new ConcurrentHashMap<>();
 
     public OxKingsAxeItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -80,18 +84,25 @@ public class OxKingsAxeItem extends Item {
                 Attributes.ATTACK_SPEED,
                 new AttributeModifier(
                     BASE_ATTACK_SPEED_ID,
-                    -3.3, // Heavy swing feel
+                    -2.8, // Heavy, colossal strikes
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
             );
 
-        // MC 26.2 Physics: Titan Ground Grip (increased friction against knockback)
+        // MC 26.2 Physics: Titan mass & immovable ground friction
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
             builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("ox_ground_grip"), 1.0, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
         );
 
         return builder.build();
+    }
+
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainStaminaDiscrete(player, 125.0, 15);
+        }
     }
 
     // --- LEFT CLICK: Groundbreaker Charging & Downward Shockwave Strike ---
@@ -100,20 +111,14 @@ public class OxKingsAxeItem extends Item {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Drain Ki: 2.5% max Ki per second (0.125% per tick)
-        double maxKi = PlayerStats.getMaxKi(player);
-        double drainPerTick = (maxKi * 0.025) / 20.0;
-        double currentKi = accessor.dba$getCurrentKi();
-
-        if (currentKi >= drainPerTick) {
-            accessor.dba$addKi(-drainPerTick);
-            if (chargeTicks % 5 == 0) {
-                accessor.dba$syncStats();
-            }
-        } else {
-            // Out of Ki! Force release with accumulated charge
+        // Drain Stamina: 125% per minute (smooth)
+        if (!WeaponDrainHelper.drainStaminaPerTick(player, 125.0)) {
+            // Out of Stamina! Force release with accumulated charge
             onLeftClickRelease(player, stack, chargeTicks);
             return;
+        }
+        if (chargeTicks % 5 == 0) {
+            accessor.dba$syncStats();
         }
 
         // Progressive Rooting & Poise: Ox Brace
@@ -185,6 +190,9 @@ public class OxKingsAxeItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasStamina(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
     }
@@ -202,6 +210,12 @@ public class OxKingsAxeItem extends Item {
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            // Drain Stamina: 125% per minute
+            if (!WeaponDrainHelper.drainStaminaPerTick(player, 125.0)) {
+                player.stopUsingItem();
+                return;
+            }
+
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
 

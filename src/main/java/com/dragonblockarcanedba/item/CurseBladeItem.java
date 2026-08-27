@@ -26,28 +26,15 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.Comparator;
 import java.util.List;
 
 /**
  * Curse Blade — Dark Curse & Battlefield Denial Weapon.
  * 
- * LEFT: Curse Chain (Continuous Projected Seeking Chains)
- * - Hold left click to continuously stream spectral cursed chains.
- * - Chains seek nearby enemies and apply Movement Curse (1 to 10 stacks).
- * - Physical/destructible chains (~60 HP); enemies can attack them to remove stacks.
- * - Stacks last 5s, hits reset countdown. Max 10 chains per target.
- * - Tweak A: Chains jump to nearby alternative enemies when target is maxed.
- * - Tweak B: 10 stacks completely prevents teleportation, dashing, and abilities.
- * - Tweak C: Heavily cursed enemies are pulled toward user; chains wrap body.
- * 
- * RIGHT: Abyssal Eclipse (Supernatural Corrupted Storm)
- * - Channel right click to expand a localized storm domain (10 to 30 blocks).
- * - Swirling wind tosses enemies and has a chance of disarming them (drop held item).
- * - Telegraphed dark red lightning strikes cursed targets (Tweak A).
- * - Applies Storm of Darkness effect (Darkness, Nausea, progressive slow).
- * - Tweak B: Localized corrupt weather zone.
- * - Tweak C: At max charge (15s+), triggers full root on heavily cursed enemies.
+ * Ki Drain: 30% per minute (smooth).
  */
 public class CurseBladeItem extends Item {
     public static final int MAX_ECLIPSE_CHANNEL_TICKS = 300; // 15 seconds
@@ -88,10 +75,22 @@ public class CurseBladeItem extends Item {
         return builder.build();
     }
 
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainKiDiscrete(player, 30.0, 10);
+        }
+    }
+
     // --- LEFT CLICK: Curse Chain Streaming ---
 
     public static void streamCurseChain(Player player, ItemStack stack) {
         if (!player.level().isClientSide() && player.level() instanceof ServerLevel serverLevel) {
+            // Drain Ki: 30% per minute (~4 ticks cadence = 0.1% Max Ki)
+            if (!WeaponDrainHelper.drainKiDiscrete(player, 30.0, 4)) {
+                return;
+            }
+
             Vec3 eyePos = player.getEyePosition();
             Vec3 look = player.getLookAngle();
 
@@ -148,6 +147,9 @@ public class CurseBladeItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasKi(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
     }
@@ -165,6 +167,12 @@ public class CurseBladeItem extends Item {
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            // Drain Ki: 30% per minute
+            if (!WeaponDrainHelper.drainKiPerTick(player, 30.0)) {
+                player.stopUsingItem();
+                return;
+            }
+
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float stormRatio = Math.min(1.0f, heldTicks / (float) MAX_ECLIPSE_CHANNEL_TICKS);

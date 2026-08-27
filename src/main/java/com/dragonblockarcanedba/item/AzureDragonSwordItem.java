@@ -33,6 +33,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -41,21 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Azure Dragon Sword — Wind, Flight & Tempest Manipulation Weapon.
  * 
- * LEFT: Azure Dragon Rush (Superman / Elytra Flight & Dragon Wind)
- * - Hold left click to fly freely with Elytra flight pose in look direction at high speed.
- * - Sneaking (Shift) slows down speed for precision (Tweak A).
- * - Leaves bright blue wind trails and blasts nearby enemies away.
- * - Fall damage immune during rush and on next landing.
- * - Landing / diving into ground creates Sonic Quake shockwave (Tweak B).
- * - Passing through enemies spawns miniature tornadoes launching them (Tweak C).
- * 
- * RIGHT: Call of the Tempest (Dragon Storm Domain)
- * - Hold right click to channel a massive storm domain (up to 15s / 300 ticks max charge).
- * - Causes rain, localized thunder, howling wind turbulence, and periodic cyan dragon lightning.
- * - Storm lasts up to 30s.
- * - Tweak A: Storm follows the player.
- * - Tweak B: Storm follows targeted enemy.
- * - Tweak C: At max charge, summons a giant tornado filled with lightning.
+ * Ki Drain: 20% per minute for normal flight & Right Tempest ability; 40% per minute for Double Rush.
  */
 public class AzureDragonSwordItem extends Item {
     public static final int MAX_TEMPEST_CHARGE_TICKS = 300; // 15 seconds
@@ -125,22 +113,13 @@ public class AzureDragonSwordItem extends Item {
 
         boolean isDoubleRushing = DOUBLE_RUSHING_MAP.getOrDefault(player.getUUID(), false);
 
-        // Drain Ki
-        double maxKi = PlayerStats.getMaxKi(player);
-        // Normal rush: 0 drain. Double Rush: 1% a sec.
-        double drainPerTick = isDoubleRushing ? ((maxKi * 0.01) / 20.0) : 0.0;
-        double currentKi = accessor.dba$getCurrentKi();
-
-        if (drainPerTick > 0) {
-            if (currentKi >= drainPerTick) {
-                accessor.dba$addKi(-drainPerTick);
-                accessor.dba$syncStats();
-            } else {
-                // If they run out of mana during double rush, drop from sky & 1 sec cooldown
-                stopDragonRush(player);
-                player.getCooldowns().addCooldown(stack, 20);
-                return;
-            }
+        // Drain Ki: 20% per min (normal) or 40% per min (double rush)
+        double kiPercentPerMin = isDoubleRushing ? 40.0 : 20.0;
+        if (!WeaponDrainHelper.drainKiPerTick(player, kiPercentPerMin)) {
+            // Ran out of Ki, drop from sky & apply 1 sec cooldown
+            stopDragonRush(player);
+            player.getCooldowns().addCooldown(stack, 20);
+            return;
         }
 
         IS_RUSHING_MAP.put(player.getUUID(), true);
@@ -277,6 +256,9 @@ public class AzureDragonSwordItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasKi(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
     }
@@ -294,6 +276,12 @@ public class AzureDragonSwordItem extends Item {
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            // Drain Ki: 20% per minute for Tempest channeling
+            if (!WeaponDrainHelper.drainKiPerTick(player, 20.0)) {
+                player.stopUsingItem();
+                return;
+            }
+
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_TEMPEST_CHARGE_TICKS);

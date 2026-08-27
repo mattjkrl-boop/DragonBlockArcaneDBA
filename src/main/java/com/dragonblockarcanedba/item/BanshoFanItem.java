@@ -23,11 +23,14 @@ import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
 
 import java.util.List;
 
 /**
  * Bansho Fan — The Storm Emperor. Endgame legendary weapon.
+ * 
+ * Stamina Drain: 45% per minute (smooth).
  * 
  * Left-click: 400 + (Strength × 1.5) damage.
  *   - Gale Force: Launches target 10 blocks with strong upward velocity & physics modifiers
@@ -66,15 +69,18 @@ public class BanshoFanItem extends Item {
                 Attributes.ATTACK_SPEED,
                 new AttributeModifier(
                     BASE_ATTACK_SPEED_ID,
-                    -1.0, // Fastest weapon — swift fan swipes (effective 3.0 attacks/sec)
+                    -2.0, // Standard weapon speed (2.0 attacks/sec)
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
             );
 
-        // MC 26.2 Physics: Storm Emperor aerial glide (drastically reduced mid-air drag)
+        // MC 26.2 Physics: Wind glide and zero friction
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
-            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("bansho_wind_drag"), -0.70, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("bansho_air_drag"), -0.60, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("bansho_friction"), -0.75, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
         );
 
         return builder.build();
@@ -107,6 +113,9 @@ public class BanshoFanItem extends Item {
         target.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 300, 1, false, true), attacker);
 
         if (attacker instanceof ServerPlayer serverPlayer) {
+            // Drain Stamina: 45% per minute (~10 ticks cadence = 0.375% Max Stamina)
+            WeaponDrainHelper.drainStaminaDiscrete(serverPlayer, 45.0, 10);
+
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
 
             // Stat-scaled bonus damage: Strength × 1.5
@@ -168,6 +177,11 @@ public class BanshoFanItem extends Item {
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack itemStack = player.getItemInHand(hand);
+
+        // Drain Stamina: 45% per minute for 40-tick (2-second) cooldown cycle (1.5% Max Stamina)
+        if (!WeaponDrainHelper.drainStaminaDiscrete(player, 45.0, 40)) {
+            return InteractionResult.FAIL;
+        }
 
         // Play tempest release sound
         level.playSound(null, player.getX(), player.getY(), player.getZ(),

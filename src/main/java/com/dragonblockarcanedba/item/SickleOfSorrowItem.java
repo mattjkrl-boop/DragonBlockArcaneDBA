@@ -39,6 +39,8 @@ import net.minecraft.world.phys.Vec3;
  * 
  * Unbreakable legendary weapon. No durability.
  */
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 public class SickleOfSorrowItem extends Item {
     private static boolean alternatingTilt = false;
 
@@ -91,6 +93,9 @@ public class SickleOfSorrowItem extends Item {
         target.addEffect(new MobEffectInstance(DbaEffects.SORROW_RIFT_HOLDER, 80, 0, false, true), attacker);
 
         if (attacker instanceof ServerPlayer serverPlayer) {
+            // Drain Ki for swing cadence (~13 ticks at 1.6 attacks/sec)
+            WeaponDrainHelper.drainKiDiscrete(serverPlayer, 25.0, 13);
+
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
 
             // Stat-scaled bonus damage: Strength × 3
@@ -127,6 +132,11 @@ public class SickleOfSorrowItem extends Item {
         if (!player.level().isClientSide() && player.level() instanceof ServerLevel serverLevel) {
             if (player.getCooldowns().isOnCooldown(stack)) return;
 
+            // Drain Ki for 8-tick swing cadence (25% Ki / min)
+            if (!WeaponDrainHelper.drainKiDiscrete(player, 25.0, 8)) {
+                return;
+            }
+
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
             float strengthBonus = (float) (accessor.dba$getStrength() * 3.0);
             float totalDamage = 750.0f + strengthBonus;
@@ -157,6 +167,11 @@ public class SickleOfSorrowItem extends Item {
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
+
+        // Check & drain Ki for 60-tick (3-second) domain cooldown cycle (25% Ki / min)
+        if (!WeaponDrainHelper.drainKiDiscrete(player, 25.0, 60)) {
+            return InteractionResult.FAIL;
+        }
 
         if (!level.isClientSide()) {
             ServerLevel serverLevel = (ServerLevel) level;

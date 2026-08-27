@@ -27,6 +27,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,6 +36,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Z-Sword — Divine Heavy Weapon.
+ * 
+ * Drain: Left click Ki 75% + Stamina 50% per minute, Right click Stamina 75% per minute.
  * 
  * LEFT: Z Shockwave (Charge-to-Fire)
  * - Hold left click to channel power (up to 15s / 300 ticks).
@@ -54,8 +58,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ZSwordItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 300; // 15 seconds
 
-    public static final Map<UUID, ZChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
-    public static final Map<UUID, ZStanceAuraEntity> ACTIVE_STANCE_MAP = new ConcurrentHashMap<>();
+    private static final Map<UUID, ZChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
+    private static final Map<UUID, ZStanceAuraEntity> ACTIVE_STANCE_MAP = new ConcurrentHashMap<>();
 
     public ZSwordItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -67,7 +71,7 @@ public class ZSwordItem extends Item {
                 Attributes.ATTACK_DAMAGE,
                 new AttributeModifier(
                     BASE_ATTACK_DAMAGE_ID,
-                    899.0, // 1 + 899 = 900 base damage
+                    999.0, // 1 + 999 = 1000 base damage
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
@@ -76,7 +80,7 @@ public class ZSwordItem extends Item {
                 Attributes.ATTACK_SPEED,
                 new AttributeModifier(
                     BASE_ATTACK_SPEED_ID,
-                    -3.2, // Extremely heavy swing feel
+                    -3.0, // Slowest, most devastating swing speed
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
@@ -90,24 +94,27 @@ public class ZSwordItem extends Item {
         return builder.build();
     }
 
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainBothDiscrete(player, 75.0, 50.0, 15);
+        }
+    }
+
     // --- LEFT CLICK: Z Shockwave Charging & Firing ---
 
     public static void onLeftClickChargeTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Drain Ki: ~5% max Ki per second (0.25% per tick)
-        double maxKi = PlayerStats.getMaxKi(player);
-        double drainPerTick = (maxKi * 0.05) / 20.0;
-        double currentKi = accessor.dba$getCurrentKi();
-
-        if (currentKi >= drainPerTick) {
-            accessor.dba$addKi(-drainPerTick);
-            accessor.dba$syncStats();
-        } else {
-            // Out of Ki! Force fire the shockwave with accumulated charge
+        // Drain Ki: 75% per min + Stamina: 50% per min (smooth)
+        if (!WeaponDrainHelper.drainBothPerTick(player, 75.0, 50.0)) {
+            // Out of Ki or Stamina! Force fire the shockwave with accumulated charge
             onLeftClickRelease(player, stack, chargeTicks);
             return;
+        }
+        if (chargeTicks % 5 == 0) {
+            accessor.dba$syncStats();
         }
 
         // Heavy movement slowdown & grounding while charging
@@ -175,6 +182,9 @@ public class ZSwordItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasStamina(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
     }
@@ -192,6 +202,12 @@ public class ZSwordItem extends Item {
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            // Drain: Right click Stamina 75% per minute (smooth)
+            if (!WeaponDrainHelper.drainStaminaPerTick(player, 75.0)) {
+                player.stopUsingItem();
+                return;
+            }
+
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float stanceRatio = Math.min(1.0f, heldTicks / 200.0f); // 10s max power

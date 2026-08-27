@@ -26,6 +26,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -36,7 +38,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Evil Spear — Cursed Hunter Weapon.
- * Target marking, supernatural spear throws, enemy impalement, and chained executions.
+ * 
+ * Ki Drain: 45% per minute (smooth).
  */
 public class EvilSpearItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 120; // 6 seconds
@@ -54,7 +57,7 @@ public class EvilSpearItem extends Item {
                 Attributes.ATTACK_DAMAGE,
                 new AttributeModifier(
                     BASE_ATTACK_DAMAGE_ID,
-                    799.0, // 1 + 799 = 800 base damage
+                    749.0, // 1 + 749 = 750 base damage
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
@@ -63,18 +66,15 @@ public class EvilSpearItem extends Item {
                 Attributes.ATTACK_SPEED,
                 new AttributeModifier(
                     BASE_ATTACK_SPEED_ID,
-                    -1.6, // Rapid thrusts
+                    -1.5, // Rapid piercing spear thrusts
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
             );
 
-        // MC 26.2 Stealth & Physics: Cursed Hunter Stealth & Throw Aerodynamics
+        // MC 26.2 Stealth: Predatory Camouflage
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.NAME_PLATE_DIST_ID).ifPresent(h ->
             builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_spear_nameplate_stealth"), -48.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
-        );
-        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.MINI_NAME_PLATE_DIST_ID).ifPresent(h ->
-            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_spear_mini_nameplate_stealth"), -8.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
         );
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
             builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("evil_spear_air_drag"), -0.40, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
@@ -83,25 +83,26 @@ public class EvilSpearItem extends Item {
         return builder.build();
     }
 
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainKiDiscrete(player, 45.0, 8);
+        }
+    }
+
     // --- LEFT CLICK: Evil Impale (Charged Spectral Spear Throw) ---
 
     public static void onLeftClickChargeTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Drain Ki: ~2.5% max Ki per second
-        double maxKi = PlayerStats.getMaxKi(player);
-        double drainPerTick = (maxKi * 0.025) / 20.0;
-        double currentKi = accessor.dba$getCurrentKi();
-
-        if (currentKi >= drainPerTick) {
-            accessor.dba$addKi(-drainPerTick);
-            if (chargeTicks % 5 == 0) {
-                accessor.dba$syncStats();
-            }
-        } else {
+        // Drain Ki: 45% per minute (smooth)
+        if (!WeaponDrainHelper.drainKiPerTick(player, 45.0)) {
             onLeftClickRelease(player, stack, chargeTicks);
             return;
+        }
+        if (chargeTicks % 5 == 0) {
+            accessor.dba$syncStats();
         }
 
         Vec3 vel = player.getDeltaMovement();
@@ -143,10 +144,10 @@ public class EvilSpearItem extends Item {
         float totalDamage = baseDmg + strBonus;
 
         Vec3 look = player.getLookAngle();
-        double speed = 2.0 + (chargeRatio * 1.2);
+        double speed = 1.8 + (chargeRatio * 1.8);
 
         EvilSpearProjectileEntity spear = new EvilSpearProjectileEntity(level, player, totalDamage);
-        spear.setDeltaMovement(look.x * speed, look.y * speed, look.z * speed);
+        spear.setDeltaMovement(look.scale(speed));
         level.addFreshEntity(spear);
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -164,6 +165,11 @@ public class EvilSpearItem extends Item {
         if (!level.isClientSide() && player instanceof ServerPlayer serverPlayer) {
             if (serverPlayer.getCooldowns().isOnCooldown(stack)) {
                 return InteractionResult.PASS;
+            }
+
+            // Drain Ki: 45% per minute for 40-tick cooldown cycle (1.5% Max Ki)
+            if (!WeaponDrainHelper.drainKiDiscrete(serverPlayer, 45.0, 40)) {
+                return InteractionResult.FAIL;
             }
 
             if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(serverPlayer)) {

@@ -2,11 +2,13 @@ package com.dragonblockarcanedba.mixin;
 
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.ki.KiTechnique;
 import com.dragonblockarcanedba.ki.KiTechniqueType;
 import com.dragonblockarcanedba.network.DbaNetwork;
 import com.dragonblockarcanedba.registry.DbaRegistries;
 import com.dragonblockarcanedba.registry.Form;
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -68,6 +70,10 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     };
     @Unique
     private final Map<String, Integer> dbaStatUpgradesMap = new HashMap<>();
+    @Unique
+    private int dbaKiRecoveryCooldown = 0;
+    @Unique
+    private int dbaStaminaRecoveryCooldown = 0;
 
     @Unique
     @Override
@@ -246,14 +252,21 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
 
         // Ki & Stamina recovery & drain mechanics
         double kiRecovery = PlayerStats.getKiRecovery(player);
-        double kiChange = kiRecovery / 20.0;
+        double kiChange = 0.0;
+        if (dbaKiRecoveryCooldown > 0) {
+            dbaKiRecoveryCooldown--;
+        } else {
+            kiChange = kiRecovery / 20.0;
+        }
         
-        // Recover stamina if not sprinting (10 stamina/sec roughly), drain if sprinting (5 stamina/sec)
+        // Recover stamina if not sprinting and recovery is not on cooldown
         if (player.isSprinting()) {
             dba$addStamina(-5.0 / 20.0);
             if (dbaCurrentStamina <= 0.0) {
                 player.setSprinting(false);
             }
+        } else if (dbaStaminaRecoveryCooldown > 0) {
+            dbaStaminaRecoveryCooldown--;
         } else {
             dba$addStamina(10.0 / 20.0);
         }
@@ -282,6 +295,43 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
 
         if (kiChange != 0.0) {
             dba$addKi(kiChange);
+        }
+
+        // Continuous drain while weapon effects are active on the player ("me")
+        if (player.hasEffect(DbaEffects.CELESTIAL_GRACE_HOLDER)) {
+            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 100.0, "whis_celestial_grace")) {
+                player.removeEffect(DbaEffects.CELESTIAL_GRACE_HOLDER);
+            }
+        }
+        if (player.hasEffect(DbaEffects.DEMON_SURGE_HOLDER)) {
+            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 45.0, "evil_spear_demon_surge")) {
+                player.removeEffect(DbaEffects.DEMON_SURGE_HOLDER);
+            }
+        }
+        if (player.hasEffect(DbaEffects.OX_BRACE_HOLDER)) {
+            if (!WeaponDrainHelper.drainStaminaPerTickOnce(player, 125.0, "ox_axe_brace")) {
+                player.removeEffect(DbaEffects.OX_BRACE_HOLDER);
+            }
+        }
+        if (player.hasEffect(DbaEffects.BLADE_GUARD_HOLDER)) {
+            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 30.0, "katana_blade_guard")) {
+                player.removeEffect(DbaEffects.BLADE_GUARD_HOLDER);
+            }
+        }
+        if (player.hasEffect(DbaEffects.HEROIC_FOCUS_HOLDER)) {
+            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 15.0, "brave_sword_heroic_focus")) {
+                player.removeEffect(DbaEffects.HEROIC_FOCUS_HOLDER);
+            }
+        }
+        if (player.hasEffect(DbaEffects.HOLLOWED_HOLDER)) {
+            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 30.0, "hollow_edge_hollowed")) {
+                player.removeEffect(DbaEffects.HOLLOWED_HOLDER);
+            }
+        }
+        if (player.hasEffect(DbaEffects.ANCIENT_WEIGHT_HOLDER)) {
+            if (!WeaponDrainHelper.drainBothPerTickOnce(player, 75.0, 50.0, "z_sword_ancient_weight")) {
+                player.removeEffect(DbaEffects.ANCIENT_WEIGHT_HOLDER);
+            }
         }
 
         // Revert transformation if Ki drops to 0
@@ -862,5 +912,17 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     public void dba$setSpeedPercent(int percent) {
         this.dbaSpeedPercent = Math.max(1, Math.min(100, percent));
         dba$updateAttributes();
+    }
+
+    @Unique
+    @Override
+    public void dba$pauseKiRecovery(int ticks) {
+        this.dbaKiRecoveryCooldown = Math.max(this.dbaKiRecoveryCooldown, ticks);
+    }
+
+    @Unique
+    @Override
+    public void dba$pauseStaminaRecovery(int ticks) {
+        this.dbaStaminaRecoveryCooldown = Math.max(this.dbaStaminaRecoveryCooldown, ticks);
     }
 }

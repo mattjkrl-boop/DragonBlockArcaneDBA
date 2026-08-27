@@ -9,6 +9,7 @@ import com.dragonblockarcanedba.entity.SaberDodgeSparkEntity;
 import com.dragonblockarcanedba.entity.SaberDimensionalLineSlashEntity;
 import com.dragonblockarcanedba.entity.SaberSlashEntity;
 import com.dragonblockarcanedba.entity.SaberVoidTearEntity;
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -44,29 +45,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Saber — Fastest pure-combat weapon: precision, mobility, counters, and rapid target-to-target chaining.
- *
- * LEFT: Blitz Flurry (Hold Left Click)
- * - Holds left click to continuously perform rapid saber strikes.
- * - Automatically acquires and chains between enemies within 3.0 blocks.
- * - Consumes 5% max Ki per successful target transition.
- * - Strikes automatically without needing manual blade model contact.
- * - Pierces through targets; targets become ~90% transparent client-side for the Saber user.
- * - Inflicts Movement Curse (level 10 root + Darkness) on chained enemies.
- * - Every 5–10 hits delivers a Stronger Slash with critical damage burst.
- * - Escalating Speed (Tweak A): Buffs attack speed progressively; grants temporary attack speed boost (2s) for ANY weapon.
- * - Releasing left click carries slightly past target and opens a 0.5s continuation buffer.
- * - Re-holding left click continues the combo to next target.
- * - Ending the combo triggers Best-Fit 3D Line Snap Finisher: snaps all chained enemies onto the straightest fit line,
- *   dealing massive finishing burst damage with neck-snap crunch, and applies a 5-second cooldown.
- *
- * RIGHT: Flash Step (Right Click / Hold Right Click)
- * - Instantly dashes horizontally or vertically in look direction (works airborne).
- * - Spawns Hollow Afterimage clone at starting position.
- * - Damages enemies along the dash path.
- * - Tweak A: Dashes behind targeted enemy if an enemy is aimed at within 16 blocks.
- * - Tweak B: 3 charges stored with 3s recharge per charge; holding repeatedly performs short dashes.
- * - Tweak C: Perfect Dodge — dodging an incoming attack within 0.75s negates damage and resets cooldown/charges.
+ * Saber — High-Speed Phasing & Blitz Chain Weapon.
+ * 
+ * Drain: Left click Stamina 100% per minute, Right click Ki 75% per minute.
  */
 public class SaberItem extends Item {
 
@@ -108,7 +89,7 @@ public class SaberItem extends Item {
         public double maxT;
         public float damage;
         public int ticks = 0;
-        public final int maxTicks = 10; // 0.5s float duration
+        public final int maxTicks = 12; // 0.5s float duration
     }
 
     public static final Map<UUID, BlitzSequence> ACTIVE_BLITZ_MAP = new ConcurrentHashMap<>();
@@ -154,6 +135,13 @@ public class SaberItem extends Item {
         return builder.build();
     }
 
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainStaminaDiscrete(player, 100.0, 5);
+        }
+    }
+
     // --- LEFT CLICK: Blitz Flurry ---
 
     public static void onBlitzTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
@@ -174,6 +162,15 @@ public class SaberItem extends Item {
 
         if (seq.waitingForRelease) {
             return; // Must release click before chaining to next!
+        }
+
+        // Drain Stamina smoothly: 100% per minute while blitzing
+        if (!WeaponDrainHelper.drainStaminaPerTick(player, 100.0)) {
+            executeBestFitLineFinisher(player, level, seq, stack);
+            clearEscalatingSpeedBuff(player);
+            ACTIVE_BLITZ_MAP.remove(playerUuid);
+            player.sendSystemMessage(Component.literal("§c✦ Out of Stamina! Blitz Ended. ✦"), true);
+            return;
         }
 
         boolean resumedFromWindow = false;
@@ -197,20 +194,10 @@ public class SaberItem extends Item {
         if (currentTarget == null && (chargeTicks <= 2 || resumedFromWindow)) {
             currentTarget = acquireTarget(player, level, seq.chainedEntityUuids, 64.0, chargeTicks <= 2);
             if (currentTarget != null) {
-                // New target transition -> Requires 5% mana (Ki)
-                double maxKi = PlayerStats.getMaxKi(player);
-                double kiCost = maxKi * 0.05;
-                com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
-                double currentKi = accessor.dba$getCurrentKi();
-
-                if (currentKi < kiCost) {
-                    player.sendSystemMessage(Component.literal("§c✦ Not Enough Ki (5% Required to Chain)! ✦"), true);
+                if (!WeaponDrainHelper.hasStamina(player)) {
+                    player.sendSystemMessage(Component.literal("§c✦ Not Enough Stamina to Chain! ✦"), true);
                     return;
                 }
-
-                // Deduct 5% Ki
-                accessor.dba$addKi(-kiCost);
-                accessor.dba$syncStats();
 
                 // Register to sequence
                 seq.currentTargetUuid = currentTarget.getUUID();
@@ -646,17 +633,10 @@ public class SaberItem extends Item {
             return;
         }
 
-        // Drain small Ki / Stamina
-        double currentKi = accessor.dba$getCurrentKi();
-        if (currentKi >= 10.0) {
-            accessor.dba$addKi(-10.0);
-            accessor.dba$syncStats();
-        } else {
-            double currentStamina = accessor.dba$getCurrentStamina();
-            if (currentStamina >= 10.0) {
-                accessor.dba$addStamina(-10.0);
-                accessor.dba$syncStats();
-            }
+        // Drain Ki: 75% per minute (smooth per charge cooldown cycle = 40 ticks = 2.5% Max Ki)
+        if (!WeaponDrainHelper.drainKiDiscrete(player, 75.0, 40)) {
+            player.sendSystemMessage(Component.literal("§c✦ Not Enough Ki for Flash Step! ✦"), true);
+            return;
         }
 
         if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {

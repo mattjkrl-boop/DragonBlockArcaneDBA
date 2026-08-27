@@ -33,6 +33,8 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -41,21 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Hollow's Edge — Void Assassin Weapon.
  * 
- * LEFT: Hollow Rush (Charge & Phasing Multi-Dash)
- * - Hold left click to charge (up to 5s / 100 ticks).
- * - Release grants an active sequence window (heldSec * 2.0s).
- * - During active window, left click repeatedly to teleport 5 blocks (or backward if holding S - Tweak B).
- * - Phasing raycast teleports past obstacles into open gaps without getting stuck in solid blocks.
- * - Passing through enemies inflicts Void Damage, Dark Faded effect, and spawns an Afterimage clone.
- * - Grants Hollowed effect for 3s (translucency, speed, no mob aggro, block passing - Tweak C).
- * - Tweak A: Every 3rd teleport unleashes a massive Void Slash wave.
- * 
- * RIGHT: Void Rift (Dimensional Vortex & Implosion)
- * - Right click opens a stationary Void Rift at target location.
- * - Holding right click enlarges the rift and pulls enemies + projectiles inward.
- * - Tweak A: Follows crosshair while charging.
- * - Release triggers final implosion (violent inward pull -> massive outward explosion).
- * - Tweak C: Releasing while aiming at the rift teleports the player inside and grants Rifted effect.
+ * Ki Drain: 30% per minute (smooth).
  */
 public class HollowsEdgeItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 100; // 5 seconds
@@ -115,17 +103,13 @@ public class HollowsEdgeItem extends Item {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Drain Ki while charging (~3% max Ki per second)
-        double maxKi = PlayerStats.getMaxKi(player);
-        double drainPerTick = (maxKi * 0.03) / 20.0;
-        double currentKi = accessor.dba$getCurrentKi();
-
-        if (currentKi >= drainPerTick) {
-            accessor.dba$addKi(-drainPerTick);
-            accessor.dba$syncStats();
-        } else {
+        // Drain Ki while charging: 30% max Ki per minute (smooth)
+        if (!WeaponDrainHelper.drainKiPerTick(player, 30.0)) {
             onLeftClickRelease(player, stack, chargeTicks);
             return;
+        }
+        if (chargeTicks % 5 == 0) {
+            accessor.dba$syncStats();
         }
 
         // Heavy movement slowdown while charging
@@ -288,6 +272,9 @@ public class HollowsEdgeItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasKi(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
 
         if (!level.isClientSide() && player instanceof ServerPlayer serverPlayer) {
@@ -323,6 +310,12 @@ public class HollowsEdgeItem extends Item {
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            // Drain Ki: 30% per minute
+            if (!WeaponDrainHelper.drainKiPerTick(player, 30.0)) {
+                player.stopUsingItem();
+                return;
+            }
+
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / 100.0f); // 5s max rift growth

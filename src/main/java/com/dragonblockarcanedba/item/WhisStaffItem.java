@@ -5,6 +5,7 @@ import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.TemporalRiftEntity;
 import com.dragonblockarcanedba.entity.TimeShatterEntity;
 import com.dragonblockarcanedba.util.TimeTracker;
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -46,6 +47,7 @@ import java.util.List;
  *   (Implemented via LivingEntityMixin)
  * 
  * Unbreakable legendary weapon. No durability.
+ * Ki Drain: 100% per minute (smooth).
  */
 public class WhisStaffItem extends Item {
     private static final double AOE_RADIUS = 12.0;
@@ -69,7 +71,7 @@ public class WhisStaffItem extends Item {
                 Attributes.ATTACK_SPEED,
                 new AttributeModifier(
                     BASE_ATTACK_SPEED_ID,
-                    -1.5, // Fast — befitting Whis's speed (effective 2.5 attacks/sec)
+                    -2.4, // Standard weapon speed (1.6 attacks/sec)
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
@@ -113,6 +115,9 @@ public class WhisStaffItem extends Item {
         );
 
         if (attacker instanceof ServerPlayer serverPlayer) {
+            // Drain Ki: 100% per minute (~13 ticks cadence = 1.08% Max Ki)
+            WeaponDrainHelper.drainKiDiscrete(serverPlayer, 100.0, 13);
+
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
 
             // Stat-scaled bonus damage: Dexterity × 2
@@ -153,6 +158,11 @@ public class WhisStaffItem extends Item {
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
+
+        // Drain Ki: 100% per minute for 100-tick (5-second) cooldown cycle (8.33% Max Ki)
+        if (!WeaponDrainHelper.drainKiDiscrete(player, 100.0, 100)) {
+            return InteractionResult.FAIL;
+        }
 
         if (!level.isClientSide()) {
             ServerLevel serverLevel = (ServerLevel) level;

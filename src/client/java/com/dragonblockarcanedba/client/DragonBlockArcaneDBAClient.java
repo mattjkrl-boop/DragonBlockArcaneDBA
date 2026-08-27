@@ -791,15 +791,17 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 }
 
                 if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem)) {
-                    // Fallback for standard weapons detecting air click
                     if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
-                        if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem || stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem) {
+                        if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem ||
+                            stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem ||
+                            stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem ||
+                            stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
+                            stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
                             ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                                 com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
                                 0
                             ));
                         }
-
                     }
                 }
             }

@@ -28,6 +28,8 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 public class PowerPoleItem extends Item {
 
     public PowerPoleItem(Properties properties) {
@@ -66,11 +68,18 @@ public class PowerPoleItem extends Item {
     // Left Click: Whirlwind Staff (AoE Knockback and Damage)
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        // Wind spin logic is now handled by the left-click swing packet
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainStaminaDiscrete(player, 20.0, 10);
+        }
     }
 
     public static void performWindSpin(Player player, ItemStack stack) {
         if (!player.level().isClientSide()) {
+            // Drain Stamina: 20% per minute (~10 ticks duration = ~0.167% Max Stamina)
+            if (!WeaponDrainHelper.drainStaminaDiscrete(player, 20.0, 10)) {
+                return;
+            }
+
             ServerLevel serverLevel = (ServerLevel) player.level();
             
             double maxRange = 25.0; // 25 blocks max range
@@ -145,6 +154,12 @@ public class PowerPoleItem extends Item {
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
+
+        // Drain Stamina: 20% per minute for 40-tick (2-second) cooldown cycle (0.667% Max Stamina)
+        if (!WeaponDrainHelper.drainStaminaDiscrete(player, 20.0, 40)) {
+            return InteractionResult.FAIL;
+        }
+
         if (!level.isClientSide()) {
             ServerLevel serverLevel = (ServerLevel) level;
             double reach = 30.0;

@@ -32,6 +32,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,11 +41,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Brave Sword — Heroic Legendary Sword (Tapion's Sword).
- * Relentless sword assault, escalating Brave Power, physical 3D cruciform cross slashes,
- * supersonic heroic rush flight trails, and geometric valor shockwaves.
+ * 
+ * Drain: Left click Ki 25% + Stamina 20% per minute, Right click Ki 15% per minute.
  */
 public class BraveSwordItem extends Item {
-    public static final int MAX_RIGHT_CHARGE_TICKS = 160; // 8 seconds
+    public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
 
     // Track active charging BraveChargeEntity per player
     public static final Map<UUID, BraveChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
@@ -58,7 +60,7 @@ public class BraveSwordItem extends Item {
                 Attributes.ATTACK_DAMAGE,
                 new AttributeModifier(
                     BASE_ATTACK_DAMAGE_ID,
-                    899.0, // 1 + 899 = 900 base damage
+                    799.0, // 1 + 799 = 800 base damage
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
@@ -67,21 +69,25 @@ public class BraveSwordItem extends Item {
                 Attributes.ATTACK_SPEED,
                 new AttributeModifier(
                     BASE_ATTACK_SPEED_ID,
-                    -1.4, // Swift heroic swordplay
+                    -1.8, // Fluid hero strikes
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
             );
 
-        // MC 26.2 Physics: Hero's Swift Stride & Acrobatic Glide
-        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
-            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("brave_hero_friction"), -0.60, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
-        );
+        // MC 26.2 Physics: Heroic Agility and Low-Drag Glide
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID).ifPresent(h ->
             builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("brave_hero_drag"), -0.50, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
         );
 
         return builder.build();
+    }
+
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainBothDiscrete(player, 25.0, 20.0, 10);
+        }
     }
 
     // --- Combo Tracking ---
@@ -104,6 +110,11 @@ public class BraveSwordItem extends Item {
     // --- LEFT CLICK: Brave Sword Assault (Combo & Finisher) ---
 
     public static void onLeftClickAssaultTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
+        // Drain Ki: 25% per min + Stamina: 20% per min (smooth)
+        if (!WeaponDrainHelper.drainBothPerTick(player, 25.0, 20.0)) {
+            return;
+        }
+
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
@@ -183,6 +194,9 @@ public class BraveSwordItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasKi(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
     }
@@ -200,6 +214,12 @@ public class BraveSwordItem extends Item {
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            // Drain Ki: 15% per minute (smooth)
+            if (!WeaponDrainHelper.drainKiPerTick(player, 15.0)) {
+                player.stopUsingItem();
+                return;
+            }
+
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);

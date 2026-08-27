@@ -137,17 +137,39 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             }
 
             if (!world.isClientSide()) {
-                com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
-                double stamina = accessor.dba$getCurrentStamina();
-                if (stamina < 8.0) {
-                    // Apply stamina exhaustion weakness & fatigue via custom Earth Shatter effect
-                    player.addEffect(new net.minecraft.world.effect.MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.EARTH_SHATTER_HOLDER, 40, 0, false, false));
-                } else {
-                    double strength = com.dragonblockarcanedba.attribute.PlayerStats.getEffectiveStat(player, "strength");
-                    double drain = 8.0 + (strength * 0.25); // Scales with strength
-                    accessor.dba$addStamina(-drain);
+                boolean isDbaWeapon = heldItem instanceof com.dragonblockarcanedba.item.SpiritSwordItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.HollowsEdgeItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.DimensionalSwordItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.PowerPoleItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.DevilTridentItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.CurseBladeItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.SaberItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.OxKingsAxeItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.GrandSwordItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.DaburaSwordItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.ZSwordItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.EvilSpearItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.BraveSwordItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.KatanaItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.BlasterGunItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.WhisStaffItem;
+
+                if (!isDbaWeapon) {
+                    com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
+                    double stamina = accessor.dba$getCurrentStamina();
+                    if (stamina < 8.0) {
+                        // Apply stamina exhaustion weakness & fatigue via custom Earth Shatter effect
+                        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.EARTH_SHATTER_HOLDER, 40, 0, false, false));
+                    } else {
+                        double strength = com.dragonblockarcanedba.attribute.PlayerStats.getEffectiveStat(player, "strength");
+                        double drain = 8.0 + (strength * 0.25); // Scales with strength
+                        accessor.dba$addStamina(-drain);
+                    }
+                    accessor.dba$syncStats();
                 }
-                accessor.dba$syncStats();
 
                 // Devil Trident Target logic
                 net.minecraft.world.item.ItemStack stack = player.getItemInHand(hand);

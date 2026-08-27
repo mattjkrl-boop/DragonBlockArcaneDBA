@@ -27,26 +27,15 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.List;
 import java.util.Optional;
 
 /**
  * Spirit Sword — The Annihilator Blade. Endgame legendary weapon.
  * 
- * Left-click: 500 + (Strength × 2) damage.
- *   - Applies Spirit Impale (mid-air suspension, weakness, divine Ki radiance)
- *   - Deals bonus 2% of target's max HP as magic damage (Spirit Cleave)
- *   - 20% chance to Disarm (target drops held item)
- *   - Spawns physical 3D Spirit Impale entity (6 ethereal celestial swords, 3 ground seals, ascending divine pillar)
- * 
- * Right-click (hold): Spirit Cannon — continuous physical 3D geometric beam (32-block range).
- *   - Pierces through ALL entities in line
- *   - 200 + (Spirit × 1.5) damage per pulse (every 10 ticks)
- *   - Each pulse also deals 2% of target's max HP as magic damage
- *   - Continuous multi-layered prismatic beam model with quad rotating helical energy drills and muzzle/terminus geometry
- *   - On release: 1-second cooldown
- * 
- * Unbreakable legendary weapon. No durability.
+ * Ki Drain: 55% per minute (smooth).
  */
 public class SpiritSwordItem extends Item {
     private static final double PULSE_RANGE = 32.0;
@@ -105,6 +94,9 @@ public class SpiritSwordItem extends Item {
 
         // Spirit Cleave: 2% of target's max HP as bonus magic damage
         if (attacker instanceof ServerPlayer serverPlayer) {
+            // Drain discrete Ki for swing duration (~7 ticks at 3.0 attacks/sec)
+            WeaponDrainHelper.drainKiDiscrete(serverPlayer, 55.0, 7);
+
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
             float spiritCleave = target.getMaxHealth() * 0.02f;
             target.hurtServer(serverLevel, serverLevel.damageSources().magic(), spiritCleave);
@@ -140,6 +132,9 @@ public class SpiritSwordItem extends Item {
     // --- Right Click: Start holding to fire Spirit Cannon ---
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasKi(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
     }
@@ -158,6 +153,12 @@ public class SpiritSwordItem extends Item {
     @Override
     public void onUseTick(Level level, LivingEntity livingEntity, ItemStack stack, int remainingUseDuration) {
         if (level.isClientSide() || !(livingEntity instanceof ServerPlayer player)) return;
+
+        // Drain Ki smoothly: 55% per minute
+        if (!WeaponDrainHelper.drainKiPerTick(player, 55.0)) {
+            player.stopUsingItem();
+            return;
+        }
 
         int ticksUsed = getUseDuration(stack, livingEntity) - remainingUseDuration;
         ServerLevel serverLevel = (ServerLevel) level;

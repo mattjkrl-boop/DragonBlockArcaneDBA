@@ -29,6 +29,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,7 +38,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Darkness Sword (Dabura Sword) — Abyssal Darkness Weapon.
- * Overwhelming darkness manipulation, physical 3D void slashes, enemy suppression, and a devastating eclipse domain.
+ * 
+ * Ki Drain: 35% per minute (smooth).
  */
 public class DaburaSwordItem extends Item {
     public static final int MAX_LEFT_CHARGE_TICKS = 160; // 8 seconds
@@ -54,7 +57,7 @@ public class DaburaSwordItem extends Item {
                 Attributes.ATTACK_DAMAGE,
                 new AttributeModifier(
                     BASE_ATTACK_DAMAGE_ID,
-                    849.0, // 1 + 849 = 850 base damage
+                    799.0, // 1 + 799 = 800 base damage
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
@@ -63,18 +66,15 @@ public class DaburaSwordItem extends Item {
                 Attributes.ATTACK_SPEED,
                 new AttributeModifier(
                     BASE_ATTACK_SPEED_ID,
-                    -1.8, // Fluid dark heavy swings
+                    -2.4, // Standard two-handed blade speed
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
             );
 
-        // MC 26.2 Stealth & Physics: Demonic Presence & Grounded Darkness Stance
+        // MC 26.2 Stealth: Darkness shrouds player nameplate
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.NAME_PLATE_DIST_ID).ifPresent(h ->
-            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dabura_nameplate_stealth"), -48.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
-        );
-        com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.MINI_NAME_PLATE_DIST_ID).ifPresent(h ->
-            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dabura_mini_nameplate_stealth"), -8.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
+            builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dabura_nameplate_stealth"), -64.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND)
         );
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.getAttributeHolder(com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID).ifPresent(h ->
             builder.add(h, new AttributeModifier(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dabura_heavy_friction"), 0.50, AttributeModifier.Operation.ADD_MULTIPLIED_BASE), EquipmentSlotGroup.MAINHAND)
@@ -83,25 +83,26 @@ public class DaburaSwordItem extends Item {
         return builder.build();
     }
 
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainKiDiscrete(player, 35.0, 10);
+        }
+    }
+
     // --- LEFT CLICK: Abyssal Slash (Charging & Crescent Wave) ---
 
     public static void onLeftClickChargeTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Drain Ki: ~2.5% max Ki per second
-        double maxKi = PlayerStats.getMaxKi(player);
-        double drainPerTick = (maxKi * 0.025) / 20.0;
-        double currentKi = accessor.dba$getCurrentKi();
-
-        if (currentKi >= drainPerTick) {
-            accessor.dba$addKi(-drainPerTick);
-            if (chargeTicks % 5 == 0) {
-                accessor.dba$syncStats();
-            }
-        } else {
+        // Drain Ki: 35% per minute (smooth)
+        if (!WeaponDrainHelper.drainKiPerTick(player, 35.0)) {
             onLeftClickRelease(player, stack, chargeTicks);
             return;
+        }
+        if (chargeTicks % 5 == 0) {
+            accessor.dba$syncStats();
         }
 
         // Slow player while charging
@@ -180,6 +181,9 @@ public class DaburaSwordItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasKi(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
     }
@@ -197,6 +201,12 @@ public class DaburaSwordItem extends Item {
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
+            // Drain Ki: 35% per minute
+            if (!WeaponDrainHelper.drainKiPerTick(player, 35.0)) {
+                player.stopUsingItem();
+                return;
+            }
+
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHANNEL_TICKS);

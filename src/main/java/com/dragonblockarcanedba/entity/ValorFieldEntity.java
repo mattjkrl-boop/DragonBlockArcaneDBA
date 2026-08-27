@@ -21,6 +21,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
+
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -101,23 +103,16 @@ public class ValorFieldEntity extends Projectile {
                     return;
                 }
 
-                // Continuous Ki/Stamina drain (~3.5% per second = 0.175% per tick)
-                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
-                double maxKi = PlayerStats.getMaxKi(player);
-                double drainPerTick = (maxKi * 0.035) / 20.0;
-                double currentKi = accessor.dba$getCurrentKi();
-
-                if (currentKi >= drainPerTick) {
-                    accessor.dba$addKi(-drainPerTick);
-                    if (this.tickCount % 5 == 0) {
-                        accessor.dba$syncStats();
-                    }
-                } else {
+                // Continuous Ki drain: 90% per minute (smooth)
+                if (!WeaponDrainHelper.drainKiPerTick(player, 90.0)) {
                     // Out of Ki: cancel field
                     player.stopUsingItem();
                     releaseAllSuspended(serverLevel);
                     this.discard();
                     return;
+                }
+                if (this.tickCount % 5 == 0) {
+                    ((PlayerStatsAccessor) player).dba$syncStats();
                 }
             }
 

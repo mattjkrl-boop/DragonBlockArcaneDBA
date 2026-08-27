@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.GrandCrescentWaveEntity;
 import com.dragonblockarcanedba.entity.ValorFieldEntity;
+import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -42,17 +43,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Slowly moves player forward in facing direction.
  * - Drains 4% max Ki per second.
  * - Release executes an outward finisher slash + fires a glowing Grand Crescent Wave (Tweak B).
+ * Grand Sword — Knight / Crusader AoE, Defense & Battlefield Control Weapon.
  * 
- * RIGHT: Valor Field (Hold Right Click)
- * - Creates a 9-block golden protective dome following the player (Tweak C).
- * - Allies receive Strength II and Resistance II.
- * - Caster receives Strength III, Resistance III, and Haste II / Attack Speed Boost (Tweak B).
- * - Enemies entering the field are slowed (Slowness II).
- * - Enemy projectiles entering the field hang suspended in mid-air for up to 4s (detonating on contact, resuming trajectory on exit).
- * - Drains 3.5% max Ki per second.
+ * Ki Drain: 90% per minute (smooth).
  */
 public class GrandSwordItem extends Item {
+    public static final int MAX_LEFT_SPIN_TICKS = 140; // 7 seconds
 
+    // Track active Valor Field entities per player
     public static final Map<UUID, ValorFieldEntity> ACTIVE_VALOR_FIELDS = new ConcurrentHashMap<>();
 
     public GrandSwordItem(Properties properties) {
@@ -65,7 +63,7 @@ public class GrandSwordItem extends Item {
                 Attributes.ATTACK_DAMAGE,
                 new AttributeModifier(
                     BASE_ATTACK_DAMAGE_ID,
-                    849.0, // 1 + 849 = 850 base damage
+                    899.0, // 1 + 899 = 900 base damage
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
@@ -74,7 +72,7 @@ public class GrandSwordItem extends Item {
                 Attributes.ATTACK_SPEED,
                 new AttributeModifier(
                     BASE_ATTACK_SPEED_ID,
-                    -2.4, // Balanced heavy swing
+                    -2.4, // Heavy, deliberate two-handed strikes
                     AttributeModifier.Operation.ADD_VALUE
                 ),
                 EquipmentSlotGroup.MAINHAND
@@ -88,26 +86,27 @@ public class GrandSwordItem extends Item {
         return builder.build();
     }
 
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainKiDiscrete(player, 90.0, 10);
+        }
+    }
+
     // --- LEFT CLICK: Grand Cyclone Spin, Blade Shards & Finisher Slash ---
 
     public static void onLeftClickSpinTick(ServerPlayer player, ItemStack stack, int spinTicks) {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Drain Ki: 3.5% max Ki per second (0.175% per tick)
-        double maxKi = PlayerStats.getMaxKi(player);
-        double drainPerTick = (maxKi * 0.035) / 20.0;
-        double currentKi = accessor.dba$getCurrentKi();
-
-        if (currentKi >= drainPerTick) {
-            accessor.dba$addKi(-drainPerTick);
-            if (spinTicks % 5 == 0) {
-                accessor.dba$syncStats();
-            }
-        } else {
+        // Drain Ki: 90% per minute (smooth)
+        if (!WeaponDrainHelper.drainKiPerTick(player, 90.0)) {
             // Out of Ki: force release
             onLeftClickSpinRelease(player, stack, spinTicks);
             return;
+        }
+        if (spinTicks % 5 == 0) {
+            accessor.dba$syncStats();
         }
 
         // Server-side player rotation sync (accelerating from 15° to 35° per tick)
@@ -240,6 +239,9 @@ public class GrandSwordItem extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!WeaponDrainHelper.hasKi(player)) {
+            return InteractionResult.FAIL;
+        }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
     }

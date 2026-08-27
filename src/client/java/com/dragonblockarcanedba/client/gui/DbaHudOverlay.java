@@ -86,7 +86,7 @@ public class DbaHudOverlay implements HudElement {
         float kiPercent = Math.min(1.0f, (float) (Math.max(0, currentKi) / Math.max(1, maxKi)));
         drawTechBar.accept(
             new StyledBar(y, kiPercent, 0xFF00AAFF, 0xFF55FFFF),
-            (int)Math.ceil(currentKi) + " / " + (int)maxKi + " KI"
+            (int)Math.floor(currentKi) + " / " + (int)maxKi + " KI"
         );
 
         // Draw Stamina Bar (Green)
@@ -94,7 +94,7 @@ public class DbaHudOverlay implements HudElement {
         float staminaPercent = Math.min(1.0f, (float) (Math.max(0, currentStamina) / Math.max(1, maxStamina)));
         drawTechBar.accept(
             new StyledBar(y, staminaPercent, 0xFF22FF22, 0xFF55FF55),
-            (int)Math.ceil(currentStamina) + " / " + (int)maxStamina + " STM"
+            (int)Math.floor(currentStamina) + " / " + (int)maxStamina + " STM"
         );
 
         // Draw Active Form
