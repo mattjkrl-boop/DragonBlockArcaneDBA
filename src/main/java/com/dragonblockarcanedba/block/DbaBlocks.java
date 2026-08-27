@@ -18,12 +18,16 @@ public class DbaBlocks {
     public static final ResourceKey<Block> YELLOW_CLOUD_BLOCK_KEY = ResourceKey.create(
         Registries.BLOCK, DragonBlockArcaneDBA.id("yellow_cloud_block")
     );
-    public static final Block YELLOW_CLOUD_BLOCK = new Block(
+    public static final Block YELLOW_CLOUD_BLOCK = new YellowCloudBlock(
         BlockBehaviour.Properties.of()
             .setId(YELLOW_CLOUD_BLOCK_KEY)
             .mapColor(MapColor.COLOR_YELLOW)
-            .strength(0.2f)
+            .noCollision()
+            .noOcclusion()
+            .instabreak()
             .sound(SoundType.WOOL)
+            .isSuffocating((state, level, pos) -> false)
+            .isViewBlocking((state, level, pos) -> false)
     );
 
     // --- Planet Namek ---
@@ -216,31 +220,48 @@ public class DbaBlocks {
             .requiresCorrectToolForDrops()
     );
 
+    // --- Block Items ---
+    public static BlockItem YELLOW_CLOUD_BLOCK_ITEM;
+    public static BlockItem NAMEK_GRASS_ITEM;
+    public static BlockItem NAMEK_STONE_ITEM;
+    public static BlockItem VEGETA_GRASS_ITEM;
+    public static BlockItem VEGETA_STONE_ITEM;
+    public static BlockItem YARDRAT_GRASS_ITEM;
+    public static BlockItem YARDRAT_STONE_ITEM;
+    public static BlockItem KATCHIN_ORE_ITEM;
+    public static BlockItem DRAGSTONE_ORE_ITEM;
+    public static BlockItem AETHERIUM_ORE_ITEM;
+    public static BlockItem BAUXITE_ORE_ITEM;
+    public static BlockItem TIN_ORE_ITEM;
+    public static BlockItem SILVER_ORE_ITEM;
+
     // --- Registration helpers ---
-    private static void registerBlock(ResourceKey<Block> key, Block block) {
+    private static BlockItem registerBlock(ResourceKey<Block> key, Block block) {
         Registry.register(BuiltInRegistries.BLOCK, key, block);
         // Register a corresponding BlockItem
         ResourceKey<Item> itemKey = ResourceKey.create(Registries.ITEM, key.identifier());
-        Registry.register(BuiltInRegistries.ITEM, itemKey,
-            new BlockItem(block, new Item.Properties().setId(itemKey)));
+        BlockItem item = new BlockItem(block, new Item.Properties().setId(itemKey));
+        item.registerBlocks(Item.BY_BLOCK, item);
+        Registry.register(BuiltInRegistries.ITEM, itemKey, item);
+        return item;
     }
 
     public static void register() {
         DragonBlockArcaneDBA.LOGGER.info("Registering Blocks for " + DragonBlockArcaneDBA.MOD_ID);
 
-        registerBlock(YELLOW_CLOUD_BLOCK_KEY, YELLOW_CLOUD_BLOCK);
-        registerBlock(NAMEK_GRASS_KEY, NAMEK_GRASS);
-        registerBlock(NAMEK_STONE_KEY, NAMEK_STONE);
-        registerBlock(VEGETA_GRASS_KEY, VEGETA_GRASS);
-        registerBlock(VEGETA_STONE_KEY, VEGETA_STONE);
-        registerBlock(YARDRAT_GRASS_KEY, YARDRAT_GRASS);
-        registerBlock(YARDRAT_STONE_KEY, YARDRAT_STONE);
-        registerBlock(KATCHIN_ORE_KEY, KATCHIN_ORE);
-        registerBlock(DRAGSTONE_ORE_KEY, DRAGSTONE_ORE);
-        registerBlock(AETHERIUM_ORE_KEY, AETHERIUM_ORE);
-        registerBlock(BAUXITE_ORE_KEY, BAUXITE_ORE);
-        registerBlock(TIN_ORE_KEY, TIN_ORE);
-        registerBlock(SILVER_ORE_KEY, SILVER_ORE);
+        YELLOW_CLOUD_BLOCK_ITEM = registerBlock(YELLOW_CLOUD_BLOCK_KEY, YELLOW_CLOUD_BLOCK);
+        NAMEK_GRASS_ITEM = registerBlock(NAMEK_GRASS_KEY, NAMEK_GRASS);
+        NAMEK_STONE_ITEM = registerBlock(NAMEK_STONE_KEY, NAMEK_STONE);
+        VEGETA_GRASS_ITEM = registerBlock(VEGETA_GRASS_KEY, VEGETA_GRASS);
+        VEGETA_STONE_ITEM = registerBlock(VEGETA_STONE_KEY, VEGETA_STONE);
+        YARDRAT_GRASS_ITEM = registerBlock(YARDRAT_GRASS_KEY, YARDRAT_GRASS);
+        YARDRAT_STONE_ITEM = registerBlock(YARDRAT_STONE_KEY, YARDRAT_STONE);
+        KATCHIN_ORE_ITEM = registerBlock(KATCHIN_ORE_KEY, KATCHIN_ORE);
+        DRAGSTONE_ORE_ITEM = registerBlock(DRAGSTONE_ORE_KEY, DRAGSTONE_ORE);
+        AETHERIUM_ORE_ITEM = registerBlock(AETHERIUM_ORE_KEY, AETHERIUM_ORE);
+        BAUXITE_ORE_ITEM = registerBlock(BAUXITE_ORE_KEY, BAUXITE_ORE);
+        TIN_ORE_ITEM = registerBlock(TIN_ORE_KEY, TIN_ORE);
+        SILVER_ORE_ITEM = registerBlock(SILVER_ORE_KEY, SILVER_ORE);
 
         Registry.register(BuiltInRegistries.BLOCK, SENZU_PLANT_KEY, SENZU_PLANT);
         Registry.register(BuiltInRegistries.BLOCK, EARTH_DRAGON_BALL_KEY, EARTH_DRAGON_BALL);

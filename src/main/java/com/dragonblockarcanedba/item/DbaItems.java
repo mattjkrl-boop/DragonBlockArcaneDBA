@@ -550,22 +550,22 @@ public class DbaItems {
             output.accept(SENZU_SPROUT);
 
             // === ORES ===
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.KATCHIN_ORE);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.DRAGSTONE_ORE);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.AETHERIUM_ORE);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.BAUXITE_ORE);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.TIN_ORE);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.SILVER_ORE);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.KATCHIN_ORE_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.DRAGSTONE_ORE_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.AETHERIUM_ORE_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.BAUXITE_ORE_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.TIN_ORE_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.SILVER_ORE_ITEM);
 
             // === BLOCKS & TERRAIN ===
             output.accept(GRAVITY_TRAINING_BLOCK);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.YELLOW_CLOUD_BLOCK);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.NAMEK_GRASS);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.NAMEK_STONE);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.VEGETA_GRASS);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.VEGETA_STONE);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.YARDRAT_GRASS);
-            output.accept(com.dragonblockarcanedba.block.DbaBlocks.YARDRAT_STONE);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.YELLOW_CLOUD_BLOCK_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.NAMEK_GRASS_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.NAMEK_STONE_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.VEGETA_GRASS_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.VEGETA_STONE_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.YARDRAT_GRASS_ITEM);
+            output.accept(com.dragonblockarcanedba.block.DbaBlocks.YARDRAT_STONE_ITEM);
         })
         .build();
 

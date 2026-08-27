@@ -2,6 +2,10 @@
   "has_precipitation": false,
   "temperature": 0.5,
   "downfall": 0.0,
+  "attributes": {
+    "minecraft:visual/cloud_color": "#E6FFE070",
+    "minecraft:visual/cloud_height": 275.0
+  },
   "effects": {
     "fog_color": 16763972,
     "sky_color": 16768340,
@@ -41,8 +45,7 @@
     [],
     [],
     [
-      "dragonblockarcanedba:otherworld_rock_spires",
-      "dragonblockarcanedba:otherworld_cloud_banks"
+      "dragonblockarcanedba:otherworld_rock_spires"
     ],
     []
   ]

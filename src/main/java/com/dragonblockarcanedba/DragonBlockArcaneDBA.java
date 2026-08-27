@@ -18,6 +18,9 @@ import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
 
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+
 public class DragonBlockArcaneDBA implements ModInitializer {
     public static final String MOD_ID = "dragonblockarcanedba";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);

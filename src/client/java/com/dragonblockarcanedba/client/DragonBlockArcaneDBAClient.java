@@ -431,6 +431,8 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(2));
             }
 
+            // Otherworld atmospheric layered cloud particles
+            com.dragonblockarcanedba.client.particle.OtherworldCloudParticleManager.tick(client);
 
             if (client.level != null) {
                 for (net.minecraft.world.entity.player.Player player : client.level.players()) {
