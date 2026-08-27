@@ -4,7 +4,7 @@
   "downfall": 0.0,
   "attributes": {
     "minecraft:visual/cloud_color": "#E6FFE070",
-    "minecraft:visual/cloud_height": 275.0
+    "minecraft:visual/cloud_height": 210.0
   },
   "effects": {
     "fog_color": 16763972,

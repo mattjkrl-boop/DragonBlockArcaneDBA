@@ -15,6 +15,7 @@
 	],
 	"client": [
 		"CloudTextureMixin",
+		"CloudRendererAccessor",
 		"ClientLevelWeatherMixin",
 		"client.SaberClientMixin"
 	],
