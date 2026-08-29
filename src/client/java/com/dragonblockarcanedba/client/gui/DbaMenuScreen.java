@@ -1,36 +1,26 @@
 package com.dragonblockarcanedba.client.gui;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
-import com.dragonblockarcanedba.network.ActionPayload;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class DbaMenuScreen extends Screen {
     private final List<MenuTab> tabs = new ArrayList<>();
-    private final String[] tabNames = {"STATS", "FORMS", "TECHS", "KI CUSTOMIZER"};
-    private int activeTab = 0;
+    private final String[] tabNames = {"✦ STATS", "⚡ FORMS", "🌌 SKILLS", "🔮 CRAFT"};
+    private static int lastActiveTab = 2; // Default to Skill Tree
+    private int activeTab = lastActiveTab;
 
     private int x;
     private int y;
-    // Dimensions for the overall window
-    private final int bgWidth = 370;
-    private final int bgHeight = 230;
-    
-    // Sidebar dimensions
-    private final int sidebarWidth = 100;
-    private final int tabHeight = 33;
-    private final int tabSpacing = 2;
-
-    // Speed slider dragging state
-    private boolean isDraggingSpeedSlider = false;
+    private int bgWidth = 540;
+    private int bgHeight = 330;
 
     public DbaMenuScreen() {
         super(Component.literal("Dragon Block Arcane Menu"));
@@ -42,21 +32,21 @@ public class DbaMenuScreen extends Screen {
 
     @Override
     protected void init() {
-        // Center the main frame on screen
+        // Responsive sizing: generous, but clamps to available screen resolution
+        this.bgWidth = Math.min(560, Math.max(340, this.width - 20));
+        this.bgHeight = Math.min(340, Math.max(220, this.height - 20));
         this.x = (this.width - bgWidth) / 2;
         this.y = (this.height - bgHeight) / 2;
-        this.isDraggingSpeedSlider = false;
 
         this.clearWidgets();
-        
-        // Initialize the active tab (it may add its own widgets)
         tabs.get(activeTab).init(this);
     }
 
-    private void selectTab(int index) {
+    public void selectTab(int index) {
         if (index >= 0 && index < tabs.size()) {
             this.activeTab = index;
-            init(); // Re-initialize the screen for the new tab widgets
+            lastActiveTab = index;
+            init();
         }
     }
 
@@ -64,189 +54,184 @@ public class DbaMenuScreen extends Screen {
     public int getY() { return y; }
     public int getBgWidth() { return bgWidth; }
     public int getBgHeight() { return bgHeight; }
-    public int getSidebarWidth() { return sidebarWidth; }
-    public int getContentX() { return x + sidebarWidth; }
-    public int getContentWidth() { return bgWidth - sidebarWidth; }
+    public int getContentX() { return x + 6; }
+    public int getContentY() { return y + 34; }
+    public int getContentWidth() { return bgWidth - 12; }
+    public int getContentHeight() { return bgHeight - 40; }
 
     public <T extends net.minecraft.client.gui.components.events.GuiEventListener & net.minecraft.client.gui.components.Renderable & net.minecraft.client.gui.narration.NarratableEntry> T addTabWidget(T widget) {
         return this.addRenderableWidget(widget);
     }
 
-    public int getSpeedCardX() { return x + 6; }
-    public int getSpeedCardY() { return y + 160; }
-    public int getSpeedCardW() { return sidebarWidth - 12; }
-    public int getSpeedCardH() { return 62; }
-
-    public int getSliderX() { return getSpeedCardX() + 6; }
-    public int getSliderY() { return getSpeedCardY() + 28; }
-    public int getSliderW() { return getSpeedCardW() - 12; }
-    public int getSliderH() { return 10; }
-
-    private void updateSpeedFromMouse(double mouseX, PlayerStatsAccessor accessor) {
-        int sliderX = getSliderX();
-        int sliderW = getSliderW();
-        float frac = (float) (mouseX - sliderX) / (float) sliderW;
-        int percent = Math.max(1, Math.min(100, Math.round(frac * 100.0f)));
-        if (percent != accessor.dba$getSpeedPercent()) {
-            accessor.dba$setSpeedPercent(percent);
-            sendSpeedPercent(percent);
+    public static String formatCompactNumber(long num) {
+        if (num >= 1_000_000_000L) {
+            return String.format(Locale.US, "%.1fB", num / 1_000_000_000.0);
+        } else if (num >= 10_000_000L) {
+            return String.format(Locale.US, "%.1fM", num / 1_000_000.0);
+        } else if (num >= 100_000L) {
+            return String.format(Locale.US, "%.0fk", num / 1_000.0);
         }
-    }
-
-    private void sendSpeedPercent(int percent) {
-        CompoundTag nbt = new CompoundTag();
-        nbt.putString("action", "set_speed_percent");
-        nbt.putInt("percent", percent);
-        ClientPlayNetworking.send(new ActionPayload(nbt));
+        return String.format(Locale.US, "%,d", num);
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         super.extractRenderState(context, mouseX, mouseY, delta);
 
-        int sidebarBg = 0xAA11151A; // Dark blue/gray, but lighter alpha
-        int contentBg = 0xAA1A1C20; // Slightly lighter sleek gray
-        int borderColor = 0xAA55FF88; // Sleek mint green accent
-        int borderThick = 2;
+        Minecraft client = Minecraft.getInstance();
 
-        // Draw sidebar background
-        context.fill(x, y, x + sidebarWidth, y + bgHeight, sidebarBg);
-        // Draw content background
-        context.fill(x + sidebarWidth, y, x + bgWidth, y + bgHeight, contentBg);
+        // 1. Outer Dark Obsidian Glass Frame
+        context.fill(x - 2, y - 2, x + bgWidth + 2, y + bgHeight + 2, 0x88000000);
+        context.fill(x, y, x + bgWidth, y + bgHeight, 0xF20A0E17); // Cosmic slate
 
-        // Draw Tabs
+        // Glowing outer border
+        int borderColor = 0xAA00E5FF;
+        context.fill(x, y, x + bgWidth, y + 1, borderColor);
+        context.fill(x, y + bgHeight - 1, x + bgWidth, y + bgHeight, borderColor);
+        context.fill(x, y, x + 1, y + bgHeight, borderColor);
+        context.fill(x + bgWidth - 1, y, x + bgWidth, y + bgHeight, borderColor);
+
+        // 2. Top Header Navigation Bar
+        int headerH = 30;
+        context.fill(x + 1, y + 1, x + bgWidth - 1, y + headerH, 0xDD0D131F);
+        context.fill(x + 1, y + headerH - 1, x + bgWidth - 1, y + headerH, 0x3300E5FF);
+
+        // Right side buttons: Close [✕] and Settings [⚙]
+        int closeW = 16;
+        int closeH = 16;
+        int closeX = x + bgWidth - closeW - 6;
+        int closeY = y + 7;
+        boolean hoverClose = mouseX >= closeX && mouseX <= closeX + closeW && mouseY >= closeY && mouseY <= closeY + closeH;
+        context.fill(closeX, closeY, closeX + closeW, closeY + closeH, hoverClose ? 0xAAFF4444 : 0x33442222);
+        context.centeredText(client.font, Component.literal("✕"), closeX + closeW / 2, closeY + 4, hoverClose ? 0xFFFFFFFF : 0xFFAAAAAA);
+
+        int gearW = 16;
+        int gearH = 16;
+        int gearX = closeX - gearW - 4;
+        int gearY = closeY;
+        boolean hoverGear = mouseX >= gearX && mouseX <= gearX + gearW && mouseY >= gearY && mouseY <= gearY + gearH;
+        context.fill(gearX, gearY, gearX + gearW, gearY + gearH, hoverGear ? 0xAA00C853 : 0x33112818);
+        context.centeredText(client.font, Component.literal("⚙"), gearX + gearW / 2, gearY + 4, hoverGear ? 0xFFFFFFFF : 0xFF55FF88);
+
+        // Calculate available space for tabs vs status pill
+        int rightMargin = gearX - 6;
+
+        // Draw Left Navigation Tabs (Compact & Responsive)
+        int tabX = x + 6;
         for (int i = 0; i < tabs.size(); i++) {
-            int tabX = x;
-            int tabY = y + 14 + i * (tabHeight + tabSpacing);
-            
+            String name = tabNames[i];
+            int textW = client.font.width(name);
+            int tabW = textW + 10;
+            int tabY = y + 4;
+            int tabH = headerH - 8;
+
             boolean isActive = (i == activeTab);
-            boolean isHovered = (mouseX >= tabX && mouseX <= tabX + sidebarWidth && mouseY >= tabY && mouseY <= tabY + tabHeight);
-            
-            int textCol = isActive ? 0xFF55FF88 : (isHovered ? 0xFFFFFFFF : 0xFFAAAAAA);
+            boolean isHovered = mouseX >= tabX && mouseX <= tabX + tabW && mouseY >= tabY && mouseY <= tabY + tabH;
 
             if (isActive) {
-                // Active highlight background
-                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x4455FF88);
-                // Active left accent line
-                context.fill(tabX, tabY, tabX + 3, tabY + tabHeight, 0xFF55FF88);
+                context.fill(tabX, tabY, tabX + tabW, tabY + tabH, 0x3355FF88);
+                context.fill(tabX, tabY + tabH - 2, tabX + tabW, tabY + tabH, 0xFF55FF88);
             } else if (isHovered) {
-                // Hover highlight background
-                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x33FFFFFF);
-                // Hover accent line
-                context.fill(tabX, tabY, tabX + 3, tabY + tabHeight, 0xAAFFFFFF);
-            } else {
-                // Inactive tabs get a slightly darker backing
-                context.fill(tabX, tabY, tabX + sidebarWidth, tabY + tabHeight, 0x44000000);
+                context.fill(tabX, tabY, tabX + tabW, tabY + tabH, 0x22FFFFFF);
             }
-            
-            // Tab text (left-aligned with padding)
-            Minecraft client = Minecraft.getInstance();
-            context.text(client.font, tabNames[i], tabX + 15, tabY + (tabHeight - 8) / 2, textCol, false);
+
+            int textCol = isActive ? 0xFF55FF88 : (isHovered ? 0xFFFFFFFF : 0xFF8899A6);
+            context.centeredText(client.font, Component.literal(name), tabX + tabW / 2, tabY + 4, textCol);
+            tabX += tabW + 3;
         }
 
-        // Draw Dedicated Speed Control Card in the sidebar off to the side
-        Minecraft client = Minecraft.getInstance();
+        // Consolidated Single Status Pill (Never overlaps!)
         if (client.player instanceof PlayerStatsAccessor accessor) {
-            int cardX = getSpeedCardX();
-            int cardY = getSpeedCardY();
-            int cardW = getSpeedCardW();
-            int cardH = getSpeedCardH();
-            int sliderX = getSliderX();
-            int sliderY = getSliderY();
-            int sliderW = getSliderW();
-            int sliderH = getSliderH();
-            int speedPct = accessor.dba$getSpeedPercent();
+            String race = accessor.dba$getRaceId() != null ? accessor.dba$getRaceId().getPath().replace("_", " ").toUpperCase() : "MORTAL";
+            long lvl = accessor.dba$getLevel();
+            long ap = accessor.dba$getStatPoints();
 
-            boolean hoverCard = (mouseX >= cardX && mouseX <= cardX + cardW && mouseY >= cardY && mouseY <= cardY + cardH);
-            boolean hoverSlider = (mouseX >= sliderX - 3 && mouseX <= sliderX + sliderW + 3 && mouseY >= sliderY - 3 && mouseY <= sliderY + sliderH + 3);
+            int availableW = rightMargin - tabX - 8;
+            if (availableW > 50) {
+                // Try full status string: RACE • LV. X • ✦ X AP
+                String fullStatus = race + " • LV." + formatCompactNumber(lvl) + " • ✦ " + formatCompactNumber(ap) + " AP";
+                String displayStatus = fullStatus;
 
-            // Card background & borders
-            int cardBg = hoverCard ? 0x99111822 : 0x770D1117;
-            int cardBorder = hoverCard ? 0xAA00E5FF : 0x4455FF88;
-            context.fill(cardX, cardY, cardX + cardW, cardY + cardH, cardBg);
-            context.fill(cardX, cardY, cardX + cardW, cardY + 1, 0xFF00E5FF); // top accent line
-            context.fill(cardX, cardY + cardH - 1, cardX + cardW, cardY + cardH, cardBorder);
-            context.fill(cardX, cardY, cardX + 1, cardY + cardH, cardBorder);
-            context.fill(cardX + cardW - 1, cardY, cardX + cardW, cardY + cardH, cardBorder);
+                if (client.font.width(displayStatus) > availableW) {
+                    displayStatus = "LV." + formatCompactNumber(lvl) + " • ✦ " + formatCompactNumber(ap) + " AP";
+                }
+                if (client.font.width(displayStatus) > availableW) {
+                    displayStatus = "✦ " + formatCompactNumber(ap) + " AP";
+                }
 
-            // Header line: "SPEED" and percentage
-            context.text(client.font, Component.literal("SPEED"), cardX + 6, cardY + 6, 0xFF00E5FF);
-            String pctStr = speedPct + "%";
-            int pctW = client.font.width(pctStr);
-            context.text(client.font, Component.literal(pctStr), cardX + cardW - 6 - pctW, cardY + 6, 0xFF55FF88);
+                int pillW = client.font.width(displayStatus) + 12;
+                int pillX = rightMargin - pillW;
+                int pillY = y + 6;
+                int pillH = 18;
 
-            // Subtitle
-            context.centeredText(client.font, Component.literal("Movement Limit"), cardX + cardW / 2, cardY + 17, 0xFF8899A6);
+                context.fill(pillX, pillY, pillX + pillW, pillY + pillH, 0x66162233);
+                context.fill(pillX, pillY, pillX + pillW, pillY + 1, 0x5500E5FF);
+                context.fill(pillX, pillY + pillH - 1, pillX + pillW, pillY + pillH, 0x5500E5FF);
+                context.fill(pillX, pillY, pillX + 1, pillY + pillH, 0x5500E5FF);
+                context.fill(pillX + pillW - 1, pillY, pillX + pillW, pillY + pillH, 0x5500E5FF);
 
-            // Slider Track background
-            context.fill(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH, 0x88000000);
-
-            // Slider Filled progress
-            int fillW = Math.max(2, (int) (sliderW * (speedPct / 100.0f)));
-            int fillColor = (hoverSlider || isDraggingSpeedSlider) ? 0xEE00E5FF : 0xAA00B0FF;
-            context.fill(sliderX, sliderY, sliderX + fillW, sliderY + sliderH, fillColor);
-
-            // Slider Track Borders
-            int trackBorder = (hoverSlider || isDraggingSpeedSlider) ? 0xAA00E5FF : 0x5555FF88;
-            context.fill(sliderX - 1, sliderY - 1, sliderX + sliderW + 1, sliderY, trackBorder);
-            context.fill(sliderX - 1, sliderY + sliderH, sliderX + sliderW + 1, sliderY + sliderH + 1, trackBorder);
-            context.fill(sliderX - 1, sliderY, sliderX, sliderY + sliderH, trackBorder);
-            context.fill(sliderX + sliderW, sliderY, sliderX + sliderW + 1, sliderY + sliderH, trackBorder);
-
-            // Slider Knob
-            int knobX = sliderX + fillW;
-            context.fill(knobX - 2, sliderY - 1, knobX + 2, sliderY + sliderH + 1, 0xFFFFFFFF);
-            context.fill(knobX - 1, sliderY, knobX + 1, sliderY + sliderH, 0xFF00E5FF);
-
-            // Footnote
-            context.centeredText(client.font, Component.literal("Walk / Swim"), cardX + cardW / 2, cardY + 45, 0xFF556677);
+                context.centeredText(client.font, Component.literal(displayStatus), pillX + pillW / 2, pillY + 5, 0xFFFFAA00);
+            }
         }
 
-        // Main frame borders
-        // Top border
-        context.fill(x, y, x + bgWidth, y + borderThick, borderColor);
-        // Bottom border
-        context.fill(x, y + bgHeight - borderThick, x + bgWidth, y + bgHeight, borderColor);
-        // Right border
-        context.fill(x + bgWidth - borderThick, y, x + bgWidth, y + bgHeight, borderColor);
-        // Left border
-        context.fill(x, y, x + borderThick, y + bgHeight, borderColor);
-        // Divider line between sidebar and content
-        context.fill(x + sidebarWidth - 1, y, x + sidebarWidth, y + bgHeight, 0x4455FF88);
-
-        // Delegate content rendering to active tab
+        // 3. Render Active Tab Content
         tabs.get(activeTab).render(context, mouseX, mouseY, delta);
+    }
+
+    public static void playClickSound() {
+        Minecraft client = Minecraft.getInstance();
+        if (client != null && client.getSoundManager() != null) {
+            client.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK, 1.0f));
+        }
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isRepeat) {
         double mouseX = event.x();
         double mouseY = event.y();
-        
-        // Check for tab clicks
+        Minecraft client = Minecraft.getInstance();
+
+        // Close button click
+        int closeW = 16;
+        int closeH = 16;
+        int closeX = x + bgWidth - closeW - 6;
+        int closeY = y + 7;
+        if (mouseX >= closeX && mouseX <= closeX + closeW && mouseY >= closeY && mouseY <= closeY + closeH) {
+            playClickSound();
+            this.onClose();
+            return true;
+        }
+
+        // Settings gear button click
+        int gearW = 16;
+        int gearH = 16;
+        int gearX = closeX - gearW - 4;
+        int gearY = closeY;
+        if (mouseX >= gearX && mouseX <= gearX + gearW && mouseY >= gearY && mouseY <= gearY + gearH) {
+            playClickSound();
+            client.setScreenAndShow(new DbaSettingsScreen(this));
+            return true;
+        }
+
+        // Tab clicks
+        int tabX = x + 6;
+        int headerH = 30;
         for (int i = 0; i < tabs.size(); i++) {
-            int tabX = x;
-            int tabY = y + 14 + i * (tabHeight + tabSpacing);
-            if (mouseX >= tabX && mouseX <= tabX + sidebarWidth && mouseY >= tabY && mouseY <= tabY + tabHeight) {
+            String name = tabNames[i];
+            int textW = client.font.width(name);
+            int tabW = textW + 10;
+            int tabY = y + 4;
+            int tabH = headerH - 8;
+
+            if (mouseX >= tabX && mouseX <= tabX + tabW && mouseY >= tabY && mouseY <= tabY + tabH) {
+                playClickSound();
                 selectTab(i);
                 return true;
             }
+            tabX += tabW + 3;
         }
 
-        // Check for Speed Slider click
-        Minecraft client = Minecraft.getInstance();
-        if (client.player instanceof PlayerStatsAccessor accessor) {
-            int sliderX = getSliderX();
-            int sliderY = getSliderY();
-            int sliderW = getSliderW();
-            int sliderH = getSliderH();
-            if (mouseX >= sliderX - 3 && mouseX <= sliderX + sliderW + 3 && mouseY >= sliderY - 3 && mouseY <= sliderY + sliderH + 3) {
-                this.isDraggingSpeedSlider = true;
-                updateSpeedFromMouse(mouseX, accessor);
-                return true;
-            }
-        }
-
+        // Delegate to active tab
         if (tabs.get(activeTab).mouseClicked(event, isRepeat)) {
             return true;
         }
@@ -255,13 +240,6 @@ public class DbaMenuScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
-        if (this.isDraggingSpeedSlider) {
-            Minecraft client = Minecraft.getInstance();
-            if (client.player instanceof PlayerStatsAccessor accessor) {
-                updateSpeedFromMouse(event.x(), accessor);
-            }
-            return true;
-        }
         if (tabs.get(activeTab).mouseDragged(event, dragX, dragY)) {
             return true;
         }
@@ -270,10 +248,6 @@ public class DbaMenuScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        if (this.isDraggingSpeedSlider) {
-            this.isDraggingSpeedSlider = false;
-            return true;
-        }
         if (tabs.get(activeTab).mouseReleased(event)) {
             return true;
         }
@@ -282,24 +256,6 @@ public class DbaMenuScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        int cardX = getSpeedCardX();
-        int cardY = getSpeedCardY();
-        int cardW = getSpeedCardW();
-        int cardH = getSpeedCardH();
-        if (mouseX >= cardX && mouseX <= cardX + cardW && mouseY >= cardY && mouseY <= cardY + cardH) {
-            Minecraft client = Minecraft.getInstance();
-            if (client.player instanceof PlayerStatsAccessor accessor) {
-                int current = accessor.dba$getSpeedPercent();
-                int step = verticalAmount > 0 ? 5 : -5;
-                int newPct = Math.max(1, Math.min(100, current + step));
-                if (newPct != current) {
-                    accessor.dba$setSpeedPercent(newPct);
-                    sendSpeedPercent(newPct);
-                }
-                return true;
-            }
-        }
-
         if (tabs.get(activeTab).mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount)) {
             return true;
         }

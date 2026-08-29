@@ -1,0 +1,644 @@
+{
+  "format_version": 1,
+  "total_nodes": 50,
+  "nodes": [
+    {
+      "id": "ki_sense",
+      "name": "Ki Sense",
+      "unlockLevel": 1,
+      "apCost": 15,
+      "description": "Senses entity health bars and player Ki within range.",
+      "prerequisites": [],
+      "x": -32,
+      "y": 0,
+      "group": "core"
+    },
+    {
+      "id": "sickle_of_sorrow",
+      "name": "Sickle of Sorrow",
+      "unlockLevel": 5,
+      "apCost": 25,
+      "description": "Summons ethereal dimensional scythe to rend reality.",
+      "prerequisites": [],
+      "x": 32,
+      "y": 0,
+      "group": "core"
+    },
+    {
+      "id": "tech_node_1",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Awakened root node of the Arcane constellation.",
+      "prerequisites": [],
+      "x": -68,
+      "y": -68,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_2",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_1"
+      ],
+      "x": -102,
+      "y": -102,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_3",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_2"
+      ],
+      "x": -136,
+      "y": -136,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_4",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_3"
+      ],
+      "x": -170,
+      "y": -170,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_5",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_4"
+      ],
+      "x": -233,
+      "y": -166,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_6",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_5"
+      ],
+      "x": -298,
+      "y": -136,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_7",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_5"
+      ],
+      "x": -238,
+      "y": -238,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_8",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_4"
+      ],
+      "x": -166,
+      "y": -233,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_9",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_5"
+      ],
+      "x": -136,
+      "y": -298,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_10",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_9"
+      ],
+      "x": -215,
+      "y": -316,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_11",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_7"
+      ],
+      "x": -316,
+      "y": -215,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_12",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious arcane technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_10"
+      ],
+      "x": -306,
+      "y": -306,
+      "group": "arcane"
+    },
+    {
+      "id": "tech_node_13",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Awakened root node of the Celestial constellation.",
+      "prerequisites": [],
+      "x": 68,
+      "y": -68,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_14",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_13"
+      ],
+      "x": 63,
+      "y": -122,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_15",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_13"
+      ],
+      "x": 108,
+      "y": -106,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_16",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_14"
+      ],
+      "x": 95,
+      "y": -160,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_17",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_13"
+      ],
+      "x": 117,
+      "y": -59,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_18",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_15"
+      ],
+      "x": 141,
+      "y": -141,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_19",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_18"
+      ],
+      "x": 109,
+      "y": -207,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_20",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_17"
+      ],
+      "x": 160,
+      "y": -95,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_21",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_20"
+      ],
+      "x": 175,
+      "y": -175,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_22",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_21"
+      ],
+      "x": 166,
+      "y": -233,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_23",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_20"
+      ],
+      "x": 206,
+      "y": -109,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_24",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious celestial technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_23"
+      ],
+      "x": 233,
+      "y": -166,
+      "group": "celestial"
+    },
+    {
+      "id": "tech_node_25",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Awakened root node of the Astral constellation.",
+      "prerequisites": [],
+      "x": -68,
+      "y": 68,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_26",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_25"
+      ],
+      "x": -64,
+      "y": 123,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_27",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_25"
+      ],
+      "x": -110,
+      "y": 108,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_28",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_25"
+      ],
+      "x": -117,
+      "y": 60,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_29",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_26"
+      ],
+      "x": -118,
+      "y": 156,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_30",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_29"
+      ],
+      "x": -109,
+      "y": 206,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_31",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_27"
+      ],
+      "x": -157,
+      "y": 118,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_32",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_31"
+      ],
+      "x": -170,
+      "y": 170,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_33",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_31"
+      ],
+      "x": -206,
+      "y": 109,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_34",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_30"
+      ],
+      "x": -166,
+      "y": 233,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_35",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_34"
+      ],
+      "x": -238,
+      "y": 238,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_36",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious astral technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_32"
+      ],
+      "x": -233,
+      "y": 166,
+      "group": "astral"
+    },
+    {
+      "id": "tech_node_37",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Awakened root node of the Abyssal constellation.",
+      "prerequisites": [],
+      "x": 68,
+      "y": 68,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_38",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_37"
+      ],
+      "x": 117,
+      "y": 83,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_39",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_38"
+      ],
+      "x": 164,
+      "y": 71,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_40",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_38"
+      ],
+      "x": 151,
+      "y": 117,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_41",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_37"
+      ],
+      "x": 83,
+      "y": 117,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_42",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_40"
+      ],
+      "x": 206,
+      "y": 109,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_43",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_41"
+      ],
+      "x": 117,
+      "y": 151,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_44",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_41"
+      ],
+      "x": 71,
+      "y": 164,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_45",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_42"
+      ],
+      "x": 233,
+      "y": 166,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_46",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_42"
+      ],
+      "x": 166,
+      "y": 233,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_47",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_43"
+      ],
+      "x": 170,
+      "y": 170,
+      "group": "abyssal"
+    },
+    {
+      "id": "tech_node_48",
+      "name": "?",
+      "unlockLevel": 1,
+      "apCost": 0,
+      "description": "Mysterious abyssal technique node awaiting discovery.",
+      "prerequisites": [
+        "tech_node_44"
+      ],
+      "x": 109,
+      "y": 206,
+      "group": "abyssal"
+    }
+  ]
+}

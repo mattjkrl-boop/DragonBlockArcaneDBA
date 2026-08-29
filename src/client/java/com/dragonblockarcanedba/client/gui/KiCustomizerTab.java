@@ -1,16 +1,21 @@
 package com.dragonblockarcanedba.client.gui;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient;
 import com.dragonblockarcanedba.ki.KiTechnique;
 import com.dragonblockarcanedba.ki.KiTechniqueType;
 import com.dragonblockarcanedba.network.C2SKiTechniqueSavePayload;
-import com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
+/**
+ * Dedicated Ki Crafter Tab:
+ * - Left: Scrollable controls with docked bottom Save button (zero overlaps!).
+ * - Right: Animated glowing Ki Core Preview Chamber.
+ */
 public class KiCustomizerTab implements MenuTab {
     private DbaMenuScreen parent;
 
@@ -23,19 +28,23 @@ public class KiCustomizerTab implements MenuTab {
         0xFFAA22FF, // Purple
         0xFFFFFFFF  // White
     };
-    
+    private final String[] colorNames = {"Azure", "Crimson", "Emerald", "Golden", "Violet", "Pure"};
+
     private int targetSlot = 0; // 0, 1, 2 for F7, F8, F9
     private int typeIdx = 0;
     private int percentUsed = 50;
     private int colorIdx = 0;
     private boolean isBarrage = false;
 
+    private double scrollY = 0;
+    private boolean isDraggingSlider = false;
     private boolean loadedInitial = false;
 
     @Override
     public void init(DbaMenuScreen screen) {
         this.parent = screen;
-        
+        this.isDraggingSlider = false;
+        this.scrollY = 0;
         if (!loadedInitial) {
             loadSlotData(0);
             loadedInitial = true;
@@ -49,7 +58,6 @@ public class KiCustomizerTab implements MenuTab {
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) client.player;
             KiTechnique tech = accessor.dba$getKiTechniqueSlot(slot);
             if (tech != null && !tech.isEmpty) {
-                // Find type idx
                 typeIdx = 0;
                 for (int i = 0; i < types.length; i++) {
                     if (types[i] == tech.type) {
@@ -57,7 +65,6 @@ public class KiCustomizerTab implements MenuTab {
                         break;
                     }
                 }
-                // Find color idx
                 colorIdx = 0;
                 for (int i = 0; i < colors.length; i++) {
                     if (colors[i] == tech.color) {
@@ -79,170 +86,265 @@ public class KiCustomizerTab implements MenuTab {
     @Override
     public void render(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         Minecraft client = Minecraft.getInstance();
+        if (client.player == null) return;
+
         int startX = parent.getContentX();
-        int startY = parent.getY();
+        int startY = parent.getContentY();
         int width = parent.getContentWidth();
+        int height = parent.getContentHeight();
 
-        // Slot Selector (Top Row)
-        String[] keys = {
-            DragonBlockArcaneDBAClient.techSlot1Key.getTranslatedKeyMessage().getString(),
-            DragonBlockArcaneDBAClient.techSlot2Key.getTranslatedKeyMessage().getString(),
-            DragonBlockArcaneDBAClient.techSlot3Key.getTranslatedKeyMessage().getString()
-        };
-        
-        for (int i = 0; i < 3; i++) {
-            int slotX = startX + 15 + (i * 70);
-            int slotY = startY + 15;
-            int slotW = 65;
-            int slotH = 20;
-            boolean selected = (i == targetSlot);
-            int bgColor = selected ? 0xFF22AA55 : 0x44222222;
-            
-            context.fill(slotX, slotY, slotX + slotW, slotY + slotH, bgColor);
-            if (!selected) {
-                context.fill(slotX, slotY, slotX + slotW, slotY + 1, 0x44FFFFFF);
-                context.fill(slotX, slotY + slotH - 1, slotX + slotW, slotY + slotH, 0x44FFFFFF);
-                context.fill(slotX, slotY, slotX + 1, slotY + slotH, 0x44FFFFFF);
-                context.fill(slotX + slotW - 1, slotY, slotX + slotW, slotY + slotH, 0x44FFFFFF);
-            }
-            context.centeredText(client.font, Component.literal("Slot " + (i+1) + " [" + keys[i].toUpperCase() + "]"), slotX + slotW/2, slotY + 6, selected ? 0xFFFFFFFF : 0xFFAAAAAA);
-        }
-        // Type Selector
-        context.text(client.font, Component.literal("Type:"), startX + 15, startY + 40, 0xFF55FF88);
-        for (int i = 0; i < types.length; i++) {
-            int col = i % 2;
-            int row = i / 2;
-            int tx = startX + 15 + (col * 75);
-            int ty = startY + 55 + (row * 20);
-            int tw = 70;
-            int th = 16;
-            boolean selected = (i == typeIdx);
-            
-            // Sleek hover check
-            boolean hoverT = mouseX >= tx && mouseX <= tx + tw && mouseY >= ty && mouseY <= ty + th;
-            int bgColor = selected ? 0xFF55FF88 : (hoverT ? 0x66222222 : 0x44111111);
-            int textColor = selected ? 0xFF111111 : 0xFFFFFFFF;
-            
-            context.fill(tx, ty, tx + tw, ty + th, bgColor);
-            if (!selected) {
-                context.fill(tx, ty, tx + 1, ty + th, 0x4455FF88); // Left accent
-            }
-            context.centeredText(client.font, Component.literal(types[i].displayName()), tx + tw/2, ty + 4, textColor);
-        }
-        
-        // Color Selector
-        context.text(client.font, Component.literal("Color:"), startX + 15, startY + 120, 0xFF55FF88);
-        for (int i = 0; i < colors.length; i++) {
-            int cx = startX + 15 + (i * 22);
-            int cy = startY + 135;
-            int cw = 16;
-            int ch = 16;
-            boolean selected = (i == colorIdx);
-            
-            context.fill(cx, cy, cx + cw, cy + ch, colors[i]);
-            if (selected) {
-                context.fill(cx - 2, cy - 2, cx + cw + 2, cy, 0xFFFFFFFF); // Top
-                context.fill(cx - 2, cy + ch, cx + cw + 2, cy + ch + 2, 0xFFFFFFFF); // Bottom
-                context.fill(cx - 2, cy, cx, cy + ch, 0xFFFFFFFF); // Left
-                context.fill(cx + cw, cy, cx + cw + 2, cy + ch, 0xFFFFFFFF); // Right
-            }
-        }
-        
-        // Mode (if Blast)
-        int nextY = 160;
-        if (types[typeIdx] == KiTechniqueType.BLAST) {
-            context.text(client.font, Component.literal("Mode:"), startX + 15, startY + 160, 0xFF55FF88);
-            // Single
-            int mx = startX + 15;
-            int my = startY + 175;
-            context.fill(mx, my, mx + 50, my + 16, !isBarrage ? 0xFF55FF88 : 0x44111111);
-            if (isBarrage) context.fill(mx, my, mx + 1, my + 16, 0x4455FF88);
-            context.centeredText(client.font, Component.literal("Single"), mx + 25, my + 4, !isBarrage ? 0xFF111111 : 0xFFFFFFFF);
-            // Barrage
-            mx += 55;
-            context.fill(mx, my, mx + 50, my + 16, isBarrage ? 0xFF55FF88 : 0x44111111);
-            if (!isBarrage) context.fill(mx, my, mx + 1, my + 16, 0x4455FF88);
-            context.centeredText(client.font, Component.literal("Barrage"), mx + 25, my + 4, isBarrage ? 0xFF111111 : 0xFFFFFFFF);
-            
-            nextY = 200;
-        }
-        
-        // Save Button
-        int saveW = 105;
-        int saveH = 18;
-        int saveX = startX + 15;
-        int saveY = startY + nextY;
+        // =========================================================================
+        // 1. LEFT COLUMN: CRAFTER CONTROLS (width ~ 280-320)
+        // =========================================================================
+        int leftW = Math.min(310, width - 150);
+        int leftX = startX + 6;
+        int leftY = startY + 6;
+        int leftH = height - 12;
+
+        context.fill(leftX, leftY, leftX + leftW, leftY + leftH, 0xAA0D131F);
+        context.fill(leftX, leftY, leftX + leftW, leftY + 1, 0x4400E5FF);
+        context.fill(leftX, leftY + leftH - 1, leftX + leftW, leftY + leftH, 0x4400E5FF);
+        context.fill(leftX, leftY, leftX + 1, leftY + leftH, 0x4400E5FF);
+        context.fill(leftX + leftW - 1, leftY, leftX + leftW, leftY + leftH, 0x4400E5FF);
+
+        // Docked Bottom Save Button (24px high)
+        int saveH = 22;
+        int saveW = leftW - 16;
+        int saveX = leftX + 8;
+        int saveY = leftY + leftH - saveH - 6;
+
         boolean hoverSave = mouseX >= saveX && mouseX <= saveX + saveW && mouseY >= saveY && mouseY <= saveY + saveH;
-        context.fill(saveX, saveY, saveX + saveW, saveY + saveH, hoverSave ? 0xFF55FF88 : 0xFF22AA55);
-        context.centeredText(client.font, Component.literal("SAVE TECHNIQUE"), saveX + saveW/2, saveY + 5, hoverSave ? 0xFF111111 : 0xFFFFFFFF);
+        context.fill(saveX, saveY, saveX + saveW, saveY + saveH, hoverSave ? 0xDD00C853 : 0xAA009624);
+        context.fill(saveX, saveY, saveX + saveW, saveY + 1, 0xFF55FF88);
+        context.fill(saveX, saveY + saveH - 1, saveX + saveW, saveY + saveH, 0xFF55FF88);
+        context.fill(saveX, saveY, saveX + 1, saveY + saveH, 0xFF55FF88);
+        context.fill(saveX + saveW - 1, saveY, saveX + saveW, saveY + saveH, 0xFF55FF88);
 
-        // Preview Area (Right side)
-        int previewX = startX + 175;
-        int previewY = startY + 45;
-        int previewW = width - 185;
-        int previewH = 175;
-        
-        context.fill(previewX, previewY, previewX + previewW, previewY + previewH, 0x44000000);
-        int activeColor = colors[colorIdx];
-        context.fill(previewX, previewY, previewX + previewW, previewY + 2, activeColor); // Top
-        context.fill(previewX, previewY + previewH - 2, previewX + previewW, previewY + previewH, activeColor); // Bottom
-        context.fill(previewX, previewY, previewX + 2, previewY + previewH, activeColor); // Left
-        context.fill(previewX + previewW - 2, previewY, previewX + previewW, previewY + previewH, activeColor); // Right
-        
-        context.centeredText(client.font, Component.literal("Summary"), previewX + previewW / 2, previewY + 15, 0xFFFFFFFF);
-        String displayName = types[typeIdx].displayName();
-        if (types[typeIdx] == KiTechniqueType.BLAST && isBarrage) displayName = "Ki Barrage";
-        context.centeredText(client.font, Component.literal(displayName), previewX + previewW / 2, previewY + 35, activeColor);
-        
-        if (types[typeIdx] == KiTechniqueType.EXPLOSION) {
-            context.centeredText(client.font, Component.literal("Cost: 100%"), previewX + previewW / 2, previewY + 55, 0xFFFF5555);
-            context.centeredText(client.font, Component.literal("Self Damage!"), previewX + previewW / 2, previewY + 70, 0xFFFF2222);
-        } else {
-            // Percent Used Slider
-            context.centeredText(client.font, Component.literal("Ki Cost: " + percentUsed + "%"), previewX + previewW / 2, previewY + 55, 0xFF55FFFF);
-            int px = previewX + 10;
-            int py = previewY + 70;
-            int pw = previewW - 20;
-            int ph = 6;
-            context.fill(px, py, px + pw, py + ph, 0x44000000);
-            context.fill(px, py, px + (int)(pw * (percentUsed / 100.0f)), py + ph, 0xFF55FFFF);
-            // Slider border
-            context.fill(px - 1, py - 1, px + pw + 1, py, 0x55FFFFFF);
-            context.fill(px - 1, py + ph, px + pw + 1, py + ph + 1, 0x55FFFFFF);
-            context.fill(px - 1, py, px, py + ph, 0x55FFFFFF);
-            context.fill(px + pw, py, px + pw + 1, py + ph, 0x55FFFFFF);
+        String saveTxt = "SAVE TECHNIQUE TO SLOT " + (targetSlot + 1);
+        context.centeredText(client.font, Component.literal(saveTxt), saveX + saveW / 2, saveY + 7, 0xFFFFFFFF);
+
+        // Separator above save button
+        context.fill(leftX + 4, saveY - 4, leftX + leftW - 4, saveY - 3, 0x3300E5FF);
+
+        // Scrollable Controls Region (above save button)
+        int scrollAreaY = leftY + 4;
+        int scrollAreaH = saveY - scrollAreaY - 6;
+
+        int totalContentH = 220; // Natural height of all controls
+        int maxScroll = Math.max(0, totalContentH - scrollAreaH);
+        scrollY = Math.max(-maxScroll, Math.min(0, scrollY));
+
+        context.enableScissor(leftX, scrollAreaY, leftX + leftW, scrollAreaY + scrollAreaH);
+
+        int cy = scrollAreaY + 4 + (int) scrollY;
+
+        // 1. Slot Selector
+        context.text(client.font, Component.literal("TARGET QUICK-SLOT:"), leftX + 10, cy, 0xFF55FF88);
+        cy += 11;
+
+        String[] keys = {
+            DragonBlockArcaneDBAClient.techSlot1Key.getTranslatedKeyMessage().getString().toUpperCase(),
+            DragonBlockArcaneDBAClient.techSlot2Key.getTranslatedKeyMessage().getString().toUpperCase(),
+            DragonBlockArcaneDBAClient.techSlot3Key.getTranslatedKeyMessage().getString().toUpperCase()
+        };
+
+        int slotBtnW = (leftW - 28) / 3;
+        for (int i = 0; i < 3; i++) {
+            int sx = leftX + 10 + i * (slotBtnW + 4);
+            int sy = cy;
+            int sh = 16;
+            boolean selected = (i == targetSlot);
+            boolean hoverS = mouseX >= sx && mouseX <= sx + slotBtnW && mouseY >= sy && mouseY <= sy + sh && mouseY < saveY - 4;
+
+            int bg = selected ? 0xDD00C853 : (hoverS ? 0x66223344 : 0x44111822);
+            int border = selected ? 0xFF55FF88 : 0x44FFFFFF;
+
+            context.fill(sx, sy, sx + slotBtnW, sy + sh, bg);
+            context.fill(sx, sy, sx + slotBtnW, sy + 1, border);
+            context.fill(sx, sy + sh - 1, sx + slotBtnW, sy + sh, border);
+            context.fill(sx, sy, sx + 1, sy + sh, border);
+            context.fill(sx + slotBtnW - 1, sy, sx + slotBtnW, sy + sh, border);
+
+            String label = "SLOT " + (i + 1) + " [" + keys[i] + "]";
+            context.centeredText(client.font, Component.literal(label), sx + slotBtnW / 2, sy + 4, selected ? 0xFFFFFFFF : 0xFFAAAAAA);
         }
-        
-        // Color swatch graphic inside preview
-        context.fill(previewX + previewW / 2 - 12, previewY + 100, previewX + previewW / 2 + 12, previewY + 124, activeColor);
-        context.fill(previewX + previewW / 2 - 10, previewY + 102, previewX + previewW / 2 + 10, previewY + 122, 0xFFFFFFFF);
+        cy += 22;
+
+        // 2. Attack Archetype Chips
+        context.text(client.font, Component.literal("ATTACK ARCHETYPE:"), leftX + 10, cy, 0xFF55FF88);
+        cy += 11;
+
+        int typeCols = 3;
+        int typeBtnW = (leftW - 28) / typeCols;
+        for (int i = 0; i < types.length; i++) {
+            int col = i % typeCols;
+            int row = i / typeCols;
+            int tx = leftX + 10 + col * (typeBtnW + 4);
+            int ty = cy + row * 18;
+            int th = 15;
+
+            boolean selected = (i == typeIdx);
+            boolean hoverT = mouseX >= tx && mouseX <= tx + typeBtnW && mouseY >= ty && mouseY <= ty + th && mouseY < saveY - 4;
+
+            int bg = selected ? 0xDD0B3848 : (hoverT ? 0x66223344 : 0x44111822);
+            int border = selected ? 0xFF00E5FF : 0x33FFFFFF;
+            int textCol = selected ? 0xFFFFFFFF : (hoverT ? 0xFFCCDDEE : 0xFFAAAAAA);
+
+            context.fill(tx, ty, tx + typeBtnW, ty + th, bg);
+            context.fill(tx, ty, tx + typeBtnW, ty + 1, border);
+            context.fill(tx, ty + th - 1, tx + typeBtnW, ty + th, border);
+            context.fill(tx, ty, tx + 1, ty + th, border);
+            context.fill(tx + typeBtnW - 1, ty, tx + typeBtnW, ty + th, border);
+
+            context.centeredText(client.font, Component.literal(types[i].displayName()), tx + typeBtnW / 2, ty + 4, textCol);
+        }
+        cy += 40;
+
+        // 3. Aura Color Chips
+        context.text(client.font, Component.literal("AURA ENERGY COLOR:"), leftX + 10, cy, 0xFF55FF88);
+        cy += 11;
+
+        int colorBtnW = (leftW - 32) / colors.length;
+        for (int i = 0; i < colors.length; i++) {
+            int cx = leftX + 10 + i * (colorBtnW + 4);
+            int cyBtn = cy;
+            int ch = 14;
+            boolean selected = (i == colorIdx);
+
+            context.fill(cx, cyBtn, cx + colorBtnW, cyBtn + ch, colors[i]);
+            if (selected) {
+                context.fill(cx - 2, cyBtn - 2, cx + colorBtnW + 2, cyBtn, 0xFFFFFFFF);
+                context.fill(cx - 2, cyBtn + ch, cx + colorBtnW + 2, cyBtn + ch + 2, 0xFFFFFFFF);
+                context.fill(cx - 2, cyBtn, cx, cyBtn + ch, 0xFFFFFFFF);
+                context.fill(cx + colorBtnW, cyBtn, cx + colorBtnW + 2, cyBtn + ch, 0xFFFFFFFF);
+            }
+        }
+        cy += 20;
+
+        // 4. Mode Switcher (if BLAST)
+        if (types[typeIdx] == KiTechniqueType.BLAST) {
+            context.text(client.font, Component.literal("DISCHARGE MODE:"), leftX + 10, cy, 0xFF55FF88);
+            cy += 11;
+
+            int modeW = (leftW - 24) / 2;
+            int m1X = leftX + 10;
+            int m2X = m1X + modeW + 4;
+            int mh = 15;
+
+            // Single
+            context.fill(m1X, cy, m1X + modeW, cy + mh, !isBarrage ? 0xDD00C853 : 0x44111822);
+            context.centeredText(client.font, Component.literal("Single Fire"), m1X + modeW / 2, cy + 4, !isBarrage ? 0xFFFFFFFF : 0xFFAAAAAA);
+
+            // Barrage
+            context.fill(m2X, cy, m2X + modeW, cy + mh, isBarrage ? 0xDD00C853 : 0x44111822);
+            context.centeredText(client.font, Component.literal("Rapid Barrage"), m2X + modeW / 2, cy + 4, isBarrage ? 0xFFFFFFFF : 0xFFAAAAAA);
+
+            cy += 20;
+        }
+
+        // 5. Ki Power / Cost Slider
+        if (types[typeIdx] == KiTechniqueType.EXPLOSION) {
+            context.text(client.font, Component.literal("POWER: SELF-DESTRUCT (100% KI)"), leftX + 10, cy, 0xFFFF5555);
+            cy += 16;
+        } else {
+            String pStr = "KI POWER: " + percentUsed + "%";
+            context.text(client.font, Component.literal(pStr), leftX + 10, cy, 0xFFFFAA00);
+            cy += 10;
+
+            int sldX = leftX + 10;
+            int sldY = cy;
+            int sldW = leftW - 20;
+            int sldH = 6;
+
+            context.fill(sldX, sldY, sldX + sldW, sldY + sldH, 0x88000000);
+            int fill = (int) (sldW * (percentUsed / 100.0f));
+            context.fill(sldX, sldY, sldX + fill, sldY + sldH, 0xFFFFAA00);
+            // Knob
+            int knobX = sldX + fill;
+            context.fill(knobX - 2, sldY - 1, knobX + 2, sldY + sldH + 1, 0xFFFFFFFF);
+            cy += 14;
+        }
+
+        context.disableScissor();
+
+        // =========================================================================
+        // 2. RIGHT COLUMN: ANIMATED KI CORE CHAMBER
+        // =========================================================================
+        int rightX = leftX + leftW + 8;
+        int rightW = width - leftW - 14;
+        int rightY = startY + 6;
+        int rightH = height - 12;
+
+        context.fill(rightX, rightY, rightX + rightW, rightY + rightH, 0xAA0A0E17);
+        context.fill(rightX, rightY, rightX + rightW, rightY + 1, 0x4400E5FF);
+        context.fill(rightX, rightY + rightH - 1, rightX + rightW, rightY + rightH, 0x4400E5FF);
+        context.fill(rightX, rightY, rightX + 1, rightY + rightH, 0x4400E5FF);
+        context.fill(rightX + rightW - 1, rightY, rightX + rightW, rightY + rightH, 0x4400E5FF);
+
+        context.text(client.font, Component.literal("ATTACK SIMULATION"), rightX + 10, rightY + 8, 0xFF00E5FF);
+
+        // Animated Orb Core (Proportional to window height)
+        int coreX = rightX + rightW / 2;
+        int coreY = rightY + Math.min(65, rightH / 4);
+        long time = System.currentTimeMillis();
+        int pulse = (int) (Math.sin(time / 200.0) * 3);
+        int orbRadius = 18 + pulse;
+        int activeColor = colors[colorIdx];
+
+        // Outer Aura
+        for (int r = orbRadius + 6; r >= orbRadius; r -= 2) {
+            int alpha = (int) (40 * ((double) (r - orbRadius) / 6.0));
+            int auraCol = (alpha << 24) | (activeColor & 0x00FFFFFF);
+            for (int y = -r; y <= r; y++) {
+                int w = (int) Math.sqrt(r * r - y * y);
+                context.fill(coreX - w, coreY + y, coreX + w + 1, coreY + y + 1, auraCol);
+            }
+        }
+        // Solid Core
+        for (int y = -orbRadius; y <= orbRadius; y++) {
+            int w = (int) Math.sqrt(orbRadius * orbRadius - y * y);
+            context.fill(coreX - w, coreY + y, coreX + w + 1, coreY + y + 1, activeColor);
+        }
+        // White Hot Center
+        int inner = orbRadius / 2;
+        for (int y = -inner; y <= inner; y++) {
+            int w = (int) Math.sqrt(inner * inner - y * y);
+            context.fill(coreX - w, coreY + y, coreX + w + 1, coreY + y + 1, 0xFFFFFFFF);
+        }
+
+        // Summary Details Card below Orb
+        int cardY = coreY + orbRadius + 14;
+        int cardH = rightY + rightH - cardY - 8;
+        if (cardH > 40) {
+            context.fill(rightX + 8, cardY, rightX + rightW - 8, rightY + rightH - 8, 0x66060910);
+
+            String typeName = types[typeIdx].displayName();
+            if (types[typeIdx] == KiTechniqueType.BLAST && isBarrage) typeName = "Ki Barrage";
+            context.text(client.font, Component.literal("Form: " + typeName), rightX + 14, cardY + 6, 0xFFFFFFFF);
+            context.text(client.font, Component.literal("Color: " + colorNames[colorIdx]), rightX + 14, cardY + 18, activeColor);
+
+            int costPct = (types[typeIdx] == KiTechniqueType.EXPLOSION) ? 100 : percentUsed;
+            context.text(client.font, Component.literal("Ki Cost: " + costPct + "%"), rightX + 14, cardY + 30, 0xFF00E5FF);
+
+            String modeName = (types[typeIdx] == KiTechniqueType.BLAST) ? (isBarrage ? "Rapid Barrage" : "Single Shot") : "Standard Flow";
+            context.text(client.font, Component.literal("Discharge: " + modeName), rightX + 14, cardY + 42, 0xFFFFAA00);
+
+            String slotBound = "Bound: Slot " + (targetSlot + 1) + " [" + keys[targetSlot] + "]";
+            context.text(client.font, Component.literal(slotBound), rightX + 14, cardY + 54, 0xFF55FF88);
+        }
     }
-    
-    private void updatePercentFromMouse(double mx, int px, int pw) {
-        double ratio = (mx - px) / (double)pw;
-        if (ratio < 0.01) ratio = 0.01;
-        if (ratio > 1.0) ratio = 1.0;
-        percentUsed = (int)(ratio * 100);
+
+    private void updatePercentFromMouse(double mx, int sldX, int sldW) {
+        float frac = (float) (mx - sldX) / (float) sldW;
+        percentUsed = Math.max(5, Math.min(100, Math.round(frac * 100.0f)));
     }
 
     @Override
-    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
-        double mx = event.x();
-        double my = event.y();
-        int startX = parent.getContentX();
-        int startY = parent.getY();
-        
-        int previewX = startX + 175;
-        int previewY = startY + 45;
-        int previewW = parent.getContentWidth() - 185;
-        
-        int px = previewX + 10;
-        int py = previewY + 70;
-        int pw = previewW - 20;
-        int ph = 6;
-        
-        if (mx >= px && mx <= px + pw && my >= py - 2 && my <= py + ph + 2) {
-            updatePercentFromMouse(mx, px, pw);
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        int leftW = Math.min(310, parent.getContentWidth() - 150);
+        int leftX = parent.getContentX() + 6;
+        if (mouseX >= leftX && mouseX <= leftX + leftW) {
+            this.scrollY += verticalAmount * 18;
             return true;
         }
         return false;
@@ -252,86 +354,24 @@ public class KiCustomizerTab implements MenuTab {
     public boolean mouseClicked(MouseButtonEvent event, boolean isRepeat) {
         double mx = event.x();
         double my = event.y();
+
         int startX = parent.getContentX();
-        int startY = parent.getY();
-        
-        // Slots
-        for (int i = 0; i < 3; i++) {
-            int slotX = startX + 15 + (i * 70);
-            int slotY = startY + 15;
-            int slotW = 65;
-            int slotH = 20;
-            if (mx >= slotX && mx <= slotX + slotW && my >= slotY && my <= slotY + slotH) {
-                loadSlotData(i);
-                return true;
-            }
-        }
-        
-        // Types
-        for (int i = 0; i < types.length; i++) {
-            int col = i % 2;
-            int row = i / 2;
-            int tx = startX + 15 + (col * 75);
-            int ty = startY + 55 + (row * 20);
-            int tw = 70;
-            int th = 16;
-            if (mx >= tx && mx <= tx + tw && my >= ty && my <= ty + th) {
-                typeIdx = i;
-                if (types[typeIdx] != KiTechniqueType.BLAST) isBarrage = false;
-                return true;
-            }
-        }
-        
-        // Colors
-        for (int i = 0; i < colors.length; i++) {
-            int cx = startX + 15 + (i * 22);
-            int cy = startY + 135;
-            int cw = 16;
-            int ch = 16;
-            if (mx >= cx && mx <= cx + cw && my >= cy && my <= cy + ch) {
-                colorIdx = i;
-                return true;
-            }
-        }
-        
-        // Mode
-        int nextY = 160;
-        if (types[typeIdx] == KiTechniqueType.BLAST) {
-            int mx1 = startX + 15;
-            int my1 = startY + 175;
-            if (mx >= mx1 && mx <= mx1 + 50 && my >= my1 && my <= my1 + 16) {
-                isBarrage = false;
-                return true;
-            }
-            int mx2 = mx1 + 55;
-            if (mx >= mx2 && mx <= mx2 + 50 && my >= my1 && my <= my1 + 16) {
-                isBarrage = true;
-                return true;
-            }
-            nextY = 200;
-        }
-        
-        // Slider Click
-        int previewX = startX + 175;
-        int previewY = startY + 45;
-        int previewW = parent.getContentWidth() - 185;
-        
-        int px = previewX + 10;
-        int py = previewY + 70;
-        int pw = previewW - 20;
-        int ph = 6;
-        
-        if (mx >= px && mx <= px + pw && my >= py - 2 && my <= py + ph + 2) {
-            updatePercentFromMouse(mx, px, pw);
-            return true;
-        }
-        
-        // Save
-        int saveW = 105;
-        int saveH = 18;
-        int saveX = startX + 15;
-        int saveY = startY + nextY;
+        int startY = parent.getContentY();
+        int width = parent.getContentWidth();
+        int height = parent.getContentHeight();
+
+        int leftW = Math.min(310, width - 150);
+        int leftX = startX + 6;
+        int leftY = startY + 6;
+        int leftH = height - 12;
+
+        // Save Button Click (Docked at bottom)
+        int saveH = 22;
+        int saveW = leftW - 16;
+        int saveX = leftX + 8;
+        int saveY = leftY + leftH - saveH - 6;
         if (mx >= saveX && mx <= saveX + saveW && my >= saveY && my <= saveY + saveH) {
+            DbaMenuScreen.playClickSound();
             ClientPlayNetworking.send(new C2SKiTechniqueSavePayload(
                 targetSlot,
                 types[typeIdx].name(),
@@ -342,6 +382,107 @@ public class KiCustomizerTab implements MenuTab {
             return true;
         }
 
+        // Scrollable region clicks
+        int scrollAreaY = leftY + 4;
+        int scrollAreaH = saveY - scrollAreaY - 6;
+        if (my < scrollAreaY || my > scrollAreaY + scrollAreaH) return false;
+
+        int cy = scrollAreaY + 4 + (int) scrollY;
+
+        // 1. Slot Selector
+        cy += 11;
+        int slotBtnW = (leftW - 28) / 3;
+        for (int i = 0; i < 3; i++) {
+            int sx = leftX + 10 + i * (slotBtnW + 4);
+            if (mx >= sx && mx <= sx + slotBtnW && my >= cy && my <= cy + 16) {
+                DbaMenuScreen.playClickSound();
+                loadSlotData(i);
+                return true;
+            }
+        }
+        cy += 22;
+
+        // 2. Type Chips
+        cy += 11;
+        int typeCols = 3;
+        int typeBtnW = (leftW - 28) / typeCols;
+        for (int i = 0; i < types.length; i++) {
+            int col = i % typeCols;
+            int row = i / typeCols;
+            int tx = leftX + 10 + col * (typeBtnW + 4);
+            int ty = cy + row * 18;
+            if (mx >= tx && mx <= tx + typeBtnW && my >= ty && my <= ty + 15) {
+                DbaMenuScreen.playClickSound();
+                typeIdx = i;
+                if (types[typeIdx] != KiTechniqueType.BLAST) isBarrage = false;
+                return true;
+            }
+        }
+        cy += 40;
+
+        // 3. Color Swatches
+        cy += 11;
+        int colorBtnW = (leftW - 32) / colors.length;
+        for (int i = 0; i < colors.length; i++) {
+            int cx = leftX + 10 + i * (colorBtnW + 4);
+            if (mx >= cx && mx <= cx + colorBtnW && my >= cy && my <= cy + 14) {
+                DbaMenuScreen.playClickSound();
+                colorIdx = i;
+                return true;
+            }
+        }
+        cy += 20;
+
+        // 4. Mode Buttons (if BLAST)
+        if (types[typeIdx] == KiTechniqueType.BLAST) {
+            cy += 11;
+            int modeW = (leftW - 24) / 2;
+            int m1X = leftX + 10;
+            int m2X = m1X + modeW + 4;
+            if (mx >= m1X && mx <= m1X + modeW && my >= cy && my <= cy + 15) {
+                DbaMenuScreen.playClickSound();
+                isBarrage = false;
+                return true;
+            }
+            if (mx >= m2X && mx <= m2X + modeW && my >= cy && my <= cy + 15) {
+                DbaMenuScreen.playClickSound();
+                isBarrage = true;
+                return true;
+            }
+            cy += 20;
+        }
+
+        // 5. Ki Power Slider
+        if (types[typeIdx] != KiTechniqueType.EXPLOSION) {
+            cy += 10;
+            int sldX = leftX + 10;
+            int sldW = leftW - 20;
+            if (mx >= sldX - 4 && mx <= sldX + sldW + 4 && my >= cy - 4 && my <= cy + 10) {
+                this.isDraggingSlider = true;
+                updatePercentFromMouse(mx, sldX, sldW);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (this.isDraggingSlider && types[typeIdx] != KiTechniqueType.EXPLOSION) {
+            int leftW = Math.min(310, parent.getContentWidth() - 150);
+            int leftX = parent.getContentX() + 6;
+            int sldX = leftX + 10;
+            int sldW = leftW - 20;
+            updatePercentFromMouse(event.x(), sldX, sldW);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        this.isDraggingSlider = false;
         return false;
     }
 }

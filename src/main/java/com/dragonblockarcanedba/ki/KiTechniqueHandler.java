@@ -62,8 +62,9 @@ public class KiTechniqueHandler {
             double usedKi = currentKi * (tech.usedPercent / 100.0);
             double damage = usedKi * (1.0 + willpower * 0.002);
 
-            // Drain Ki
+            // Drain Ki & Pause Ki Recovery (like weapons do)
             accessor.dba$addKi(-usedKi);
+            accessor.dba$pauseKiRecovery(25);
 
             switch (tech.type) {
                 case BLAST -> {
@@ -236,8 +237,9 @@ public class KiTechniqueHandler {
         double radius = Math.max(3.0, kiPower / 100.0);
         if (radius > 50) radius = 50; // Safety cap
 
-        // Drain ALL Ki
+        // Drain ALL Ki & Pause Ki Recovery (like weapons do)
         accessor.dba$setCurrentKi(0);
+        accessor.dba$pauseKiRecovery(60);
 
         // Find all entities in radius
         AABB box = new AABB(

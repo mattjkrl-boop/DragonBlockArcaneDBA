@@ -16,6 +16,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
+import com.dragonblockarcanedba.item.DbaItems;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -173,6 +176,28 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
         if ((Object) this instanceof Player player) {
             if (hand == net.minecraft.world.InteractionHand.MAIN_HAND && player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
                 ci.cancel();
+            }
+        }
+    }
+
+    // ========== Sickle of Sorrow Technique Hand Override ==========
+
+    @Unique
+    private static ItemStack dba$sickleItemInstance = null;
+
+    @Inject(method = "getItemBySlot", at = @At("HEAD"), cancellable = true)
+    private void dba$getSickleItemBySlot(EquipmentSlot slot, CallbackInfoReturnable<ItemStack> cir) {
+        if ((Object) this instanceof Player player) {
+            PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+            if (accessor.dba$isSickleActive()) {
+                if (slot == EquipmentSlot.MAINHAND) {
+                    if (dba$sickleItemInstance == null) {
+                        dba$sickleItemInstance = DbaItems.SICKLE_OF_SORROW.getDefaultInstance();
+                    }
+                    cir.setReturnValue(dba$sickleItemInstance);
+                } else if (slot == EquipmentSlot.OFFHAND) {
+                    cir.setReturnValue(ItemStack.EMPTY);
+                }
             }
         }
     }

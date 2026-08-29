@@ -66,8 +66,13 @@ public interface PlayerStatsAccessor {
     boolean dba$hasTechnique(String technique);
     void dba$setTechniqueUnlocked(String technique, boolean unlocked);
 
+    int dba$getTechniqueLevel(String technique);
+    void dba$setTechniqueLevel(String technique, int level);
+
     boolean dba$isTechniqueActive(String technique);
     void dba$setTechniqueActive(String technique, boolean active);
+
+    boolean dba$isSickleActive();
 
     String dba$getEquippedTechnique(int slot);
     void dba$setEquippedTechnique(int slot, String technique);

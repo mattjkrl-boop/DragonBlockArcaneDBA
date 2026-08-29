@@ -22,20 +22,34 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
             return;
         }
 
-        // Add health bars on all alive, visible living entities (mobs)
-        // Requires Ki Sense technique and distance <= 15 blocks
+        // Add health bars on all alive, visible living entities (mobs) and players (health + ki)
+        // Requires Ki Sense technique and distance <= dynamic range based on Ki Sense level
         boolean hasKiSense = false;
+        float maxSenseRange = 15.0f;
         net.minecraft.client.player.LocalPlayer localPlayer = net.minecraft.client.Minecraft.getInstance().player;
         if (localPlayer != null) {
             com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) localPlayer;
             hasKiSense = accessor.dba$isTechniqueActive("ki_sense");
+            if (hasKiSense) {
+                int level = accessor.dba$getTechniqueLevel("ki_sense");
+                maxSenseRange = (float) com.dragonblockarcanedba.attribute.PlayerStats.getKiSenseRange(level);
+            }
         }
         
-        if (hasKiSense && entity.distanceTo(localPlayer) <= 15.0f && entity.isAlive()) {
+        if (hasKiSense && entity.distanceTo(localPlayer) <= maxSenseRange && entity.isAlive()) {
             float health = entity.getHealth();
             float maxHealth = entity.getMaxHealth();
 
-            net.minecraft.network.chat.MutableComponent healthBar = dba$createHealthBarComponent(health, maxHealth);
+            net.minecraft.network.chat.MutableComponent barComponent = dba$createHealthBarComponent(health, maxHealth);
+
+            // If target is another player, also append cyan Ki bar!
+            if (entity instanceof net.minecraft.world.entity.player.Player targetPlayer && entity != localPlayer) {
+                com.dragonblockarcanedba.attribute.PlayerStatsAccessor targetAccessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) targetPlayer;
+                float currentKi = (float) targetAccessor.dba$getCurrentKi();
+                float maxKi = (float) com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(targetPlayer);
+                net.minecraft.network.chat.MutableComponent kiBar = dba$createKiBarComponent(currentKi, maxKi);
+                barComponent = barComponent.append(net.minecraft.network.chat.Component.literal("  ")).append(kiBar);
+            }
 
             // Populate nameTagAttachment if missing
             if (state.nameTagAttachment == null) {
@@ -52,11 +66,11 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
             }
 
             if (state.nameTag != null) {
-                // If it already has a custom name (or is a player name), render health bar as scoreText
-                state.scoreText = healthBar;
+                // If it already has a custom name (or is a player name), render health/ki bar as scoreText
+                state.scoreText = barComponent;
             } else {
                 // Otherwise, render health bar directly as the primary nameTag
-                state.nameTag = healthBar;
+                state.nameTag = barComponent;
             }
         }
     }
@@ -103,6 +117,30 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
         String numStr = String.format(" %.0f/%.0f", health, maxHealth);
         bar.append(net.minecraft.network.chat.Component.literal(numStr).withStyle(net.minecraft.ChatFormatting.GRAY));
 
+        return bar;
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private static net.minecraft.network.chat.MutableComponent dba$createKiBarComponent(float ki, float maxKi) {
+        int barLength = 10;
+        if (maxKi <= 0) maxKi = 100.0f;
+        float ratio = ki / maxKi;
+        int filledCount = Math.round(ratio * barLength);
+        if (filledCount < 0) filledCount = 0;
+        if (filledCount > barLength) filledCount = barLength;
+        if (ki > 0 && filledCount == 0) filledCount = 1;
+
+        net.minecraft.network.chat.MutableComponent bar = net.minecraft.network.chat.Component.empty();
+        bar.append(net.minecraft.network.chat.Component.literal("⚡ ").withStyle(net.minecraft.ChatFormatting.AQUA));
+        if (filledCount > 0) {
+            bar.append(net.minecraft.network.chat.Component.literal("■".repeat(filledCount)).withStyle(net.minecraft.ChatFormatting.AQUA));
+        }
+        int emptyCount = barLength - filledCount;
+        if (emptyCount > 0) {
+            bar.append(net.minecraft.network.chat.Component.literal("■".repeat(emptyCount)).withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
+        }
+        String numStr = String.format(" %.0f/%.0f", ki, maxKi);
+        bar.append(net.minecraft.network.chat.Component.literal(numStr).withStyle(net.minecraft.ChatFormatting.DARK_AQUA));
         return bar;
     }
 }

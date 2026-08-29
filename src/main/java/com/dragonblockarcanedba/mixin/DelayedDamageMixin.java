@@ -107,7 +107,12 @@ public abstract class DelayedDamageMixin {
                             self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.DEVILS_HANDS_HOLDER);
                         }
                     } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.SORROW_RIFT_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, 25.0, "target_sorrow_rift")) {
+                        double drain = 25.0;
+                        if (attacker instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc) {
+                            int sickleLvl = acc.dba$getTechniqueLevel("sickle_of_sorrow");
+                            drain = com.dragonblockarcanedba.attribute.PlayerStats.getSickleBaseActionDrain(sickleLvl);
+                        }
+                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, drain, "target_sorrow_rift")) {
                             self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.SORROW_RIFT_HOLDER);
                         }
                     } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.POLE_STUN_HOLDER)) {

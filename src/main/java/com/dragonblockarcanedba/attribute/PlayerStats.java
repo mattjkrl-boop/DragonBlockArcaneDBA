@@ -140,7 +140,7 @@ public class PlayerStats {
 
     public static int getXpToNextLevel(int currentLevel) {
         if (currentLevel <= 0) return 50;
-        double calc = 50.0 * Math.pow(currentLevel, 1.05);
+        double calc = 40.0 + 35.0 * Math.pow(currentLevel, 1.02);
         if (calc >= Integer.MAX_VALUE || Double.isInfinite(calc) || Double.isNaN(calc)) {
             return Integer.MAX_VALUE;
         }
@@ -337,5 +337,48 @@ public class PlayerStats {
         
         // Cap damage reduction to at least 0.0 (100% reduction max)
         return Math.max(0.0, multiplier);
+    }
+
+    public static int getTechniqueUpgradeCost(String techId, int targetLevel) {
+        int baseCost = 15;
+        com.dragonblockarcanedba.registry.Technique tech = com.dragonblockarcanedba.registry.TechniqueRegistry.getTechnique(net.minecraft.resources.Identifier.tryParse(techId));
+        if (tech != null) {
+            baseCost = tech.apCost();
+        } else if ("sickle_of_sorrow".equals(techId)) {
+            baseCost = 25;
+        }
+        if (targetLevel <= 1) {
+            return baseCost;
+        }
+        return (int) Math.round(baseCost * Math.pow(1.45, targetLevel - 1));
+    }
+
+    public static int getKiAttackSaveCost(com.dragonblockarcanedba.ki.KiTechniqueType type, int usedPercent, boolean isBarrage) {
+        if (type == com.dragonblockarcanedba.ki.KiTechniqueType.EXPLOSION) {
+            return 25;
+        }
+        int base = 5 + (int) Math.round(usedPercent * 0.2);
+        if (isBarrage) base += 3;
+        return Math.max(5, base);
+    }
+
+    public static int getSickleSummonPercent(int level) {
+        int lvl = Math.min(10, Math.max(1, level));
+        return Math.max(5, 25 - (lvl - 1) * 2);
+    }
+
+    public static double getSickleBaseActionDrain(int level) {
+        int lvl = Math.min(10, Math.max(1, level));
+        return Math.max(6.0, 25.0 - (lvl - 1) * 2.0);
+    }
+
+    public static float getKiSenseRange(int level) {
+        int lvl = Math.min(10, Math.max(1, level));
+        return 15.0f + (lvl - 1) * 5.0f;
+    }
+
+    public static double getKiSenseDrainPerSecond(int level) {
+        int lvl = Math.min(10, Math.max(1, level));
+        return Math.max(0.2, 1.0 - (lvl - 1) * 0.088);
     }
 }

@@ -796,6 +796,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
                         if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem ||
                             stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem ||
+                            ((com.dragonblockarcanedba.attribute.PlayerStatsAccessor) client.player).dba$isSickleActive() ||
                             stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem ||
                             stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
                             stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
@@ -860,6 +861,11 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     for (String key : techUnlocked.keySet()) {
                         accessor.dba$setTechniqueUnlocked(key, techUnlocked.getBooleanOr(key, false));
                     }
+
+                    CompoundTag techLevels = nbt.getCompoundOrEmpty("techniqueLevels");
+                    for (String key : techLevels.keySet()) {
+                        accessor.dba$setTechniqueLevel(key, techLevels.getIntOr(key, 1));
+                    }
                     
                     CompoundTag techActive = nbt.getCompoundOrEmpty("activeTechniques");
                     for (String key : techActive.keySet()) {
@@ -889,6 +895,21 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 }
             });
         });
+
+        // Register Player Ki Broadcast receiver for Ki Sense
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.dragonblockarcanedba.network.PlayerKiBroadcastPayload.TYPE,
+            (payload, context) -> {
+                context.client().execute(() -> {
+                    if (context.client().level != null) {
+                        net.minecraft.world.entity.Entity entity = context.client().level.getEntity(payload.entityId());
+                        if (entity instanceof PlayerStatsAccessor targetAccessor) {
+                            targetAccessor.dba$setCurrentKi(payload.currentKi());
+                        }
+                    }
+                });
+            }
+        );
 
         // Register Space Pod screen opener (S2C)
         ClientPlayNetworking.registerGlobalReceiver(

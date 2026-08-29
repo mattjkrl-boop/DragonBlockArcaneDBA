@@ -86,58 +86,70 @@ public class SickleOfSorrowItem extends Item {
     // --- Left Click: Direct Melee Impact ---
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        if (attacker instanceof ServerPlayer serverPlayer) {
+            executeTechniqueMelee(serverPlayer, target);
+        }
+    }
+
+    public static void executeTechniqueMelee(ServerPlayer serverPlayer, LivingEntity target) {
         // Apply Melting III (amplifier 2) for 15 seconds (300 ticks)
-        target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 2, false, true), attacker);
+        target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 2, false, true), serverPlayer);
 
         // Apply Sorrow Rift for 4 seconds (80 ticks) — weeping shadow corruption
-        target.addEffect(new MobEffectInstance(DbaEffects.SORROW_RIFT_HOLDER, 80, 0, false, true), attacker);
+        target.addEffect(new MobEffectInstance(DbaEffects.SORROW_RIFT_HOLDER, 80, 0, false, true), serverPlayer);
 
-        if (attacker instanceof ServerPlayer serverPlayer) {
-            // Drain Ki for swing cadence (~13 ticks at 1.6 attacks/sec)
-            WeaponDrainHelper.drainKiDiscrete(serverPlayer, 25.0, 13);
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) serverPlayer;
+        int level = accessor.dba$getTechniqueLevel("sickle_of_sorrow");
+        double baseDrain = com.dragonblockarcanedba.attribute.PlayerStats.getSickleBaseActionDrain(level);
 
-            ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
+        // Drain Ki for swing cadence (~13 ticks at 1.6 attacks/sec)
+        WeaponDrainHelper.drainKiDiscrete(serverPlayer, baseDrain, 13);
 
-            // Stat-scaled bonus damage: Strength × 3
-            PlayerStatsAccessor accessor = (PlayerStatsAccessor) serverPlayer;
-            float strengthBonus = (float) (accessor.dba$getStrength() * 3.0);
-            if (strengthBonus > 0) {
-                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), strengthBonus);
-            }
+        ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
 
-            // Soul Rend: Steal 3% of total damage dealt as healing
-            float totalDamage = 750.0f + strengthBonus;
-            float healAmount = totalDamage * 0.03f;
-            serverPlayer.heal(healAmount);
-
-            // Spawn 3D Physical Sorrow Slash Impact Geometry directly on target
-            alternatingTilt = !alternatingTilt;
-            Vec3 targetCenter = target.position().add(0, target.getBbHeight() * 0.5, 0);
-            SorrowSlashEntity impactSlash = new SorrowSlashEntity(
-                serverLevel,
-                serverPlayer,
-                targetCenter,
-                serverPlayer.getYRot(),
-                serverPlayer.getXRot(),
-                0.0f, // Damage already applied above in melee hit
-                alternatingTilt,
-                true  // isImpactBurst
-            );
-            serverLevel.addFreshEntity(impactSlash);
+        // Stat-scaled bonus damage: Strength × 3
+        float strengthBonus = (float) (accessor.dba$getStrength() * 3.0);
+        if (strengthBonus > 0) {
+            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), strengthBonus);
         }
+
+        // Soul Rend: Steal 3% of total damage dealt as healing
+        float totalDamage = 750.0f + strengthBonus;
+        float healAmount = totalDamage * 0.03f;
+        serverPlayer.heal(healAmount);
+
+        // Spawn 3D Physical Sorrow Slash Impact Geometry directly on target
+        alternatingTilt = !alternatingTilt;
+        Vec3 targetCenter = target.position().add(0, target.getBbHeight() * 0.5, 0);
+        SorrowSlashEntity impactSlash = new SorrowSlashEntity(
+            serverLevel,
+            serverPlayer,
+            targetCenter,
+            serverPlayer.getYRot(),
+            serverPlayer.getXRot(),
+            0.0f, // Damage already applied above in melee hit
+            alternatingTilt,
+            true  // isImpactBurst
+        );
+        serverLevel.addFreshEntity(impactSlash);
     }
 
     // --- Left Click: Air Swing Physical Crescent Slash ---
     public static void performSorrowSlash(Player player, ItemStack stack) {
-        if (!player.level().isClientSide() && player.level() instanceof ServerLevel serverLevel) {
-            if (player.getCooldowns().isOnCooldown(stack)) return;
+        performTechniqueAirSwing(player);
+    }
 
-            // Drain Ki for 8-tick swing cadence (25% Ki / min)
-            if (!WeaponDrainHelper.drainKiDiscrete(player, 25.0, 8)) {
+    public static void performTechniqueAirSwing(Player player) {
+        if (!player.level().isClientSide() && player.level() instanceof ServerLevel serverLevel) {
+            PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+            int level = accessor.dba$getTechniqueLevel("sickle_of_sorrow");
+            double baseDrain = com.dragonblockarcanedba.attribute.PlayerStats.getSickleBaseActionDrain(level);
+
+            // Drain Ki for 8-tick swing cadence
+            if (!WeaponDrainHelper.drainKiDiscrete(player, baseDrain, 8)) {
                 return;
             }
 
-            PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
             float strengthBonus = (float) (accessor.dba$getStrength() * 3.0);
             float totalDamage = 750.0f + strengthBonus;
 
@@ -157,9 +169,6 @@ public class SickleOfSorrowItem extends Item {
             );
             slashWave.setDeltaMovement(look.scale(1.6));
             serverLevel.addFreshEntity(slashWave);
-
-            // Brief 8-tick swing cadence
-            player.getCooldowns().addCooldown(stack, 8);
         }
     }
 
@@ -167,20 +176,38 @@ public class SickleOfSorrowItem extends Item {
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
-
-        // Check & drain Ki for 60-tick (3-second) domain cooldown cycle (25% Ki / min)
-        if (!WeaponDrainHelper.drainKiDiscrete(player, 25.0, 60)) {
+        if (player.getCooldowns().isOnCooldown(stack)) {
             return InteractionResult.FAIL;
         }
+        if (performTechniqueDimensionalRift(player)) {
+            player.getCooldowns().addCooldown(stack, 60);
+            return InteractionResult.SUCCESS;
+        }
+        return InteractionResult.FAIL;
+    }
 
-        if (!level.isClientSide()) {
-            ServerLevel serverLevel = (ServerLevel) level;
-            PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+    private static final java.util.Map<java.util.UUID, Long> RIFT_COOLDOWNS = new java.util.concurrent.ConcurrentHashMap<>();
 
-            // Calculate AOE burst damage: 500 + (Spirit × 2)
+    public static boolean performTechniqueDimensionalRift(Player player) {
+        long gameTime = player.level().getGameTime();
+        long lastUse = RIFT_COOLDOWNS.getOrDefault(player.getUUID(), 0L);
+        if (gameTime - lastUse < 60) {
+            return false;
+        }
+
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+        int level = accessor.dba$getTechniqueLevel("sickle_of_sorrow");
+        double baseDrain = com.dragonblockarcanedba.attribute.PlayerStats.getSickleBaseActionDrain(level);
+
+        if (!WeaponDrainHelper.drainKiDiscrete(player, baseDrain, 60)) {
+            return false;
+        }
+        RIFT_COOLDOWNS.put(player.getUUID(), gameTime);
+
+        if (!player.level().isClientSide()) {
+            ServerLevel serverLevel = (ServerLevel) player.level();
             float burstDamage = 500.0f + (float) (accessor.dba$getSpirit() * 2.0);
 
-            // Spawn 3D Physical Dimensional Rift Domain Entity
             DimensionalRiftEntity rift = new DimensionalRiftEntity(
                 serverLevel,
                 player,
@@ -189,9 +216,6 @@ public class SickleOfSorrowItem extends Item {
             );
             serverLevel.addFreshEntity(rift);
         }
-
-        // 3-second cooldown (60 ticks)
-        player.getCooldowns().addCooldown(stack, 60);
-        return InteractionResult.SUCCESS;
+        return true;
     }
 }

@@ -1,1 +1,28 @@
-{"parent": "minecraft:item/generated", "textures": {"layer0": "dragonblockarcanedba:item/sickle_of_sorrow"}}
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "dragonblockarcanedba:item/sickle_of_sorrow"
+  },
+  "display": {
+    "thirdperson_righthand": {
+      "rotation": [ 0, -90, 145 ],
+      "translation": [ 0, 4.0, 0.5 ],
+      "scale": [ 1.8, 1.8, 1.8 ]
+    },
+    "thirdperson_lefthand": {
+      "rotation": [ 0, 90, -145 ],
+      "translation": [ 0, 4.0, 0.5 ],
+      "scale": [ 1.8, 1.8, 1.8 ]
+    },
+    "firstperson_righthand": {
+      "rotation": [ 0, -90, 115 ],
+      "translation": [ 1.13, 3.2, 1.13 ],
+      "scale": [ 1.8, 1.8, 1.8 ]
+    },
+    "firstperson_lefthand": {
+      "rotation": [ 0, 90, -115 ],
+      "translation": [ 1.13, 3.2, 1.13 ],
+      "scale": [ 1.8, 1.8, 1.8 ]
+    }
+  }
+}

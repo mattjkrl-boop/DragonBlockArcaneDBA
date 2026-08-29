@@ -61,6 +61,8 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     private final Map<String, Boolean> dbaUnlockedTechniques = new HashMap<>();
     @Unique
+    private final Map<String, Integer> dbaTechniqueLevelsMap = new HashMap<>();
+    @Unique
     private final Map<String, Boolean> dbaActiveTechniques = new HashMap<>();
     @Unique
     private final String[] dbaEquippedTechniques = new String[]{"", "", ""};
@@ -122,6 +124,9 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
 
         ValueOutput techUnlockedOut = dbaOut.child("unlockedTechniques");
         dbaUnlockedTechniques.forEach(techUnlockedOut::putBoolean);
+
+        ValueOutput techLevelsOut = dbaOut.child("techniqueLevels");
+        dbaTechniqueLevelsMap.forEach(techLevelsOut::putInt);
         
         ValueOutput techActiveOut = dbaOut.child("activeTechniques");
         dbaActiveTechniques.forEach(techActiveOut::putBoolean);
@@ -214,6 +219,17 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             }
         }
 
+        dbaTechniqueLevelsMap.clear();
+        ValueInput techLevelsIn = dbaIn.childOrEmpty("techniqueLevels");
+        for (com.dragonblockarcanedba.registry.Technique tech : com.dragonblockarcanedba.registry.TechniqueRegistry.getAllTechniques()) {
+            int lvl = techLevelsIn.getIntOr(tech.id(), 0);
+            if (lvl > 0) {
+                dbaTechniqueLevelsMap.put(tech.id(), lvl);
+            } else if (dbaUnlockedTechniques.getOrDefault(tech.id(), false)) {
+                dbaTechniqueLevelsMap.put(tech.id(), 1); // Default to level 1 if unlocked
+            }
+        }
+
         dbaActiveTechniques.clear();
         ValueInput techActiveIn = dbaIn.childOrEmpty("activeTechniques");
         for (com.dragonblockarcanedba.registry.Technique tech : com.dragonblockarcanedba.registry.TechniqueRegistry.getAllTechniques()) {
@@ -251,12 +267,47 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         }
 
         // Ki & Stamina recovery & drain mechanics
+        // Ki & Stamina recovery & drain mechanics
         double kiRecovery = PlayerStats.getKiRecovery(player);
         double kiChange = 0.0;
+
+        Identifier formId = dba$getActiveFormId();
+        double formKiDrain = 0.0;
+        if (formId != null) {
+            Form form = DbaRegistries.getForm(formId);
+            if (form != null) {
+                double mastery = dba$getFormMastery(formId);
+                double baseDrain = form.getBaseKiDrain();
+                double maxReduction = form.getMaxMasteryReduction();
+                formKiDrain = baseDrain * (1.0 - (mastery / 100.0 * maxReduction));
+
+                // Mastery XP growth (1 XP per tick in form)
+                dba$addFormMasteryXp(formId, 1);
+            }
+        }
+
+        double techKiDrain = 0.0;
+        if (dba$isTechniqueActive("ki_sense")) {
+            int senseLvl = dba$getTechniqueLevel("ki_sense");
+            techKiDrain = PlayerStats.getKiSenseDrainPerSecond(senseLvl);
+        }
+
+        // Active Ki drains pause natural Ki recovery just like weapons do
+        if (formKiDrain > 0.0 || techKiDrain > 0.0) {
+            dba$pauseKiRecovery(15);
+        }
+
         if (dbaKiRecoveryCooldown > 0) {
             dbaKiRecoveryCooldown--;
         } else {
-            kiChange = kiRecovery / 20.0;
+            kiChange += (kiRecovery / 20.0);
+        }
+
+        if (formKiDrain > 0.0) {
+            kiChange -= (formKiDrain / 20.0);
+        }
+        if (techKiDrain > 0.0) {
+            kiChange -= (techKiDrain / 20.0);
         }
         
         // Recover stamina if not sprinting and recovery is not on cooldown
@@ -269,28 +320,6 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             dbaStaminaRecoveryCooldown--;
         } else {
             dba$addStamina(10.0 / 20.0);
-        }
-
-        Identifier formId = dba$getActiveFormId();
-        if (formId != null) {
-            Form form = DbaRegistries.getForm(formId);
-            if (form != null) {
-                double mastery = dba$getFormMastery(formId);
-                double baseDrain = form.getBaseKiDrain();
-                double maxReduction = form.getMaxMasteryReduction();
-                double actualDrain = baseDrain * (1.0 - (mastery / 100.0 * maxReduction));
-
-                // Mastery XP growth (1 XP per tick in form)
-                dba$addFormMasteryXp(formId, 1);
-
-                kiChange -= (actualDrain / 20.0);
-            }
-        }
-        
-        // Active Technique drains
-        if (dba$isTechniqueActive("ki_sense")) {
-            // Drain 1 Ki per second (0.05 per tick)
-            kiChange -= (1.0 / 20.0);
         }
 
         if (kiChange != 0.0) {
@@ -334,7 +363,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             }
         }
 
-        // Revert transformation if Ki drops to 0
+        // Revert transformation or cancel active weapons/senses if Ki drops to 0
         if (dbaCurrentKi <= 0.0) {
             if (dbaActiveFormId != null) {
                 dba$setActiveFormId(null);
@@ -344,13 +373,22 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
                 dba$setTechniqueActive("ki_sense", false);
                 dba$syncStats();
             }
+            if (dba$isTechniqueActive("sickle_of_sorrow")) {
+                dba$setTechniqueActive("sickle_of_sorrow", false);
+                dba$syncStats();
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cKi depleted! Sickle of Sorrow dissipated."));
+            }
         }
 
-        // Periodic sync to client
+        // Periodic sync to client & broadcast Ki to nearby players for Ki Sense
         if (player.tickCount % 20 == 0) {
             dba$syncStats();
+            if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+                DbaNetwork.broadcastPlayerKi(serverPlayer, dbaCurrentKi, PlayerStats.getMaxKi(player));
+            }
         }
     }
+
 
     // ==================== ACCESSOR IMPLEMENTATIONS ====================
 
@@ -692,6 +730,31 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
 
     @Unique
     @Override
+    public int dba$getTechniqueLevel(String technique) {
+        int lvl = dbaTechniqueLevelsMap.getOrDefault(technique, 0);
+        if (lvl <= 0 && dba$hasTechnique(technique)) {
+            return 1;
+        }
+        return lvl;
+    }
+
+    @Unique
+    @Override
+    public void dba$setTechniqueLevel(String technique, int level) {
+        dbaTechniqueLevelsMap.put(technique, Math.max(0, Math.min(10, level)));
+        if (level > 0) {
+            dba$setTechniqueUnlocked(technique, true);
+        }
+    }
+
+    @Unique
+    @Override
+    public boolean dba$isSickleActive() {
+        return dba$isTechniqueActive("sickle_of_sorrow");
+    }
+
+    @Unique
+    @Override
     public boolean dba$isTechniqueActive(String technique) {
         return dbaActiveTechniques.getOrDefault(technique, false);
     }
@@ -763,6 +826,10 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         CompoundTag techUnlockedNbt = new CompoundTag();
         dbaUnlockedTechniques.forEach(techUnlockedNbt::putBoolean);
         dbaNbt.put("unlockedTechniques", techUnlockedNbt);
+
+        CompoundTag techLevelsNbt = new CompoundTag();
+        dbaTechniqueLevelsMap.forEach(techLevelsNbt::putInt);
+        dbaNbt.put("techniqueLevels", techLevelsNbt);
 
         CompoundTag techActiveNbt = new CompoundTag();
         dbaActiveTechniques.forEach(techActiveNbt::putBoolean);
@@ -886,6 +953,9 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
 
         this.dbaUnlockedTechniques.clear();
         this.dbaUnlockedTechniques.putAll(old.dbaUnlockedTechniques);
+
+        this.dbaTechniqueLevelsMap.clear();
+        this.dbaTechniqueLevelsMap.putAll(old.dbaTechniqueLevelsMap);
 
         this.dbaActiveTechniques.clear();
         this.dbaActiveTechniques.putAll(old.dbaActiveTechniques);

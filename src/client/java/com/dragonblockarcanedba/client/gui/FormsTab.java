@@ -9,11 +9,20 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.Identifier;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
+/**
+ * Transformation Sanctuary:
+ * - Themed transformation cards with aura borders (gold, crimson, silver, purple)
+ * - Mastery progress gauges (0-100%)
+ * - Ki drain metrics and stat multiplier chips
+ * - Smooth scrolling and tactile transform/revert buttons
+ */
 public class FormsTab implements MenuTab {
     private DbaMenuScreen parent;
     private double scrollY = 0;
@@ -21,54 +30,78 @@ public class FormsTab implements MenuTab {
     @Override
     public void init(DbaMenuScreen screen) {
         this.parent = screen;
+        this.scrollY = 0;
     }
-    
+
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        this.scrollY += verticalAmount * 20;
+        this.scrollY += verticalAmount * 24;
         if (this.scrollY > 0) this.scrollY = 0;
         return true;
+    }
+
+    private int getFormAuraColor(String formId) {
+        if (formId.contains("kaioken")) return 0xFFFF2222;
+        if (formId.contains("super_saiyan") || formId.contains("ssj")) return 0xFFFFDD44;
+        if (formId.contains("god")) return 0xFFFF3366;
+        if (formId.contains("blue") || formId.contains("ssb")) return 0xFF00E5FF;
+        if (formId.contains("instinct")) return 0xFFEEEEFF;
+        if (formId.contains("ego")) return 0xFFDD22DD;
+        if (formId.contains("beast")) return 0xFFCC3333;
+        if (formId.contains("golden")) return 0xFFFFCC00;
+        return 0xFF55FF88;
     }
 
     @Override
     public void render(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null) return;
-
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) client.player;
+
         int startX = parent.getContentX();
-        int startY = parent.getY();
+        int startY = parent.getContentY();
         int width = parent.getContentWidth();
-        int height = parent.getBgHeight();
+        int height = parent.getContentHeight();
 
-        context.text(client.font, Component.literal("Arcane Transformations"), startX + 15, startY + 15, 0xFF55FF88);
-
-        // enable scissor for scrolling
-        context.enableScissor(startX, startY + 30, startX + width, startY + height);
+        // Header
+        context.text(client.font, Component.literal("ARCANE TRANSFORMATIONS"), startX + 10, startY + 6, 0xFF55FF88);
 
         Identifier activeForm = accessor.dba$getActiveFormId();
+        if (activeForm != null) {
+            String activeStr = "● ACTIVE: " + activeForm.getPath().replace("_", " ").toUpperCase();
+            context.text(client.font, Component.literal(activeStr), startX + width - client.font.width(activeStr) - 10, startY + 6, 0xFF55FF88);
+        }
+
+        int listY = startY + 20;
+        int listH = height - 24;
+
+        context.enableScissor(startX, listY, startX + width, listY + listH);
+
         List<Form> compatible = DbaRegistries.getForms().values().stream()
             .filter(f -> f.getCompatibleRaces().contains(accessor.dba$getRaceId()))
             .collect(Collectors.toList());
-            
+
         if (compatible.isEmpty()) {
-            context.text(client.font, Component.literal("No compatible transformations found."), startX + 15, startY + 45, 0xFF888888);
+            context.centeredText(client.font, Component.literal("No compatible transformations found for your race."), startX + width / 2, listY + 40, 0xFF888888);
             context.disableScissor();
             return;
         }
 
+        int cardH = 50;
+        int spacing = 6;
+        int totalHeight = compatible.size() * (cardH + spacing);
+        int maxScroll = Math.max(0, totalHeight - listH);
+        scrollY = Math.max(-maxScroll, Math.min(0, scrollY));
+
         for (int i = 0; i < compatible.size(); i++) {
             Form form = compatible.get(i);
-            int cardHeight = 46;
-            int cardX = startX + 10;
-            int cardY = startY + 35 + i * (cardHeight + 8) + (int)scrollY;
-            int cardWidth = width - 20;
-            
-            // if card is out of bounds, skip rendering
-            if (cardY > startY + height || cardY + cardHeight < startY + 30) continue;
+            int cardY = listY + i * (cardH + spacing) + (int) scrollY;
+            int cardX = startX + 6;
+            int cardW = width - 12;
+
+            if (cardY + cardH < listY || cardY > listY + listH) continue; // Culling
 
             double mastery = accessor.dba$getFormMastery(form.getId());
-            
             com.dragonblockarcanedba.registry.Form.UnlockRequirements req = form.getUnlockRequirements();
             boolean levelMet = accessor.dba$getLevel() >= req.minLevel();
             boolean statsMet = true;
@@ -81,92 +114,120 @@ public class FormsTab implements MenuTab {
             }
             boolean unlocked = levelMet && statsMet;
             boolean isActive = (activeForm != null && activeForm.equals(form.getId()));
-            
-            int bgColor = isActive ? 0x661E3320 : (unlocked ? 0x66050810 : 0x44111111);
-            int accentColor = isActive ? 0xFF55FF88 : (unlocked ? 0xFFFFAA00 : 0xFF555555);
-            
-            context.fill(cardX, cardY, cardX + cardWidth, cardY + cardHeight, bgColor);
-            context.fill(cardX, cardY, cardX + 3, cardY + cardHeight, accentColor);
-            
-            // Glowing border
-            context.fill(cardX, cardY, cardX + cardWidth, cardY + 1, 0x33FFFFFF);
-            context.fill(cardX, cardY + cardHeight - 1, cardX + cardWidth, cardY + cardHeight, 0x33FFFFFF);
-            context.fill(cardX + cardWidth - 1, cardY, cardX + cardWidth, cardY + cardHeight, 0x33FFFFFF);
 
+            int auraCol = getFormAuraColor(form.getId().getPath());
+            int bg = isActive ? 0xDD122A1E : (unlocked ? 0xAA0D131F : 0x66080C14);
+            int border = isActive ? 0xFF55FF88 : (unlocked ? 0x4400E5FF : 0x22334455);
+
+            // Card Background & Borders
+            context.fill(cardX, cardY, cardX + cardW, cardY + cardH, bg);
+            context.fill(cardX, cardY, cardX + cardW, cardY + 1, border);
+            context.fill(cardX, cardY + cardH - 1, cardX + cardW, cardY + cardH, border);
+            context.fill(cardX + cardW - 1, cardY, cardX + cardW, cardY + cardH, border);
+            context.fill(cardX, cardY, cardX + 3, cardY + cardH, auraCol); // Themed left aura line
+
+            // Form Title
             String formName = form.getId().getPath().replace("_", " ").toUpperCase();
-            int titleColor = isActive ? 0xFF55FF88 : (unlocked ? 0xFFFFFFFF : 0xFF888888);
-            context.text(client.font, Component.literal(formName), cardX + 15, cardY + 8, titleColor);
+            int titleCol = isActive ? 0xFF55FF88 : (unlocked ? 0xFFFFFFFF : 0xFF778899);
+            context.text(client.font, Component.literal(formName + (isActive ? " §a●" : "")), cardX + 12, cardY + 7, titleCol);
 
-            if (!unlocked) {
-                String reqStr = "Req: Lvl " + req.minLevel() + " + Stats";
-                context.text(client.font, Component.literal(reqStr), cardX + 15, cardY + 24, 0xFFFF5555);
-            } else {
-                String masteryText = String.format("Mastery: %.1f%%", mastery);
-                context.text(client.font, Component.literal(masteryText), cardX + 15, cardY + 24, 0xFFFFAA33);
+            // Row 2: Mastery Bar & Ki Drain
+            if (unlocked) {
+                // Mastery Progress Bar
+                int mBarX = cardX + 12;
+                int mBarY = cardY + 22;
+                int mBarW = 110;
+                int mBarH = 6;
+                context.fill(mBarX, mBarY, mBarX + mBarW, mBarY + mBarH, 0x88000000);
+                int mFill = (int) (mBarW * Math.min(1.0, mastery / 100.0));
+                context.fill(mBarX, mBarY, mBarX + mFill, mBarY + mBarH, auraCol);
+
+                String mTxt = String.format(Locale.US, "Mastery: %.1f%%", mastery);
+                context.text(client.font, Component.literal(mTxt), cardX + 130, cardY + 21, 0xFFFFAA00);
 
                 double actualDrain = form.getBaseKiDrain() * (1.0 - (mastery / 100.0 * form.getMaxMasteryReduction()));
-                String drainText = String.format("Drain: %.1f/s", actualDrain);
-                context.text(client.font, Component.literal(drainText), cardX + 105, cardY + 24, 0xFF55FFFF);
-            }
-            
-            // Button Drawing
-            int btnW = 75;
-            int btnH = 20;
-            int btnX = cardX + cardWidth - btnW - 10;
-            int btnY = cardY + (cardHeight - btnH) / 2;
-            boolean hoverBtn = (mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH);
-            
-            if (isActive) {
-                // Draw Revert Button
-                context.fill(btnX, btnY, btnX + btnW, btnY + btnH, hoverBtn ? 0xAAFF5555 : 0x55551111);
-                context.fill(btnX, btnY, btnX + btnW, btnY + 1, 0xFFFF5555);
-                context.fill(btnX, btnY + btnH - 1, btnX + btnW, btnY + btnH, 0xFFFF5555);
-                context.centeredText(client.font, Component.literal("REVERT"), btnX + btnW/2, btnY + 6, hoverBtn ? 0xFFFFFFFF : 0xFFFF5555);
-            } else if (unlocked) {
-                // Draw Transform Button
-                context.fill(btnX, btnY, btnX + btnW, btnY + btnH, hoverBtn ? 0xAA55FF88 : 0x55113322);
-                context.fill(btnX, btnY, btnX + btnW, btnY + 1, 0xFF55FF88);
-                context.fill(btnX, btnY + btnH - 1, btnX + btnW, btnY + btnH, 0xFF55FF88);
-                context.centeredText(client.font, Component.literal("TRANSFORM"), btnX + btnW/2, btnY + 6, hoverBtn ? 0xFFFFFFFF : 0xFF55FF88);
+                String drainTxt = String.format(Locale.US, "Ki Drain: %.1f/s", actualDrain);
+                context.text(client.font, Component.literal(drainTxt), cardX + 12, cardY + 34, 0xFF00E5FF);
             } else {
-                // Locked Button
-                context.fill(btnX, btnY, btnX + btnW, btnY + btnH, 0x44111111);
-                context.fill(btnX, btnY, btnX + btnW, btnY + 1, 0x44FFFFFF);
-                context.fill(btnX, btnY + btnH - 1, btnX + btnW, btnY + btnH, 0x44FFFFFF);
-                context.centeredText(client.font, Component.literal("LOCKED"), btnX + btnW/2, btnY + 6, 0xFF555555);
+                String reqStr = "Requirements: Level " + req.minLevel() + " + Attributes";
+                context.text(client.font, Component.literal(reqStr), cardX + 12, cardY + 24, 0xFFFF5555);
             }
+
+            // Right Action Button
+            int btnW = 90;
+            int btnH = 22;
+            int btnX = cardX + cardW - btnW - 10;
+            int btnY = cardY + (cardH - btnH) / 2;
+            boolean hoverBtn = mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH;
+
+            String btnTxt;
+            int btnBg;
+            int btnBorder;
+            int btnTxtCol;
+
+            if (isActive) {
+                btnTxt = "REVERT";
+                btnBg = hoverBtn ? 0xDDFF4444 : 0x88CC2222;
+                btnBorder = 0xFFFF4444;
+                btnTxtCol = 0xFFFFFFFF;
+            } else if (unlocked) {
+                btnTxt = "TRANSFORM";
+                btnBg = hoverBtn ? 0xDD00C853 : 0x88009624;
+                btnBorder = 0xFF55FF88;
+                btnTxtCol = 0xFFFFFFFF;
+            } else {
+                btnTxt = "LOCKED";
+                btnBg = 0x33222222;
+                btnBorder = 0x55555555;
+                btnTxtCol = 0xFF777777;
+            }
+
+            context.fill(btnX, btnY, btnX + btnW, btnY + btnH, btnBg);
+            context.fill(btnX, btnY, btnX + btnW, btnY + 1, btnBorder);
+            context.fill(btnX, btnY + btnH - 1, btnX + btnW, btnY + btnH, btnBorder);
+            context.fill(btnX, btnY, btnX + 1, btnY + btnH, btnBorder);
+            context.fill(btnX + btnW - 1, btnY, btnX + btnW, btnY + btnH, btnBorder);
+            context.centeredText(client.font, Component.literal(btnTxt), btnX + btnW / 2, btnY + 7, btnTxtCol);
         }
-        
+
         context.disableScissor();
     }
-    
+
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isRepeat) {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null) return false;
-        
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) client.player;
+
         int startX = parent.getContentX();
-        int startY = parent.getY();
+        int startY = parent.getContentY();
         int width = parent.getContentWidth();
-        int height = parent.getBgHeight();
+        int height = parent.getContentHeight();
+
         double mouseX = event.x();
         double mouseY = event.y();
 
-        if (mouseY < startY + 30 || mouseY > startY + height) return false;
+        int listY = startY + 20;
+        int listH = height - 24;
+
+        if (mouseY < listY || mouseY > listY + listH) return false;
 
         Identifier activeForm = accessor.dba$getActiveFormId();
         List<Form> compatible = DbaRegistries.getForms().values().stream()
             .filter(f -> f.getCompatibleRaces().contains(accessor.dba$getRaceId()))
             .collect(Collectors.toList());
-            
+
+        int cardH = 50;
+        int spacing = 6;
+
         for (int i = 0; i < compatible.size(); i++) {
             Form form = compatible.get(i);
-            int cardHeight = 46;
-            int cardX = startX + 10;
-            int cardY = startY + 35 + i * (cardHeight + 8) + (int)scrollY;
-            int cardWidth = width - 20;
-            
+            int cardY = listY + i * (cardH + spacing) + (int) scrollY;
+            int cardX = startX + 6;
+            int cardW = width - 12;
+
+            if (cardY + cardH < listY || cardY > listY + listH) continue;
+
             com.dragonblockarcanedba.registry.Form.UnlockRequirements req = form.getUnlockRequirements();
             boolean levelMet = accessor.dba$getLevel() >= req.minLevel();
             boolean statsMet = true;
@@ -180,12 +241,13 @@ public class FormsTab implements MenuTab {
             boolean unlocked = levelMet && statsMet;
             boolean isActive = (activeForm != null && activeForm.equals(form.getId()));
 
-            int btnW = 75;
-            int btnH = 20;
-            int btnX = cardX + cardWidth - btnW - 10;
-            int btnY = cardY + (cardHeight - btnH) / 2;
-            
+            int btnW = 90;
+            int btnH = 22;
+            int btnX = cardX + cardW - btnW - 10;
+            int btnY = cardY + (cardH - btnH) / 2;
+
             if (mouseX >= btnX && mouseX <= btnX + btnW && mouseY >= btnY && mouseY <= btnY + btnH) {
+                DbaMenuScreen.playClickSound();
                 if (isActive) {
                     CompoundTag nbt = new CompoundTag();
                     nbt.putString("action", "untransform");

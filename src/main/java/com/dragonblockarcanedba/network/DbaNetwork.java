@@ -39,8 +39,12 @@ public class DbaNetwork {
         
         // Techniques (C2S)
         PayloadTypeRegistry.serverboundPlay().register(C2SUnlockTechniquePayload.ID, C2SUnlockTechniquePayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(C2SUpgradeTechniquePayload.ID, C2SUpgradeTechniquePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(C2SEquipTechniquePayload.ID, C2SEquipTechniquePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(C2SToggleTechniquePayload.ID, C2SToggleTechniquePayload.CODEC);
+
+        // Player Ki broadcast to nearby players (S2C)
+        PayloadTypeRegistry.clientboundPlay().register(PlayerKiBroadcastPayload.TYPE, PlayerKiBroadcastPayload.CODEC);
 
         // Ki Technique payloads (C2S)
         PayloadTypeRegistry.serverboundPlay().register(C2SKiTechniqueSavePayload.ID, C2SKiTechniqueSavePayload.CODEC);
@@ -235,12 +239,52 @@ public class DbaNetwork {
                 PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
                 com.dragonblockarcanedba.registry.Technique tech = com.dragonblockarcanedba.registry.TechniqueRegistry.getTechnique(Identifier.tryParse(techniqueId));
                 if (tech != null && !accessor.dba$hasTechnique(techniqueId)) {
-                    if (accessor.dba$getStatPoints() >= tech.apCost() && accessor.dba$getLevel() >= tech.unlockLevel()) {
-                        accessor.dba$setStatPoints(accessor.dba$getStatPoints() - tech.apCost());
+                    if (tech.hasPrerequisites()) {
+                        for (String prereqId : tech.prerequisiteTechniqueIds()) {
+                            if (!accessor.dba$hasTechnique(prereqId)) {
+                                com.dragonblockarcanedba.registry.Technique prereq = com.dragonblockarcanedba.registry.TechniqueRegistry.getTechnique(Identifier.tryParse(prereqId));
+                                String prereqName = (prereq != null) ? prereq.name() : prereqId;
+                                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cRequires " + prereqName + " to be unlocked first!"), true);
+                                return;
+                            }
+                        }
+                    }
+                    int apCost = com.dragonblockarcanedba.attribute.PlayerStats.getTechniqueUpgradeCost(techniqueId, 1);
+                    if (accessor.dba$getStatPoints() >= apCost && accessor.dba$getLevel() >= tech.unlockLevel()) {
+                        accessor.dba$setStatPoints(accessor.dba$getStatPoints() - apCost);
                         accessor.dba$setTechniqueUnlocked(techniqueId, true);
+                        accessor.dba$setTechniqueLevel(techniqueId, 1);
                         accessor.dba$syncStats();
                         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                             SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§aUnlocked §b" + tech.name() + " §a(Level 1)!"), true);
+                    }
+                }
+            });
+        });
+
+        // Handle Technique Upgrading
+        ServerPlayNetworking.registerGlobalReceiver(C2SUpgradeTechniquePayload.ID, (payload, context) -> {
+            ServerPlayer player = context.player();
+            String techniqueId = payload.techniqueId();
+            context.server().execute(() -> {
+                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+                if (!accessor.dba$hasTechnique(techniqueId)) return;
+                int currentLvl = accessor.dba$getTechniqueLevel(techniqueId);
+                int targetLvl = currentLvl + 1;
+                if (targetLvl <= 10) {
+                    int apCost = com.dragonblockarcanedba.attribute.PlayerStats.getTechniqueUpgradeCost(techniqueId, targetLvl);
+                    if (accessor.dba$getStatPoints() >= apCost) {
+                        accessor.dba$setStatPoints(accessor.dba$getStatPoints() - apCost);
+                        accessor.dba$setTechniqueLevel(techniqueId, targetLvl);
+                        accessor.dba$syncStats();
+                        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                            SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
+                        com.dragonblockarcanedba.registry.Technique t = com.dragonblockarcanedba.registry.TechniqueRegistry.getTechnique(Identifier.tryParse(techniqueId));
+                        String disp = (t != null) ? t.name() : techniqueId;
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§aUpgraded §b" + disp + " §ato Level " + targetLvl + "!"), true);
+                    } else {
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cNeed " + apCost + " AP to upgrade!"), true);
                     }
                 }
             });
@@ -255,6 +299,9 @@ public class DbaNetwork {
                 PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
                 if (accessor.dba$hasTechnique(techniqueId) || techniqueId.isEmpty()) {
                     accessor.dba$setEquippedTechnique(slot, techniqueId);
+                    if (!techniqueId.isEmpty()) {
+                        accessor.dba$setKiTechniqueSlot(slot, com.dragonblockarcanedba.ki.KiTechnique.EMPTY);
+                    }
                     accessor.dba$syncStats();
                     player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.ARMOR_EQUIP_GENERIC.value(), SoundSource.PLAYERS, 1.0f, 1.0f);
@@ -270,11 +317,7 @@ public class DbaNetwork {
                 PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
                 String tech = accessor.dba$getEquippedTechnique(slot);
                 if (tech != null && !tech.isEmpty() && accessor.dba$hasTechnique(tech)) {
-                    boolean isActive = accessor.dba$isTechniqueActive(tech);
-                    accessor.dba$setTechniqueActive(tech, !isActive);
-                    accessor.dba$syncStats();
-                    player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.8f, !isActive ? 1.2f : 0.8f);
+                    toggleTechnique(player, accessor, tech);
                 }
             });
         });
@@ -288,13 +331,20 @@ public class DbaNetwork {
                 if (slot >= 0 && slot < 3) {
                     KiTechniqueType type = KiTechniqueType.fromString(payload.techType());
                     int pct = Math.max(1, Math.min(100, payload.usedPercent()));
+                    int apCost = com.dragonblockarcanedba.attribute.PlayerStats.getKiAttackSaveCost(type, pct, payload.isBarrage());
+                    if (accessor.dba$getStatPoints() < apCost) {
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cNot enough AP to save! Need " + apCost + " AP."), true);
+                        return;
+                    }
+                    accessor.dba$setStatPoints(accessor.dba$getStatPoints() - apCost);
+                    accessor.dba$setEquippedTechnique(slot, ""); // Clear arcane tech in this slot
                     KiTechnique kiTech = new KiTechnique(type, pct, payload.color(), payload.isBarrage());
                     accessor.dba$setKiTechniqueSlot(slot, kiTech);
                     accessor.dba$syncStats();
                     player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 1.0f, 1.4f);
                     player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                        "\u00a7aSaved \u00a7b" + kiTech.displayName() + "\u00a7a to slot " + (slot + 1)
+                        "§aSaved §b" + kiTech.displayName() + "§a to slot " + (slot + 1) + " §7(Cost: " + apCost + " AP)"
                     ), true);
                 }
             });
@@ -304,7 +354,13 @@ public class DbaNetwork {
         ServerPlayNetworking.registerGlobalReceiver(C2SKiTechniqueFirePayload.ID, (payload, context) -> {
             ServerPlayer player = context.player();
             context.server().execute(() -> {
-                KiTechniqueHandler.fire(player, payload.slot());
+                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+                String tech = accessor.dba$getEquippedTechnique(payload.slot());
+                if (tech != null && !tech.isEmpty() && accessor.dba$hasTechnique(tech)) {
+                    toggleTechnique(player, accessor, tech);
+                } else {
+                    KiTechniqueHandler.fire(player, payload.slot());
+                }
             });
         });
 
@@ -335,6 +391,11 @@ public class DbaNetwork {
         ServerPlayNetworking.registerGlobalReceiver(C2SWeaponLeftClickPayload.TYPE, (payload, context) -> {
             ServerPlayer player = context.player();
             context.server().execute(() -> {
+                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+                if (accessor.dba$isSickleActive()) {
+                    com.dragonblockarcanedba.item.SickleOfSorrowItem.performTechniqueAirSwing(player);
+                    return;
+                }
                 net.minecraft.world.item.ItemStack stack = player.getMainHandItem();
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) {
                     if (player.getCooldowns().isOnCooldown(stack)) return;
@@ -482,5 +543,56 @@ public class DbaNetwork {
         );
 
         ServerPlayNetworking.send(targetPlayer, payload);
+    }
+
+    public static void toggleTechnique(ServerPlayer player, PlayerStatsAccessor accessor, String tech) {
+        if ("sickle_of_sorrow".equals(tech)) {
+            boolean active = accessor.dba$isTechniqueActive("sickle_of_sorrow");
+            if (!active) {
+                double currentKi = accessor.dba$getCurrentKi();
+                if (currentKi <= 0) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cNot enough Ki to summon Sickle of Sorrow!"), true);
+                    return;
+                }
+                int sickleLvl = accessor.dba$getTechniqueLevel("sickle_of_sorrow");
+                int summonPct = com.dragonblockarcanedba.attribute.PlayerStats.getSickleSummonPercent(sickleLvl);
+                double cost = currentKi * (summonPct / 100.0);
+                accessor.dba$addKi(-cost);
+                accessor.dba$pauseKiRecovery(25);
+                accessor.dba$setTechniqueActive("sickle_of_sorrow", true);
+                accessor.dba$syncStats();
+                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.WITHER_SPAWN, SoundSource.PLAYERS, 0.7f, 1.8f);
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§5✦ Summoned Sickle of Sorrow! §7(-" + summonPct + "% Ki)"), true);
+            } else {
+                accessor.dba$setTechniqueActive("sickle_of_sorrow", false);
+                accessor.dba$syncStats();
+                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 0.7f, 1.5f);
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7Dismissed Sickle of Sorrow."), true);
+            }
+        } else if ("ki_sense".equals(tech)) {
+            boolean isActive = accessor.dba$isTechniqueActive("ki_sense");
+            accessor.dba$setTechniqueActive("ki_sense", !isActive);
+            accessor.dba$syncStats();
+            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.8f, !isActive ? 1.4f : 0.8f);
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal(!isActive ? "§a✦ Ki Sense Activated" : "§7Ki Sense Deactivated"), true);
+        } else {
+            boolean isActive = accessor.dba$isTechniqueActive(tech);
+            accessor.dba$setTechniqueActive(tech, !isActive);
+            accessor.dba$syncStats();
+            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.8f, !isActive ? 1.2f : 0.8f);
+        }
+    }
+
+    public static void broadcastPlayerKi(ServerPlayer player, double currentKi, double maxKi) {
+        PlayerKiBroadcastPayload payload = new PlayerKiBroadcastPayload(player.getId(), (float) currentKi, (float) maxKi);
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            for (ServerPlayer other : serverLevel.players()) {
+                ServerPlayNetworking.send(other, payload);
+            }
+        }
     }
 }

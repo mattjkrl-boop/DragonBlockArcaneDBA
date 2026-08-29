@@ -10,7 +10,10 @@
 		"AvatarRenderStateMixin",
 		"AbstractContainerScreenMixin",
 		"ItemModelResolverMixin",
-		"EntityRenderDispatcherMixin"
+		"EntityRenderDispatcherMixin",
+		"OptionsScreenMixin",
+		"PauseScreenMixin",
+		"TitleScreenMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

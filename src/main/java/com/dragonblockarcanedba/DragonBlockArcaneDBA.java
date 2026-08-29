@@ -107,6 +107,9 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         // Block Mining for rapid-fire / charging weapons (Dimensional Sword, Power Pole, Z Sword, Curse Blade, Hollow's Edge, Azure Dragon Sword)
         net.fabricmc.fabric.api.event.player.AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
             if (!player.isSpectator()) {
+                if (player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc && acc.dba$isSickleActive()) {
+                    return net.minecraft.world.InteractionResult.FAIL;
+                }
                 net.minecraft.world.item.ItemStack stack = player.getItemInHand(hand);
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem || 
                     stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem ||
@@ -130,8 +133,15 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             return net.minecraft.world.InteractionResult.PASS;
         });
 
-        // Register Attack Hook for Stamina Drain
+        // Register Attack Hook for Stamina Drain and Sickle Technique Melee
         net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            if (player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc && acc.dba$isSickleActive()) {
+                if (!world.isClientSide() && entity instanceof net.minecraft.world.entity.LivingEntity target && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+                    com.dragonblockarcanedba.item.SickleOfSorrowItem.executeTechniqueMelee(serverPlayer, target);
+                }
+                return net.minecraft.world.InteractionResult.FAIL;
+            }
+
             net.minecraft.world.item.Item heldItem = player.getItemInHand(hand).getItem();
             if (heldItem instanceof com.dragonblockarcanedba.item.SaberItem ||
                 heldItem instanceof com.dragonblockarcanedba.item.GrandSwordItem ||
@@ -188,6 +198,29 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem && entity instanceof net.minecraft.world.entity.LivingEntity) {
                     com.dragonblockarcanedba.item.AzureDragonSwordItem.LOCKED_TARGET_MAP.put(player.getUUID(), entity.getUUID());
                 }
+            }
+            return net.minecraft.world.InteractionResult.PASS;
+        });
+
+        // Disable off-hand and normal item use while Sickle is active, and route right-click to Dimensional Rift
+        net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register((player, world, hand) -> {
+            if (player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc && acc.dba$isSickleActive()) {
+                if (hand == net.minecraft.world.InteractionHand.OFF_HAND) {
+                    return net.minecraft.world.InteractionResult.FAIL;
+                }
+                com.dragonblockarcanedba.item.SickleOfSorrowItem.performTechniqueDimensionalRift(player);
+                return net.minecraft.world.InteractionResult.FAIL;
+            }
+            return net.minecraft.world.InteractionResult.PASS;
+        });
+
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
+            if (player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc && acc.dba$isSickleActive()) {
+                if (hand == net.minecraft.world.InteractionHand.OFF_HAND) {
+                    return net.minecraft.world.InteractionResult.FAIL;
+                }
+                com.dragonblockarcanedba.item.SickleOfSorrowItem.performTechniqueDimensionalRift(player);
+                return net.minecraft.world.InteractionResult.FAIL;
             }
             return net.minecraft.world.InteractionResult.PASS;
         });
