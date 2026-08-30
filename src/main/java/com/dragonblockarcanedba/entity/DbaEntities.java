@@ -109,8 +109,16 @@ public class DbaEntities {
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("shenron"),
             EntityType.Builder.of(ShenronEntity::new, MobCategory.MISC)
-                    .sized(3.0f, 6.0f)
+                    .sized(4.0f, 16.0f)
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("shenron")))
+    );
+
+    public static final EntityType<PorungaEntity> PORUNGA = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("porunga"),
+            EntityType.Builder.of(PorungaEntity::new, MobCategory.MISC)
+                    .sized(6.0f, 20.0f)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("porunga")))
     );
 
     public static final EntityType<ZShockwaveEntity> Z_SHOCKWAVE = Registry.register(
@@ -805,5 +813,6 @@ public class DbaEntities {
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(OTHERWORLD_GUIDE, OtherworldGuideEntity.createMobAttributes());
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(FLYING_NIMBUS, FlyingNimbusEntity.createAttributes());
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(SHENRON, ShenronEntity.createAttributes());
+        net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(PORUNGA, PorungaEntity.createAttributes());
     }
 }

@@ -231,6 +231,27 @@ public class DbaItems {
     public static final ResourceKey<Item> BLASTER_AMMO_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("blaster_ammo")
     );
+    public static final ResourceKey<Item> BATTLE_ARMOR_CHESTPLATE_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("battle_armor_chestplate")
+    );
+    public static final ResourceKey<Item> BATTLE_ARMOR_LEGGINGS_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("battle_armor_leggings")
+    );
+    public static final ResourceKey<Item> BATTLE_ARMOR_BOOTS_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("battle_armor_boots")
+    );
+    public static final ResourceKey<Item> PICCOLO_OUTFIT_HELMET_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("piccolo_outfit_helmet")
+    );
+    public static final ResourceKey<Item> PICCOLO_OUTFIT_CHESTPLATE_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("piccolo_outfit_chestplate")
+    );
+    public static final ResourceKey<Item> PICCOLO_OUTFIT_LEGGINGS_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("piccolo_outfit_leggings")
+    );
+    public static final ResourceKey<Item> PICCOLO_OUTFIT_BOOTS_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("piccolo_outfit_boots")
+    );
 
     public static final Item SPACE_POD = new SpacePodItem(
         new Item.Properties().setId(SPACE_POD_KEY).stacksTo(1)
@@ -455,6 +476,27 @@ public class DbaItems {
     public static final Item BLASTER_AMMO = new BlasterAmmoItem(
         new Item.Properties().setId(BLASTER_AMMO_KEY)
     );
+    public static final Item BATTLE_ARMOR_CHESTPLATE = new Item(
+        new Item.Properties().humanoidArmor(DbaArmorMaterials.BATTLE_ARMOR_MATERIAL, net.minecraft.world.item.equipment.ArmorType.CHESTPLATE).setId(BATTLE_ARMOR_CHESTPLATE_KEY).stacksTo(1)
+    );
+    public static final Item BATTLE_ARMOR_LEGGINGS = new Item(
+        new Item.Properties().humanoidArmor(DbaArmorMaterials.BATTLE_ARMOR_MATERIAL, net.minecraft.world.item.equipment.ArmorType.LEGGINGS).setId(BATTLE_ARMOR_LEGGINGS_KEY).stacksTo(1)
+    );
+    public static final Item BATTLE_ARMOR_BOOTS = new Item(
+        new Item.Properties().humanoidArmor(DbaArmorMaterials.BATTLE_ARMOR_MATERIAL, net.minecraft.world.item.equipment.ArmorType.BOOTS).setId(BATTLE_ARMOR_BOOTS_KEY).stacksTo(1)
+    );
+    public static final Item PICCOLO_OUTFIT_HELMET = new Item(
+        new Item.Properties().humanoidArmor(DbaArmorMaterials.PICCOLO_OUTFIT_MATERIAL, net.minecraft.world.item.equipment.ArmorType.HELMET).setId(PICCOLO_OUTFIT_HELMET_KEY).stacksTo(1)
+    );
+    public static final Item PICCOLO_OUTFIT_CHESTPLATE = new Item(
+        new Item.Properties().humanoidArmor(DbaArmorMaterials.PICCOLO_OUTFIT_MATERIAL, net.minecraft.world.item.equipment.ArmorType.CHESTPLATE).setId(PICCOLO_OUTFIT_CHESTPLATE_KEY).stacksTo(1)
+    );
+    public static final Item PICCOLO_OUTFIT_LEGGINGS = new Item(
+        new Item.Properties().humanoidArmor(DbaArmorMaterials.PICCOLO_OUTFIT_MATERIAL, net.minecraft.world.item.equipment.ArmorType.LEGGINGS).setId(PICCOLO_OUTFIT_LEGGINGS_KEY).stacksTo(1)
+    );
+    public static final Item PICCOLO_OUTFIT_BOOTS = new Item(
+        new Item.Properties().humanoidArmor(DbaArmorMaterials.PICCOLO_OUTFIT_MATERIAL, net.minecraft.world.item.equipment.ArmorType.BOOTS).setId(PICCOLO_OUTFIT_BOOTS_KEY).stacksTo(1)
+    );
 
     public static final CreativeModeTab DBA_TAB = CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
         .title(Component.translatable("itemGroup.dragonblockarcanedba.dba_items"))
@@ -481,6 +523,16 @@ public class DbaItems {
             output.accept(BLASTER_AMMO);
             output.accept(BANSHO_FAN);
             output.accept(WHIS_STAFF);
+
+            // === ARMOR ===
+            output.accept(BATTLE_ARMOR_CHESTPLATE);
+            output.accept(BATTLE_ARMOR_LEGGINGS);
+            output.accept(BATTLE_ARMOR_BOOTS);
+            
+            output.accept(PICCOLO_OUTFIT_HELMET);
+            output.accept(PICCOLO_OUTFIT_CHESTPLATE);
+            output.accept(PICCOLO_OUTFIT_LEGGINGS);
+            output.accept(PICCOLO_OUTFIT_BOOTS);
 
             // === DRAGON BALLS & RADAR ===
             output.accept(EARTH_DRAGON_BALL);
@@ -642,6 +694,13 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, KATANA_KEY, KATANA);
         Registry.register(BuiltInRegistries.ITEM, BLASTER_GUN_KEY, BLASTER_GUN);
         Registry.register(BuiltInRegistries.ITEM, BLASTER_AMMO_KEY, BLASTER_AMMO);
+        Registry.register(BuiltInRegistries.ITEM, BATTLE_ARMOR_CHESTPLATE_KEY, BATTLE_ARMOR_CHESTPLATE);
+        Registry.register(BuiltInRegistries.ITEM, BATTLE_ARMOR_LEGGINGS_KEY, BATTLE_ARMOR_LEGGINGS);
+        Registry.register(BuiltInRegistries.ITEM, BATTLE_ARMOR_BOOTS_KEY, BATTLE_ARMOR_BOOTS);
+        Registry.register(BuiltInRegistries.ITEM, PICCOLO_OUTFIT_HELMET_KEY, PICCOLO_OUTFIT_HELMET);
+        Registry.register(BuiltInRegistries.ITEM, PICCOLO_OUTFIT_CHESTPLATE_KEY, PICCOLO_OUTFIT_CHESTPLATE);
+        Registry.register(BuiltInRegistries.ITEM, PICCOLO_OUTFIT_LEGGINGS_KEY, PICCOLO_OUTFIT_LEGGINGS);
+        Registry.register(BuiltInRegistries.ITEM, PICCOLO_OUTFIT_BOOTS_KEY, PICCOLO_OUTFIT_BOOTS);
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, DBA_TAB_KEY, DBA_TAB);
         DragonBlockArcaneDBA.LOGGER.info("Registered DBA items");
     }

@@ -15,6 +15,7 @@ public class WishScreen extends Screen {
     private final int panelHeight = 230;
     private int startX;
     private int startY;
+    private int wishesMade = 0;
 
     // Wish Option Definition
     private record WishOption(String id, String icon, String title, String subtitle, int accentColor) {}
@@ -26,7 +27,7 @@ public class WishScreen extends Screen {
     };
 
     public WishScreen(int shenronId) {
-        super(Component.literal("Summon Shenron"));
+        super(Component.literal("Summon Dragon"));
         this.shenronId = shenronId;
     }
 
@@ -42,7 +43,22 @@ public class WishScreen extends Screen {
             this.minecraft.player.playSound(SoundEvents.UI_BUTTON_CLICK.value(), 0.8f, 1.2f);
         }
         ClientPlayNetworking.send(new C2SMakeWishPayload(this.shenronId, wishType));
-        this.onClose();
+        
+        boolean isPorunga = false;
+        if (this.minecraft != null && this.minecraft.level != null) {
+            if (this.minecraft.level.getEntity(this.shenronId) instanceof com.dragonblockarcanedba.entity.PorungaEntity) {
+                isPorunga = true;
+            }
+        }
+        
+        if (isPorunga) {
+            this.wishesMade++;
+            if (this.wishesMade >= 3) {
+                this.onClose();
+            }
+        } else {
+            this.onClose();
+        }
     }
 
     @Override
@@ -105,8 +121,17 @@ public class WishScreen extends Screen {
         context.fill(startX + 5, startY + 5, startX + panelWidth - 5, startY + 42, 0x66000000);
         context.fill(startX + 5, startY + 41, startX + panelWidth - 5, startY + 42, 0x44FFD700);
 
+        boolean isPorunga = false;
+        if (this.minecraft != null && this.minecraft.level != null) {
+            if (this.minecraft.level.getEntity(this.shenronId) instanceof com.dragonblockarcanedba.entity.PorungaEntity) {
+                isPorunga = true;
+            }
+        }
+        
+        String title = isPorunga ? "\u2728 PORUNGA'S WISH SANCTUM \u2728" : "\u2728 SHENRON'S WISH SANCTUM \u2728";
+
         // Header Text
-        context.centeredText(this.font, Component.literal("\u2728 SHENRON'S WISH SANCTUM \u2728"), this.width / 2, startY + 12, 0xFFFFD700);
+        context.centeredText(this.font, Component.literal(title), this.width / 2, startY + 12, 0xFFFFD700);
         context.centeredText(this.font, Component.literal("Speak thy wish into the storm, mortal:"), this.width / 2, startY + 26, 0xFFAAAAAA);
 
         int cardX = startX + 15;

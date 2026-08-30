@@ -415,6 +415,10 @@ public class DbaNetwork {
                     if (player.distanceToSqr(shenron) < 256.0) {
                         shenron.grantWish(player, wishType);
                     }
+                } else if (entity instanceof com.dragonblockarcanedba.entity.PorungaEntity porunga && porunga.isAlive()) {
+                    if (player.distanceToSqr(porunga) < 256.0) {
+                        porunga.grantWish(player, wishType);
+                    }
                 }
             });
         });

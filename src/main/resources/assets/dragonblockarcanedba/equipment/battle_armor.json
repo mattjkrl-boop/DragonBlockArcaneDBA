@@ -1,0 +1,14 @@
+{
+  "layers": {
+    "humanoid": [
+      {
+        "texture": "dragonblockarcanedba:battle_armor"
+      }
+    ],
+    "humanoid_leggings": [
+      {
+        "texture": "dragonblockarcanedba:battle_armor"
+      }
+    ]
+  }
+}

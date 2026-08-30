@@ -40,6 +40,9 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     public static final net.minecraft.client.model.geom.ModelLayerLocation SHENRON_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
         com.dragonblockarcanedba.DragonBlockArcaneDBA.id("shenron"), "main"
     );
+    public static final net.minecraft.client.model.geom.ModelLayerLocation PORUNGA_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
+        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("porunga"), "main"
+    );
 
     @Override
     public void onInitializeClient() {
@@ -82,9 +85,13 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.entity.DbaEntities.KI_EXPLOSION,
             com.dragonblockarcanedba.client.render.ki.KiExplosionRenderer::new
         );
-        net.minecraft.client.renderer.entity.EntityRenderers.register(
+        net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
             com.dragonblockarcanedba.entity.DbaEntities.SHENRON,
             com.dragonblockarcanedba.client.render.ShenronRenderer::new
+        );
+        net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
+            com.dragonblockarcanedba.entity.DbaEntities.PORUNGA,
+            com.dragonblockarcanedba.client.render.PorungaRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.CURSE_LIGHTNING,
@@ -381,6 +388,9 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         // Register model layers
         net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry.registerModelLayer(
             SHENRON_MODEL_LAYER, com.dragonblockarcanedba.client.model.ShenronModel::createBodyLayer
+        );
+        net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry.registerModelLayer(
+            PORUNGA_MODEL_LAYER, com.dragonblockarcanedba.client.model.PorungaModel::createBodyLayer
         );
 
         // Load persisted config from disk
