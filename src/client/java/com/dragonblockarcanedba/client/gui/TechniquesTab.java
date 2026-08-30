@@ -2,7 +2,6 @@ package com.dragonblockarcanedba.client.gui;
 
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
-import com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient;
 import com.dragonblockarcanedba.network.C2SEquipTechniquePayload;
 import com.dragonblockarcanedba.network.C2SUnlockTechniquePayload;
 import com.dragonblockarcanedba.network.C2SUpgradeTechniquePayload;
@@ -238,8 +237,6 @@ public class TechniquesTab implements MenuTab {
 
         // 4. Draw Nodes (Radius scales smoothly with zoom, Color-Coded by Group)
         Technique hoveredTech = null;
-        int hoveredScreenX = 0;
-        int hoveredScreenY = 0;
 
         int nodeRadius = Math.max(6, Math.min(15, (int) Math.round(11 * Math.sqrt(zoom))));
         int clickR = Math.max(9, nodeRadius + 3);
@@ -260,13 +257,10 @@ public class TechniquesTab implements MenuTab {
 
             // Check prerequisites
             boolean prereqsMet = true;
-            String missingPrereqName = null;
             if (tech.hasPrerequisites()) {
                 for (String prereqId : tech.prerequisiteTechniqueIds()) {
                     if (!accessor.dba$hasTechnique(prereqId)) {
                         prereqsMet = false;
-                        Technique prereqTech = TechniqueRegistry.getTechnique(Identifier.tryParse(prereqId));
-                        missingPrereqName = (prereqTech != null) ? prereqTech.name() : prereqId;
                         break;
                     }
                 }
@@ -282,8 +276,6 @@ public class TechniquesTab implements MenuTab {
 
             if (isHover) {
                 hoveredTech = tech;
-                hoveredScreenX = nodeX;
-                hoveredScreenY = nodeY;
             }
 
             // Outer Aura & Glow Rings (Color-Coded)
@@ -908,8 +900,8 @@ public class TechniquesTab implements MenuTab {
         if (this.isDraggingCanvas) {
             double mx = event.x();
             double my = event.y();
-            this.panX += (mx - lastDragMouseX);
-            this.panY += (my - lastDragMouseY);
+            TechniquesTab.panX += (mx - lastDragMouseX);
+            TechniquesTab.panY += (my - lastDragMouseY);
             this.lastDragMouseX = mx;
             this.lastDragMouseY = my;
             return true;

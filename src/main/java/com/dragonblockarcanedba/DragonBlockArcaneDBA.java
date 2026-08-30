@@ -18,9 +18,6 @@ import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
 
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
-
 public class DragonBlockArcaneDBA implements ModInitializer {
     public static final String MOD_ID = "dragonblockarcanedba";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
@@ -302,6 +299,7 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             net.minecraft.server.level.ServerPlayer player = handler.getPlayer();
             com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
             accessor.dba$syncStats();
+            com.dragonblockarcanedba.compat.BpmCompatServer.onPlayerJoin(player);
             if (!accessor.dba$hasSelectedRace()) {
                 net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, new com.dragonblockarcanedba.network.RaceSelectOpenPayload());
             }

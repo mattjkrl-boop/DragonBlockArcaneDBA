@@ -156,6 +156,22 @@ public class DbaNetwork {
                         SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 1.0f, 0.8f);
                     accessor.dba$syncStats();
                     broadcastTransformState(player);
+                } else if ("emote".equals(action)) {
+                    String emoteId = nbt.getStringOr("emote", "");
+                    var server = player.level().getServer();
+                    if (server != null) {
+                        if (!emoteId.isEmpty()) {
+                            server.getCommands().performPrefixedCommand(
+                                player.createCommandSourceStack().withSuppressedOutput(),
+                                "ysm animation play @s animation.player." + emoteId
+                            );
+                        } else {
+                            server.getCommands().performPrefixedCommand(
+                                player.createCommandSourceStack().withSuppressedOutput(),
+                                "ysm animation stop @s"
+                            );
+                        }
+                    }
                 } else if ("select_race".equals(action)) {
                     String raceStr = nbt.getStringOr("race", "");
                     if (!raceStr.isEmpty()) {
@@ -202,6 +218,7 @@ public class DbaNetwork {
                         player.setHealth(player.getMaxHealth());
                         
                         accessor.dba$syncStats();
+                        com.dragonblockarcanedba.compat.BpmCompatServer.switchPlayerModel(player, "custom:" + Identifier.parse(raceStr).getPath());
                         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                             SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.0f);
                     }
@@ -217,6 +234,29 @@ public class DbaNetwork {
                     int percent = nbt.getIntOr("percent", 100);
                     accessor.dba$setSpeedPercent(percent);
                     accessor.dba$syncStats();
+                } else if ("emote".equals(action)) {
+                    String emote = nbt.getStringOr("emote", "");
+                    accessor.dba$setActiveEmote(emote);
+                    accessor.dba$syncStats();
+                    if (!emote.isEmpty()) {
+                        String msg = switch (emote) {
+                            case "dance" -> "is dancing!";
+                            case "wave" -> "waves enthusiastically!";
+                            case "talk" -> "is speaking!";
+                            case "shout" -> "charges their Ki with a thunderous battle shout!";
+                            case "zombie_walk" -> "groans like a zombie!";
+                            case "sit" -> "sits down to meditate.";
+                            case "kick_right", "kick_left" -> "unleashes a fierce martial arts kick!";
+                            case "cross_punch_right", "cross_punch_left" -> "throws a heavy cross punch!";
+                            case "arm_parry", "sword_parry" -> "takes a defensive parry stance!";
+                            case "sword_idle" -> "readies their blade!";
+                            default -> "performs " + emote + "!";
+                        };
+                        if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+                            serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT, player.getX(), player.getY() + 1.0, player.getZ(), 5, 0.3, 0.5, 0.3, 0.1);
+                        }
+                        player.sendOverlayMessage(net.minecraft.network.chat.Component.literal("§6* You " + msg.replace("is ", "are ").replace("charges their", "charge your").replace("sits", "sit").replace("unleashes", "unleash").replace("throws", "throw").replace("takes", "take").replace("readies their", "ready your") + " *"));
+                    }
                 }
             });
         });

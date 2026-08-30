@@ -198,6 +198,48 @@ def download_geckolib():
         print(f"Warning: GeckoLib download failed: {e}")
 
 
+def download_better_player_model():
+    """Download Better Player Model (BPM) from Modrinth into run/mods so animations execute."""
+    mods_dir = os.path.join("run", "mods")
+    os.makedirs(mods_dir, exist_ok=True)
+
+    for file in os.listdir(mods_dir):
+        if ("better" in file.lower() and "player" in file.lower() and "model" in file.lower()) and file.endswith(".jar"):
+            return
+
+    print("Better Player Model not found. Downloading via Modrinth API...")
+    url = "https://api.modrinth.com/v2/project/betterplayermodel/version?loaders=%5B%22fabric%22%5D"
+    headers = {"User-Agent": "DBA-Launcher/1.0"}
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as response:
+            versions = json.loads(response.read().decode())
+
+        selected_version = None
+        for v in versions:
+            if "26.2" in v.get("game_versions", []):
+                selected_version = v
+                break
+
+        if not selected_version and versions:
+            selected_version = versions[0]
+
+        if not selected_version:
+            print("Warning: Could not resolve a compatible Better Player Model version. Continuing without it.")
+            return
+
+        file_info = selected_version["files"][0]
+        dest_file = os.path.join(mods_dir, file_info["filename"])
+
+        print(f"Downloading Better Player Model {selected_version['version_number']}...")
+        urllib.request.urlretrieve(file_info["url"], dest_file)
+        print(f"Downloaded: {dest_file}")
+
+    except Exception as e:
+        print(f"Warning: Better Player Model download failed: {e}")
+
+
 def nuke_caches():
     """Delete stale Gradle/Loom caches to force a clean resolve."""
     for folder in [".gradle", ".fabric"]:
@@ -210,10 +252,154 @@ def nuke_caches():
                 print(f"Warning: Could not remove {path}: {e}")
 
 
+def sync_universal_animations():
+    """
+    Automatically syncs the Universal Player Animation Library into the Minecraft run configuration
+    directory so Better Player Model (BPM) loads it immediately upon launch.
+    """
+    bpm_root = os.path.join("Animated", "UniversalAnimations", "BPM")
+    if not os.path.exists(bpm_root):
+        print("[!] Universal animations BPM folder not found at:", bpm_root)
+        return
+
+    dest_roots = [
+        os.path.join("run", "config", "better_player_model", "custom"),
+    ]
+
+    appdata = os.environ.get("APPDATA")
+    if appdata and os.path.exists(os.path.join(appdata, ".minecraft")):
+        dest_roots.append(os.path.join(appdata, ".minecraft", "config", "better_player_model", "custom"))
+
+    # Sync every race/model folder
+    model_count = 0
+    for model_folder in os.listdir(bpm_root):
+        model_src = os.path.join(bpm_root, model_folder)
+        if os.path.isdir(model_src):
+            model_count += 1
+            for droot in dest_roots:
+                dst = os.path.join(droot, model_folder)
+                try:
+                    os.makedirs(dst, exist_ok=True)
+                    shutil.copytree(model_src, dst, dirs_exist_ok=True)
+                except Exception as e:
+                    print(f"[!] Warning: Could not sync {model_folder} to {dst}: {e}")
+
+    # Ensure built/default is also updated with Yardrat
+    yardrat_src = os.path.join(bpm_root, "universal_humanoid")
+    for b_dst in [
+        os.path.join("run", "config", "better_player_model", "built", "default"),
+        os.path.join(appdata, ".minecraft", "config", "better_player_model", "built", "default") if appdata and os.path.exists(os.path.join(appdata, ".minecraft")) else None
+    ]:
+        if b_dst:
+            try:
+                os.makedirs(b_dst, exist_ok=True)
+                shutil.copytree(yardrat_src, b_dst, dirs_exist_ok=True)
+            except Exception:
+                pass
+
+    print(f"[+] Auto-synced all {model_count} DBA race model packs to BPM custom and built/default folders")
+
+    # Clean up accidental duplicate run/run directory
+    run_run = os.path.join("run", "run")
+    if os.path.exists(run_run):
+        try:
+            shutil.rmtree(run_run)
+        except Exception:
+            pass
+
+    # Clear BPM cache so models recompile cleanly
+    cache_dir = os.path.join("run", "config", "better_player_model", "cache")
+    if os.path.exists(cache_dir):
+        try:
+            shutil.rmtree(cache_dir)
+        except Exception:
+            pass
+
+    # Remove built-in anime / misc models if extracted
+    stale_built = [
+        os.path.join("run", "config", "better_player_model", "built", "wine_fox"),
+        os.path.join("run", "config", "better_player_model", "built", "misc"),
+    ]
+    for p in stale_built:
+        if os.path.exists(p):
+            try:
+                shutil.rmtree(p)
+                print(f"[+] Cleaned up unwanted built-in model pack: {p}")
+            except Exception:
+                pass
+
+    # Ensure blacklist.txt disables all built-in models from jar extraction
+    blacklist_path = os.path.join("run", "config", "better_player_model", "blacklist.txt")
+    if os.path.exists(blacklist_path):
+        try:
+            with open(blacklist_path, "r", encoding="utf-8", errors="ignore") as f:
+                bl_text = f.read()
+            if "assets/better_player_model/builtin/.*" not in bl_text:
+                with open(blacklist_path, "a", encoding="utf-8") as f:
+                    f.write("\n# Enabled Blacklist Rules for Dragon Block Arcane:\nassets/better_player_model/builtin/.*\nassets/better_player_model/builtin/default/.*\nassets/better_player_model/builtin/wine_fox/.*\nassets/better_player_model/builtin/misc/.*\n")
+                print("[+] Updated BPM blacklist.txt with active rules")
+        except Exception as e:
+            print(f"[!] Warning: Could not update blacklist.txt: {e}")
+
+    # Enforce default model and hide unwanted models in better_player_model-server.toml
+    bpm_server_toml = os.path.join("run", "config", "better_player_model-server.toml")
+    try:
+        if os.path.exists(bpm_server_toml):
+            with open(bpm_server_toml, "r", encoding="utf-8") as f:
+                content = f.read()
+            changed = False
+            if 'DefaultModelId = "default"' in content:
+                content = content.replace('DefaultModelId = "default"', 'DefaultModelId = "custom:universal_humanoid"')
+                changed = True
+            if 'ClientNotDisplayModels = []' in content:
+                content = content.replace('ClientNotDisplayModels = []', 'ClientNotDisplayModels = ["built:wine_fox/.*", "built:misc/.*"]')
+                changed = True
+            if changed:
+                with open(bpm_server_toml, "w", encoding="utf-8") as f:
+                    f.write(content)
+                print("[+] Configured BPM server default model and display filter")
+    except Exception as e:
+        print(f"[!] Warning: Could not configure BPM server toml: {e}")
+
+    # Disable awkward HUD extra player puppet in better_player_model-client.toml
+    bpm_client_toml = os.path.join("run", "config", "better_player_model-client.toml")
+    try:
+        if os.path.exists(bpm_client_toml):
+            with open(bpm_client_toml, "r", encoding="utf-8") as f:
+                c_content = f.read()
+            if "DisablePlayerRender = false" in c_content:
+                c_content = c_content.replace("DisablePlayerRender = false", "DisablePlayerRender = true")
+                with open(bpm_client_toml, "w", encoding="utf-8") as f:
+                    f.write(c_content)
+                print("[+] Disabled BPM HUD extra player overlay")
+    except Exception as e:
+        print(f"[!] Warning: Could not configure BPM client toml: {e}")
+
+    # Migrate any existing world saves to use custom:universal_humanoid
+    old_tag = b'\x08\x00\x08model_id\x00\x07default'
+    new_tag = b'\x08\x00\x08model_id\x00\x1acustom:universal_humanoid'
+    import gzip
+    for root, dirs, files in os.walk(os.path.join("run", "saves")):
+        for f in files:
+            if f.endswith(".dat") or f.endswith(".dat_old"):
+                full = os.path.join(root, f)
+                try:
+                    with gzip.open(full, "rb") as fp:
+                        d = fp.read()
+                    if old_tag in d:
+                        d = d.replace(old_tag, new_tag)
+                        with gzip.open(full, "wb") as fp:
+                            fp.write(d)
+                except Exception:
+                    pass
+
+
 def launch_client():
     verify_java()
     download_modmenu()
     download_geckolib()
+    download_better_player_model()
+    sync_universal_animations()
 
     username = resolve_username()
     local_ips = get_local_ips()

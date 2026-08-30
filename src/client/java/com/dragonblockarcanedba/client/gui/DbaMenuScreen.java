@@ -13,7 +13,7 @@ import java.util.Locale;
 
 public class DbaMenuScreen extends Screen {
     private final List<MenuTab> tabs = new ArrayList<>();
-    private final String[] tabNames = {"✦ STATS", "⚡ FORMS", "🌌 SKILLS", "🔮 CRAFT"};
+    private final String[] tabNames = {"✦ STATS", "⚡ FORMS", "🌌 SKILLS", "🔮 CRAFT", "🎭 EMOTES"};
     private static int lastActiveTab = 2; // Default to Skill Tree
     private int activeTab = lastActiveTab;
 
@@ -28,6 +28,7 @@ public class DbaMenuScreen extends Screen {
         tabs.add(new FormsTab());
         tabs.add(new TechniquesTab());
         tabs.add(new KiCustomizerTab());
+        tabs.add(new EmotesTab());
     }
 
     @Override
@@ -61,6 +62,10 @@ public class DbaMenuScreen extends Screen {
 
     public <T extends net.minecraft.client.gui.components.events.GuiEventListener & net.minecraft.client.gui.components.Renderable & net.minecraft.client.gui.narration.NarratableEntry> T addTabWidget(T widget) {
         return this.addRenderableWidget(widget);
+    }
+
+    public net.minecraft.client.gui.Font getFont() {
+        return this.font;
     }
 
     public static String formatCompactNumber(long num) {

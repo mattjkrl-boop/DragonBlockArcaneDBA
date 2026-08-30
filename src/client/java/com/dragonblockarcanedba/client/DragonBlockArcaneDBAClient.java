@@ -15,6 +15,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     public static KeyMapping openMenuKey;
+    public static KeyMapping openEmoteMenuKey;
     public static KeyMapping techSlot1Key;
     public static KeyMapping techSlot2Key;
     public static KeyMapping techSlot3Key;
@@ -392,6 +393,12 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             GLFW.GLFW_KEY_V,
             KeyMapping.Category.MISC
         ));
+        openEmoteMenuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+            "key.dragonblockarcanedba.open_emote_menu",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_H,
+            KeyMapping.Category.MISC
+        ));
         techSlot1Key = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.dragonblockarcanedba.tech_slot_1",
             InputConstants.Type.KEYSYM,
@@ -419,6 +426,11 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             while (openMenuKey.consumeClick()) {
                 if (client.player != null) {
                     client.setScreenAndShow(new DbaMenuScreen());
+                }
+            }
+            while (openEmoteMenuKey.consumeClick()) {
+                if (client.player != null) {
+                    client.setScreenAndShow(new com.dragonblockarcanedba.client.gui.EmoteSelectionScreen());
                 }
             }
             while (techSlot1Key.consumeClick()) {
@@ -826,6 +838,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     accessor.dba$setTailSevered(nbt.getBooleanOr("tailSevered", false));
                     accessor.dba$setSkinColor(nbt.getStringOr("skinColor", ""));
                     accessor.dba$setHairColor(nbt.getStringOr("hairColor", ""));
+                    accessor.dba$setActiveEmote(nbt.getStringOr("activeEmote", ""));
 
                     CompoundTag stats = nbt.getCompoundOrEmpty("stats");
                     for (String key : stats.keySet()) {
@@ -980,6 +993,12 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     }
                 });
             }
+        );
+
+        // Initialize Better Player Model real-time dynamic texture hooks and model sync
+        com.dragonblockarcanedba.client.compat.BpmCompatClient.init();
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register(
+            (handler, sender, client) -> com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceYardratModel()
         );
     }
 }

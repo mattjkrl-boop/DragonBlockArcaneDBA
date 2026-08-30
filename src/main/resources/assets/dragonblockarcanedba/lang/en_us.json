@@ -156,5 +156,7 @@
   "item.dragonblockarcanedba.brave_sword": "Brave Sword",
   "item.dragonblockarcanedba.katana": "Katana",
   "item.dragonblockarcanedba.blaster_gun": "Blaster Gun",
-  "item.dragonblockarcanedba.blaster_ammo": "Blaster Ammo"
+  "item.dragonblockarcanedba.blaster_ammo": "Blaster Ammo",
+  "key.dragonblockarcanedba.open_menu": "Open Character Menu",
+  "key.dragonblockarcanedba.open_emote_menu": "Open Emote Wheel"
 }

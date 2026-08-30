@@ -4,7 +4,6 @@ import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.entity.DimensionalWarpRiftEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;

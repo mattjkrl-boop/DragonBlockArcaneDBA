@@ -37,6 +37,9 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     private int dba$hairColor = 0xFF1EB4FF;
 
     @Unique
+    private String dba$activeEmote = "";
+
+    @Unique
     private boolean dba$isInOtherworld = false;
 
     @Unique
@@ -80,12 +83,14 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
             this.dba$activeFormId = accessor.dba$getActiveFormId();
             this.dba$skinColor = parseHexColor(accessor.dba$getSkinColor(), 0xFF8CC8FF);
             this.dba$hairColor = parseHexColor(accessor.dba$getHairColor(), 0xFF1EB4FF);
+            this.dba$activeEmote = accessor.dba$getActiveEmote();
         } else {
             this.dba$hasTail = false;
             this.dba$raceId = null;
             this.dba$activeFormId = null;
             this.dba$skinColor = 0xFF8CC8FF;
             this.dba$hairColor = 0xFF1EB4FF;
+            this.dba$activeEmote = "";
         }
 
         this.dba$isInOtherworld = player.level() != null && player.level().dimension().identifier().getPath().contains("otherworld");
@@ -248,6 +253,11 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     @Override
     public boolean dba$isInOtherworld() {
         return this.dba$isInOtherworld;
+    }
+
+    @Override
+    public String dba$getActiveEmote() {
+        return this.dba$activeEmote != null ? this.dba$activeEmote : "";
     }
 }
 

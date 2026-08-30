@@ -1,6 +1,5 @@
 package com.dragonblockarcanedba.entity;
 
-import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;

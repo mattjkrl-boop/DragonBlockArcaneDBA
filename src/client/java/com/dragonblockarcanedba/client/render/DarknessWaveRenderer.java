@@ -121,9 +121,6 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
             float curve1 = (1.0f - Math.abs(t1) * 0.65f);
             float curve2 = (1.0f - Math.abs(t2) * 0.65f);
 
-            float th1 = thickness * curve1;
-            float th2 = thickness * curve2;
-
             float h1 = (height * 0.5f) * curve1;
             float h2 = (height * 0.5f) * curve2;
 
@@ -154,7 +151,6 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         float x1 = cx - span * 0.5f;
         float x2 = cx + span * 0.5f;
         float zLead = cz + chord;
-        float zTrail = cz - chord * 0.8f;
         float h = 0.22f;
 
         consumer.addVertex(matrix, x1, cy + h, cz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);

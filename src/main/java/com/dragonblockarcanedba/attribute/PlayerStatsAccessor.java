@@ -92,5 +92,8 @@ public interface PlayerStatsAccessor {
     void dba$pauseKiRecovery(int ticks);
     void dba$pauseStaminaRecovery(int ticks);
 
+    String dba$getActiveEmote();
+    void dba$setActiveEmote(String emote);
+
     void dba$copyFrom(PlayerStatsAccessor original);
 }

@@ -2,7 +2,6 @@ package com.dragonblockarcanedba.client.mixin;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.registry.DbaRegistries;
-import com.dragonblockarcanedba.registry.Race;
 import com.dragonblockarcanedba.registry.Form;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
@@ -40,22 +39,12 @@ public abstract class PlayerEntityRendererMixin {
     @Unique
     private static final Set<Identifier> dba$checkedMissing = new HashSet<>();
 
-    private static final Identifier DEFAULT_STEVE = Identifier.parse("minecraft:textures/entity/player/wide/steve.png");
-
     @Inject(method = "getTextureLocation", at = @At("HEAD"), cancellable = true)
     private void dba$getTextureLocation(AvatarRenderState state, CallbackInfoReturnable<Identifier> cir) {
         var level = Minecraft.getInstance().level;
         if (level != null) {
             net.minecraft.world.entity.Entity entity = level.getEntity(state.id);
             if (entity instanceof PlayerStatsAccessor accessor) {
-                Identifier raceId = accessor.dba$getRaceId();
-                String racePath = raceId != null ? raceId.getPath().toLowerCase() : "human";
-
-                // Human pick always uses player's own skin
-                if ("human".equals(racePath)) {
-                    return; // Let vanilla return state.skin.texture()
-                }
-
                 // Check form override texture first if available
                 Identifier formId = accessor.dba$getActiveFormId();
                 if (formId != null) {
@@ -68,21 +57,21 @@ public abstract class PlayerEntityRendererMixin {
                         }
                     }
                 }
-
-                // Check custom race texture if available
-                Race race = DbaRegistries.getRace(raceId);
-                if (race != null && race.getBaseTexture() != null) {
-                    Identifier tex = race.getBaseTexture();
-                    if (dba$isTextureAvailable(tex)) {
-                        cir.setReturnValue(tex);
-                        return;
-                    }
-                }
-
-                // Non-human placeholder: default MC person (Steve)
-                cir.setReturnValue(DEFAULT_STEVE);
             }
         }
+
+        // Physically recolored DBZ skin using exact user chosen skin and hair colors
+        if (state instanceof com.dragonblockarcanedba.client.render.layer.DbaPlayerState dbaState) {
+            int skin = dbaState.dba$getSkinColor();
+            int hair = dbaState.dba$getHairColor();
+            Identifier dynSkin = com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(skin, hair);
+            if (dynSkin != null) {
+                cir.setReturnValue(dynSkin);
+                return;
+            }
+        }
+
+        cir.setReturnValue(com.dragonblockarcanedba.client.render.DynamicSkinManager.BASE_SKIN_ID);
     }
 
     /**
@@ -92,9 +81,7 @@ public abstract class PlayerEntityRendererMixin {
     @Unique
     private static boolean dba$isTextureAvailable(Identifier texture) {
         if (texture == null) return false;
-        // Vanilla textures always exist
         if ("minecraft".equals(texture.getNamespace())) return true;
-        // Already known missing — skip
         if (dba$checkedMissing.contains(texture)) return false;
 
         try {

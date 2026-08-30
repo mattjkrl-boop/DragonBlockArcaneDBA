@@ -1,11 +1,9 @@
 package com.dragonblockarcanedba.client.render.item;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.special.SpecialModelRenderer;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.world.item.ItemStack;
 import org.joml.Vector3fc;
 

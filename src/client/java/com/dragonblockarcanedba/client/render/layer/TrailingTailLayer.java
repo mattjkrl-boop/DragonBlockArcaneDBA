@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render.layer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.model.EntityModel;
+import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
@@ -10,7 +11,6 @@ import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
-import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -18,35 +18,40 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 
 /**
- * High-detail procedural multi-joint tail renderer with speed/movement responsive physics.
- * Generates custom code geometry for all tailed races (Saiyan, Half-Saiyan, Arcosian, Bio-Android).
- * Features true skeletal forward kinematics, inertia lag, speed drag, and organic secondary motion.
+ * Universal Dragon Ball Trailing Tail Layer.
+ * - Authentically anchored at the sacrum/lower back (Z = +2px, Y = +10.5px).
+ * - Extends backwards (+Z) with true forward-kinematic articulation.
+ * - Dynamic transformation colors (Super Saiyan golden fur, SSJ Blue cyan, SSJ God magenta, SSJ4 crimson, Cell orange stinger, Arcosian golden form).
+ * - Smooth damped kinematics with zero jittering/spasms during character spin or idle.
  */
 public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityModel<AvatarRenderState>> {
+
     private static final Identifier WHITE_TEXTURE =
             Identifier.parse("dragonblockarcanedba:textures/entity/ki_white.png");
 
     private static final int SAIYAN_SEGMENTS = 8;
-    private static final int ARCOSIAN_SEGMENTS = 9;
+    private static final int ARCOSIAN_SEGMENTS = 8;
     private static final int BIO_SEGMENTS = 8;
 
-    private final ModelPart[] saiyanTail = new ModelPart[SAIYAN_SEGMENTS];
-    private final ModelPart[] arcosianTail = new ModelPart[ARCOSIAN_SEGMENTS];
-    private final ModelPart[] bioTail = new ModelPart[BIO_SEGMENTS];
+    private final ModelPart[] saiyanSegments;
+    private final ModelPart[] arcosianSegments;
+    private final ModelPart[] bioAndroidSegments;
 
     public TrailingTailLayer(RenderLayerParent<AvatarRenderState, EntityModel<AvatarRenderState>> renderer) {
         super(renderer);
-
+        this.saiyanSegments = new ModelPart[SAIYAN_SEGMENTS];
         for (int i = 0; i < SAIYAN_SEGMENTS; i++) {
-            saiyanTail[i] = createSaiyanSegment(i);
+            this.saiyanSegments[i] = createSaiyanSegment(i);
         }
 
+        this.arcosianSegments = new ModelPart[ARCOSIAN_SEGMENTS];
         for (int i = 0; i < ARCOSIAN_SEGMENTS; i++) {
-            arcosianTail[i] = createArcosianSegment(i);
+            this.arcosianSegments[i] = createArcosianSegment(i);
         }
 
+        this.bioAndroidSegments = new ModelPart[BIO_SEGMENTS];
         for (int i = 0; i < BIO_SEGMENTS; i++) {
-            bioTail[i] = createBioAndroidSegment(i);
+            this.bioAndroidSegments[i] = createBioAndroidSegment(i);
         }
     }
 
@@ -57,25 +62,26 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         return root.bake(64, 64);
     }
 
-    // ==================== PROCEDURAL CODE GEOMETRY ====================
+    // ==================== PROCEDURAL CODE GEOMETRY (EXTENDING ALONG +Z) ====================
 
     private ModelPart createSaiyanSegment(int index) {
         float progress = index / (float) (SAIYAN_SEGMENTS - 1);
-        float width = Math.max(1.6F, 2.6F - progress * 0.9F);
-        float depth = Math.max(1.6F, 2.5F - progress * 0.85F);
-        float length = 3.2F;
+        float width = Math.max(1.6F, 2.6F - progress * 0.8F);
+        float depth = Math.max(1.6F, 2.5F - progress * 0.75F);
+        float length = 3.0F;
 
         CubeListBuilder builder = CubeListBuilder.create();
 
         if (index == SAIYAN_SEGMENTS - 1) {
-            // Fluffy rounded tip of the monkey tail
-            float tipWidth = 2.0F;
-            float tipDepth = 2.0F;
-            builder.texOffs(0, 0).addBox(-tipWidth / 2.0F, 0.0F, -tipDepth / 2.0F, tipWidth, length * 0.85F, tipDepth);
-            builder.texOffs(0, 0).addBox(-tipWidth * 0.35F, length * 0.85F, -tipDepth * 0.35F, tipWidth * 0.7F, length * 0.35F, tipDepth * 0.7F);
+            // Fluffy rounded tufted tip of the monkey tail (classic DBZ Goku/Vegeta look)
+            float tipWidth = 2.4F;
+            float tipDepth = 2.4F;
+            builder.texOffs(0, 0).addBox(-tipWidth / 2.0F, -tipDepth / 2.0F, 0.0F, tipWidth, tipDepth, length * 0.8F);
+            // Angled tuft crown extending out
+            builder.texOffs(0, 0).addBox(-tipWidth * 0.35F, -tipDepth * 0.35F, length * 0.8F, tipWidth * 0.7F, tipDepth * 0.7F, length * 0.4F);
         } else {
-            // Main fur segment
-            builder.texOffs(0, 0).addBox(-width / 2.0F, 0.0F, -depth / 2.0F, width, length, depth);
+            // Main fur segment extending along +Z
+            builder.texOffs(0, 0).addBox(-width / 2.0F, -depth / 2.0F, 0.0F, width, depth, length);
         }
 
         return bake("saiyan_seg_" + index, builder);
@@ -83,16 +89,24 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
 
     private ModelPart createArcosianSegment(int index) {
         float progress = index / (float) (ARCOSIAN_SEGMENTS - 1);
-        float width = Math.max(1.0F, 2.8F - progress * 1.8F);
-        float depth = Math.max(1.0F, 2.6F - progress * 1.7F);
-        float length = 3.4F;
+        // Heavy muscular alien tail tapering down
+        float width = Math.max(1.8F, 3.8F - progress * 2.0F);
+        float depth = Math.max(1.7F, 3.6F - progress * 1.9F);
+        float length = 3.2F;
 
         CubeListBuilder builder = CubeListBuilder.create();
-        builder.texOffs(0, 0).addBox(-width / 2.0F, 0.0F, -depth / 2.0F, width, length, depth);
+        // Main muscular body extending along +Z
+        builder.texOffs(0, 0).addBox(-width / 2.0F, -depth / 2.0F, 0.0F, width, depth, length);
 
-        // Sleek tapering tip
+        // Segmented dorsal armor ridge on top of tail
+        if (index < ARCOSIAN_SEGMENTS - 1) {
+            builder.texOffs(0, 0).addBox(-width * 0.28F, -depth / 2.0F - 0.4F, 0.2F, width * 0.56F, 0.5F, length - 0.4F);
+        }
+
+        // Smooth bulbous alien tip
         if (index == ARCOSIAN_SEGMENTS - 1) {
-            builder.texOffs(0, 0).addBox(-0.5F, length, -0.5F, 1.0F, 1.2F, 1.0F);
+            float tipW = 1.8F;
+            builder.texOffs(0, 0).addBox(-tipW / 2.0F, -tipW / 2.0F, length, tipW, tipW, 1.4F);
         }
 
         return bake("arcosian_seg_" + index, builder);
@@ -100,30 +114,34 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
 
     private ModelPart createBioAndroidSegment(int index) {
         float progress = index / (float) (BIO_SEGMENTS - 1);
-        float width = Math.max(1.4F, 3.2F - progress * 1.6F);
-        float depth = Math.max(1.4F, 3.0F - progress * 1.5F);
-        float length = 3.5F;
+        float width = Math.max(1.8F, 3.6F - progress * 1.6F);
+        float depth = Math.max(1.8F, 3.4F - progress * 1.5F);
+        float length = 3.2F;
 
         CubeListBuilder builder = CubeListBuilder.create();
 
         if (index < BIO_SEGMENTS - 2) {
-            // Segmented carapace core
-            builder.texOffs(0, 0).addBox(-width / 2.0F, 0.0F, -depth / 2.0F, width, length, depth);
-            // Armored dorsal ridge plate
-            builder.texOffs(0, 0).addBox(-width / 2.0F - 0.2F, 0.4F, depth / 2.0F - 0.2F, width + 0.4F, length - 0.8F, 0.8F);
+            // Armored green carapace segment along +Z
+            builder.texOffs(0, 0).addBox(-width / 2.0F, -depth / 2.0F, 0.0F, width, depth, length);
+            // Prominent dorsal chitin crest plate on top of segment
+            builder.texOffs(0, 0).addBox(-width * 0.3F, -depth / 2.0F - 0.5F, 0.3F, width * 0.6F, 0.6F, length - 0.6F);
         } else if (index == BIO_SEGMENTS - 2) {
-            // Stinger collar base
-            float collarW = 2.4F;
-            float collarD = 2.4F;
-            builder.texOffs(0, 0).addBox(-collarW / 2.0F, 0.0F, -collarD / 2.0F, collarW, length, collarD);
-            builder.texOffs(0, 0).addBox(-collarW / 2.0F - 0.3F, length - 1.0F, -collarD / 2.0F - 0.3F, collarW + 0.6F, 1.4F, collarD + 0.6F);
+            // Flared stinger collar / socket ring
+            float collarW = 3.0F;
+            float collarD = 3.0F;
+            builder.texOffs(0, 0).addBox(-collarW / 2.0F, -collarD / 2.0F, 0.0F, collarW, collarD, length * 0.85F);
+            builder.texOffs(0, 0).addBox(-collarW / 2.0F - 0.3F, -collarD / 2.0F - 0.3F, length * 0.35F, collarW + 0.6F, collarD + 0.6F, length * 0.5F);
         } else {
-            // Segmented absorption stinger / needle cone
-            float coneW = 1.2F;
-            float coneD = 1.2F;
-            builder.texOffs(0, 0).addBox(-coneW / 2.0F, 0.0F, -coneD / 2.0F, coneW, length * 0.6F, coneD);
-            // Needle tip
-            builder.texOffs(0, 0).addBox(-0.35F, length * 0.6F, -0.35F, 0.7F, length * 0.65F, 0.7F);
+            // Iconic DBZ Cell Absorption Stinger
+            // Orange conical stinger base along +Z
+            float coneW = 2.0F;
+            float coneD = 2.0F;
+            builder.texOffs(0, 0).addBox(-coneW / 2.0F, -coneD / 2.0F, 0.0F, coneW, coneD, length * 0.7F);
+            // Tapered middle needle
+            float midW = 1.2F;
+            builder.texOffs(0, 0).addBox(-midW / 2.0F, -midW / 2.0F, length * 0.7F, midW, midW, length * 0.5F);
+            // Sharp metallic needle puncture tip
+            builder.texOffs(0, 0).addBox(-0.35F, -0.35F, length * 1.2F, 0.7F, 0.7F, length * 0.7F);
         }
 
         return bake("bio_seg_" + index, builder);
@@ -148,73 +166,70 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
             return;
         }
 
-        Identifier raceId = dbaState.dba$getRaceId();
-        if (raceId == null) {
-            return;
-        }
-
         if (!(this.getParentModel() instanceof HumanoidModel<?> humanoidModel)) {
             return;
         }
 
         ModelPart body = humanoidModel.body;
-        String race = raceId.getPath().toLowerCase();
+
+        Identifier raceId = dbaState.dba$getRaceId();
+        String race = raceId != null ? raceId.getPath().toLowerCase() : "saiyan";
 
         ModelPart[] segments;
         int segmentCount;
         float segLengthMeters;
 
-        if (race.contains("arcosian")) {
-            segments = arcosianTail;
-            segmentCount = ARCOSIAN_SEGMENTS;
-            segLengthMeters = 3.4F / 16.0F;
-        } else if (race.contains("bio_android") || race.contains("cell")) {
-            segments = bioTail;
+        if (race.contains("bio_android") || race.contains("cell")) {
+            segments = this.bioAndroidSegments;
             segmentCount = BIO_SEGMENTS;
-            segLengthMeters = 3.5F / 16.0F;
-        } else {
-            segments = saiyanTail;
-            segmentCount = SAIYAN_SEGMENTS;
             segLengthMeters = 3.2F / 16.0F;
+        } else if (race.contains("arcosian")) {
+            segments = this.arcosianSegments;
+            segmentCount = ARCOSIAN_SEGMENTS;
+            segLengthMeters = 3.2F / 16.0F;
+        } else {
+            segments = this.saiyanSegments;
+            segmentCount = SAIYAN_SEGMENTS;
+            segLengthMeters = 3.0F / 16.0F;
         }
 
         float age = dbaState.dba$getTailAgeInTicks();
-        float speed = dbaState.dba$getHorizontalSpeed();
+        float speedFactor = Mth.clamp(dbaState.dba$getHorizontalSpeed() * 2.5F, 0.0F, 1.0F);
         boolean isSprinting = dbaState.dba$isSprinting();
         boolean isCrouching = dbaState.dba$isCrouching();
         boolean isSwimming = dbaState.dba$isSwimming();
-        boolean isFlying = dbaState.dba$isFlying();
-
-        // Local velocities and turning physics
-        float bodyYawVelocity = dbaState.dba$getBodyYawVelocity();
-        float localVx = dbaState.dba$getLocalVelocityX();
-        float localVz = dbaState.dba$getLocalVelocityZ();
-        float localVy = dbaState.dba$getLocalVelocityY();
-        float headYawRel = dbaState.dba$getHeadYawRel();
-
-        // Effective speed multiplier (0.0 to 1.5+)
-        float speedFactor = Math.min(1.5F, (isSprinting || isFlying ? 1.0F : speed * 4.0F));
 
         // Form identification for dynamic tail transformations
         Identifier formId = dbaState.dba$getActiveFormId();
         String formStr = formId != null ? formId.getPath().toLowerCase() : "";
 
-        // Tail base color determination
+        // Tail base color determination - full Dragon Ball anime canonical palette
         int baseTailColor;
         if (race.contains("arcosian")) {
             if (formStr.contains("golden")) {
-                baseTailColor = 0xFFFFD700; // Radiant Golden Form
+                baseTailColor = 0xFFFFD700; // Radiant 24k Golden Form
             } else {
                 int skin = dbaState.dba$getSkinColor();
-                baseTailColor = skin != 0 ? skin : 0xFFE5D0FF; // Arcosian customized skin or lavender pearl
+                baseTailColor = skin != 0 ? skin : 0xFFE8DCF5; // Arcosian customized skin or pearl lavender
             }
         } else if (race.contains("bio_android") || race.contains("cell")) {
-            baseTailColor = 0xFF4FBC5A; // Bio-Android emerald carapace
+            baseTailColor = 0xFF2E7D32; // Cell emerald carapace
         } else {
-            if (formStr.contains("ssj4") || formStr.contains("super_saiyan_4") || formStr.contains("ozaru")) {
-                baseTailColor = 0xFFBA1B2B; // Super Saiyan 4 primal crimson fur
+            // Saiyan & Half-Saiyan monkey tail: dynamically matches DBZ transformations!
+            if (formStr.contains("ssj4") || formStr.contains("super_saiyan_4")) {
+                baseTailColor = 0xFFC41528; // SSJ4 primal crimson fur
+            } else if (formStr.contains("super_saiyan_blue") || formStr.contains("ssj_blue") || formStr.contains("ssjb")) {
+                baseTailColor = 0xFF00E5FF; // SSJ Blue divine cyan fur
+            } else if (formStr.contains("super_saiyan_god") || formStr.contains("ssj_god")) {
+                baseTailColor = 0xFFFF204E; // SSJ God fiery magenta fur
+            } else if (formStr.contains("ultra_instinct")) {
+                baseTailColor = 0xFFE8EEF8; // Ultra Instinct platinum silver fur
+            } else if (formStr.contains("super_saiyan") || formStr.contains("ssj")) {
+                baseTailColor = 0xFFFFD700; // Super Saiyan radiant golden fur!
+            } else if (formStr.contains("kaioken")) {
+                baseTailColor = 0xFF992222; // Kaioken aura infused crimson-brown fur
             } else {
-                baseTailColor = 0xFF8A5A38; // Saiyan natural monkey fur brown
+                baseTailColor = 0xFF6B4226; // DBZ authentic rich monkey fur brown
             }
         }
 
@@ -225,6 +240,18 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         final float bodyXRot = body.xRot;
         final float bodyYRot = body.yRot;
         final float bodyZRot = body.zRot;
+
+        // Damped physical forces: strictly clamped to prevent glitching/shaking
+        boolean isMoving = speedFactor > 0.04F || limbSwingAmount > 0.05F;
+        float rawTurnLag = -dbaState.dba$getBodyYawVelocity() * 0.012F;
+        float rawStrafe = -dbaState.dba$getLocalVelocityX() * 0.8F;
+        float rawForward = -dbaState.dba$getLocalVelocityZ() * 0.6F;
+        float rawVertical = dbaState.dba$getLocalVelocityY() * 0.4F;
+
+        final float clampedTurningLag = isMoving ? Mth.clamp(rawTurnLag, -0.06F, 0.06F) : 0.0F;
+        final float clampedStrafe = isMoving ? Mth.clamp(rawStrafe, -0.08F, 0.08F) : 0.0F;
+        final float clampedForward = isMoving ? Mth.clamp(rawForward, -0.10F, 0.10F) : 0.0F;
+        final float clampedVertical = isMoving ? Mth.clamp(rawVertical, -0.06F, 0.06F) : 0.0F;
 
         RenderType renderType = RenderTypes.entitySolid(WHITE_TEXTURE);
 
@@ -247,11 +274,12 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                 stack.mulPose(com.mojang.math.Axis.XP.rotation(bodyXRot));
             }
 
-            // Anchor tail accurately to the lower base of the spine/pelvis (meters)
-            stack.translate(0.0F, 0.58F, 0.14F);
+            // Anchor tail accurately to the lower base of the spine/pelvis on the BACK surface:
+            // Y = 10.5 pixels down from neck = 0.656F meters
+            // Z = 2.0 pixels back from torso center = 0.125F meters (exact surface of back!)
+            stack.translate(0.0F, 0.656F, 0.125F);
 
-            // True forward-kinematics skeletal chaining:
-            // Each segment rotates and extends relative to its parent joint!
+            // True forward-kinematics skeletal chaining extending along +Z (backwards):
             int pushedPoses = 0;
 
             for (int i = 0; i < segmentCount; i++) {
@@ -263,68 +291,52 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                 float pitch = 0.0F;
                 float roll = 0.0F;
 
-                // --- 1. Dynamic Physical Forces (Turning Lag, Strafe Drag, Velocity Stream) ---
-                // Torso turning inertia: tail lags behind rapid body rotation
-                float turningLag = -bodyYawVelocity * 0.024F * (0.25F + progress * 0.75F);
-
-                // Strafe drag: strafing pushes tail in opposite lateral direction
-                float strafeDrag = -localVx * 1.6F * progress;
-
-                // Forward/Backward movement stream: moving forward tilts tail backward/up into wind
-                float forwardDrag = -localVz * 1.4F * (0.3F + progress * 0.7F);
-
-                // Vertical lift/fall: jumping pushes down, falling lifts up
-                float verticalDrag = localVy * 0.6F * progress;
-
-                // Head counter-balance: looking sideways slightly swivels tail in sympathy
-                float headCounter = -headYawRel * 0.006F * progress;
-
-                // Stride counter-oscillation during walking/running
-                float strideSway = Mth.sin(limbSwing * 0.6662F) * limbSwingAmount * 0.18F * (0.3F + progress * 0.7F);
-
-                // Wind flutter in high-velocity flight or sprint
-                float windFlutterYaw = Mth.sin(age * 0.55F - i * 0.75F) * (0.04F + speedFactor * 0.09F) * progress;
-                float windFlutterPitch = Mth.cos(age * 0.50F - i * 0.65F) * (0.03F + speedFactor * 0.07F) * progress;
+                float turnLag = clampedTurningLag * (0.2F + progress * 0.8F);
+                float strafe = clampedStrafe * progress;
+                float fwd = clampedForward * (0.2F + progress * 0.8F);
+                float vert = clampedVertical * progress;
+                float strideSway = isMoving ? Mth.sin(limbSwing * 0.6662F) * limbSwingAmount * 0.10F * progress : 0.0F;
 
                 if (isSwimming) {
-                    // Serpentine undulating swim wave
-                    yaw = Mth.sin(age * 0.28F - progress * 3.5F) * 0.24F + strafeDrag * 0.5F;
-                    pitch = -0.15F + Mth.cos(age * 0.18F - progress * 2.0F) * 0.08F + forwardDrag * 0.4F;
-                    roll = Mth.sin(age * 0.20F + progress) * 0.06F;
+                    yaw = Mth.sin(age * 0.22F - progress * 2.8F) * 0.18F + strafe;
+                    pitch = -0.10F + Mth.cos(age * 0.15F - progress * 1.5F) * 0.06F + fwd;
+                    roll = Mth.sin(age * 0.18F + progress) * 0.05F;
                 } else if (isCrouching) {
-                    // Crouching: alert tail arching upward & inward over lower back
-                    yaw = Mth.sin(age * 0.10F + i * 0.4F) * 0.07F + turningLag * 0.6F + strafeDrag * 0.4F;
-                    pitch = (i == 0 ? -0.75F : -0.22F - progress * 0.15F) + forwardDrag * 0.3F;
-                    roll = Mth.cos(age * 0.08F + i * 0.3F) * 0.04F;
+                    yaw = Mth.sin(age * 0.08F + i * 0.3F) * 0.04F + turnLag;
+                    // Arches high over lower back when crouching
+                    pitch = (i == 0 ? -0.35F : (i < 4 ? -0.15F : 0.20F)) + fwd;
+                    roll = turnLag * 0.2F;
                 } else if (speedFactor > 0.35F) {
-                    // High-Speed Running / Sprinting / Flying: Aerodynamic backward stream
-                    yaw = turningLag + strafeDrag + headCounter + strideSway + windFlutterYaw;
-                    pitch = (i == 0 ? -0.38F - speedFactor * 0.30F : -0.10F - speedFactor * 0.12F)
-                            + forwardDrag + verticalDrag + windFlutterPitch;
-                    roll = (turningLag + strafeDrag) * 0.35F + windFlutterYaw * 0.5F;
+                    // Running/Sprinting: streamlined behind player
+                    yaw = turnLag + strafe + strideSway;
+                    pitch = (i == 0 ? -0.15F : -0.04F) + fwd + vert;
+                    roll = (turnLag + strafe) * 0.2F;
                 } else {
-                    // Idle & Walking: Organic breathing sway + stride oscillation + turning inertia
-                    float breathWave = Mth.sin(age * 0.08F + i * 0.45F) * (0.05F + progress * 0.10F);
-                    float sideSway = Mth.cos(age * 0.06F + i * 0.55F) * (0.07F + progress * 0.14F);
+                    // Idle & Walking: Smooth natural breathing sway
+                    float breathWave = Mth.sin(age * 0.06F + i * 0.35F) * 0.035F;
+                    float sideSway = Mth.cos(age * 0.05F + i * 0.45F) * (0.04F + progress * 0.06F);
 
                     if (race.contains("arcosian")) {
-                        // Sleek sinuous reptilian whip motion
-                        float whipWave = Mth.sin(age * 0.12F - progress * 2.6F) * (0.09F + progress * 0.14F);
-                        yaw = sideSway * 1.1F + whipWave + turningLag + strafeDrag + headCounter + strideSway;
-                        pitch = (i == 0 ? -0.38F : -0.16F - progress * 0.07F + breathWave) + forwardDrag + verticalDrag;
-                        roll = (whipWave + turningLag) * 0.3F;
+                        // Muscular tail sweeps smoothly down behind legs and lifts at the bulb tip
+                        float whipWave = Mth.sin(age * 0.08F - progress * 2.0F) * 0.04F;
+                        yaw = sideSway * 0.8F + whipWave + turnLag + strafe + strideSway;
+                        float arcosianPitch = (i == 0 ? 0.12F : (i < 5 ? 0.04F : -0.14F));
+                        pitch = arcosianPitch + breathWave + fwd + vert;
+                        roll = (whipWave + turnLag) * 0.2F;
                     } else if (race.contains("bio_android") || race.contains("cell")) {
-                        // Heavy mechanical / chitinous posture with poised stinger
-                        yaw = breathWave * 0.7F + turningLag + strafeDrag + headCounter + strideSway * 0.7F;
-                        pitch = (i == 0 ? -0.58F : -0.16F - progress * 0.10F + Mth.cos(age * 0.07F + i * 0.3F) * 0.04F)
-                                + forwardDrag + verticalDrag;
-                        roll = turningLag * 0.25F;
+                        // Arches up in a scorpion curve rising behind back and pointing stinger horizontally
+                        yaw = breathWave * 0.5F + turnLag + strafe + strideSway;
+                        float cellPitch = (i == 0 ? -0.32F : (i < 4 ? 0.14F : (i < 6 ? -0.04F : 0.02F)));
+                        pitch = cellPitch + breathWave * 0.4F + fwd + vert;
+                        roll = turnLag * 0.2F;
                     } else {
-                        // Saiyan: classic curled S-shape monkey tail with relaxed breathing & lively twitches
-                        float tipFlick = (i >= 5 ? Mth.sin(age * 0.15F + i * 0.7F) * 0.08F : 0.0F);
-                        yaw = sideSway + tipFlick + turningLag + strafeDrag + headCounter + strideSway;
-                        pitch = (i == 0 ? -0.46F : (i < 4 ? -0.22F : 0.18F)) + breathWave * 0.8F + forwardDrag + verticalDrag;
-                        roll = (sideSway + turningLag) * 0.25F;
+                        // Saiyan monkey tail: arches out, flows naturally, and curls up at tip
+                        float tipFlick = (i >= 5 ? Mth.sin(age * 0.12F + i * 0.6F) * 0.05F : 0.0F);
+                        yaw = sideSway + tipFlick + turnLag + strafe + strideSway;
+                        // Joints 0 arch up/back; 1-4 curve gently; 5-7 hook upward in DBZ curl!
+                        float saiyanPitch = (i == 0 ? -0.30F : (i < 4 ? 0.06F : -0.24F));
+                        pitch = saiyanPitch + breathWave + fwd + vert;
+                        roll = (sideSway + turnLag) * 0.2F;
                     }
                 }
 
@@ -337,9 +349,41 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
 
                 // Subtle shading / tip coloring per segment
                 int segmentColor = baseTailColor;
-                if (race.contains("bio_android") && i >= segmentCount - 2) {
-                    // Dark needle tip for Bio-Android stinger
-                    segmentColor = 0xFF1E3A22;
+                if (race.contains("bio_android") || race.contains("cell")) {
+                    if (i == segmentCount - 1) {
+                        segmentColor = 0xFFFF7700; // Iconic Cell Orange stinger cone
+                    } else if (i == segmentCount - 2) {
+                        segmentColor = 0xFF1B4D20; // Stinger socket collar
+                    } else if (i % 2 == 1) {
+                        segmentColor = 0xFF388E3C;
+                    } else {
+                        segmentColor = 0xFF2E7D32;
+                    }
+                } else if (race.contains("arcosian")) {
+                    if (formStr.contains("golden")) {
+                        if (i == segmentCount - 1) {
+                            segmentColor = 0xFF8822CC; // Purple jewel tip in Golden Form
+                        } else if (i % 2 == 1) {
+                            segmentColor = 0xFFFFC800;
+                        } else {
+                            segmentColor = 0xFFFFD700;
+                        }
+                    } else {
+                        if (i == segmentCount - 1) {
+                            segmentColor = 0xFF8844AA; // Purple alien tail tip
+                        } else if (i % 2 == 1) {
+                            segmentColor = 0xFFD8C4EE;
+                        }
+                    }
+                } else {
+                    // Saiyan tail
+                    if (i == segmentCount - 1) {
+                        if (formStr.contains("super_saiyan") || formStr.contains("ssj")) {
+                            segmentColor = 0xFFFFEA66; // Bright tip on golden fur
+                        } else {
+                            segmentColor = 0xFF543118; // Darker brown tuft tip
+                        }
+                    }
                 }
 
                 // Render current segment
@@ -351,8 +395,8 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                         segmentColor
                 );
 
-                // Translate along segment axis to base of the next joint
-                stack.translate(0.0F, segLengthMeters, 0.0F);
+                // Translate backwards (+Z) along segment length to the base of the next joint
+                stack.translate(0.0F, 0.0F, segLengthMeters);
             }
 
             // Pop all chained segment poses
@@ -364,4 +408,3 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         });
     }
 }
-

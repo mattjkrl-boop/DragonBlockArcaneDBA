@@ -96,6 +96,16 @@ public class RaceSelectionScreen extends Screen {
         int btnWidth = Math.min(100, midColWidth - 10);
         int btnHeight = 20;
 
+        if (selectedRace == null || selectedRace.isEmpty()) {
+            List<Race> selectable = getSelectableRaces();
+            if (!selectable.isEmpty()) {
+                selectedRace = selectable.get(0).getId().toString();
+                String path = selectable.get(0).getId().getPath().toLowerCase();
+                com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(path);
+            }
+        }
+        applyLiveRecolor();
+
         if (currentState == State.RACE_SELECT) {
             initRaceSelection(
                     midStartX,
@@ -126,66 +136,20 @@ public class RaceSelectionScreen extends Screen {
             int btnHeight
     ) {
         List<Race> races = getSelectableRaces();
+        int totalRaces = races.size();
 
-        int spacingY = 22;
-        int startY = 32;
-
-        int maxVisible = Math.max(
-                1,
-                (this.height - 80) / spacingY
-        );
-
-        int maxScroll = Math.max(
-                0,
-                races.size() - maxVisible
-        );
-
-        scrollOffset = Math.max(
-                0,
-                Math.min(scrollOffset, maxScroll)
-        );
+        int availableH = this.height - 40;
+        int dynamicBtnHeight = Math.max(12, Math.min(15, (availableH - (totalRaces - 1) * 2) / totalRaces));
+        int spacingY = dynamicBtnHeight + 2;
+        int startY = 24 + (availableH - (totalRaces * spacingY)) / 2;
 
         int buttonX = midStartX + (midColWidth - btnWidth) / 2;
 
-        if (scrollOffset > 0) {
-            addRenderableWidget(
-                    Button.builder(
-                            Component.literal("▲"),
-                            button -> {
-                                scrollOffset--;
-                                init();
-                            }
-                    ).bounds(
-                            buttonX,
-                            startY - 18,
-                            btnWidth,
-                            14
-                    ).build()
-            );
-        }
-
-        int visibleCount = Math.min(
-                maxVisible,
-                races.size()
-        );
-
-        for (int i = 0; i < visibleCount; i++) {
-            int raceIndex = i + scrollOffset;
-
-            if (raceIndex >= races.size()) {
-                break;
-            }
-
-            Race race = races.get(raceIndex);
-
-            boolean selected = race.getId()
-                    .toString()
-                    .equals(selectedRace);
-
+        for (int i = 0; i < totalRaces; i++) {
+            Race race = races.get(i);
+            boolean selected = race.getId().toString().equals(selectedRace);
             Component label = Component.literal(
-                    selected
-                            ? "> " + race.getDisplayName() + " <"
-                            : race.getDisplayName()
+                    selected ? "> " + race.getDisplayName() + " <" : race.getDisplayName()
             );
 
             addRenderableWidget(
@@ -193,32 +157,29 @@ public class RaceSelectionScreen extends Screen {
                             label,
                             button -> {
                                 selectedRace = race.getId().toString();
+                                String path = race.getId().getPath().toLowerCase();
+                                if (path.contains("yardrat")) {
+                                    skinR = 255; skinG = 180; skinB = 160;
+                                    hairR = 255; hairG = 240; hairB = 140;
+                                } else if (path.contains("namek")) {
+                                    skinR = 85; skinG = 255; skinB = 120;
+                                } else if (path.contains("majin")) {
+                                    skinR = 255; skinG = 140; skinB = 200;
+                                } else if (path.contains("arcosian")) {
+                                    skinR = 230; skinG = 230; skinB = 250;
+                                } else {
+                                    skinR = 255; skinG = 204; skinB = 153;
+                                    hairR = 15; hairG = 15; hairB = 15;
+                                }
+                                applyLiveRecolor();
+                                com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(path);
                                 init();
                             }
                     ).bounds(
                             buttonX,
                             startY + i * spacingY,
                             btnWidth,
-                            btnHeight
-                    ).build()
-            );
-        }
-
-        if (scrollOffset < maxScroll) {
-            int y = startY + visibleCount * spacingY;
-
-            addRenderableWidget(
-                    Button.builder(
-                            Component.literal("▼"),
-                            button -> {
-                                scrollOffset++;
-                                init();
-                            }
-                    ).bounds(
-                            buttonX,
-                            y,
-                            btnWidth,
-                            14
+                            dynamicBtnHeight
                     ).build()
             );
         }
@@ -308,7 +269,7 @@ public class RaceSelectionScreen extends Screen {
                     18,
                     "Red",
                     skinR,
-                    value -> skinR = value
+                    value -> { skinR = value; applyLiveRecolor(); }
             );
 
             skinGreenSlider = new RgbSliderWidget(
@@ -318,7 +279,7 @@ public class RaceSelectionScreen extends Screen {
                     18,
                     "Green",
                     skinG,
-                    value -> skinG = value
+                    value -> { skinG = value; applyLiveRecolor(); }
             );
 
             skinBlueSlider = new RgbSliderWidget(
@@ -328,7 +289,7 @@ public class RaceSelectionScreen extends Screen {
                     18,
                     "Blue",
                     skinB,
-                    value -> skinB = value
+                    value -> { skinB = value; applyLiveRecolor(); }
             );
 
             addRenderableWidget(skinRedSlider);
@@ -348,7 +309,7 @@ public class RaceSelectionScreen extends Screen {
                     18,
                     "Red",
                     hairR,
-                    value -> hairR = value
+                    value -> { hairR = value; applyLiveRecolor(); }
             );
 
             hairGreenSlider = new RgbSliderWidget(
@@ -358,7 +319,7 @@ public class RaceSelectionScreen extends Screen {
                     18,
                     "Green",
                     hairG,
-                    value -> hairG = value
+                    value -> { hairG = value; applyLiveRecolor(); }
             );
 
             hairBlueSlider = new RgbSliderWidget(
@@ -368,7 +329,7 @@ public class RaceSelectionScreen extends Screen {
                     18,
                     "Blue",
                     hairB,
-                    value -> hairB = value
+                    value -> { hairB = value; applyLiveRecolor(); }
             );
 
             addRenderableWidget(hairRedSlider);
@@ -382,8 +343,8 @@ public class RaceSelectionScreen extends Screen {
             );
         }
 
-        int bottomY = this.height - 28;
-        int actionBtnW = Math.min(80, (rightColWidth - 25) / 2);
+        int bottomY = this.height - 24;
+        int actionBtnW = Math.min(75, (panelW - 16) / 2);
 
         addRenderableWidget(
                 Button.builder(
@@ -393,10 +354,10 @@ public class RaceSelectionScreen extends Screen {
                             init();
                         }
                 ).bounds(
-                        rightStartX + 5,
+                        panelX + 4,
                         bottomY,
                         actionBtnW,
-                        btnHeight
+                        18
                 ).build()
         );
 
@@ -405,10 +366,10 @@ public class RaceSelectionScreen extends Screen {
                         Component.literal("CONFIRM"),
                         button -> confirmCharacter()
                 ).bounds(
-                        rightStartX + rightColWidth - actionBtnW - 5,
+                        panelX + panelW - actionBtnW - 4,
                         bottomY,
                         actionBtnW,
-                        btnHeight
+                        18
                 ).build()
         );
     }
@@ -440,6 +401,7 @@ public class RaceSelectionScreen extends Screen {
                     if (skinRedSlider != null) skinRedSlider.setIntValue(skinR);
                     if (skinGreenSlider != null) skinGreenSlider.setIntValue(skinG);
                     if (skinBlueSlider != null) skinBlueSlider.setIntValue(skinB);
+                    applyLiveRecolor();
                 }
         );
     }
@@ -471,8 +433,19 @@ public class RaceSelectionScreen extends Screen {
                     if (hairRedSlider != null) hairRedSlider.setIntValue(hairR);
                     if (hairGreenSlider != null) hairGreenSlider.setIntValue(hairG);
                     if (hairBlueSlider != null) hairBlueSlider.setIntValue(hairB);
+                    applyLiveRecolor();
                 }
         );
+    }
+
+    private void applyLiveRecolor() {
+        int s = ((skinR & 0xFF) << 16) | ((skinG & 0xFF) << 8) | (skinB & 0xFF);
+        int h = ((hairR & 0xFF) << 16) | ((hairG & 0xFF) << 8) | (hairB & 0xFF);
+        com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(s, h);
+        if (Minecraft.getInstance().player instanceof PlayerStatsAccessor acc) {
+            acc.dba$setSkinColor(rgbToHex(skinR, skinG, skinB));
+            acc.dba$setHairColor(rgbToHex(hairR, hairG, hairB));
+        }
     }
 
     private void addPresetGrid(
@@ -523,9 +496,14 @@ public class RaceSelectionScreen extends Screen {
         data.putString("hair_color", hairHex);
 
         ClientPlayNetworking.send(new ActionPayload(data));
+        applyLiveRecolor();
+        Identifier rId = Identifier.tryParse(selectedRace);
+        String racePath = (rId != null) ? rId.getPath() : "yardrat";
+        com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(racePath);
         Minecraft mc = Minecraft.getInstance();
         if (mc.player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor) {
             accessor.dba$setHasSelectedRace(true);
+            accessor.dba$setTailSevered(false);
         }
         this.onClose();
     }
@@ -545,15 +523,9 @@ public class RaceSelectionScreen extends Screen {
             return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
 
-        int spacingY = 22;
-        int maxVisible = Math.max(1, (this.height - 80) / spacingY);
-        int totalRaces = getSelectableRaces().size();
-
-        if (totalRaces <= maxVisible) {
-            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
-        }
-
-        int maxScroll = totalRaces - maxVisible;
+        List<Race> races = getSelectableRaces();
+        int maxVisible = Math.max(1, (this.height - 80) / 22);
+        int maxScroll = Math.max(0, races.size() - maxVisible);
 
         if (verticalAmount > 0) {
             scrollOffset--;
@@ -609,6 +581,12 @@ public class RaceSelectionScreen extends Screen {
         context.fill(panelX, panelY, panelX + 2, panelY + panelH, borderColor);
         context.fill(panelX + panelW - 2, panelY, panelX + panelW, panelY + panelH, borderColor);
 
+        if (currentState == State.CUSTOMIZATION) {
+            context.centeredText(this.font, Component.literal(customizationTab.toUpperCase() + " TINT"), panelX + panelW / 2, panelY + 4, 0xFF00FFCC);
+        }
+
+        super.extractRenderState(context, mouseX, mouseY, delta);
+
         int previewX = leftColWidth / 2;
         int previewY = this.height / 2;
 
@@ -619,15 +597,7 @@ public class RaceSelectionScreen extends Screen {
             float savedYHeadRot = localPlayer.yHeadRot;
             float savedXRot = localPlayer.getXRot();
 
-            Identifier savedRace = null;
-            String savedSkin = null;
-            String savedHair = null;
-            PlayerStatsAccessor accessor = null;
             if (localPlayer instanceof PlayerStatsAccessor acc) {
-                accessor = acc;
-                savedRace = acc.dba$getRaceId();
-                savedSkin = acc.dba$getSkinColor();
-                savedHair = acc.dba$getHairColor();
                 if (selectedRace != null && !selectedRace.isEmpty()) {
                     acc.dba$setRaceId(Identifier.parse(selectedRace));
                 }
@@ -635,12 +605,8 @@ public class RaceSelectionScreen extends Screen {
                 String hairHex = rgbToHex(hairR, hairG, hairB);
                 acc.dba$setSkinColor(skinHex);
                 acc.dba$setHairColor(hairHex);
+                acc.dba$setTailSevered(false);
             }
-
-            localPlayer.setYRot(spinAngle);
-            localPlayer.yBodyRot = spinAngle;
-            localPlayer.yHeadRot = spinAngle;
-            localPlayer.setXRot(0f);
 
             int x0 = previewX - 45;
             int y0 = previewY - 70;
@@ -648,46 +614,15 @@ public class RaceSelectionScreen extends Screen {
             int y1 = previewY + 75;
             int scale = Math.min(45, this.height / 4);
 
-            float midX = (float) (x0 + x1) / 2.0F;
-            float midY = (float) (y0 + y1) / 2.0F;
-            float lookX = (float) Math.atan((midX - (float) mouseX) / 50.0F);
-            float lookY = (float) Math.atan((midY - (float) mouseY) / 50.0F);
-
-            org.joml.Quaternionf rotZ = new org.joml.Quaternionf().rotateZ((float) Math.PI);
-            org.joml.Quaternionf rotX = new org.joml.Quaternionf().rotateX(lookY * 20.0F * 0.017453292F);
-            rotZ.mul(rotX);
-
-            var dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
-            var renderer = dispatcher.getRenderer(localPlayer);
-            net.minecraft.client.renderer.entity.state.EntityRenderState renderState = renderer.createRenderState(localPlayer, 1.0F);
-            renderState.shadowPieces.clear();
-            renderState.outlineColor = 0;
-
-            if (renderState instanceof net.minecraft.client.renderer.entity.state.LivingEntityRenderState livingState) {
-                livingState.bodyRot = spinAngle;
-                livingState.yRot = spinAngle + lookX * 25.0F;
-                livingState.xRot = -lookY * 20.0F;
-                livingState.boundingBoxWidth /= livingState.scale;
-                livingState.boundingBoxHeight /= livingState.scale;
-                livingState.scale = 1.0F;
-            }
-
-            org.joml.Vector3f offset = new org.joml.Vector3f(0.0F, renderState.boundingBoxHeight / 2.0F, 0.0F);
-            context.entity(renderState, (float) scale, offset, rotZ, null, x0, y0, x1, y1);
+            net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(
+                context, x0, y0, x1, y1, scale, 0.0625F, (float) mouseX, (float) mouseY, localPlayer
+            );
 
             localPlayer.setYRot(savedYRot);
             localPlayer.yBodyRot = savedYBodyRot;
             localPlayer.yHeadRot = savedYHeadRot;
             localPlayer.setXRot(savedXRot);
-            if (accessor != null) {
-                accessor.dba$setRaceId(savedRace);
-                accessor.dba$setSkinColor(savedSkin);
-                accessor.dba$setHairColor(savedHair);
-            }
         }
-
-
-        super.extractRenderState(context, mouseX, mouseY, delta);
     }
 
     private record PresetColor(String name, int r, int g, int b) {}

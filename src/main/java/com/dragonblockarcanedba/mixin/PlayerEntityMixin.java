@@ -38,6 +38,8 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Unique
     private double dbaCurrentKi = 100.0;
     @Unique
+    private String dbaActiveEmote = "";
+    @Unique
     private double dbaCurrentStamina = 100.0;
     @Unique
     private int dbaLevel = 1;
@@ -264,6 +266,14 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         Player player = (Player) (Object) this;
         if (player.level().isClientSide()) {
             return;
+        }
+
+        // Auto-cancel active emote upon movement, crouching, or attacking
+        if (!dbaActiveEmote.isEmpty()) {
+            if (player.getDeltaMovement().horizontalDistanceSqr() > 0.002 || player.swinging || player.isCrouching()) {
+                dbaActiveEmote = "";
+                dba$syncStats();
+            }
         }
 
         // Ki & Stamina recovery & drain mechanics
@@ -853,6 +863,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             }
         }
         dbaNbt.put("kiTechniqueSlots", kiTechNbt);
+        dbaNbt.putString("activeEmote", dbaActiveEmote != null ? dbaActiveEmote : "");
 
         return dbaNbt;
     }
@@ -936,6 +947,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         this.dbaXp = old.dbaXp;
         this.dbaAp = old.dbaAp;
         this.dbaSpeedPercent = old.dbaSpeedPercent;
+        this.dbaActiveEmote = old.dbaActiveEmote;
 
         this.dbaStatsMap.clear();
         this.dbaStatsMap.putAll(old.dbaStatsMap);
@@ -994,5 +1006,17 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
     @Override
     public void dba$pauseStaminaRecovery(int ticks) {
         this.dbaStaminaRecoveryCooldown = Math.max(this.dbaStaminaRecoveryCooldown, ticks);
+    }
+
+    @Unique
+    @Override
+    public String dba$getActiveEmote() {
+        return this.dbaActiveEmote != null ? this.dbaActiveEmote : "";
+    }
+
+    @Unique
+    @Override
+    public void dba$setActiveEmote(String emote) {
+        this.dbaActiveEmote = emote != null ? emote : "";
     }
 }

@@ -26,5 +26,6 @@ public interface DbaPlayerState {
     int dba$getSkinColor();
     int dba$getHairColor();
     boolean dba$isInOtherworld();
+    String dba$getActiveEmote();
 }
 
