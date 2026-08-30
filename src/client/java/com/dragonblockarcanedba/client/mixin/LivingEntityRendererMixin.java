@@ -7,12 +7,24 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(LivingEntityRenderer.class)
 public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extends LivingEntityRenderState, M extends net.minecraft.client.model.EntityModel<? super S>> extends net.minecraft.client.renderer.entity.EntityRenderer<T, S> {
 
     protected LivingEntityRendererMixin(net.minecraft.client.renderer.entity.EntityRendererProvider.Context context) {
         super(context);
+    }
+
+    @Inject(method = "getRenderType", at = @At("HEAD"), cancellable = true)
+    protected void dba$suppressVanillaPlayerModel(S state, boolean bodyVisible, boolean translucent, boolean glowing, CallbackInfoReturnable<net.minecraft.client.renderer.rendertype.RenderType> cir) {
+        if (state instanceof com.dragonblockarcanedba.client.render.layer.DbaPlayerState dbaState) {
+            net.minecraft.resources.Identifier raceId = dbaState.dba$getRaceId();
+            String race = raceId != null ? raceId.getPath().toLowerCase() : "universal_humanoid";
+            if (com.dragonblockarcanedba.client.render.model.Custom3DModelRegistry.getModelForRace(race) != null) {
+                cir.setReturnValue(null);
+            }
+        }
     }
 
     @Inject(method = "extractNameTags(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V", at = @At("TAIL"))

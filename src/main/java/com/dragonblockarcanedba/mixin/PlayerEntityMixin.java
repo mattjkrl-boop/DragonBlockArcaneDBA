@@ -390,6 +390,17 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             }
         }
 
+        // Auto-cancel static emotes if the player walks, sprints, or jumps
+        if (dbaActiveEmote != null && !dbaActiveEmote.isEmpty() && !"zombie_walk".equals(dbaActiveEmote)) {
+            if (player.getDeltaMovement().horizontalDistanceSqr() > 0.015 || Math.abs(player.getDeltaMovement().y) > 0.08) {
+                dbaActiveEmote = "";
+                dba$syncStats();
+                if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+                    DbaNetwork.broadcastEmote(serverPlayer, "");
+                }
+            }
+        }
+
         // Periodic sync to client & broadcast Ki to nearby players for Ki Sense
         if (player.tickCount % 20 == 0) {
             dba$syncStats();

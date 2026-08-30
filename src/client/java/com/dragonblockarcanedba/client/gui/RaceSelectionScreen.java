@@ -46,6 +46,7 @@ public class RaceSelectionScreen extends Screen {
     private RgbSliderWidget hairBlueSlider;
 
     private float spinAngle;
+    private float previewRotation = 35.0F;
     private int scrollOffset;
 
     public RaceSelectionScreen() {
@@ -159,17 +160,23 @@ public class RaceSelectionScreen extends Screen {
                                 selectedRace = race.getId().toString();
                                 String path = race.getId().getPath().toLowerCase();
                                 if (path.contains("yardrat")) {
-                                    skinR = 255; skinG = 180; skinB = 160;
+                                    skinR = 250; skinG = 180; skinB = 175;
                                     hairR = 255; hairG = 240; hairB = 140;
                                 } else if (path.contains("namek")) {
-                                    skinR = 85; skinG = 255; skinB = 120;
+                                    skinR = 90; skinG = 210; skinB = 110;
+                                    hairR = 230; hairG = 140; hairB = 160;
                                 } else if (path.contains("majin")) {
-                                    skinR = 255; skinG = 140; skinB = 200;
+                                    skinR = 255; skinG = 145; skinB = 195;
+                                    hairR = 255; hairG = 145; hairB = 195;
                                 } else if (path.contains("arcosian")) {
-                                    skinR = 230; skinG = 230; skinB = 250;
+                                    skinR = 240; skinG = 240; skinB = 252;
+                                    hairR = 130; hairG = 40; hairB = 190;
+                                } else if (path.contains("bio_android")) {
+                                    skinR = 60; skinG = 180; skinB = 85;
+                                    hairR = 240; hairG = 190; hairB = 30;
                                 } else {
                                     skinR = 255; skinG = 204; skinB = 153;
-                                    hairR = 15; hairG = 15; hairB = 15;
+                                    hairR = 25; hairG = 25; hairB = 25;
                                 }
                                 applyLiveRecolor();
                                 com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(path);
@@ -441,7 +448,11 @@ public class RaceSelectionScreen extends Screen {
     private void applyLiveRecolor() {
         int s = ((skinR & 0xFF) << 16) | ((skinG & 0xFF) << 8) | (skinB & 0xFF);
         int h = ((hairR & 0xFF) << 16) | ((hairG & 0xFF) << 8) | (hairB & 0xFF);
-        com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(s, h);
+        
+        Identifier rId = Identifier.tryParse(selectedRace);
+        String racePath = (rId != null) ? rId.getPath() : "universal_humanoid";
+        com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(racePath, s, h);
+        
         if (Minecraft.getInstance().player instanceof PlayerStatsAccessor acc) {
             acc.dba$setSkinColor(rgbToHex(skinR, skinG, skinB));
             acc.dba$setHairColor(rgbToHex(hairR, hairG, hairB));
@@ -498,7 +509,7 @@ public class RaceSelectionScreen extends Screen {
         ClientPlayNetworking.send(new ActionPayload(data));
         applyLiveRecolor();
         Identifier rId = Identifier.tryParse(selectedRace);
-        String racePath = (rId != null) ? rId.getPath() : "yardrat";
+        String racePath = (rId != null) ? rId.getPath() : "universal_humanoid";
         com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(racePath);
         Minecraft mc = Minecraft.getInstance();
         if (mc.player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor) {
@@ -614,9 +625,13 @@ public class RaceSelectionScreen extends Screen {
             int y1 = previewY + 75;
             int scale = Math.min(45, this.height / 4);
 
+            float rad = (float) Math.toRadians(previewRotation);
+            float simMouseX = previewX - (float) Math.sin(rad) * 150.0F;
+            float simMouseY = previewY;
             net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(
-                context, x0, y0, x1, y1, scale, 0.0625F, (float) mouseX, (float) mouseY, localPlayer
+                context, x0, y0, x1, y1, scale, 0.0625F, simMouseX, simMouseY, localPlayer
             );
+            context.centeredText(this.font, Component.literal("§7[ Drag to Rotate 360° ]"), previewX, y1 + 4, 0xFFA0B4C8);
 
             localPlayer.setYRot(savedYRot);
             localPlayer.yBodyRot = savedYBodyRot;
@@ -625,9 +640,25 @@ public class RaceSelectionScreen extends Screen {
         }
     }
 
+    @Override
+    public boolean mouseDragged(
+            net.minecraft.client.input.MouseButtonEvent event,
+            double dragX,
+            double dragY
+    ) {
+        int leftColWidth = Math.max(100, this.width / 3);
+        if (event.x() < leftColWidth + 30) {
+            previewRotation += (float) dragX * 1.8F;
+            if (previewRotation > 360.0F) previewRotation -= 360.0F;
+            if (previewRotation < 0.0F) previewRotation += 360.0F;
+            return true;
+        }
+        return super.mouseDragged(event, dragX, dragY);
+    }
+
     private record PresetColor(String name, int r, int g, int b) {}
 
-    private class RgbSliderWidget extends AbstractSliderButton {
+    public static class RgbSliderWidget extends AbstractSliderButton {
         private final String prefix;
         private final IntConsumer onChanged;
 

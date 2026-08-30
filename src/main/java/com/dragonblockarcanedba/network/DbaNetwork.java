@@ -31,6 +31,8 @@ public class DbaNetwork {
         PayloadTypeRegistry.serverboundPlay().register(C2SMakeWishPayload.TYPE, C2SMakeWishPayload.CODEC);
         // Transform broadcast to nearby players (S2C)
         PayloadTypeRegistry.clientboundPlay().register(TransformBroadcastPayload.TYPE, TransformBroadcastPayload.CODEC);
+        // Emote broadcast to nearby players (S2C)
+        PayloadTypeRegistry.clientboundPlay().register(EmoteBroadcastPayload.TYPE, EmoteBroadcastPayload.CODEC);
 
         // Player actions (C2S)
         PayloadTypeRegistry.serverboundPlay().register(ActionPayload.TYPE, ActionPayload.CODEC);
@@ -156,22 +158,7 @@ public class DbaNetwork {
                         SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 1.0f, 0.8f);
                     accessor.dba$syncStats();
                     broadcastTransformState(player);
-                } else if ("emote".equals(action)) {
-                    String emoteId = nbt.getStringOr("emote", "");
-                    var server = player.level().getServer();
-                    if (server != null) {
-                        if (!emoteId.isEmpty()) {
-                            server.getCommands().performPrefixedCommand(
-                                player.createCommandSourceStack().withSuppressedOutput(),
-                                "ysm animation play @s animation.player." + emoteId
-                            );
-                        } else {
-                            server.getCommands().performPrefixedCommand(
-                                player.createCommandSourceStack().withSuppressedOutput(),
-                                "ysm animation stop @s"
-                            );
-                        }
-                    }
+
                 } else if ("select_race".equals(action)) {
                     String raceStr = nbt.getStringOr("race", "");
                     if (!raceStr.isEmpty()) {
@@ -236,10 +223,13 @@ public class DbaNetwork {
                     accessor.dba$syncStats();
                 } else if ("emote".equals(action)) {
                     String emote = nbt.getStringOr("emote", "");
-                    accessor.dba$setActiveEmote(emote);
+                    String current = accessor.dba$getActiveEmote();
+                    String newEmote = emote.equalsIgnoreCase(current) ? "" : emote;
+                    accessor.dba$setActiveEmote(newEmote);
                     accessor.dba$syncStats();
-                    if (!emote.isEmpty()) {
-                        String msg = switch (emote) {
+                    broadcastEmote(player, newEmote);
+                    if (!newEmote.isEmpty()) {
+                        String msg = switch (newEmote) {
                             case "dance" -> "is dancing!";
                             case "wave" -> "waves enthusiastically!";
                             case "talk" -> "is speaking!";
@@ -250,7 +240,7 @@ public class DbaNetwork {
                             case "cross_punch_right", "cross_punch_left" -> "throws a heavy cross punch!";
                             case "arm_parry", "sword_parry" -> "takes a defensive parry stance!";
                             case "sword_idle" -> "readies their blade!";
-                            default -> "performs " + emote + "!";
+                            default -> "performs " + newEmote + "!";
                         };
                         if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
                             serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT, player.getX(), player.getY() + 1.0, player.getZ(), 5, 0.3, 0.5, 0.3, 0.1);
@@ -633,6 +623,15 @@ public class DbaNetwork {
 
     public static void broadcastPlayerKi(ServerPlayer player, double currentKi, double maxKi) {
         PlayerKiBroadcastPayload payload = new PlayerKiBroadcastPayload(player.getId(), (float) currentKi, (float) maxKi);
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            for (ServerPlayer other : serverLevel.players()) {
+                ServerPlayNetworking.send(other, payload);
+            }
+        }
+    }
+
+    public static void broadcastEmote(ServerPlayer player, String emote) {
+        EmoteBroadcastPayload payload = new EmoteBroadcastPayload(player.getId(), emote != null ? emote : "");
         if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
             for (ServerPlayer other : serverLevel.players()) {
                 ServerPlayNetworking.send(other, payload);

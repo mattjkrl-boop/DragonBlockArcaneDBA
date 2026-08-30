@@ -3,7 +3,7 @@
   "minecraft:geometry": [
     {
       "description": {
-        "identifier": "geometry.universal_humanoid",
+        "identifier": "geometry.android",
         "texture_width": 256,
         "texture_height": 256,
         "visible_bounds_width": 3,

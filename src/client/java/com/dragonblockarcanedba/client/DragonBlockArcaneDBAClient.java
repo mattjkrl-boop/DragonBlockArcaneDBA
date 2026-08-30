@@ -1005,10 +1005,36 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             }
         );
 
+        // Register Emote Broadcast receiver (S2C) — for multiplayer emote syncing
+        ClientPlayNetworking.registerGlobalReceiver(
+            com.dragonblockarcanedba.network.EmoteBroadcastPayload.TYPE,
+            (payload, context) -> {
+                context.client().execute(() -> {
+                    if (context.client().level != null) {
+                        net.minecraft.world.entity.Entity entity = context.client().level.getEntity(payload.entityId());
+                        if (entity instanceof PlayerStatsAccessor accessor) {
+                            accessor.dba$setActiveEmote(payload.emote());
+                        }
+                    }
+                });
+            }
+        );
+
+        // Initialize native Bedrock animation registry (68 keyframed animations)
+        com.dragonblockarcanedba.client.render.animation.BedrockAnimationRegistry.init();
+
         // Initialize Better Player Model real-time dynamic texture hooks and model sync
         com.dragonblockarcanedba.client.compat.BpmCompatClient.init();
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register(
-            (handler, sender, client) -> com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceYardratModel()
+            (handler, sender, client) -> {
+                if (client.player instanceof PlayerStatsAccessor accessor) {
+                    Identifier raceId = accessor.dba$getRaceId();
+                    String racePath = (raceId != null) ? raceId.getPath().toLowerCase() : "yardrat";
+                    com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(racePath);
+                } else {
+                    com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceYardratModel();
+                }
+            }
         );
     }
 }

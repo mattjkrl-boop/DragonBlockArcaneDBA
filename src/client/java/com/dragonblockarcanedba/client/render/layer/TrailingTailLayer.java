@@ -229,7 +229,8 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
             } else if (formStr.contains("kaioken")) {
                 baseTailColor = 0xFF992222; // Kaioken aura infused crimson-brown fur
             } else {
-                baseTailColor = 0xFF6B4226; // DBZ authentic rich monkey fur brown
+                int hair = dbaState.dba$getHairColor();
+                baseTailColor = hair != 0 ? hair : 0xFF6B4226;
             }
         }
 
@@ -255,6 +256,8 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
 
         RenderType renderType = RenderTypes.entitySolid(WHITE_TEXTURE);
 
+        final int renderLight = Math.max(packedLight, 0x00D000D0);
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             PoseStack stack = new PoseStack();
             stack.last().pose().set(pose.pose());
@@ -274,10 +277,10 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                 stack.mulPose(com.mojang.math.Axis.XP.rotation(bodyXRot));
             }
 
-            // Anchor tail accurately to the lower base of the spine/pelvis on the BACK surface:
-            // Y = 10.5 pixels down from neck = 0.656F meters
-            // Z = 2.0 pixels back from torso center = 0.125F meters (exact surface of back!)
-            stack.translate(0.0F, 0.656F, 0.125F);
+            // Anchor tail accurately to the lower base of the spine/pelvis on the exterior back surface:
+            // Y = 10.2 pixels down from neck = 0.640F meters
+            // Z = 2.64 pixels back from torso center = 0.165F meters (cleanly outside torso, never intersecting)
+            stack.translate(0.0F, 0.640F, 0.165F);
 
             // True forward-kinematics skeletal chaining extending along +Z (backwards):
             int pushedPoses = 0;
@@ -303,13 +306,12 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                     roll = Mth.sin(age * 0.18F + progress) * 0.05F;
                 } else if (isCrouching) {
                     yaw = Mth.sin(age * 0.08F + i * 0.3F) * 0.04F + turnLag;
-                    // Arches high over lower back when crouching
-                    pitch = (i == 0 ? -0.35F : (i < 4 ? -0.15F : 0.20F)) + fwd;
+                    pitch = (i == 0 ? 0.10F : (i < 4 ? -0.05F : 0.12F)) + fwd;
                     roll = turnLag * 0.2F;
                 } else if (speedFactor > 0.35F) {
                     // Running/Sprinting: streamlined behind player
                     yaw = turnLag + strafe + strideSway;
-                    pitch = (i == 0 ? -0.15F : -0.04F) + fwd + vert;
+                    pitch = (i == 0 ? 0.05F : -0.02F) + fwd + vert;
                     roll = (turnLag + strafe) * 0.2F;
                 } else {
                     // Idle & Walking: Smooth natural breathing sway
@@ -320,23 +322,24 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                         // Muscular tail sweeps smoothly down behind legs and lifts at the bulb tip
                         float whipWave = Mth.sin(age * 0.08F - progress * 2.0F) * 0.04F;
                         yaw = sideSway * 0.8F + whipWave + turnLag + strafe + strideSway;
-                        float arcosianPitch = (i == 0 ? 0.12F : (i < 5 ? 0.04F : -0.14F));
+                        float arcosianPitch = (i == 0 ? 0.14F : (i < 5 ? 0.06F : -0.10F));
                         pitch = arcosianPitch + breathWave + fwd + vert;
                         roll = (whipWave + turnLag) * 0.2F;
                     } else if (race.contains("bio_android") || race.contains("cell")) {
-                        // Arches up in a scorpion curve rising behind back and pointing stinger horizontally
+                        // Arches smoothly behind back and points stinger horizontally
                         yaw = breathWave * 0.5F + turnLag + strafe + strideSway;
-                        float cellPitch = (i == 0 ? -0.32F : (i < 4 ? 0.14F : (i < 6 ? -0.04F : 0.02F)));
+                        float cellPitch = (i == 0 ? -0.15F : (i < 4 ? 0.10F : (i < 6 ? -0.04F : 0.02F)));
                         pitch = cellPitch + breathWave * 0.4F + fwd + vert;
                         roll = turnLag * 0.2F;
                     } else {
-                        // Saiyan monkey tail: arches out, flows naturally, and curls up at tip
-                        float tipFlick = (i >= 5 ? Mth.sin(age * 0.12F + i * 0.6F) * 0.05F : 0.0F);
-                        yaw = sideSway + tipFlick + turnLag + strafe + strideSway;
-                        // Joints 0 arch up/back; 1-4 curve gently; 5-7 hook upward in DBZ curl!
-                        float saiyanPitch = (i == 0 ? -0.30F : (i < 4 ? 0.06F : -0.24F));
-                        pitch = saiyanPitch + breathWave + fwd + vert;
-                        roll = (sideSway + turnLag) * 0.2F;
+                        // Saiyan monkey tail: gently cascades downward behind player, flows naturally to the side, and curls up at tip
+                        float tipFlick = (i >= 5 ? Mth.sin(age * 0.10F + i * 0.5F) * 0.04F : 0.0F);
+                        float sideCurve = (i < 4 ? 0.08F : -0.05F);
+                        yaw = sideCurve + sideSway * 0.6F + tipFlick + turnLag + strafe + strideSway;
+                        // Joint 0 angles downward and away from back; 1-4 droop down; 5-7 curl gently up at tip!
+                        float saiyanPitch = (i == 0 ? 0.16F : (i < 4 ? 0.09F : (i < 6 ? -0.04F : -0.12F)));
+                        pitch = saiyanPitch + breathWave * 0.5F + fwd + vert;
+                        roll = (sideSway + turnLag) * 0.15F;
                     }
                 }
 
@@ -390,7 +393,7 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                 segments[i].render(
                         stack,
                         buffer,
-                        packedLight,
+                        renderLight,
                         net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY,
                         segmentColor
                 );

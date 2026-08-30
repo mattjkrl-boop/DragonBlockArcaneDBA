@@ -398,8 +398,6 @@ def launch_client():
     verify_java()
     download_modmenu()
     download_geckolib()
-    download_better_player_model()
-    sync_universal_animations()
 
     username = resolve_username()
     local_ips = get_local_ips()
