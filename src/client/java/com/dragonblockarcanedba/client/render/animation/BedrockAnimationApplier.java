@@ -53,7 +53,7 @@ public final class BedrockAnimationApplier {
             BedrockAnimationRegistry.BedrockAnimation deathAnim = getAnim("death");
             if (deathAnim != null) {
                 float time = Math.min((state.deathTime / 20.0f), deathAnim.length);
-                applyTrackedBones(model, deathAnim, time, 1.0f);
+                applyTrackedBones(model, deathAnim, time, 1.0f, true);
                 return true;
             }
         }
@@ -64,7 +64,7 @@ public final class BedrockAnimationApplier {
             if (sleepAnim == null) sleepAnim = getAnim("sleep");
             if (sleepAnim != null) {
                 float time = sleepAnim.calculatePlayTime(ageSeconds);
-                applyTrackedBones(model, sleepAnim, time, 1.0f);
+                applyTrackedBones(model, sleepAnim, time, 1.0f, true);
                 return true;
             }
         }
@@ -98,6 +98,17 @@ public final class BedrockAnimationApplier {
             if (swimAnim != null) {
                 float time = swimAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, swimAnim, time, 1.0f);
+                return true;
+            }
+        }
+
+        // ==================== 5.5. CLIMBING (Ladders, Vines, Scaffolding) ====================
+        if (dbaState.dba$isOnLadder()) {
+            BedrockAnimationRegistry.BedrockAnimation climbAnim = getAnim("climb");
+            if (climbAnim != null) {
+                boolean isMovingOnLadder = Math.abs(dbaState.dba$getLocalVelocityY()) > 0.02f || dbaState.dba$getHorizontalSpeed() > 0.02f;
+                float time = isMovingOnLadder ? (limbSwing * 0.15f) % climbAnim.length : 0.25f;
+                applyTrackedBones(model, climbAnim, time, 1.0f);
                 return true;
             }
         }
@@ -276,6 +287,16 @@ public final class BedrockAnimationApplier {
             float time,
             float weight
     ) {
+        applyTrackedBones(model, anim, time, weight, false);
+    }
+
+    private static void applyTrackedBones(
+            HumanoidModel<?> model,
+            BedrockAnimationRegistry.BedrockAnimation anim,
+            float time,
+            float weight,
+            boolean overrideLook
+    ) {
         if (anim == null || anim.bones.isEmpty()) return;
 
         // Root bone (overall elevation and lean)
@@ -299,12 +320,51 @@ public final class BedrockAnimationApplier {
             }
         }
 
-        applyBone(model.head, anim.bones.get("head"), time, weight);
+        applyHeadBone(model.head, anim.bones.get("head"), time, weight, overrideLook);
         applyBone(model.body, anim.bones.get("body"), time, weight);
         applyBone(model.rightArm, anim.bones.get("right_arm"), time, weight);
         applyBone(model.leftArm, anim.bones.get("left_arm"), time, weight);
         applyBone(model.rightLeg, anim.bones.get("right_leg"), time, weight);
         applyBone(model.leftLeg, anim.bones.get("left_leg"), time, weight);
+    }
+
+    private static void applyHeadBone(
+            ModelPart head,
+            BedrockAnimationRegistry.BoneTrack track,
+            float time,
+            float weight,
+            boolean overrideLook
+    ) {
+        if (head == null) return;
+
+        // Vanilla look angles already calculated by Minecraft setupAnim
+        float vanillaPitch = head.xRot;
+        float vanillaYaw = head.yRot;
+
+        if (track != null) {
+            float[] rot = track.sampleRotation(time);
+            float radX = (float) Math.toRadians(rot[0]);
+            float radY = (float) Math.toRadians(rot[1]);
+            float radZ = (float) Math.toRadians(rot[2]);
+
+            if (overrideLook) {
+                head.xRot = Mth.lerp(weight, head.xRot, radX);
+                head.yRot = Mth.lerp(weight, head.yRot, radY);
+                head.zRot = Mth.lerp(weight, head.zRot, radZ);
+            } else {
+                // Free head rotation: preserve vanilla look pitch & yaw (independent of body up to ±75 deg)
+                head.xRot = vanillaPitch + (radX * weight);
+                head.yRot = vanillaYaw + (radY * weight);
+                head.zRot = radZ * weight;
+            }
+
+            float[] pos = track.samplePosition(time);
+            if (pos[0] != 0.0f || pos[1] != 0.0f || pos[2] != 0.0f) {
+                head.x += pos[0] * weight;
+                head.y += -pos[1] * weight;
+                head.z += pos[2] * weight;
+            }
+        }
     }
 
     private static void applyBone(

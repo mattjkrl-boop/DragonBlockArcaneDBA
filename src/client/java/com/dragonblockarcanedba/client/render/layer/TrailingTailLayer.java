@@ -29,6 +29,11 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
     private static final Identifier WHITE_TEXTURE =
             Identifier.parse("dragonblockarcanedba:textures/entity/ki_white.png");
 
+    private static final java.util.Map<Integer, Float> PREV_BODY_ROT =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<Integer, Float> SMOOTHED_SPIN_DRAG =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     private static final int SAIYAN_SEGMENTS = 8;
     private static final int ARCOSIAN_SEGMENTS = 8;
     private static final int BIO_SEGMENTS = 8;
@@ -155,8 +160,8 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
             SubmitNodeCollector collector,
             int packedLight,
             AvatarRenderState state,
-            float limbSwing,
-            float limbSwingAmount
+            float yRot,
+            float xRot
     ) {
         if (!(state instanceof DbaPlayerState dbaState)) {
             return;
@@ -198,6 +203,12 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         boolean isSprinting = dbaState.dba$isSprinting();
         boolean isCrouching = dbaState.dba$isCrouching();
         boolean isSwimming = dbaState.dba$isSwimming();
+        boolean isFlying = dbaState.dba$isFlying();
+        float vertVel = Mth.clamp(dbaState.dba$getLocalVelocityY(), -1.0F, 1.0F);
+
+        // True body walking movement from Minecraft entity state (NOT head angles!)
+        float limbSwing = state.walkAnimationPos;
+        float limbSwingAmount = state.walkAnimationSpeed;
 
         // Form identification for dynamic tail transformations
         Identifier formId = dbaState.dba$getActiveFormId();
@@ -242,17 +253,30 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         final float bodyYRot = body.yRot;
         final float bodyZRot = body.zRot;
 
-        // Damped physical forces: strictly clamped to prevent glitching/shaking
-        boolean isMoving = speedFactor > 0.04F || limbSwingAmount > 0.05F;
-        float rawTurnLag = -dbaState.dba$getBodyYawVelocity() * 0.012F;
-        float rawStrafe = -dbaState.dba$getLocalVelocityX() * 0.8F;
-        float rawForward = -dbaState.dba$getLocalVelocityZ() * 0.6F;
-        float rawVertical = dbaState.dba$getLocalVelocityY() * 0.4F;
+        // Ultra-smooth physical kinematics: zero chaotic interference, zero turning lag spikes
+        float moveWeight = Mth.clamp(speedFactor + limbSwingAmount * 0.5F, 0.0F, 1.0F);
 
-        final float clampedTurningLag = isMoving ? Mth.clamp(rawTurnLag, -0.06F, 0.06F) : 0.0F;
-        final float clampedStrafe = isMoving ? Mth.clamp(rawStrafe, -0.08F, 0.08F) : 0.0F;
-        final float clampedForward = isMoving ? Mth.clamp(rawForward, -0.10F, 0.10F) : 0.0F;
-        final float clampedVertical = isMoving ? Mth.clamp(rawVertical, -0.06F, 0.06F) : 0.0F;
+        // Subtle centrifugal drag when the body turns/spins in the world:
+        // Sourced exclusively from state.bodyRot changes across frames (0 while only looking around).
+        float currentBodyRot = state.bodyRot;
+        Float prevRot = PREV_BODY_ROT.put(state.id, currentBodyRot);
+        float deltaBodyRot = 0.0F;
+        if (prevRot != null) {
+            deltaBodyRot = Mth.wrapDegrees(currentBodyRot - prevRot);
+            if (Math.abs(deltaBodyRot) > 45.0F) {
+                deltaBodyRot = 0.0F; // Ignore sudden teleports or respawns
+            }
+        }
+
+        if (PREV_BODY_ROT.size() > 64) {
+            PREV_BODY_ROT.clear();
+            SMOOTHED_SPIN_DRAG.clear();
+        }
+
+        float targetDrag = -Mth.clamp(deltaBodyRot * 0.0035F, -0.018F, 0.018F);
+        float prevDrag = SMOOTHED_SPIN_DRAG.getOrDefault(state.id, 0.0F);
+        final float smoothedSpinDrag = Mth.lerp(0.08F, prevDrag, targetDrag);
+        SMOOTHED_SPIN_DRAG.put(state.id, smoothedSpinDrag);
 
         RenderType renderType = RenderTypes.entitySolid(WHITE_TEXTURE);
 
@@ -294,53 +318,69 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                 float pitch = 0.0F;
                 float roll = 0.0F;
 
-                float turnLag = clampedTurningLag * (0.2F + progress * 0.8F);
-                float strafe = clampedStrafe * progress;
-                float fwd = clampedForward * (0.2F + progress * 0.8F);
-                float vert = clampedVertical * progress;
-                float strideSway = isMoving ? Mth.sin(limbSwing * 0.6662F) * limbSwingAmount * 0.10F * progress : 0.0F;
-
                 if (isSwimming) {
-                    yaw = Mth.sin(age * 0.22F - progress * 2.8F) * 0.18F + strafe;
-                    pitch = -0.10F + Mth.cos(age * 0.15F - progress * 1.5F) * 0.06F + fwd;
-                    roll = Mth.sin(age * 0.18F + progress) * 0.05F;
-                } else if (isCrouching) {
-                    yaw = Mth.sin(age * 0.08F + i * 0.3F) * 0.04F + turnLag;
-                    pitch = (i == 0 ? 0.10F : (i < 4 ? -0.05F : 0.12F)) + fwd;
-                    roll = turnLag * 0.2F;
-                } else if (speedFactor > 0.35F) {
-                    // Running/Sprinting: streamlined behind player
-                    yaw = turnLag + strafe + strideSway;
-                    pitch = (i == 0 ? 0.05F : -0.02F) + fwd + vert;
-                    roll = (turnLag + strafe) * 0.2F;
+                    // Smooth aquatic propulsion wave
+                    yaw = Mth.sin(age * 0.18F - progress * 2.5F) * (0.14F * progress);
+                    pitch = -0.06F + Mth.cos(age * 0.12F - progress * 1.5F) * (0.04F * progress);
+                    roll = Mth.sin(age * 0.14F + progress) * (0.03F * progress);
+                } else if (race.contains("bio_android") || race.contains("cell")) {
+                    // Cell's segmented stinger tail: stable armored drape with subtle breathing ripple
+                    float cellWave = Mth.sin(age * 0.04F - progress * 1.2F) * (0.018F * progress);
+                    float walkSway = Mth.sin(limbSwing * 0.6F) * (limbSwingAmount * 0.025F * progress);
+                    float lateralDamp = isSprinting ? 0.4F : 1.0F;
+                    float spinDrag = smoothedSpinDrag * progress;
+                    yaw = (cellWave + walkSway) * lateralDamp + spinDrag;
+                    float basePitch = (i == 0 ? 0.06F : (i < 4 ? 0.08F : (i < 6 ? -0.04F : -0.08F)));
+                    float speedStream = (speedFactor * 0.12F + (isSprinting ? 0.05F : 0.0F)) * (1.0F - progress * 0.35F);
+                    float inertiaPitch = -vertVel * 0.08F * progress;
+                    pitch = basePitch - speedStream + inertiaPitch;
+                } else if (race.contains("arcosian")) {
+                    // Frieza / Arcosian tail: graceful, fluid alien tail
+                    float arcosianWave = Mth.sin(age * 0.05F - progress * 1.6F) * (0.03F * progress);
+                    float walkSway = Mth.sin(limbSwing * 0.6F) * (limbSwingAmount * 0.04F * progress);
+                    float lateralDamp = isSprinting ? 0.4F : 1.0F;
+                    float spinDrag = smoothedSpinDrag * progress;
+                    yaw = 0.03F + (arcosianWave + walkSway) * lateralDamp + spinDrag;
+                    float basePitch = (i == 0 ? 0.14F : (i < 4 ? 0.08F : (i < 6 ? -0.05F : -0.11F)));
+                    float speedStream = (speedFactor * 0.14F + (isSprinting ? 0.06F : 0.0F)) * (1.0F - progress * 0.35F);
+                    float inertiaPitch = -vertVel * 0.10F * progress;
+                    pitch = basePitch - speedStream + inertiaPitch;
+                    roll = arcosianWave * 0.12F;
                 } else {
-                    // Idle & Walking: Smooth natural breathing sway
-                    float breathWave = Mth.sin(age * 0.06F + i * 0.35F) * 0.035F;
-                    float sideSway = Mth.cos(age * 0.05F + i * 0.45F) * (0.04F + progress * 0.06F);
+                    // Saiyan & Half-Saiyan monkey tail: classic natural DBZ drape with silky smooth idle wave
+                    // Single coherent traveling wave propagating smoothly from root to tip:
+                    float idleWave = Mth.sin(age * 0.05F - progress * 1.6F) * (0.025F * progress);
 
-                    if (race.contains("arcosian")) {
-                        // Muscular tail sweeps smoothly down behind legs and lifts at the bulb tip
-                        float whipWave = Mth.sin(age * 0.08F - progress * 2.0F) * 0.04F;
-                        yaw = sideSway * 0.8F + whipWave + turnLag + strafe + strideSway;
-                        float arcosianPitch = (i == 0 ? 0.14F : (i < 5 ? 0.06F : -0.10F));
-                        pitch = arcosianPitch + breathWave + fwd + vert;
-                        roll = (whipWave + turnLag) * 0.2F;
-                    } else if (race.contains("bio_android") || race.contains("cell")) {
-                        // Arches smoothly behind back and points stinger horizontally
-                        yaw = breathWave * 0.5F + turnLag + strafe + strideSway;
-                        float cellPitch = (i == 0 ? -0.15F : (i < 4 ? 0.10F : (i < 6 ? -0.04F : 0.02F)));
-                        pitch = cellPitch + breathWave * 0.4F + fwd + vert;
-                        roll = turnLag * 0.2F;
-                    } else {
-                        // Saiyan monkey tail: gently cascades downward behind player, flows naturally to the side, and curls up at tip
-                        float tipFlick = (i >= 5 ? Mth.sin(age * 0.10F + i * 0.5F) * 0.04F : 0.0F);
-                        float sideCurve = (i < 4 ? 0.08F : -0.05F);
-                        yaw = sideCurve + sideSway * 0.6F + tipFlick + turnLag + strafe + strideSway;
-                        // Joint 0 angles downward and away from back; 1-4 droop down; 5-7 curl gently up at tip!
-                        float saiyanPitch = (i == 0 ? 0.16F : (i < 4 ? 0.09F : (i < 6 ? -0.04F : -0.12F)));
-                        pitch = saiyanPitch + breathWave * 0.5F + fwd + vert;
-                        roll = (sideSway + turnLag) * 0.15F;
-                    }
+                    // Body footstep sway (synchronized with left/right leg stride):
+                    float walkSway = Mth.sin(limbSwing * 0.6F) * (limbSwingAmount * 0.035F * progress);
+
+                    // Side curve (natural relaxed hang to one side):
+                    float baseSideCurve = 0.035F * (1.0F - progress * 0.4F);
+
+                    // High-speed sprint tightens lateral sway into a focused aerodynamic stream:
+                    float lateralDamp = isSprinting ? 0.35F : 1.0F;
+
+                    // Subtle centrifugal drag when the body turns/spins:
+                    float spinDrag = smoothedSpinDrag * progress;
+
+                    yaw = baseSideCurve + (idleWave + walkSway) * lateralDamp + spinDrag;
+
+                    // Naturally curves down from hips, levels off, and hooks up at the tip:
+                    float basePitch = (i == 0 ? 0.12F : (i < 3 ? 0.08F : (i < 5 ? 0.04F : (i < 7 ? -0.08F : -0.10F))));
+
+                    // Speed-based streamlining (faster player moves, higher tail trails backward):
+                    float speedStream = (speedFactor * 0.16F + (isSprinting ? 0.06F : 0.0F)) * (1.0F - progress * 0.35F);
+
+                    // Inertia from vertical body movement (jumping / falling):
+                    float inertiaPitch = -vertVel * 0.12F * progress;
+
+                    // Body posture adjustments:
+                    float crouchAdjust = isCrouching ? -0.04F * progress : 0.0F;
+                    float flyStream = isFlying ? -0.10F * (1.0F - progress * 0.5F) : 0.0F;
+
+                    pitch = basePitch - speedStream + inertiaPitch + crouchAdjust + flyStream;
+
+                    roll = idleWave * 0.10F;
                 }
 
                 // Apply joint rotations

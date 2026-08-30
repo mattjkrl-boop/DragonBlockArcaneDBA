@@ -20,6 +20,7 @@ public interface DbaPlayerState {
     float dba$getLocalVelocityZ();
     float dba$getLocalVelocityY();
     float dba$getHeadYawRel();
+    boolean dba$isOnLadder();
 
     Identifier dba$getRaceId();
     Identifier dba$getActiveFormId();

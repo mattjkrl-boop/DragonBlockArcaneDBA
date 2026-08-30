@@ -31,8 +31,8 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
             SubmitNodeCollector collector,
             int packedLight,
             AvatarRenderState state,
-            float limbSwing,
-            float limbSwingAmount
+            float yRot,
+            float xRot
     ) {
         if (!(this.getParentModel() instanceof HumanoidModel<?> humanoidModel)) {
             return;
@@ -56,8 +56,8 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
                 humanoidModel,
                 state,
                 dbaState,
-                limbSwing,
-                limbSwingAmount
+                state.walkAnimationPos,
+                state.walkAnimationSpeed
             );
         }
 
