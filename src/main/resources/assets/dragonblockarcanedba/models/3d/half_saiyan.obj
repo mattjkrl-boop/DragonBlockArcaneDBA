@@ -1,6 +1,6 @@
 # Blender 5.1.2
 # www.blender.org
-mtllib base.mtl
+mtllib Half-Saiyan.mtl
 o rightarm
 v -1.874909 4.094744 -0.363971
 v -1.874909 6.833105 -0.363971

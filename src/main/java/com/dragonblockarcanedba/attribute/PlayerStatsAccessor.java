@@ -16,6 +16,9 @@ public interface PlayerStatsAccessor {
     String dba$getHairColor();
     void dba$setHairColor(String color);
 
+    String dba$getEyeColor();
+    void dba$setEyeColor(String color);
+
     double dba$getCurrentKi();
     void dba$setCurrentKi(double ki);
     void dba$addKi(double amount);

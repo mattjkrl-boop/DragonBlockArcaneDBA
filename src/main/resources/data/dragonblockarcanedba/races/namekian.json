@@ -21,5 +21,11 @@
   ],
   "modelId": "dragonblockarcanedba:namekian",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/namekian.png",
-  "soundProfile": "dragonblockarcanedba:namekian_hurt"
+  "soundProfile": "dragonblockarcanedba:namekian_hurt",
+  "hitbox_width": 0.6,
+  "hitbox_height": 1.8,
+  "eye_height": 1.62,
+  "eye_offset_x": 0.0,
+  "eye_offset_y": 7.5,
+  "eye_offset_z": -2.1
 }

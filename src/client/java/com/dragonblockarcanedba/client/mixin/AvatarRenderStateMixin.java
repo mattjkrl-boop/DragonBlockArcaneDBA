@@ -37,6 +37,9 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     private int dba$hairColor = 0xFF1EB4FF;
 
     @Unique
+    private int dba$eyeColor = 0xFFFFFFFF;
+
+    @Unique
     private String dba$activeEmote = "";
 
     @Unique
@@ -84,8 +87,21 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
             this.dba$raceId = accessor.dba$getRaceId();
             this.dba$hasTail = accessor.dba$hasTail();
             this.dba$activeFormId = accessor.dba$getActiveFormId();
-            this.dba$skinColor = parseHexColor(accessor.dba$getSkinColor(), 0xFF8CC8FF);
-            this.dba$hairColor = parseHexColor(accessor.dba$getHairColor(), 0xFF1EB4FF);
+
+            String sHex = accessor.dba$getSkinColor();
+            String hHex = accessor.dba$getHairColor();
+            String eHex = accessor.dba$getEyeColor();
+            if (this.dba$activeFormId != null) {
+                com.dragonblockarcanedba.registry.Form form = com.dragonblockarcanedba.registry.DbaRegistries.getForm(this.dba$activeFormId);
+                if (form != null) {
+                    if (form.getSkinColorOverride() != null) sHex = form.getSkinColorOverride();
+                    if (form.getHairColorOverride() != null) hHex = form.getHairColorOverride();
+                }
+            }
+
+            this.dba$skinColor = parseHexColor(sHex, 0xFF8CC8FF);
+            this.dba$hairColor = parseHexColor(hHex, 0xFF1EB4FF);
+            this.dba$eyeColor = parseHexColor(eHex, 0xFFFFFFFF);
             this.dba$activeEmote = accessor.dba$getActiveEmote();
         } else {
             this.dba$hasTail = false;
@@ -93,6 +109,7 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
             this.dba$activeFormId = null;
             this.dba$skinColor = 0xFF8CC8FF;
             this.dba$hairColor = 0xFF1EB4FF;
+            this.dba$eyeColor = 0xFFFFFFFF;
             this.dba$activeEmote = "";
         }
 
@@ -122,6 +139,8 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
 
         // Overall look yaw turning rate
         this.dba$yawVelocity = Mth.wrapDegrees(player.getYRot() - player.yRotO);
+        this.dba$pitchVelocity = Mth.wrapDegrees(player.getXRot() - player.xRotO);
+        this.dba$headPitch = player.getXRot();
 
         // Transform world velocity vector into local torso coordinate space
         // Facing bodyYaw: 0 = south (+Z), 90 = west (-X), 180 = north (-Z), 270 = east (+X)
@@ -234,9 +253,25 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
         return this.dba$localVelocityY;
     }
 
+    @Unique
+    private float dba$pitchVelocity = 0.0F;
+
+    @Unique
+    private float dba$headPitch = 0.0F;
+
     @Override
     public float dba$getHeadYawRel() {
         return this.dba$headYawRel;
+    }
+
+    @Override
+    public float dba$getPitchVelocity() {
+        return this.dba$pitchVelocity;
+    }
+
+    @Override
+    public float dba$getHeadPitch() {
+        return this.dba$headPitch;
     }
 
     @Override
@@ -257,6 +292,11 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     @Override
     public int dba$getHairColor() {
         return this.dba$hairColor;
+    }
+
+    @Override
+    public int dba$getEyeColor() {
+        return this.dba$eyeColor;
     }
 
     @Override

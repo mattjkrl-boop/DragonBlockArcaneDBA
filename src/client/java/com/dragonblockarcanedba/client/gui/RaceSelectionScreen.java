@@ -37,6 +37,10 @@ public class RaceSelectionScreen extends Screen {
     private int hairG = 15;
     private int hairB = 15;
 
+    private int eyeR = 255;
+    private int eyeG = 255;
+    private int eyeB = 255;
+
     private RgbSliderWidget skinRedSlider;
     private RgbSliderWidget skinGreenSlider;
     private RgbSliderWidget skinBlueSlider;
@@ -44,6 +48,10 @@ public class RaceSelectionScreen extends Screen {
     private RgbSliderWidget hairRedSlider;
     private RgbSliderWidget hairGreenSlider;
     private RgbSliderWidget hairBlueSlider;
+
+    private RgbSliderWidget eyeRedSlider;
+    private RgbSliderWidget eyeGreenSlider;
+    private RgbSliderWidget eyeBlueSlider;
 
     private float spinAngle;
     private float previewRotation = 35.0F;
@@ -87,6 +95,10 @@ public class RaceSelectionScreen extends Screen {
         this.hairRedSlider = null;
         this.hairGreenSlider = null;
         this.hairBlueSlider = null;
+
+        this.eyeRedSlider = null;
+        this.eyeGreenSlider = null;
+        this.eyeBlueSlider = null;
 
         int leftColWidth = Math.max(100, this.width / 3);
         int midColWidth = Math.min(120, this.width / 4);
@@ -252,9 +264,28 @@ public class RaceSelectionScreen extends Screen {
                             customizationTab = "Hair";
                             init();
                         }
-                ).bounds(
+                        ).bounds(
                         tabX,
                         this.height / 2,
+                        tabWidth,
+                        btnHeight
+                ).build()
+        );
+
+        addRenderableWidget(
+                Button.builder(
+                        Component.literal(
+                                "Eyes".equals(customizationTab)
+                                        ? "[ EYES ]"
+                                        : "Eyes"
+                        ),
+                        button -> {
+                            customizationTab = "Eyes";
+                            init();
+                        }
+                ).bounds(
+                        tabX,
+                        this.height / 2 + 28,
                         tabWidth,
                         btnHeight
                 ).build()
@@ -308,7 +339,7 @@ public class RaceSelectionScreen extends Screen {
                     sliderY + 70,
                     sliderW
             );
-        } else {
+        } else if ("Hair".equals(customizationTab)) {
             hairRedSlider = new RgbSliderWidget(
                     sliderX,
                     sliderY,
@@ -348,6 +379,40 @@ public class RaceSelectionScreen extends Screen {
                     sliderY + 70,
                     sliderW
             );
+        } else if ("Eyes".equals(customizationTab)) {
+            eyeRedSlider = new RgbSliderWidget(
+                    sliderX,
+                    sliderY,
+                    sliderW,
+                    18,
+                    "Red",
+                    eyeR,
+                    value -> { eyeR = value; applyLiveRecolor(); }
+            );
+
+            eyeGreenSlider = new RgbSliderWidget(
+                    sliderX,
+                    sliderY + 22,
+                    sliderW,
+                    18,
+                    "Green",
+                    eyeG,
+                    value -> { eyeG = value; applyLiveRecolor(); }
+            );
+
+            eyeBlueSlider = new RgbSliderWidget(
+                    sliderX,
+                    sliderY + 44,
+                    sliderW,
+                    18,
+                    "Blue",
+                    eyeB,
+                    value -> { eyeB = value; applyLiveRecolor(); }
+            );
+
+            addRenderableWidget(eyeRedSlider);
+            addRenderableWidget(eyeGreenSlider);
+            addRenderableWidget(eyeBlueSlider);
         }
 
         int bottomY = this.height - 24;
@@ -448,14 +513,16 @@ public class RaceSelectionScreen extends Screen {
     private void applyLiveRecolor() {
         int s = ((skinR & 0xFF) << 16) | ((skinG & 0xFF) << 8) | (skinB & 0xFF);
         int h = ((hairR & 0xFF) << 16) | ((hairG & 0xFF) << 8) | (hairB & 0xFF);
+        int e = ((eyeR & 0xFF) << 16) | ((eyeG & 0xFF) << 8) | (eyeB & 0xFF);
         
         Identifier rId = Identifier.tryParse(selectedRace);
         String racePath = (rId != null) ? rId.getPath() : "universal_humanoid";
-        com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(racePath, s, h);
+        com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(racePath, s, h, e);
         
         if (Minecraft.getInstance().player instanceof PlayerStatsAccessor acc) {
             acc.dba$setSkinColor(rgbToHex(skinR, skinG, skinB));
             acc.dba$setHairColor(rgbToHex(hairR, hairG, hairB));
+            acc.dba$setEyeColor(rgbToHex(eyeR, eyeG, eyeB));
         }
     }
 
@@ -499,12 +566,14 @@ public class RaceSelectionScreen extends Screen {
 
         String skinHex = rgbToHex(skinR, skinG, skinB);
         String hairHex = rgbToHex(hairR, hairG, hairB);
+        String eyeHex = rgbToHex(eyeR, eyeG, eyeB);
 
         CompoundTag data = new CompoundTag();
         data.putString("action", "select_race");
         data.putString("race", selectedRace);
         data.putString("skin_color", skinHex);
         data.putString("hair_color", hairHex);
+        data.putString("eye_color", eyeHex);
 
         ClientPlayNetworking.send(new ActionPayload(data));
         applyLiveRecolor();
@@ -614,8 +683,10 @@ public class RaceSelectionScreen extends Screen {
                 }
                 String skinHex = rgbToHex(skinR, skinG, skinB);
                 String hairHex = rgbToHex(hairR, hairG, hairB);
+                String eyeHex = rgbToHex(eyeR, eyeG, eyeB);
                 acc.dba$setSkinColor(skinHex);
                 acc.dba$setHairColor(hairHex);
+                acc.dba$setEyeColor(eyeHex);
                 acc.dba$setTailSevered(false);
             }
 

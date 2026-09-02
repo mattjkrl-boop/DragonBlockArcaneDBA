@@ -15,7 +15,8 @@ public record TransformBroadcastPayload(
     String activeFormId,
     boolean tailSevered,
     String skinColor,
-    String hairColor
+    String hairColor,
+    String eyeColor
 ) implements CustomPacketPayload {
 
     public static final Type<TransformBroadcastPayload> TYPE = new Type<>(
@@ -30,12 +31,14 @@ public record TransformBroadcastPayload(
             buf.writeBoolean(value.tailSevered());
             buf.writeUtf(value.skinColor());
             buf.writeUtf(value.hairColor());
+            buf.writeUtf(value.eyeColor());
         },
         buf -> new TransformBroadcastPayload(
             buf.readVarInt(),
             buf.readUtf(),
             buf.readUtf(),
             buf.readBoolean(),
+            buf.readUtf(),
             buf.readUtf(),
             buf.readUtf()
         )

@@ -1,28 +1,29 @@
 {
-	"required": true,
-	"package": "com.dragonblockarcanedba.mixin",
-	"compatibilityLevel": "JAVA_22",
-	"mixins": [
-		"PlayerEntityMixin",
-		"LivingEntityMixin",
-		"FoodDataMixin",
-		"WindChargeMixin",
-		"EntityTeleportMixin",
-		"DelayedDamageMixin",
-		"EntityMixin",
-		"MinecraftServerMixin",
-		"RangedAttributeMixin"
-	],
-	"client": [
-		"CloudTextureMixin",
-		"CloudRendererAccessor",
-		"ClientLevelWeatherMixin",
-		"client.SaberClientMixin"
-	],
-	"injectors": {
-		"defaultRequire": 1
-	},
-	"overwrites": {
-		"requireAnnotations": true
-	}
+    "required": true,
+    "package": "com.dragonblockarcanedba.mixin",
+    "compatibilityLevel": "JAVA_22",
+    "mixins": [
+        "PlayerEntityMixin",
+        "LivingEntityMixin",
+        "FoodDataMixin",
+        "WindChargeMixin",
+        "EntityTeleportMixin",
+        "DelayedDamageMixin",
+        "EntityMixin",
+        "MinecraftServerMixin",
+        "RangedAttributeMixin",
+        "PlayerRaceDimensionsMixin"
+    ],
+    "client": [
+        "CloudTextureMixin",
+        "CloudRendererAccessor",
+        "ClientLevelWeatherMixin",
+        "client.SaberClientMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    },
+    "overwrites": {
+        "requireAnnotations": true
+    }
 }

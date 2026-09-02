@@ -17,6 +17,9 @@ import com.dragonblockarcanedba.registry.Form;
 
 public class DbaNetwork {
     public static void registerCommon() {
+        // Race Configs (S2C)
+        PayloadTypeRegistry.clientboundPlay().register(RaceConfigsSyncPayload.TYPE, RaceConfigsSyncPayload.CODEC);
+        
         // Stats sync (S2C)
         PayloadTypeRegistry.clientboundPlay().register(StatsSyncPayload.TYPE, StatsSyncPayload.CODEC);
         // Space Pod open screen (S2C)
@@ -167,6 +170,7 @@ public class DbaNetwork {
                         accessor.dba$setHasSelectedRace(true);
                         accessor.dba$setSkinColor(nbt.getStringOr("skin_color", ""));
                         accessor.dba$setHairColor(nbt.getStringOr("hair_color", ""));
+                        accessor.dba$setEyeColor(nbt.getStringOr("eye_color", ""));
                         
                         if (!wasAlreadySelected) {
                             accessor.dba$setLevel(1);
@@ -548,7 +552,8 @@ public class DbaNetwork {
             formId != null ? formId.toString() : "",
             accessor.dba$isTailSevered(),
             accessor.dba$getSkinColor() != null ? accessor.dba$getSkinColor() : "",
-            accessor.dba$getHairColor() != null ? accessor.dba$getHairColor() : ""
+            accessor.dba$getHairColor() != null ? accessor.dba$getHairColor() : "",
+            accessor.dba$getEyeColor() != null ? accessor.dba$getEyeColor() : ""
         );
 
         // Send to all players in the same level
@@ -573,7 +578,8 @@ public class DbaNetwork {
             formId != null ? formId.toString() : "",
             accessor.dba$isTailSevered(),
             accessor.dba$getSkinColor() != null ? accessor.dba$getSkinColor() : "",
-            accessor.dba$getHairColor() != null ? accessor.dba$getHairColor() : ""
+            accessor.dba$getHairColor() != null ? accessor.dba$getHairColor() : "",
+            accessor.dba$getEyeColor() != null ? accessor.dba$getEyeColor() : ""
         );
 
         ServerPlayNetworking.send(targetPlayer, payload);

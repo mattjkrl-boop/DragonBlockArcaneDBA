@@ -40,17 +40,22 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
 
         String race = "universal_humanoid";
         int skinColor = 0xFFE0BD;
-        int hairColor = 0xFFF08C;
+        int hairColor = 0xFF1EB4FF;
+        int eyeColor = 0xFFFFFF;
+        Identifier activeFormId = null;
 
         if (state instanceof DbaPlayerState dbaState) {
             Identifier raceId = dbaState.dba$getRaceId();
             if (raceId != null) {
                 race = raceId.getPath().toLowerCase();
             }
+            activeFormId = dbaState.dba$getActiveFormId();
             int sColor = dbaState.dba$getSkinColor();
             int hColor = dbaState.dba$getHairColor();
+            int eColor = dbaState.dba$getEyeColor();
             if (sColor != 0) skinColor = sColor;
             if (hColor != 0) hairColor = hColor;
+            if (eColor != 0) eyeColor = eColor;
 
             com.dragonblockarcanedba.client.render.animation.BedrockAnimationApplier.apply(
                 humanoidModel,
@@ -66,7 +71,7 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
             return;
         }
 
-        // Hide vanilla box cuboids so they do not clip inside the 3D model
+        // Hide vanilla box cuboids for 3D model races so they do not clip inside the 3D model
         humanoidModel.head.visible = false;
         humanoidModel.hat.visible = false;
         humanoidModel.body.visible = false;
@@ -74,85 +79,72 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
         humanoidModel.leftArm.visible = false;
         humanoidModel.rightLeg.visible = false;
         humanoidModel.leftLeg.visible = false;
-
-        // 3D polygonal model texture
-        Identifier texture = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/model_3d/texture.png");
-        RenderType renderType = RenderTypes.entityCutout(texture, false);
-
-        float r = ((skinColor >> 16) & 0xFF) / 255.0f;
-        float g = ((skinColor >> 8) & 0xFF) / 255.0f;
-        float b = (skinColor & 0xFF) / 255.0f;
-        float a = 1.0f;
-
-        if (skinColor == 0) {
-            r = 0.85f;
-            g = 0.85f;
-            b = 0.85f;
+        if (humanoidModel instanceof net.minecraft.client.model.player.PlayerModel playerModel) {
+            playerModel.leftSleeve.visible = false;
+            playerModel.rightSleeve.visible = false;
+            playerModel.leftPants.visible = false;
+            playerModel.rightPants.visible = false;
+            playerModel.jacket.visible = false;
         }
 
-        final float finalR = r;
-        final float finalG = g;
-        final float finalB = b;
-        final float finalA = a;
+        // Uniform dynamic texture generation for all races (Yardrat, Saiyan, Half-Saiyan, etc.)
+        Identifier texture = DynamicSkinManager.getOrGenerateSkin(race, skinColor, hairColor, eyeColor);
+        if (texture == null) {
+            texture = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/player/" + race + "_base.png");
+        }
+
+        RenderType renderType = RenderTypes.entityCutout(texture, false);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             PoseStack stack = new PoseStack();
             stack.last().pose().set(pose.pose());
             stack.last().normal().set(pose.normal());
 
-            // 1. Head (Cranium, Pointed 3D Ears, Face)
-            ObjMesh.LimbGroup headLimb = mesh.getLimb("head");
-            if (headLimb != null) {
+            renderLimb(mesh.getLimb("head"), humanoidModel.head, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("body"), humanoidModel.body, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("rightarm"), humanoidModel.rightArm, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("leftarm"), humanoidModel.leftArm, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("rightleg"), humanoidModel.rightLeg, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("leftleg"), humanoidModel.leftLeg, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+        });
+
+        // 3D Dynamic Hair Spikes for Saiyan, Half-Saiyan, and humanoid races
+        if (com.dragonblockarcanedba.client.render.model.DbaHairRenderer.hasCodedHair(race)) {
+            final String finalRace = race;
+            final Identifier finalActiveFormId = activeFormId;
+            final int finalHairColor = hairColor;
+            final DbaPlayerState finalDbaState = (state instanceof DbaPlayerState d) ? d : null;
+
+            RenderType hairRenderType = com.dragonblockarcanedba.client.render.model.DbaHairRenderer.getHairRenderType();
+            collector.submitCustomGeometry(poseStack, hairRenderType, (pose, buffer) -> {
+                PoseStack stack = new PoseStack();
+                stack.last().pose().set(pose.pose());
+                stack.last().normal().set(pose.normal());
+
                 stack.pushPose();
                 humanoidModel.head.translateAndRotate(stack);
-                headLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, finalR, finalG, finalB, finalA);
+                com.dragonblockarcanedba.client.render.model.DbaHairRenderer.renderHair(
+                        stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY,
+                        finalRace, finalActiveFormId, finalHairColor, state, finalDbaState
+                );
                 stack.popPose();
-            }
+            });
+        }
+    }
 
-            // 2. Torso / Body
-            ObjMesh.LimbGroup bodyLimb = mesh.getLimb("body");
-            if (bodyLimb != null) {
-                stack.pushPose();
-                humanoidModel.body.translateAndRotate(stack);
-                bodyLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, finalR, finalG, finalB, finalA);
-                stack.popPose();
-            }
-
-            // 3. Right Arm
-            ObjMesh.LimbGroup rightArmLimb = mesh.getLimb("rightarm");
-            if (rightArmLimb != null) {
-                stack.pushPose();
-                humanoidModel.rightArm.translateAndRotate(stack);
-                rightArmLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, finalR, finalG, finalB, finalA);
-                stack.popPose();
-            }
-
-            // 4. Left Arm
-            ObjMesh.LimbGroup leftArmLimb = mesh.getLimb("leftarm");
-            if (leftArmLimb != null) {
-                stack.pushPose();
-                humanoidModel.leftArm.translateAndRotate(stack);
-                leftArmLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, finalR, finalG, finalB, finalA);
-                stack.popPose();
-            }
-
-            // 5. Right Leg
-            ObjMesh.LimbGroup rightLegLimb = mesh.getLimb("rightleg");
-            if (rightLegLimb != null) {
-                stack.pushPose();
-                humanoidModel.rightLeg.translateAndRotate(stack);
-                rightLegLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, finalR, finalG, finalB, finalA);
-                stack.popPose();
-            }
-
-            // 6. Left Leg
-            ObjMesh.LimbGroup leftLegLimb = mesh.getLimb("leftleg");
-            if (leftLegLimb != null) {
-                stack.pushPose();
-                humanoidModel.leftLeg.translateAndRotate(stack);
-                leftLegLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, finalR, finalG, finalB, finalA);
-                stack.popPose();
-            }
-        });
+    private static void renderLimb(
+            ObjMesh.LimbGroup limb,
+            net.minecraft.client.model.geom.ModelPart bone,
+            PoseStack stack,
+            com.mojang.blaze3d.vertex.VertexConsumer buffer,
+            int packedLight,
+            float r, float g, float b, float a
+    ) {
+        if (limb != null && bone != null) {
+            stack.pushPose();
+            bone.translateAndRotate(stack);
+            limb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, r, g, b, a);
+            stack.popPose();
+        }
     }
 }

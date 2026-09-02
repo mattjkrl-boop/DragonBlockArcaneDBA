@@ -85,6 +85,10 @@ public class DragonBlockArcaneDBA implements ModInitializer {
 
         // Register JSON dynamic data loaders using non-deprecated ResourceLoader
         ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(
+            Identifier.fromNamespaceAndPath("dragonblockarcanedba", "race_configs"),
+            new com.dragonblockarcanedba.config.RaceConfigManager()
+        );
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(
             Identifier.fromNamespaceAndPath("dragonblockarcanedba", "races"),
             new RaceLoader()
         );
@@ -303,6 +307,9 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             if (!accessor.dba$hasSelectedRace()) {
                 net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, new com.dragonblockarcanedba.network.RaceSelectOpenPayload());
             }
+            
+            // Sync Race Configs
+            net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, new com.dragonblockarcanedba.network.RaceConfigsSyncPayload(com.dragonblockarcanedba.config.RaceConfigManager.getAllConfigs()));
 
             // Purge any orphan/lingering physics modifiers (e.g. bugged bounce attributes from older sessions)
             com.dragonblockarcanedba.util.DbaPhysicsAttributes.purgeAllDbaModifiers(player);

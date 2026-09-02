@@ -35,7 +35,9 @@ public abstract class PlayerEntityRendererMixin {
     private void dba$init(EntityRendererProvider.Context context, boolean slim, CallbackInfo ci) {
         ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.Custom3DModelLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));
         ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.TrailingTailLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));
+        ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.TrailingHairLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));
         ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.RaceFeatureLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));
+        ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.BlinkingEyesLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));
     }
 
     @Inject(method = "extractRenderState", at = @At("RETURN"))
@@ -43,20 +45,39 @@ public abstract class PlayerEntityRendererMixin {
         if (state instanceof com.dragonblockarcanedba.client.render.layer.DbaPlayerState dbaState && avatar instanceof net.minecraft.client.player.AbstractClientPlayer player) {
             dbaState.dba$extractFromPlayer(player, partialTicks);
 
-            // Suppress vanilla cuboid model parts so native 3D polygonal mesh renders cleanly
+            // Suppress vanilla cuboid model parts if the race uses a custom 3D OBJ mesh (Yardrat, Saiyan, Half-Saiyan)
+            Identifier raceId = dbaState.dba$getRaceId();
+            String race = (raceId != null) ? raceId.getPath().toLowerCase() : "";
+            boolean is3D = com.dragonblockarcanedba.client.render.model.Custom3DModelRegistry.hasModelForRace(race);
             var model = ((AvatarRenderer<?>)(Object) this).getModel();
-            model.head.visible = false;
-            model.hat.visible = false;
-            model.body.visible = false;
-            model.rightArm.visible = false;
-            model.leftArm.visible = false;
-            model.rightLeg.visible = false;
-            model.leftLeg.visible = false;
-            model.leftSleeve.visible = false;
-            model.rightSleeve.visible = false;
-            model.leftPants.visible = false;
-            model.rightPants.visible = false;
-            model.jacket.visible = false;
+
+            if (is3D) {
+                model.head.visible = false;
+                model.hat.visible = false;
+                model.body.visible = false;
+                model.rightArm.visible = false;
+                model.leftArm.visible = false;
+                model.rightLeg.visible = false;
+                model.leftLeg.visible = false;
+                model.leftSleeve.visible = false;
+                model.rightSleeve.visible = false;
+                model.leftPants.visible = false;
+                model.rightPants.visible = false;
+                model.jacket.visible = false;
+            } else {
+                model.head.visible = true;
+                model.hat.visible = true;
+                model.body.visible = true;
+                model.rightArm.visible = true;
+                model.leftArm.visible = true;
+                model.rightLeg.visible = true;
+                model.leftLeg.visible = true;
+                model.leftSleeve.visible = true;
+                model.rightSleeve.visible = true;
+                model.leftPants.visible = true;
+                model.rightPants.visible = true;
+                model.jacket.visible = true;
+            }
         }
     }
 
@@ -77,6 +98,10 @@ public abstract class PlayerEntityRendererMixin {
         Identifier raceId = accessor.dba$getRaceId();
         String race = raceId != null ? raceId.getPath().toLowerCase() : "universal_humanoid";
 
+        if (!com.dragonblockarcanedba.client.render.model.Custom3DModelRegistry.hasModelForRace(race)) {
+            return;
+        }
+
         com.dragonblockarcanedba.client.render.model.ObjMesh mesh =
                 com.dragonblockarcanedba.client.render.model.Custom3DModelRegistry.getModelForRace(race);
         if (mesh == null) return;
@@ -87,6 +112,7 @@ public abstract class PlayerEntityRendererMixin {
         if (armLimb == null) return;
 
         int skinColor = 0xFFE0BD;
+        int hairColor = 0xFF1EB4FF;
         String hex = accessor.dba$getSkinColor();
         if (hex != null && !hex.isEmpty()) {
             try {
@@ -94,18 +120,29 @@ public abstract class PlayerEntityRendererMixin {
                 skinColor = Integer.parseInt(hex, 16);
             } catch (Exception ignored) {}
         }
+        String hHex = accessor.dba$getHairColor();
+        if (hHex != null && !hHex.isEmpty()) {
+            try {
+                if (hHex.startsWith("#")) hHex = hHex.substring(1);
+                hairColor = Integer.parseInt(hHex, 16);
+            } catch (Exception ignored) {}
+        }
 
-        float r = ((skinColor >> 16) & 0xFF) / 255.0f;
-        float g = ((skinColor >> 8) & 0xFF) / 255.0f;
-        float b = (skinColor & 0xFF) / 255.0f;
-        if (skinColor == 0) { r = 0.85f; g = 0.85f; b = 0.85f; }
+        String eHex = accessor.dba$getEyeColor();
+        int eyeColor = 0xFFFFFFFF;
+        if (eHex != null && !eHex.isEmpty()) {
+            try {
+                if (eHex.startsWith("#")) eHex = eHex.substring(1);
+                eyeColor = Integer.parseInt(eHex, 16);
+            } catch (Exception ignored) {}
+        }
 
-        Identifier modelTexture = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/model_3d/texture.png");
+        Identifier modelTexture = com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(race, skinColor, hairColor, eyeColor);
+        if (modelTexture == null) {
+            modelTexture = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/player/" + race + "_base.png");
+        }
+
         RenderType renderType = RenderTypes.entityCutout(modelTexture, false);
-
-        final float finalR = r;
-        final float finalG = g;
-        final float finalB = b;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             PoseStack stack = new PoseStack();
@@ -117,7 +154,7 @@ public abstract class PlayerEntityRendererMixin {
             armPart.yRot = 0.0f;
             armPart.zRot = isRight ? 0.1f : -0.1f;
             armPart.translateAndRotate(stack);
-            armLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, finalR, finalG, finalB, 1.0f);
+            armLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f);
             stack.popPose();
         });
 
@@ -152,9 +189,10 @@ public abstract class PlayerEntityRendererMixin {
         if (state instanceof com.dragonblockarcanedba.client.render.layer.DbaPlayerState dbaState) {
             int skin = dbaState.dba$getSkinColor();
             int hair = dbaState.dba$getHairColor();
+            int eye = dbaState.dba$getEyeColor();
             Identifier raceId = dbaState.dba$getRaceId();
             String racePath = raceId != null ? raceId.getPath() : "universal_humanoid";
-            cir.setReturnValue(com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(racePath, skin, hair));
+            cir.setReturnValue(com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(racePath, skin, hair, eye));
         }
     }
 

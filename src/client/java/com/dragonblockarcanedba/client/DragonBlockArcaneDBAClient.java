@@ -832,6 +832,14 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             }
         });
 
+        ClientPlayNetworking.registerGlobalReceiver(com.dragonblockarcanedba.network.RaceConfigsSyncPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> {
+                payload.configs().forEach((id, config) -> {
+                    com.dragonblockarcanedba.config.RaceConfigManager.setConfig(id, config);
+                });
+            });
+        });
+
         // Register client side sync receiver
         ClientPlayNetworking.registerGlobalReceiver(StatsSyncPayload.TYPE, (payload, context) -> {
             context.client().execute(() -> {
@@ -848,6 +856,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     accessor.dba$setTailSevered(nbt.getBooleanOr("tailSevered", false));
                     accessor.dba$setSkinColor(nbt.getStringOr("skinColor", ""));
                     accessor.dba$setHairColor(nbt.getStringOr("hairColor", ""));
+                    accessor.dba$setEyeColor(nbt.getStringOr("eyeColor", ""));
                     accessor.dba$setActiveEmote(nbt.getStringOr("activeEmote", ""));
 
                     CompoundTag stats = nbt.getCompoundOrEmpty("stats");
@@ -998,6 +1007,9 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             }
                             if (!payload.hairColor().isEmpty()) {
                                 accessor.dba$setHairColor(payload.hairColor());
+                            }
+                            if (!payload.eyeColor().isEmpty()) {
+                                accessor.dba$setEyeColor(payload.eyeColor());
                             }
                         }
                     }

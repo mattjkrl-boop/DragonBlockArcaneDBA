@@ -23,5 +23,11 @@
   ],
   "modelId": "dragonblockarcanedba:arcosian",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/arcosian.png",
-  "soundProfile": "dragonblockarcanedba:arcosian_hurt"
+  "soundProfile": "dragonblockarcanedba:arcosian_hurt",
+  "hitbox_width": 0.6,
+  "hitbox_height": 1.8,
+  "eye_height": 1.62,
+  "eye_offset_x": 0.0,
+  "eye_offset_y": 7.5,
+  "eye_offset_z": -2.1
 }

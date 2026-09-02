@@ -19,5 +19,11 @@
   ],
   "modelId": "dragonblockarcanedba:yardrat",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/yardrat.png",
-  "soundProfile": "minecraft:entity.player.hurt"
+  "soundProfile": "minecraft:entity.player.hurt",
+  "hitbox_width": 0.6,
+  "hitbox_height": 1.4,
+  "eye_height": 1.25,
+  "eye_offset_x": 0.0,
+  "eye_offset_y": 7.0,
+  "eye_offset_z": -2.1
 }

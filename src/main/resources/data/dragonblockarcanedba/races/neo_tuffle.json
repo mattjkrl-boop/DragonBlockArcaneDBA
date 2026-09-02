@@ -19,5 +19,11 @@
   ],
   "modelId": "dragonblockarcanedba:neo_tuffle",
   "baseTexture": "dragonblockarcanedba:textures/entity/races/neo_tuffle.png",
-  "soundProfile": "minecraft:entity.player.hurt"
+  "soundProfile": "minecraft:entity.player.hurt",
+  "hitbox_width": 0.6,
+  "hitbox_height": 1.8,
+  "eye_height": 1.62,
+  "eye_offset_x": 0.0,
+  "eye_offset_y": 7.5,
+  "eye_offset_z": -2.1
 }

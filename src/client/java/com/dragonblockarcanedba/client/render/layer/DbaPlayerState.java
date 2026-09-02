@@ -26,7 +26,10 @@ public interface DbaPlayerState {
     Identifier dba$getActiveFormId();
     int dba$getSkinColor();
     int dba$getHairColor();
+    int dba$getEyeColor();
     boolean dba$isInOtherworld();
     String dba$getActiveEmote();
+    float dba$getPitchVelocity();
+    float dba$getHeadPitch();
 }
 

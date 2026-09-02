@@ -20,64 +20,73 @@ public final class DynamicSkinManager {
 
     private DynamicSkinManager() {}
 
-    private static NativeImage getImage(String texturePath) {
-        if (LOADED_IMAGES.containsKey(texturePath)) {
-            return LOADED_IMAGES.get(texturePath);
+    private static NativeImage getImage(String relativePath) {
+        if (LOADED_IMAGES.containsKey(relativePath)) {
+            return LOADED_IMAGES.get(relativePath);
         }
-        
-        Identifier id = Identifier.tryParse(texturePath);
-        if (id != null) {
-            var rm = Minecraft.getInstance().getResourceManager();
-            if (rm != null) {
-                try {
-                    var res = rm.getResource(id);
-                    if (res.isPresent()) {
-                        try (InputStream is = res.get().open()) {
-                            NativeImage img = NativeImage.read(is);
-                            LOADED_IMAGES.put(texturePath, img);
-                            return img;
-                        }
+
+        String fullPath = relativePath;
+        if (!fullPath.startsWith("textures/")) {
+            fullPath = "textures/" + fullPath;
+        }
+        if (!fullPath.endsWith(".png")) {
+            fullPath += ".png";
+        }
+
+        Identifier resId = Identifier.fromNamespaceAndPath("dragonblockarcanedba", fullPath);
+        var rm = Minecraft.getInstance().getResourceManager();
+        if (rm != null) {
+            try {
+                var res = rm.getResource(resId);
+                if (res.isPresent()) {
+                    try (InputStream is = res.get().open()) {
+                        NativeImage img = NativeImage.read(is);
+                        LOADED_IMAGES.put(relativePath, img);
+                        return img;
                     }
-                } catch (Exception ignored) {}
-            }
+                }
+            } catch (Exception ignored) {}
         }
-        
+
         // Classpath fallback
         try {
-            String cp = "/assets/" + texturePath.replace(":", "/textures/");
-            if (!cp.endsWith(".png")) cp += ".png";
+            String cp = "/assets/dragonblockarcanedba/" + fullPath;
             InputStream is = DynamicSkinManager.class.getResourceAsStream(cp);
             if (is != null) {
-                try (is) { 
+                try (is) {
                     NativeImage img = NativeImage.read(is);
-                    LOADED_IMAGES.put(texturePath, img);
+                    LOADED_IMAGES.put(relativePath, img);
                     return img;
                 }
             }
         } catch (Exception ignored) {}
-        
+
         return null;
     }
 
-    private static int[] resolveColors(int skinColor, int hairColor) {
+    private static int[] resolveColors(int skinColor, int hairColor, int eyeColor) {
         int sR = (skinColor >> 16) & 0xFF;
         int sG = (skinColor >> 8) & 0xFF;
         int sB = skinColor & 0xFF;
         int hR = (hairColor >> 16) & 0xFF;
         int hG = (hairColor >> 8) & 0xFF;
         int hB = hairColor & 0xFF;
+        int eR = (eyeColor >> 16) & 0xFF;
+        int eG = (eyeColor >> 8) & 0xFF;
+        int eB = eyeColor & 0xFF;
 
         if (sR == 0 && sG == 0 && sB == 0) { sR = 255; sG = 180; sB = 160; }
         if (hR == 0 && hG == 0 && hB == 0) { hR = 255; hG = 240; hB = 140; }
+        if (eR == 0 && eG == 0 && eB == 0) { eR = 255; eG = 255; eB = 255; }
 
-        return new int[]{ sR, sG, sB, hR, hG, hB };
+        return new int[]{ sR, sG, sB, hR, hG, hB, eR, eG, eB };
     }
 
-    public static Identifier getOrGenerateSkin(String racePath, int skinColor, int hairColor) {
+    public static Identifier getOrGenerateSkin(String racePath, int skinColor, int hairColor, int eyeColor) {
         if (racePath == null || racePath.isEmpty()) racePath = "base";
-        
-        int[] c = resolveColors(skinColor, hairColor);
-        String key = String.format("%s_%02x%02x%02x_%02x%02x%02x", racePath, c[0], c[1], c[2], c[3], c[4], c[5]);
+
+        int[] c = resolveColors(skinColor, hairColor, eyeColor);
+        String key = String.format("%s_%02x%02x%02x_%02x%02x%02x_%02x%02x%02x", racePath, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8]);
 
         if (CACHED_SKINS.containsKey(key)) {
             return CACHED_SKINS.get(key);
@@ -91,32 +100,32 @@ public final class DynamicSkinManager {
     }
 
     private static Identifier generateAndRegister(String racePath, String key, int[] c) {
-        String baseTexPath = "dragonblockarcanedba:entity/player/" + racePath + "_base";
-        String maskTexPath = "dragonblockarcanedba:entity/player/" + racePath + "_mask";
-        
+        String baseTexPath = "entity/player/" + racePath + "_base";
+        String maskTexPath = "entity/player/" + racePath + "_mask";
+
         NativeImage baseImage = getImage(baseTexPath);
         if (baseImage == null && !racePath.equals("universal_humanoid")) {
-            baseTexPath = "dragonblockarcanedba:entity/player/universal_humanoid_base";
+            baseTexPath = "entity/player/universal_humanoid_base";
             baseImage = getImage(baseTexPath);
         }
         if (baseImage == null) {
-            baseTexPath = "dragonblockarcanedba:entity/player/base";
+            baseTexPath = "entity/player/base";
             baseImage = getImage(baseTexPath);
         }
-        
+
         NativeImage maskImage = getImage(maskTexPath);
         if (maskImage == null && !racePath.equals("universal_humanoid")) {
-            maskTexPath = "dragonblockarcanedba:entity/player/universal_humanoid_mask";
+            maskTexPath = "entity/player/universal_humanoid_mask";
             maskImage = getImage(maskTexPath);
         }
         if (maskImage == null) {
-            maskTexPath = "dragonblockarcanedba:entity/player/base_mask";
+            maskTexPath = "entity/player/base_mask";
             maskImage = getImage(maskTexPath);
         }
 
         if (baseImage == null || maskImage == null) return null;
 
-        int sR = c[0], sG = c[1], sB = c[2], hR = c[3], hG = c[4], hB = c[5];
+        int sR = c[0], sG = c[1], sB = c[2], hR = c[3], hG = c[4], hB = c[5], eR = c[6], eG = c[7], eB = c[8];
 
         int w = baseImage.getWidth();
         int h = baseImage.getHeight();
@@ -137,6 +146,7 @@ public final class DynamicSkinManager {
                 int maskArgb = ARGB.fromABGR(maskAbgr);
                 int maskR = ARGB.red(maskArgb);
                 int maskG = ARGB.green(maskArgb);
+                int maskB = ARGB.blue(maskArgb);
 
                 int baseR = ARGB.red(baseArgb);
                 int baseG = ARGB.green(baseArgb);
@@ -156,6 +166,12 @@ public final class DynamicSkinManager {
                     finalR = Math.min(255, Math.round(hR * hLum));
                     finalG = Math.min(255, Math.round(hG * hLum));
                     finalB = Math.min(255, Math.round(hB * hLum));
+                } else if (maskB > 128) {
+                    float eLum = (0.299f * baseR + 0.587f * baseG + 0.114f * baseB) / 255.0f;
+                    if (eLum > 1.25f) eLum = 1.25f;
+                    finalR = Math.min(255, Math.round(eR * eLum));
+                    finalG = Math.min(255, Math.round(eG * eLum));
+                    finalB = Math.min(255, Math.round(eB * eLum));
                 }
 
                 out.setPixel(x, y, ARGB.toABGR(ARGB.color(baseA, finalR, finalG, finalB)));
