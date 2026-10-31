@@ -27,7 +27,9 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         LOGGER.info("Initializing Dragon Block Arcane DBA!");
 
         // Register Sound Events
+        com.dragonblockarcanedba.config.DbaEffectsConfig.load();
         DbaSounds.register();
+        com.dragonblockarcanedba.particle.DbaParticles.register();
 
         // Register Items and Blocks
         com.dragonblockarcanedba.block.DbaBlocks.register();
