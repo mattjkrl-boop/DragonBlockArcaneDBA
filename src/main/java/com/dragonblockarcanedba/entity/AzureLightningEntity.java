@@ -71,7 +71,7 @@ public class AzureLightningEntity extends Projectile {
                 BlockPos groundPos = BlockPos.containing(this.position());
                 if (serverLevel.getBlockState(groundPos).isAir()) {
                     serverLevel.sendParticles(
-                        net.minecraft.core.particles.ParticleTypes.ELECTRIC_SPARK,
+                        com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                         this.getX(), this.getY() + 0.1, this.getZ(),
                         20, 1.5, 0.2, 1.5, 0.1
                     );

@@ -76,7 +76,7 @@ public class MovementCurseEffect extends MobEffect {
             // Dark smoke if heavily cursed
             if (stacks >= 7) {
                 level.sendParticles(
-                    ParticleTypes.SMOKE,
+                    com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
                     entity.getX(), entity.getY() + height * 0.5, entity.getZ(),
                     2, width * 0.3, height * 0.2, width * 0.3, 0.02
                 );

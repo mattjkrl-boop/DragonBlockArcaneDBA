@@ -53,7 +53,7 @@ public class OxFissureEntity extends Projectile {
                 double ox = (serverLevel.getRandom().nextDouble() - 0.5) * 2.5;
                 double oz = (serverLevel.getRandom().nextDouble() - 0.5) * 2.5;
                 serverLevel.sendParticles(
-                    ParticleTypes.FLAME,
+                    com.dragonblockarcanedba.particle.DbaParticles.EMBER,
                     pos.x + ox, pos.y + 0.1, pos.z + oz,
                     1, 0, 0.03, 0, 0.01
                 );

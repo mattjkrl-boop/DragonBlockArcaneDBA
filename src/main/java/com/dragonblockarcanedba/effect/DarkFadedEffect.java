@@ -56,7 +56,7 @@ public class DarkFadedEffect extends MobEffect {
                     1, 0.0, 0.05, 0.0, 0.01
                 );
                 level.sendParticles(
-                    ParticleTypes.SQUID_INK,
+                    com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
                     px, py, pz,
                     1, 0.0, 0.02, 0.0, 0.02
                 );

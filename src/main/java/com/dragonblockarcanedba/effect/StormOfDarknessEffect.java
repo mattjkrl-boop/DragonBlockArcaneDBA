@@ -53,7 +53,7 @@ public class StormOfDarknessEffect extends MobEffect {
         // Visual storm particles
         if (entity.tickCount % 3 == 0) {
             level.sendParticles(
-                ParticleTypes.SMOKE,
+                com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
                 entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
                 3, entity.getBbWidth() * 0.4, entity.getBbHeight() * 0.3, entity.getBbWidth() * 0.4, 0.05
             );
