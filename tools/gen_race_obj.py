@@ -136,4 +136,63 @@ def emit_segment(L,seg,vi,nvi):
                 idx.append('%d/%d/%d'%(vi,vi,ni)); vi+=1
             L.append('f '+' '.join(idx))
     return vi
-for r in sys.argv[1:]: gen(r,O+r+'.obj')
+
+# ---- Blockbench source -------------------------------------------------------
+BB=pathlib.Path(__file__).resolve().parent.parent/'assets/blockbench/races'
+def gen_bbmodel(race,out):
+    """Export the OBJ from assets/blockbench/races/<race>.bbmodel (Bedrock-format project).
+    Blockbench stores bedrock x negated; convert back, then use the same face layout as gen()."""
+    m=json.load(open(BB/(race+'.bbmodel')))
+    TW,TH=m['resolution']['width'],m['resolution']['height']
+    els={e['uuid']:e for e in m['elements']}
+    groups={}
+    def walk(node,gn):
+        if isinstance(node,str):
+            e=els[node]
+            if gn and e.get('type','cube')=='cube': groups.setdefault(gn,[]).append(e)
+            return
+        name=node['name']
+        own=GROUP.get(name)
+        # only cubes owned directly by a rig bone; eyelids, tail, locators have dedicated layers
+        for ch in node.get('children',[]):
+            walk(ch, own if isinstance(ch,str) else None)
+    for r in m['outliner']: walk(r,None)
+    L=['# exported from assets/blockbench/races/%s.bbmodel by gen_race_obj.py'%race]
+    vi=1; nvi=[1]
+    N={'north':(0,0,1),'south':(0,0,-1),'east':(1,0,0),'west':(-1,0,0),'up':(0,1,0),'down':(0,-1,0)}
+    for gn in ['rightarm','body','leftarm','rightleg','head','leftleg']:
+        if gn not in groups: continue
+        L.append('o '+gn)
+        for e in groups[gn]:
+            if e.get('rotation') and any(e['rotation']): print('warn rotated cube',race,e['name'])
+            inf=e.get('inflate',0)
+            x0,x1=-e['to'][0]-inf,-e['from'][0]+inf
+            y0,y1=e['from'][1]-inf,e['to'][1]+inf
+            z0,z1=e['from'][2]-inf,e['to'][2]+inf
+            F={'north':[(x1,y1,z0),(x0,y1,z0),(x0,y0,z0),(x1,y0,z0)],
+               'south':[(x0,y1,z1),(x1,y1,z1),(x1,y0,z1),(x0,y0,z1)],
+               'east':[(x1,y1,z1),(x1,y1,z0),(x1,y0,z0),(x1,y0,z1)],
+               'west':[(x0,y1,z0),(x0,y1,z1),(x0,y0,z1),(x0,y0,z0)],
+               'up':[(x1,y1,z0),(x0,y1,z0),(x0,y1,z1),(x1,y1,z1)],
+               'down':[(x1,y0,z1),(x0,y0,z1),(x0,y0,z0),(x1,y0,z0)]}
+            feature=e.get('color')==3
+            for fn,q in F.items():
+                f=e['faces'].get(fn)
+                if not f or f.get('texture') is None: continue
+                u0,v0,u1,v1=f['uv']
+                uvs=[(u0,v0),(u1,v0),(u1,v1),(u0,v1)]
+                q=[(p[0]*S,p[1]*S,-p[2]*S) for p in q][::-1]; uvs=uvs[::-1]
+                variants=[(q,uvs,N[fn])]
+                if feature:  # double-sided like the chained features (mixed culling on body cubes)
+                    variants.append((q[::-1],uvs[::-1],tuple(-x for x in N[fn])))
+                for qq,tt,nn in variants:
+                    L.append('vn %d %d %d'%nn); ni=nvi[0]; nvi[0]+=1
+                    idx=[]
+                    for p,t in zip(qq,tt):
+                        L.append('v %.6f %.6f %.6f'%p); L.append('vt %.6f %.6f'%(t[0]/TW,1-t[1]/TH))
+                        idx.append('%d/%d/%d'%(vi,vi,ni)); vi+=1
+                    L.append('f '+' '.join(idx))
+    open(out,'w').write('\n'.join(L)+'\n')
+
+for r in sys.argv[1:]:
+    (gen_bbmodel if (BB/(r+'.bbmodel')).exists() else gen)(r,O+r+'.obj')

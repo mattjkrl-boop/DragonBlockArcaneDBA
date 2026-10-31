@@ -43,6 +43,7 @@ public class DbaCommand {
                 .executes(context -> {
                     context.getSource().sendSuccess(() -> Component.literal("§6--- Dragon Block Arcane DBA Help ---"), false);
                     context.getSource().sendSuccess(() -> Component.literal("§e/dba race set <player> <race_id>§f - Sets a player's race"), false);
+                    context.getSource().sendSuccess(() -> Component.literal("§e/dba skin set <player> <hex>§f - Sets a player's skin color"), false);
                     context.getSource().sendSuccess(() -> Component.literal("§e/dba ap <add|set|remove> <player> <amount>§f - Modify AP"), false);
                     context.getSource().sendSuccess(() -> Component.literal("§e/dba xp <add|set|remove> <player> <amount> [levels|points]§f - Modify XP or Levels"), false);
                     context.getSource().sendSuccess(() -> Component.literal("§e/dba level <add|set|remove> <player> <amount>§f - Modify Level"), false);
@@ -83,6 +84,29 @@ public class DbaCommand {
 
                                 context.getSource().sendSuccess(() -> Component.literal("Set " + target.getName().getString() + "'s race to " + raceIdStr), true);
                                 target.sendSystemMessage(Component.literal("Your race was changed to " + raceIdStr + ". Your stats are preserved, but your technique unlocks have been reset."));
+                                return 1;
+                            })
+                        )
+                    )
+                )
+            )
+            .then(Commands.literal("skin")
+                .then(Commands.literal("set")
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("hex", StringArgumentType.word())
+                            .executes(context -> {
+                                ServerPlayer target = EntityArgument.getPlayer(context, "player");
+                                String hex = StringArgumentType.getString(context, "hex");
+                                if (hex.startsWith("#")) hex = hex.substring(1);
+                                if (!hex.matches("[0-9a-fA-F]{6}")) {
+                                    context.getSource().sendFailure(Component.literal("Skin color must be a 6 digit hex like F2C79A"));
+                                    return 0;
+                                }
+                                PlayerStatsAccessor accessor = (PlayerStatsAccessor) target;
+                                accessor.dba$setSkinColor("#" + hex.toUpperCase());
+                                accessor.dba$syncStats();
+                                String shown = hex.toUpperCase();
+                                context.getSource().sendSuccess(() -> Component.literal("Set " + target.getName().getString() + "'s skin color to #" + shown), true);
                                 return 1;
                             })
                         )
