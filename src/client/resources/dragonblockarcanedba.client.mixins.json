@@ -14,7 +14,8 @@
 		"OptionsScreenMixin",
 		"PauseScreenMixin",
 		"TitleScreenMixin",
-		"CameraShakeMixin"
+		"CameraShakeMixin",
+		"GameRendererPostMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

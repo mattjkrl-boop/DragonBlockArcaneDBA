@@ -433,8 +433,12 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.addLast(com.dragonblockarcanedba.DragonBlockArcaneDBA.id("hud_overlay"), new com.dragonblockarcanedba.client.gui.DbaHudOverlay());
 
         ClientPlayNetworking.registerGlobalReceiver(com.dragonblockarcanedba.network.ScreenShakePayload.TYPE, (payload, context) ->
-            com.dragonblockarcanedba.client.fx.ScreenShakeHandler.trigger(payload.intensity(), payload.durationTicks(), payload.hitstopTicks()));
+            {
+                com.dragonblockarcanedba.client.fx.ScreenShakeHandler.trigger(payload.intensity(), payload.durationTicks(), payload.hitstopTicks());
+                com.dragonblockarcanedba.client.fx.DbaPostFx.onShake(payload.intensity());
+            });
         ClientTickEvents.END_CLIENT_TICK.register(client -> com.dragonblockarcanedba.client.fx.ScreenShakeHandler.tick());
+        ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.DbaPostFx::tick);
         com.dragonblockarcanedba.client.fx.SwingTrailRenderer.register();
         com.dragonblockarcanedba.client.particle.DbaParticleProviders.register();
         com.dragonblockarcanedba.client.fx.ScreenShakeHandler.scale = com.dragonblockarcanedba.config.DbaEffectsConfig.screenShake();
