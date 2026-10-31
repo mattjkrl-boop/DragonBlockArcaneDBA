@@ -1,0 +1,34 @@
+package com.dragonblockarcanedba.fx;
+
+import com.dragonblockarcanedba.network.ScreenShakePayload;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
+
+/** Server side helper: sends camera shake and hitstop to players near a heavy impact, with distance falloff. */
+public final class DbaImpactFx {
+    private DbaImpactFx() {}
+
+    public static final double RADIUS = 28.0;
+
+    public static void heavy(Level level, double x, double y, double z) {
+        shake(level, x, y, z, 2.2f, 12, 3);
+    }
+
+    public static void medium(Level level, double x, double y, double z) {
+        shake(level, x, y, z, 1.0f, 8, 2);
+    }
+
+    public static void shake(Level level, double x, double y, double z, float intensity, int duration, int hitstop) {
+        if (!(level instanceof ServerLevel serverLevel)) return;
+        for (ServerPlayer p : serverLevel.players()) {
+            double d = Math.sqrt(p.distanceToSqr(x, y, z));
+            if (d > RADIUS) continue;
+            float falloff = (float) (1.0 - d / RADIUS);
+            float scaled = intensity * falloff * falloff;
+            if (scaled < 0.05f) continue;
+            ServerPlayNetworking.send(p, new ScreenShakePayload(scaled, duration, d < 8 ? hitstop : 0));
+        }
+    }
+}

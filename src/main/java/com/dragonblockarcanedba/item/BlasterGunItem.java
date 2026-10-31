@@ -163,6 +163,7 @@ public class BlasterGunItem extends Item {
             setHeat(stack, 0); // Reset heat after overcharged blast
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 1.2f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
         } else {
             setHeat(stack, currentHeat + 8); // Build heat
             level.playSound(null, player.getX(), player.getY(), player.getZ(),

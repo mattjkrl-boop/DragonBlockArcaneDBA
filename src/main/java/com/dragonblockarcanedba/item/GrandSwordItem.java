@@ -230,6 +230,7 @@ public class GrandSwordItem extends Item {
             SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.4f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // Cooldown: 2 seconds (40 ticks)
         player.getCooldowns().addCooldown(stack, 40);

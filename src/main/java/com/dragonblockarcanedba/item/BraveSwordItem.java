@@ -166,6 +166,7 @@ public class BraveSwordItem extends Item {
 
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.6f);
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.8f, 1.2f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, target.getX(), target.getY(), target.getZ());
 
                 setCombo(stack, 0); // Reset combo
                 player.sendSystemMessage(Component.literal("§6★ BRAVE FINISHER! ★"), true);
@@ -341,6 +342,7 @@ public class BraveSwordItem extends Item {
 
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.9f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
             }
 
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),

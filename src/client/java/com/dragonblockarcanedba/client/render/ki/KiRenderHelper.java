@@ -20,6 +20,11 @@ public final class KiRenderHelper {
     public static final Identifier WHITE_TEXTURE = DragonBlockArcaneDBA.id("textures/entity/ki_white.png");
 
     /** Emissive translucent render type — glows at full brightness, supports transparency. */
+    /** Additive full-bright glow (eyes blend). Use for halos and outer glow shells where alpha fades are not needed. */
+    public static RenderType kiAdditiveType() {
+        return RenderTypes.eyes(WHITE_TEXTURE);
+    }
+
     public static RenderType kiRenderType() {
         return RenderTypes.entityTranslucentEmissive(WHITE_TEXTURE);
     }

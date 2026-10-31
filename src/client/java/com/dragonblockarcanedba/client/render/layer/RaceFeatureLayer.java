@@ -73,7 +73,7 @@ public class RaceFeatureLayer extends RenderLayer<AvatarRenderState, EntityModel
 
         // Render DBZ Golden Angel Halo when deceased in Otherworld
         if (dbaState.dba$isInOtherworld()) {
-            RenderType haloType = RenderTypes.entitySolid(WHITE_TEXTURE);
+            RenderType haloType = com.dragonblockarcanedba.client.render.ki.KiRenderHelper.kiAdditiveType();
             collector.submitCustomGeometry(poseStack, haloType, (pose, buffer) -> {
                 PoseStack stack = new PoseStack();
                 stack.last().pose().set(pose.pose());

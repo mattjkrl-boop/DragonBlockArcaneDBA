@@ -180,6 +180,7 @@ public class OxKingsAxeItem extends Item {
             SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.8f, 0.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 0.8f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // Cooldown based on power
         int cooldown = 20 + (int) (chargeRatio * 40);
@@ -302,6 +303,7 @@ public class OxKingsAxeItem extends Item {
                     SoundEvents.SHIELD_BREAK.value(), SoundSource.PLAYERS, 2.5f, 0.5f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.6f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
 
                 serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, player.getX(), player.getY() + 1.0, player.getZ(), 2, 0, 0, 0, 0);
 
@@ -359,8 +361,10 @@ public class OxKingsAxeItem extends Item {
 
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 3.0f, 0.5f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.6f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
 
                     player.getCooldowns().addCooldown(stack, 100); // 5 seconds cooldown on flawless slam
                 } else {
@@ -397,6 +401,7 @@ public class OxKingsAxeItem extends Item {
 
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.7f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.5f, 0.6f);
 

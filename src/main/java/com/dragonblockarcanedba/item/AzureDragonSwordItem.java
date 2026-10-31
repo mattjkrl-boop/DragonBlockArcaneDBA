@@ -250,6 +250,7 @@ public class AzureDragonSwordItem extends Item {
 
         level.playSound(null, pos.x, pos.y, pos.z,
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.8f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, pos.x, pos.y, pos.z);
     }
 
     // --- RIGHT CLICK: Call of the Tempest (Dragon Storm Domain) ---

@@ -30,6 +30,7 @@ public class DbaNetwork {
         PayloadTypeRegistry.clientboundPlay().register(ReviveUiOpenPayload.TYPE, ReviveUiOpenPayload.CODEC);
         // Wish Menu open screen (S2C)
         PayloadTypeRegistry.clientboundPlay().register(WishMenuOpenPayload.TYPE, WishMenuOpenPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ScreenShakePayload.TYPE, ScreenShakePayload.CODEC);
         // Make Wish (C2S)
         PayloadTypeRegistry.serverboundPlay().register(C2SMakeWishPayload.TYPE, C2SMakeWishPayload.CODEC);
         // Transform broadcast to nearby players (S2C)

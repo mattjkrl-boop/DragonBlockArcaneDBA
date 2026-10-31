@@ -13,7 +13,8 @@
 		"EntityRenderDispatcherMixin",
 		"OptionsScreenMixin",
 		"PauseScreenMixin",
-		"TitleScreenMixin"
+		"TitleScreenMixin",
+		"CameraShakeMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

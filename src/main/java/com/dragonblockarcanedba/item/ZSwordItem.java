@@ -172,6 +172,7 @@ public class ZSwordItem extends Item {
             SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 0.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.2f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // Cooldown based on power
         int cooldown = 20 + (int) (chargeRatio * 40);
@@ -294,6 +295,7 @@ public class ZSwordItem extends Item {
                 // Sound
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.6f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.5f, 0.5f);
 
