@@ -19,7 +19,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
  */
 public class DarkFadedEffect extends MobEffect {
     public DarkFadedEffect() {
-        super(MobEffectCategory.HARMFUL, 0x0A0014);
+        super(MobEffectCategory.HARMFUL, 0x0A0014, com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE); // particles are spawned client side by vanilla effect particle sync
 
         this.addAttributeModifier(
             Attributes.MOVEMENT_SPEED,
@@ -43,25 +43,6 @@ public class DarkFadedEffect extends MobEffect {
 
     @Override
     public boolean applyEffectTick(ServerLevel level, LivingEntity entity, int amplifier) {
-        // Dense black particles
-        if (entity.tickCount % 2 == 0) {
-            for (int i = 0; i < 2; i++) {
-                double px = entity.getX() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
-                double py = entity.getY() + level.getRandom().nextDouble() * entity.getBbHeight();
-                double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
-
-                level.sendParticles(
-                    new DustParticleOptions(0x05000A, 1.4F),
-                    px, py, pz,
-                    1, 0.0, 0.05, 0.0, 0.01
-                );
-                level.sendParticles(
-                    com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
-                    px, py, pz,
-                    1, 0.0, 0.02, 0.0, 0.02
-                );
-            }
-        }
 
         // Void tick damage every 10 ticks
         if (entity.tickCount % 10 == 0) {

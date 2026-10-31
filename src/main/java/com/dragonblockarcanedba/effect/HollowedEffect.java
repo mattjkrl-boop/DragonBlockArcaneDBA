@@ -21,7 +21,7 @@ import net.minecraft.world.entity.player.Player;
  */
 public class HollowedEffect extends MobEffect {
     public HollowedEffect() {
-        super(MobEffectCategory.BENEFICIAL, 0x1A0033);
+        super(MobEffectCategory.BENEFICIAL, 0x1A0033, com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE); // particles are spawned client side by vanilla effect particle sync
 
         this.addAttributeModifier(
             Attributes.MOVEMENT_SPEED,
@@ -38,23 +38,6 @@ public class HollowedEffect extends MobEffect {
 
     @Override
     public boolean applyEffectTick(ServerLevel level, LivingEntity entity, int amplifier) {
-        // Ethereal void particles around the phased entity
-        if (entity.tickCount % 2 == 0) {
-            double px = entity.getX() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
-            double py = entity.getY() + level.getRandom().nextDouble() * entity.getBbHeight();
-            double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
-
-            level.sendParticles(
-                new DustParticleOptions(0x4B0082, 1.2F),
-                px, py, pz,
-                1, 0.0, 0.02, 0.0, 0.01
-            );
-            level.sendParticles(
-                com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
-                px, py, pz,
-                1, 0.0, 0.01, 0.0, 0.01
-            );
-        }
 
         // Suppress mob targeting if player is hollowed
         if (entity instanceof Player) {
