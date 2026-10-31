@@ -40,5 +40,65 @@
     "sounds": [
       "dragonblockarcanedba:kamehameha_fire"
     ]
+  },
+  "ability_charge": {
+    "subtitle": "Ability charges",
+    "sounds": [
+      "dragonblockarcanedba:ability_charge"
+    ]
+  },
+  "blade_shing": {
+    "subtitle": "Blade rings",
+    "sounds": [
+      "dragonblockarcanedba:blade_shing"
+    ]
+  },
+  "blaster_shot": {
+    "subtitle": "Blaster fires",
+    "sounds": [
+      "dragonblockarcanedba:blaster_shot"
+    ]
+  },
+  "dark_pulse": {
+    "subtitle": "Dark pulse",
+    "sounds": [
+      "dragonblockarcanedba:dark_pulse"
+    ]
+  },
+  "heavy_impact": {
+    "subtitle": "Heavy impact",
+    "sounds": [
+      "dragonblockarcanedba:heavy_impact"
+    ]
+  },
+  "lightning_zap": {
+    "subtitle": "Lightning crackles",
+    "sounds": [
+      "dragonblockarcanedba:lightning_zap"
+    ]
+  },
+  "saber_hum": {
+    "subtitle": "Saber hums",
+    "sounds": [
+      "dragonblockarcanedba:saber_hum"
+    ]
+  },
+  "slash_whoosh": {
+    "subtitle": "Slash whooshes",
+    "sounds": [
+      "dragonblockarcanedba:slash_whoosh"
+    ]
+  },
+  "time_stop": {
+    "subtitle": "Time stops",
+    "sounds": [
+      "dragonblockarcanedba:time_stop"
+    ]
+  },
+  "wind_gust": {
+    "subtitle": "Wind gusts",
+    "sounds": [
+      "dragonblockarcanedba:wind_gust"
+    ]
   }
 }
