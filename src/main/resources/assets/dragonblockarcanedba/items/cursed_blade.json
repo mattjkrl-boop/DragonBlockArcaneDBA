@@ -1,6 +1,26 @@
 {
   "model": {
-    "type": "minecraft:model",
-    "model": "dragonblockarcanedba:item/cursed_blade"
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui",
+          "fixed",
+          "ground"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "dragonblockarcanedba:item/cursed_blade"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "dragonblockarcanedba:item/cursed_blade_geo_base",
+      "model": {
+        "type": "geckolib:geckolib"
+      }
+    }
   }
 }

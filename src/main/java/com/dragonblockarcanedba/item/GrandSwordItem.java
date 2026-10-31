@@ -47,7 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * Ki Drain: 90% per minute (smooth).
  */
-public class GrandSwordItem extends Item {
+public class GrandSwordItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_SPIN_TICKS = 140; // 7 seconds
 
     // Track active Valor Field entities per player

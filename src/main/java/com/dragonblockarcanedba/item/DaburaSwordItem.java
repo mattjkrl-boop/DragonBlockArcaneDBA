@@ -41,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * Ki Drain: 35% per minute (smooth).
  */
-public class DaburaSwordItem extends Item {
+public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_CHARGE_TICKS = 160; // 8 seconds
     public static final int MAX_RIGHT_CHANNEL_TICKS = 300; // 15 seconds
 

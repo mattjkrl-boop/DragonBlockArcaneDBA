@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "dragonblockarcanedba:item/sickle_of_sorrow"
+  }
+}

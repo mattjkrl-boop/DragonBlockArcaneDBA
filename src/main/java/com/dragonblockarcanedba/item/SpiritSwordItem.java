@@ -36,7 +36,7 @@ import java.util.Optional;
  * 
  * Ki Drain: 55% per minute (smooth).
  */
-public class SpiritSwordItem extends Item {
+public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     private static final double PULSE_RANGE = 32.0;
 
     public SpiritSwordItem(Properties properties) {

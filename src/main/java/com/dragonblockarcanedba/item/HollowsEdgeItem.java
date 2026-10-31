@@ -45,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * Ki Drain: 30% per minute (smooth).
  */
-public class HollowsEdgeItem extends Item {
+public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_CHARGE_TICKS = 100; // 5 seconds
 
     // Track active window expiration per player: UUID -> expiration game time in ticks

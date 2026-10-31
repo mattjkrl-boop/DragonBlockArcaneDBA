@@ -49,7 +49,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * Drain: Left click Stamina 100% per minute, Right click Ki 75% per minute.
  */
-public class SaberItem extends Item {
+public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
 
     public static final Identifier SABER_ATTACK_SPEED_ID = DragonBlockArcaneDBA.id("saber_escalating_speed");
 

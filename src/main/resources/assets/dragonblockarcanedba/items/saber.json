@@ -1,6 +1,26 @@
 {
   "model": {
-    "type": "minecraft:model",
-    "model": "dragonblockarcanedba:item/saber"
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui",
+          "fixed",
+          "ground"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "dragonblockarcanedba:item/saber"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "dragonblockarcanedba:item/saber_geo_base",
+      "model": {
+        "type": "geckolib:geckolib"
+      }
+    }
   }
 }

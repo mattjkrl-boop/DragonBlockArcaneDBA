@@ -41,7 +41,7 @@ import net.minecraft.world.phys.Vec3;
  */
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 
-public class SickleOfSorrowItem extends Item {
+public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     private static boolean alternatingTilt = false;
 
     public SickleOfSorrowItem(Properties properties) {

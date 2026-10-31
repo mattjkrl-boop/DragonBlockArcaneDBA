@@ -25,7 +25,7 @@ import net.minecraft.world.phys.Vec3;
 
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 
-public class DimensionalSwordItem extends Item {
+public class DimensionalSwordItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public DimensionalSwordItem(Properties properties) {
         super(properties.attributes(createModifiers()));
     }

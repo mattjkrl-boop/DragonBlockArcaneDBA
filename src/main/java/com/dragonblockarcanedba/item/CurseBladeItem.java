@@ -36,7 +36,7 @@ import java.util.List;
  * 
  * Ki Drain: 30% per minute (smooth).
  */
-public class CurseBladeItem extends Item {
+public class CurseBladeItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_ECLIPSE_CHANNEL_TICKS = 300; // 15 seconds
 
     public CurseBladeItem(Properties properties) {

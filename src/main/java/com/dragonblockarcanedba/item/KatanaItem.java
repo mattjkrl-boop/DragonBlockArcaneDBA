@@ -43,7 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * Ki Drain: 30% per minute (smooth).
  */
-public class KatanaItem extends Item {
+public class KatanaItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_CHARGE_TICKS = 100; // 5 seconds
     public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
 

@@ -41,7 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * Ki Drain: 45% per minute (smooth).
  */
-public class EvilSpearItem extends Item {
+public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_CHARGE_TICKS = 120; // 6 seconds
 
     // Track active charging EvilSpearChargeEntity per player

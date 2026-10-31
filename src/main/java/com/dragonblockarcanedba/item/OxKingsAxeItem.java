@@ -59,7 +59,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Critical Peak Window (14.0s–15.0s): Flawless King's Slam deals 2000.0 + Strength * 5.0 in 20-block AoE with massive titan crags and vertical magma geysers.
  * - Failure State (> 15.0s): Stance collapses, deals 25% built-up damage as recoil self-damage, and inflicts 10s cooldown.
  */
-public class OxKingsAxeItem extends Item {
+public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_CHARGE_TICKS = 200; // 10 seconds
 
     public static final Map<UUID, OxChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();

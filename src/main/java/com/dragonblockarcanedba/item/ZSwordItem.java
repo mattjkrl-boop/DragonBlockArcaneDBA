@@ -55,7 +55,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Release unleashes massive physical 3D ZGravitySlamEntity (6 to 18 blocks wide ground shatter, canyon fissures & erupted monoliths).
  * - Tweak A: Completely roots enemies for 2s, then violently launches them up and outward.
  */
-public class ZSwordItem extends Item {
+public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_CHARGE_TICKS = 300; // 15 seconds
 
     private static final Map<UUID, ZChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();

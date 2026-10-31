@@ -1,6 +1,26 @@
 {
   "model": {
-    "type": "minecraft:model",
-    "model": "dragonblockarcanedba:item/azure_dragon_sword"
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui",
+          "fixed",
+          "ground"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "dragonblockarcanedba:item/azure_dragon_sword"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "dragonblockarcanedba:item/azure_dragon_sword_geo_base",
+      "model": {
+        "type": "geckolib:geckolib"
+      }
+    }
   }
 }

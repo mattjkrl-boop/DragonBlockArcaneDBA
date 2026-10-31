@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "dragonblockarcanedba:item/azure_dragon_sword"
+  }
+}

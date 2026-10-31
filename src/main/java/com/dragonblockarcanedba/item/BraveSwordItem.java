@@ -44,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * Drain: Left click Ki 25% + Stamina 20% per minute, Right click Ki 15% per minute.
  */
-public class BraveSwordItem extends Item {
+public class BraveSwordItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
 
     // Track active charging BraveChargeEntity per player

@@ -45,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 
  * Ki Drain: 20% per minute for normal flight & Right Tempest ability; 40% per minute for Double Rush.
  */
-public class AzureDragonSwordItem extends Item {
+public class AzureDragonSwordItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_TEMPEST_CHARGE_TICKS = 300; // 15 seconds
 
     // Track players currently rushing with Azure Dragon Sword

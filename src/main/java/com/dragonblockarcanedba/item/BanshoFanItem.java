@@ -49,7 +49,7 @@ import java.util.List;
  * 
  * Unbreakable legendary weapon. No durability.
  */
-public class BanshoFanItem extends Item {
+public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public BanshoFanItem(Properties properties) {
         super(properties.attributes(createModifiers()));
     }

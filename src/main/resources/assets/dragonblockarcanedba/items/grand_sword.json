@@ -1,6 +1,26 @@
 {
   "model": {
-    "type": "minecraft:model",
-    "model": "dragonblockarcanedba:item/grand_sword"
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui",
+          "fixed",
+          "ground"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "dragonblockarcanedba:item/grand_sword"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "dragonblockarcanedba:item/grand_sword_geo_base",
+      "model": {
+        "type": "geckolib:geckolib"
+      }
+    }
   }
 }
