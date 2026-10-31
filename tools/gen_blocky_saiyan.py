@@ -28,15 +28,15 @@ def mirror(name, bone, mat, f, t, o=None, r=(0, 0, 0), **k):
     o2 = [-(o or [0, 0, 0])[0], (o or [0, 0, 0])[1], (o or [0, 0, 0])[2]]
     cube(name + '_l', bone[1], mat, f2, t2, o2, (r[0], -r[1], -r[2]), **k)
 
-def spike(name, base, L, w, rot, both=True):
-    """Tapered hair spike: three stacked cubes growing along local +y from base."""
-    segs = [(0.0, 0.48, 1.0), (0.42, 0.78, 0.68), (0.72, 1.0, 0.38)]
+def spike(name, base, L, w, rot, both=True, bone='hair'):
+    """Tapered hair spike: four stacked cubes growing along local +y from base, ending in a point."""
+    segs = [(0.0, 0.34, 1.0), (0.28, 0.58, 0.64), (0.52, 0.80, 0.38), (0.74, 1.0, 0.16)]
     for i, (a, b, s) in enumerate(segs):
         ww = w * s
         f = [base[0] - ww / 2, base[1] + a * L, base[2] - ww / 2]
         t = [base[0] + ww / 2, base[1] + b * L, base[2] + ww / 2]
-        if both: mirror('%s%d' % (name, i), ('hair', 'hair'), 'hair', f, t, base, rot)
-        else: cube('%s%d' % (name, i), 'hair', 'hair', f, t, base, rot)
+        if both: mirror('%s_%s%d' % (bone, name, i), (bone, bone), 'hair', f, t, base, rot)
+        else: cube('%s_%s%d' % (bone, name, i), bone, 'hair', f, t, base, rot)
 
 # ------------------------------------------------------------------ model
 # Legs: flush at x=0 and under the hips, baggy gi pants, chunky boots with a tan band
@@ -75,26 +75,35 @@ mirror('hand', ('right_arm', 'left_arm'), 'hand', [5.6, 9.0, -1.9], [9.4, 11.7, 
 cube('head', 'head', 'head', [-4, 24, -4], [4, 32, 4])
 mirror('ear', ('head', 'head'), 'skin', [4.0, 27.0, -0.6], [4.7, 29.2, 0.9])
 
-# Hair: cap, back mass, sideburns, then layered angled spikes (Goku style)
-cube('hair_top', 'hair', 'hair', [-4.4, 30.6, -4.5], [4.4, 33.0, 4.5])
-cube('hair_back', 'hair', 'hair', [-4.45, 25.0, 0.2], [4.45, 32.2, 4.6])
-mirror('hair_side', ('hair', 'hair'), 'hair', [3.9, 29.2, -3.6], [4.5, 32.0, 1.0])
-mirror('sideburn', ('hair', 'hair'), 'hair', [3.9, 27.2, -3.2], [4.4, 29.4, -1.4])
-spike('sp_top', [0, 32.4, 0.4], 6.38, 4.76, (14, 0, 0), both=False)
-spike('sp_top2', [0, 32.4, -1.8], 4.67, 4.20, (-6, 0, 0), both=False)
-spike('sp_upper', [2.0, 32.0, -0.4], 5.95, 4.20, (8, 0, -28))
-spike('sp_upper_b', [1.4, 32.0, 2.0], 5.52, 3.92, (34, 0, -14))
-spike('sp_side', [3.4, 30.6, -0.2], 5.95, 4.20, (4, 0, -58))
-spike('sp_side_lo', [4.0, 29.0, 0.6], 5.10, 3.78, (6, 0, -82))
-spike('sp_side_down', [4.0, 27.6, 1.6], 4.08, 3.36, (18, 0, -108))
-spike('sp_back', [0, 30.0, 3.6], 5.52, 4.48, (72, 0, 0), both=False)
-spike('sp_back_side', [2.4, 29.2, 3.6], 5.10, 4.06, (74, 0, -24))
-spike('sp_back_lo', [0, 27.2, 3.9], 4.42, 4.20, (104, 0, 0), both=False)
-spike('sp_back_lo_side', [2.4, 26.8, 3.8], 4.25, 3.64, (106, 0, -26))
-# Bangs over the forehead, pointing down and out
-spike('bang_mid', [0.0, 32.6, -4.35], 3.4, 2.4, (0, 0, 180), both=False)
-spike('bang_a', [1.9, 32.6, -4.35], 3.2, 2.2, (0, 0, 198))
-spike('bang_b', [3.4, 32.2, -4.3], 3.0, 2.0, (0, 0, 220))
+# Hair: scalp cap and back mass, then fewer, larger tapered spikes sweeping up and back (concept),
+# side spikes flaring out, 4 pointed bang locks, back spikes pointing down and back.
+# Built twice: 'hair' (base and SSJ/SSJ2) and 'hair_ssj3' (same crown plus a long mane down the back).
+HAIR_SPIKES = [
+    # name, base, length, width, rotation (x tilts tip back, -z tilts tip out to +x), mirrored
+    ('top', [0.6, 32.4, 0.4], 11.5, 6.0, (30, 0, -6), False),
+    ('upper', [2.6, 32.0, 0.0], 11.0, 5.6, (20, 0, -30), True),
+    ('side_hi', [3.8, 30.8, 0.6], 10.0, 5.0, (14, 0, -58), True),
+    ('side', [4.0, 28.8, 1.2], 7.5, 4.6, (10, 0, -80), True),
+    ('back_hi', [0, 31.0, 3.4], 10.5, 5.8, (60, 0, 0), False),
+    ('back_side', [2.6, 30.0, 3.4], 9.0, 5.0, (72, 0, -40), True),
+    ('back_lo', [0, 27.6, 3.9], 7.5, 5.2, (120, 0, 0), False),
+    ('back_lo_side', [2.8, 27.2, 3.6], 6.5, 4.4, (116, 0, -40), True),
+]
+BANGS = [('bang_in', [1.1, 32.9, -4.3], 4.0, 3.2, (6, 0, 186)), ('bang_out', [3.2, 32.7, -4.2], 3.8, 3.0, (8, 0, 208))]
+for hb in ('hair', 'hair_ssj3'):
+    cube(hb + '_top', hb, 'hair', [-4.4, 30.6, -4.5], [4.4, 33.0, 4.5])
+    cube(hb + '_back', hb, 'hair', [-4.45, 25.0, 0.2], [4.45, 32.2, 4.6])
+    mirror(hb + '_side', (hb, hb), 'hair', [3.9, 29.2, -3.6], [4.5, 32.0, 1.0])
+    mirror(hb + '_burn', (hb, hb), 'hair', [3.9, 27.2, -3.2], [4.4, 29.4, -1.4])
+    for n, bs, L, w, r, both in HAIR_SPIKES:
+        spike(n, bs, L, w, r, both, bone=hb)
+    for n, bs, L, w, r in BANGS:
+        spike(n, bs, L, w, r, True, bone=hb)
+# SSJ3 long mane: thick tapered locks from the back of the scalp down past the waist
+cube('hair_ssj3_mane_root', 'hair_ssj3', 'hair', [-5.0, 22.0, 1.0], [5.0, 31.5, 6.0])
+spike('mane_c', [0, 26.0, 4.8], 22.0, 8.4, (168, 0, 0), False, bone='hair_ssj3')
+spike('mane_s', [2.8, 26.5, 4.0], 19.0, 6.4, (168, 0, 4), True, bone='hair_ssj3')
+spike('mane_o', [4.2, 28.0, 2.6], 15.0, 4.6, (170, 0, 7), True, bone='hair_ssj3')
 
 # Tail preview (Blockbench only; the runtime tail is the segmented TrailingTailLayer)
 pts = [(0, 13.5, 3.0), (0, 12.2, 5.6), (0, 10.0, 7.8), (0, 7.4, 9.4), (0, 4.8, 10.6), (0, 2.8, 12.6), (0, 2.6, 15.2), (0, 4.4, 17.0), (0, 6.6, 17.2)]
@@ -281,11 +290,11 @@ for c in cubes:
                 MP[u0 + i, v0 + j] = MASKC[ch]
 
 # ------------------------------------------------------------------ OBJ export
-GROUP = {'right_arm': 'rightarm', 'body': 'body', 'left_arm': 'leftarm', 'right_leg': 'rightleg', 'head': 'head', 'left_leg': 'leftleg', 'hair': 'hair'}
+GROUP = {'right_arm': 'rightarm', 'body': 'body', 'left_arm': 'leftarm', 'right_leg': 'rightleg', 'head': 'head', 'left_leg': 'leftleg', 'hair': 'hair', 'hair_ssj3': 'hair_ssj3'}
 NORM = {'north': (0, 0, -1), 'south': (0, 0, 1), 'east': (1, 0, 0), 'west': (-1, 0, 0), 'up': (0, 1, 0), 'down': (0, -1, 0)}
 L = ['# exported from assets/blockbench/races/saiyan.bbmodel by tools/gen_blocky_saiyan.py']
 vi = 1
-for g in ['rightarm', 'body', 'leftarm', 'rightleg', 'head', 'hair', 'leftleg']:
+for g in ['rightarm', 'body', 'leftarm', 'rightleg', 'head', 'hair', 'hair_ssj3', 'leftleg']:
     L.append('o ' + g)
     for c in cubes:
         if not c['export'] or GROUP[c['bone']] != g: continue
@@ -311,12 +320,12 @@ for c in cubes:
     els.append({'name': c['name'], 'type': 'cube', 'uuid': uid(c['name']), 'from': c['f'], 'to': c['t'], 'origin': c['o'],
                 'rotation': c['r'], 'autouv': 0, 'color': 0, 'export': c['export'], 'box_uv': False, 'rescale': False, 'locked': False,
                 'faces': {fn: {'uv': list(c['uv'][fn]), 'texture': 0} for fn in c['uv']}})
-PIV = {'body': [0, 24, 0], 'head': [0, 24, 0], 'hair': [0, 24, 0], 'right_arm': [6.5, 22, 0], 'left_arm': [-6.5, 22, 0],
+PIV = {'body': [0, 24, 0], 'head': [0, 24, 0], 'hair': [0, 24, 0], 'hair_ssj3': [0, 24, 0], 'right_arm': [6.5, 22, 0], 'left_arm': [-6.5, 22, 0],
        'right_leg': [2.5, 12, 0], 'left_leg': [-2.5, 12, 0], 'tail': [0, 13.5, 3]}
 def bone(name, kids=()):
     return {'name': name, 'uuid': uid('bone-' + name), 'origin': PIV[name], 'rotation': [0, 0, 0], 'export': True, 'isOpen': True,
             'children': [uid(c['name']) for c in cubes if c['bone'] == name] + list(kids)}
-outliner = [bone('body', [bone('head', [bone('hair')]), bone('right_arm'), bone('left_arm'), bone('right_leg'), bone('left_leg'), bone('tail')])]
+outliner = [bone('body', [bone('head', [bone('hair'), dict(bone('hair_ssj3'), visibility=False)]), bone('right_arm'), bone('left_arm'), bone('right_leg'), bone('left_leg'), bone('tail')])]
 bb = {'meta': {'format_version': '4.10', 'model_format': 'bedrock', 'box_uv': False}, 'name': 'saiyan',
       'dba_exporter': 'tools/gen_blocky_saiyan.py',
       'geometry_name': 'dba.saiyan', 'visible_box': [3, 3.5, 1.25], 'resolution': {'width': TEX, 'height': TEX},

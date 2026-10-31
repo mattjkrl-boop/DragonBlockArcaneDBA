@@ -35,6 +35,7 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
             new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final int SAIYAN_SEGMENTS = 8;
+    private static final float[] SAIYAN_CURL = {-0.55F, -0.30F, -0.15F, 0.10F, 0.35F, 0.50F, 0.60F, 0.60F};
     private static final int ARCOSIAN_SEGMENTS = 8;
     private static final int BIO_SEGMENTS = 8;
 
@@ -367,7 +368,8 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                     yaw = baseSideCurve + (idleWave + walkSway) * lateralDamp + spinDrag;
 
                     // Naturally curves down from hips, levels off, and hooks up at the tip:
-                    float basePitch = (i == 0 ? 0.12F : (i < 3 ? 0.08F : (i < 5 ? 0.04F : (i < 7 ? -0.08F : -0.10F))));
+                    // Concept curl: droops down and back from the hips, then hooks up at the tip (cumulative per joint)
+                    float basePitch = SAIYAN_CURL[Math.min(i, SAIYAN_CURL.length - 1)];
 
                     // Speed-based streamlining (faster player moves, higher tail trails backward):
                     float speedStream = (speedFactor * 0.16F + (isSprinting ? 0.06F : 0.0F)) * (1.0F - progress * 0.35F);

@@ -95,16 +95,24 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
 
         RenderType renderType = RenderTypes.entityCutout(texture, false);
 
+        final Identifier finalFormForHair = activeFormId;
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             PoseStack stack = new PoseStack();
             stack.last().pose().set(pose.pose());
             stack.last().normal().set(pose.normal());
 
             renderLimb(mesh.getLimb("head"), humanoidModel.head, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
-            renderLimb(mesh.getLimb("hair"), humanoidModel.head, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            // Per-form modelled hair: SSJ3 swaps in the long mane group when the model has one
+            ObjMesh.LimbGroup hairLimb = mesh.getLimb("hair");
+            if (finalFormForHair != null && finalFormForHair.getPath().contains("super_saiyan_3") && mesh.getLimb("hair_ssj3") != null) {
+                hairLimb = mesh.getLimb("hair_ssj3");
+            }
+            renderLimb(hairLimb, humanoidModel.head, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
             renderLimb(mesh.getLimb("body"), humanoidModel.body, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
-            renderLimb(mesh.getLimb("rightarm"), humanoidModel.rightArm, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
-            renderLimb(mesh.getLimb("leftarm"), humanoidModel.leftArm, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            // Modelled-hair races (blocky Saiyan) hang their arms slightly away from the body
+            float armSplay = mesh.hasModelledHair() ? 0.10f : 0.0f;
+            renderLimb(mesh.getLimb("rightarm"), humanoidModel.rightArm, stack, buffer, packedLight, armSplay, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("leftarm"), humanoidModel.leftArm, stack, buffer, packedLight, -armSplay, 1.0f, 1.0f, 1.0f, 1.0f);
             renderLimb(mesh.getLimb("rightleg"), humanoidModel.rightLeg, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
             renderLimb(mesh.getLimb("leftleg"), humanoidModel.leftLeg, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
         });
@@ -142,9 +150,22 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
             int packedLight,
             float r, float g, float b, float a
     ) {
+        renderLimb(limb, bone, stack, buffer, packedLight, 0.0f, r, g, b, a);
+    }
+
+    private static void renderLimb(
+            ObjMesh.LimbGroup limb,
+            net.minecraft.client.model.geom.ModelPart bone,
+            PoseStack stack,
+            com.mojang.blaze3d.vertex.VertexConsumer buffer,
+            int packedLight,
+            float extraZRot,
+            float r, float g, float b, float a
+    ) {
         if (limb != null && bone != null) {
             stack.pushPose();
             bone.translateAndRotate(stack);
+            if (extraZRot != 0.0f) stack.mulPose(com.mojang.math.Axis.ZP.rotation(extraZRot));
             limb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, r, g, b, a);
             stack.popPose();
         }

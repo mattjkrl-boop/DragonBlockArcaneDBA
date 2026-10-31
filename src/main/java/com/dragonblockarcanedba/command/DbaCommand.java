@@ -116,6 +116,26 @@ public class DbaCommand {
             .then(Commands.literal("color")
                 .then(colorPart("skin")).then(colorPart("hair")).then(colorPart("eye"))
             )
+            // Admin/testing: force a form on (or "none" to clear) without unlock checks
+            .then(Commands.literal("form")
+                .then(Commands.argument("player", EntityArgument.player())
+                    .then(Commands.argument("form", StringArgumentType.word())
+                        .executes(context -> {
+                            ServerPlayer target = EntityArgument.getPlayer(context, "player");
+                            String form = StringArgumentType.getString(context, "form");
+                            PlayerStatsAccessor accessor = (PlayerStatsAccessor) target;
+                            accessor.dba$setActiveFormId("none".equals(form) ? null
+                                : (form.contains(":") ? net.minecraft.resources.Identifier.parse(form)
+                                    : net.minecraft.resources.Identifier.fromNamespaceAndPath("dragonblockarcanedba", form)));
+                            accessor.dba$setCurrentKi(com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(target));
+                            accessor.dba$syncStats();
+                            com.dragonblockarcanedba.network.DbaNetwork.broadcastTransformState(target);
+                            context.getSource().sendSuccess(() -> Component.literal("Set " + target.getName().getString() + "'s form to " + form), true);
+                            return 1;
+                        })
+                    )
+                )
+            )
             .then(Commands.literal("ap")
                 .then(Commands.literal("add").then(Commands.argument("player", EntityArgument.player()).then(Commands.argument("amount", StringArgumentType.word()).executes(context -> {
                     ServerPlayer target = EntityArgument.getPlayer(context, "player");
