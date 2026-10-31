@@ -84,12 +84,16 @@ public class DimensionalWarpRiftEntity extends Projectile {
                     serverLevel.playSound(null, center.x, center.y, center.z,
                         SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 2.0f, 0.7f);
                     serverLevel.playSound(null, center.x, center.y, center.z,
+                        com.dragonblockarcanedba.sound.DbaSounds.DARK_PULSE, SoundSource.PLAYERS, 2.0f, 0.7f);
+                    serverLevel.playSound(null, center.x, center.y, center.z,
                         SoundEvents.RESPAWN_ANCHOR_SET_SPAWN, SoundSource.PLAYERS, 1.8f, 0.6f);
                     serverLevel.playSound(null, center.x, center.y, center.z,
                         SoundEvents.PORTAL_TRAVEL, SoundSource.PLAYERS, 1.5f, 1.4f);
                 } else {
                     serverLevel.playSound(null, center.x, center.y, center.z,
                         SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.2f, 0.8f);
+                    serverLevel.playSound(null, center.x, center.y, center.z,
+                        com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.2f, 0.8f);
                     serverLevel.playSound(null, center.x, center.y, center.z,
                         SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 2.0f, 0.6f);
                     serverLevel.playSound(null, center.x, center.y, center.z,

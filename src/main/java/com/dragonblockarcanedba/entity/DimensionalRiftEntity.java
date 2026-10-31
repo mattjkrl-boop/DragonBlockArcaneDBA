@@ -159,6 +159,8 @@ public class DimensionalRiftEntity extends Projectile {
                 serverLevel.playSound(null, center.x, center.y, center.z,
                     SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.6f);
                 serverLevel.playSound(null, center.x, center.y, center.z,
+                    com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.6f);
+                serverLevel.playSound(null, center.x, center.y, center.z,
                     SoundEvents.RESPAWN_ANCHOR_SET_SPAWN, SoundSource.PLAYERS, 2.0f, 0.5f);
             }
             if (this.tickCount % 20 == 0) {

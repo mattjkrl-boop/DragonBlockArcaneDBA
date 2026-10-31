@@ -125,6 +125,8 @@ public class AzureStormEntity extends Projectile {
 
                 serverLevel.playSound(null, lx, ly, lz,
                     SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 2.5f, 1.0f);
+                serverLevel.playSound(null, lx, ly, lz,
+                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 2.5f, 1.0f);
             }
 
 

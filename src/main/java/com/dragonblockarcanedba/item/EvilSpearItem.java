@@ -191,6 +191,8 @@ public class EvilSpearItem extends Item {
                 serverPlayer.hurtMarked = true;
                 serverLevel.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
                     SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 0.5f);
+                serverLevel.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
+                    com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 0.5f);
                 serverPlayer.getCooldowns().addCooldown(stack, 40);
                 return InteractionResult.SUCCESS;
             }
@@ -294,6 +296,7 @@ public class EvilSpearItem extends Item {
             level.addFreshEntity(impact);
 
             level.playSound(null, t.getX(), t.getY(), t.getZ(), SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.8f, 0.5f);
+            level.playSound(null, t.getX(), t.getY(), t.getZ(), com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.8f, 0.5f);
         }
 
         // Demon Surge: Demonic rush speed, attack frenzy, and jump boost for 40 ticks

@@ -306,6 +306,8 @@ public class AzureDragonSwordItem extends Item {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.5f, 0.5f + chargeRatio * 0.7f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 1.5f, 0.5f + chargeRatio * 0.7f);
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.0f, 0.8f + chargeRatio * 0.4f);
             }
         }

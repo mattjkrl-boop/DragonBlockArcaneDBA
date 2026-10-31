@@ -236,6 +236,8 @@ public class KatanaItem extends Item {
 
                     level.playSound(null, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ(),
                         SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.6f, 1.5f + (targetIndex * 0.1f));
+                    level.playSound(null, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ(),
+                        com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.6f, 1.5f + (targetIndex * 0.1f));
                 });
             }
         } else {
@@ -301,6 +303,8 @@ public class KatanaItem extends Item {
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.8f, 1.2f + chargeRatio * 0.6f);
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 0.8f, 1.2f + chargeRatio * 0.6f);
             }
         }
     }
@@ -413,7 +417,11 @@ public class KatanaItem extends Item {
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 2.0f, 1.4f);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 2.0f, 1.4f);
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.0f, 1.8f);
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.PLAYERS, 2.0f, 1.8f);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 0.9f, 1.9f);
 

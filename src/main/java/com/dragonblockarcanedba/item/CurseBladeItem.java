@@ -267,6 +267,8 @@ public class CurseBladeItem extends Item {
                         serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
                             SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 3.0f, 0.7f);
                         serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
+                            com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 3.0f, 0.7f);
+                        serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
                             SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 2.0f, 0.6f);
                                 
                         // Fire on ground

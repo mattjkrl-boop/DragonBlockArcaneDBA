@@ -302,6 +302,8 @@ public class DaburaSwordItem extends Item {
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.5f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.5f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // 5-second cooldown

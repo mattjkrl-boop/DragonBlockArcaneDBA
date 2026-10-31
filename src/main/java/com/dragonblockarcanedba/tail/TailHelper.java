@@ -123,6 +123,7 @@ public class TailHelper {
         // Visceral audio: snap / break sound + crit slice impact
         level.playSound(null, x, y, z, SoundEvents.ITEM_BREAK, SoundSource.PLAYERS, 1.3F, 0.75F);
         level.playSound(null, x, y, z, SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.1F, 0.65F);
+        level.playSound(null, x, y, z, com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.1F, 0.65F);
 
         // Notify the player
         player.sendSystemMessage(Component.literal("§c§l[!] Your tail was severed in combat!").withStyle(ChatFormatting.RED));

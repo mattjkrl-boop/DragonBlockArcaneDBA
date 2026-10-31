@@ -265,6 +265,8 @@ public class SaberItem extends Item {
                     
                     level.playSound(null, currentTarget.getX(), currentTarget.getY(), currentTarget.getZ(),
                         SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.0f, 1.5f);
+                    level.playSound(null, currentTarget.getX(), currentTarget.getY(), currentTarget.getZ(),
+                        com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.0f, 1.5f);
                     
                     // Spawn Physical 3D Saber Crescent Slashes
                     boolean isStrong = (seq.totalHits + 1) >= seq.nextStrongSlashThreshold;
@@ -713,6 +715,8 @@ public class SaberItem extends Item {
             SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.2f, 1.4f);
         level.playSound(null, destination.x, destination.y, destination.z,
             SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 1.8f);
+        level.playSound(null, destination.x, destination.y, destination.z,
+            com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 1.8f);
 
         // Path Damage to enemies crossed during dash
         AABB pathBox = new AABB(startPos, destination).inflate(1.2);
@@ -777,6 +781,8 @@ public class SaberItem extends Item {
             SoundEvents.SHIELD_BLOCK, SoundSource.PLAYERS, 2.0f, 1.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 2.0f, 1.8f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 2.0f, 1.8f);
 
         Vec3 sparkPos = player.position().add(0, player.getBbHeight() * 0.55, 0);
         SaberDodgeSparkEntity dodgeSpark = new SaberDodgeSparkEntity(
@@ -881,7 +887,11 @@ public class SaberItem extends Item {
                 level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
                     SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 2.5f, 0.6f);
                 level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
+                    com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 2.5f, 0.6f);
+                level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
                     SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.5f, 1.4f);
+                level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
+                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 1.5f, 1.4f);
 
                 if (!anim.player.isRemoved()) {
                     anim.player.sendSystemMessage(Component.literal("§b✦ BLITZ FINISHER: " + anim.targets.size() + " Enemies Snapped! ✦"), true);

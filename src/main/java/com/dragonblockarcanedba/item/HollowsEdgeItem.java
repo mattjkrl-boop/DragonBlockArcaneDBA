@@ -262,10 +262,14 @@ public class HollowsEdgeItem extends Item {
 
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.5f);
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 2.0f, 0.5f);
         }
 
         level.playSound(null, destination.x, destination.y, destination.z,
             SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.2f, 1.1f);
+        level.playSound(null, destination.x, destination.y, destination.z,
+            com.dragonblockarcanedba.sound.DbaSounds.DARK_PULSE, SoundSource.PLAYERS, 1.2f, 1.1f);
     }
 
     // --- RIGHT CLICK: Void Rift Channeling & Implosion ---

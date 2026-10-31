@@ -165,6 +165,7 @@ public class BraveSwordItem extends Item {
                 level.addFreshEntity(crossSlash);
 
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.6f);
+                level.playSound(null, target.getX(), target.getY(), target.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 2.0f, 0.6f);
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.8f, 1.2f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, target.getX(), target.getY(), target.getZ());
 
@@ -181,11 +182,13 @@ public class BraveSwordItem extends Item {
                     crescent.setDeltaMovement(look.x * 1.8, look.y * 1.8, look.z * 1.8);
                     level.addFreshEntity(crescent);
                     level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 1.4f);
+                    level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 1.4f);
                 }
 
                 // Combo particle feedback & sound
                 level.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1.0, target.getZ(), 8, 0.3, 0.3, 0.3, 0.1);
                 level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
+                level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
                 player.sendSystemMessage(Component.literal(String.format("§6Brave Power: §e%d Hits", combo)), true);
             }
         }
@@ -240,6 +243,8 @@ public class BraveSwordItem extends Item {
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.9f, 0.8f + chargeRatio * 0.5f);
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 0.9f, 0.8f + chargeRatio * 0.5f);
             }
         }
     }
@@ -347,6 +352,8 @@ public class BraveSwordItem extends Item {
 
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.7f);
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 2.0f, 0.7f);
 
             player.getCooldowns().addCooldown(stack, 100); // 5-second cooldown
         }

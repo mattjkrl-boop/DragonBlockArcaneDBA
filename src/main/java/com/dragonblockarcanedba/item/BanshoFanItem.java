@@ -170,6 +170,8 @@ public class BanshoFanItem extends Item {
 
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
                 SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.2f, 1.2f);
+            serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.2f);
         }
     }
 

@@ -101,6 +101,8 @@ public class KiTechniqueHandler {
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.2f, 1.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.BLASTER_SHOT, SoundSource.PLAYERS, 1.2f, 1.6f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.6f, 1.8f);
     }
 
@@ -126,6 +128,8 @@ public class KiTechniqueHandler {
 
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 0.7f, 1.6f + (float) (level.getRandom().nextFloat() * 0.4));
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.BLASTER_SHOT, SoundSource.PLAYERS, 0.7f, 1.6f + (float) (level.getRandom().nextFloat() * 0.4));
         }
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -163,7 +167,11 @@ public class KiTechniqueHandler {
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.8f, 1.4f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 1.8f, 1.4f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 1.5f, 1.8f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.5f, 1.8f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 0.8f);
     }
@@ -274,6 +282,8 @@ public class KiTechniqueHandler {
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 3.0f, 0.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.5f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 2.0f, 0.6f);
 

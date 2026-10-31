@@ -364,6 +364,8 @@ public class OxKingsAxeItem extends Item {
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.6f);
+                    serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                        com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.6f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
 
                     player.getCooldowns().addCooldown(stack, 100); // 5 seconds cooldown on flawless slam

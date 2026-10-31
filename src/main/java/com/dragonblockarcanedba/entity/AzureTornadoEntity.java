@@ -111,6 +111,8 @@ public class AzureTornadoEntity extends Projectile {
 
                 serverLevel.playSound(null, rx, ry, rz,
                     SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.5f, 1.2f);
+                serverLevel.playSound(null, rx, ry, rz,
+                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 1.5f, 1.2f);
             }
 
             // Howling wind sound

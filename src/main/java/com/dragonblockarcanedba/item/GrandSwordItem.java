@@ -139,6 +139,8 @@ public class GrandSwordItem extends Item {
 
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 0.9f, 1.6f);
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 0.9f, 1.6f);
         }
 
         // Continuous tracking lock on all slowed enemies within range while spinning

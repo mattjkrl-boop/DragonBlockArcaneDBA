@@ -166,6 +166,8 @@ public class DimensionTravel {
             net.minecraft.sounds.SoundEvents.PORTAL_TRAVEL, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.2f);
         targetLevel.playSound(null, targetX, targetY, targetZ,
             net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.4f);
+        targetLevel.playSound(null, targetX, targetY, targetZ,
+            com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.4f);
 
         DragonBlockArcaneDBA.LOGGER.info("Player {} traveled safely to {} at ({}, {}, {})",
                 player.getName().getString(), destination, targetX, targetY, targetZ);

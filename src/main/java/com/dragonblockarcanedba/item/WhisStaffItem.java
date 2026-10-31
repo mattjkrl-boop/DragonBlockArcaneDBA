@@ -150,6 +150,11 @@ public class WhisStaffItem extends Item {
                 SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS,
                 0.9f, 1.9f
             );
+            serverLevel.playSound(
+                null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS,
+                0.9f, 1.9f
+            );
         }
     }
 

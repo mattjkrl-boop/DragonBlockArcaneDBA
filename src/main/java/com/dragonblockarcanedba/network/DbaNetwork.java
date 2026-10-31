@@ -146,9 +146,13 @@ public class DbaNetwork {
                                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                                     SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.8f, 1.0f);
                                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                                    com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 1.8f, 1.0f);
+                                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                                     SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 1.2f);
                                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                                     SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.0f, 1.5f);
+                                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 1.0f, 1.5f);
                             }
                         }
                     }

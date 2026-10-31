@@ -118,6 +118,8 @@ public class VoidRiftEntity extends Projectile {
                         SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.5f, 0.6f);
                     serverLevel.playSound(null, center.x, center.y, center.z,
                         SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.0f, 0.8f);
+                    serverLevel.playSound(null, center.x, center.y, center.z,
+                        com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.0f, 0.8f);
 
                     this.discard();
                     return;

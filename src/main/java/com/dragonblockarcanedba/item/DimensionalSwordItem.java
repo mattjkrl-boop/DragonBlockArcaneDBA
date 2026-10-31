@@ -158,6 +158,8 @@ public class DimensionalSwordItem extends Item {
                 net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.8f);
             serverLevel.playSound(null, targetX, targetY, targetZ,
                 net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.8f);
+            serverLevel.playSound(null, targetX, targetY, targetZ,
+                com.dragonblockarcanedba.sound.DbaSounds.DARK_PULSE, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.8f);
             
             // Phase 4: Teleport
             player.teleportTo(targetX, targetY, targetZ);

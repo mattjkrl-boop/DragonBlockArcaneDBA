@@ -15,6 +15,7 @@ public final class DbaImpactFx {
     public static void heavy(Level level, double x, double y, double z) {
         shake(level, x, y, z, 2.2f, 12, 3);
         burst(level, x, y, z);
+        level.playSound(null, x, y, z, com.dragonblockarcanedba.sound.DbaSounds.HEAVY_IMPACT, net.minecraft.sounds.SoundSource.PLAYERS, 1.6f, 0.9f + level.getRandom().nextFloat() * 0.2f);
     }
 
     /** Spark and wind burst at an impact point, sent as two particle packets. */

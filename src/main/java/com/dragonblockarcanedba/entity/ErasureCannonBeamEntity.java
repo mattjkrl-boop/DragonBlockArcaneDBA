@@ -166,6 +166,8 @@ public class ErasureCannonBeamEntity extends Projectile {
 
                 serverLevel.playSound(null, start.x, start.y, start.z,
                     SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.2f, 0.6f);
+                serverLevel.playSound(null, start.x, start.y, start.z,
+                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.PLAYERS, 2.2f, 0.6f);
             }
 
             if (this.tickCount >= MAX_LIFETIME) {

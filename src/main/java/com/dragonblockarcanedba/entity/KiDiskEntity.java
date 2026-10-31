@@ -54,6 +54,8 @@ public class KiDiskEntity extends ThrowableProjectile {
                 this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                     net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.5f);
                 this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.5f);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                     net.minecraft.sounds.SoundEvents.ANVIL_LAND, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.8f);
             }
         }

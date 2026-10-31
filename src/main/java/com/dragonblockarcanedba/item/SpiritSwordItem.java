@@ -125,6 +125,8 @@ public class SpiritSwordItem extends Item {
                 SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, 1.3f, 1.15f);
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
                 SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.1f, 1.35f);
+            serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 1.1f, 1.35f);
         }
     }
 
