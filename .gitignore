@@ -49,3 +49,4 @@ mod/
 deobf_extracted/
 scratch_out/
 .jdks/
+__pycache__/
