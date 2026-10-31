@@ -14,7 +14,15 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-public class ShenronEntity extends Mob {
+public class ShenronEntity extends Mob implements DbaGeoDragon {
+    private final com.geckolib.animatable.instance.AnimatableInstanceCache geoCache =
+        com.geckolib.util.GeckoLibUtil.createInstanceCache(this);
+
+    @Override
+    public com.geckolib.animatable.instance.AnimatableInstanceCache getAnimatableInstanceCache() {
+        return geoCache;
+    }
+
     private boolean wishGranted = false;
 
     public ShenronEntity(EntityType<? extends Mob> entityType, Level level) {

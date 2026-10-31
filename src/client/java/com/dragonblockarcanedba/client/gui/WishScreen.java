@@ -26,9 +26,14 @@ public class WishScreen extends Screen {
         new WishOption("immortality", "\u2728", "I wish for Immortality!", "16 Senzu Beans & Celestial Grace (10m)", 0xFF55FF88)
     };
 
+    public int dragonId() {
+        return this.shenronId;
+    }
+
     public WishScreen(int shenronId) {
         super(Component.literal("Summon Dragon"));
         this.shenronId = shenronId;
+        com.dragonblockarcanedba.client.render.geo.DbaDragonRenderers.markWish(shenronId);
     }
 
     @Override

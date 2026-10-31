@@ -37,16 +37,11 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     private static boolean manualSaberCameraOverride = false;
 
 
-    public static final net.minecraft.client.model.geom.ModelLayerLocation SHENRON_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
-        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("shenron"), "main"
-    );
-    public static final net.minecraft.client.model.geom.ModelLayerLocation PORUNGA_MODEL_LAYER = new net.minecraft.client.model.geom.ModelLayerLocation(
-        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("porunga"), "main"
-    );
 
     @Override
     public void onInitializeClient() {
         com.dragonblockarcanedba.client.render.geo.DbaGeoWeaponRenderers.init();
+        com.dragonblockarcanedba.client.render.geo.DbaDragonRenderers.init();
         net.minecraft.client.gui.screens.MenuScreens.register(
             com.dragonblockarcanedba.inventory.DbaMenus.GRAVITY_TRAINING,
             com.dragonblockarcanedba.client.gui.GravityTrainingScreen::new
@@ -88,11 +83,11 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         );
         net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
             com.dragonblockarcanedba.entity.DbaEntities.SHENRON,
-            com.dragonblockarcanedba.client.render.ShenronRenderer::new
+            ctx -> com.dragonblockarcanedba.client.render.geo.DbaDragonRenderers.create(ctx, "shenron")
         );
         net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
             com.dragonblockarcanedba.entity.DbaEntities.PORUNGA,
-            com.dragonblockarcanedba.client.render.PorungaRenderer::new
+            ctx -> com.dragonblockarcanedba.client.render.geo.DbaDragonRenderers.create(ctx, "porunga")
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.CURSE_LIGHTNING,
@@ -387,12 +382,6 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
 
         // Register model layers
-        net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry.registerModelLayer(
-            SHENRON_MODEL_LAYER, com.dragonblockarcanedba.client.model.ShenronModel::createBodyLayer
-        );
-        net.fabricmc.fabric.api.client.rendering.v1.ModelLayerRegistry.registerModelLayer(
-            PORUNGA_MODEL_LAYER, com.dragonblockarcanedba.client.model.PorungaModel::createBodyLayer
-        );
 
         // Load persisted config from disk
         com.dragonblockarcanedba.client.config.DbaConfig.load();
