@@ -302,4 +302,10 @@ public class EvilSpearItem extends Item {
         // 5-second cooldown
         player.getCooldowns().addCooldown(stack, 100);
     }
+
+    /** Discards any charge or stance entities still tracked for a player who logged out. */
+    public static void onPlayerDisconnect(UUID playerUuid) {
+        net.minecraft.world.entity.Entity e0 = ACTIVE_CHARGE_MAP.remove(playerUuid);
+        if (e0 != null && e0.isAlive()) e0.discard();
+    }
 }

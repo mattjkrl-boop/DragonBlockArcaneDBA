@@ -421,4 +421,12 @@ public class KatanaItem extends Item {
         }
         return true;
     }
+
+    /** Discards any charge or stance entities still tracked for a player who logged out. */
+    public static void onPlayerDisconnect(UUID playerUuid) {
+        net.minecraft.world.entity.Entity e0 = ACTIVE_CHARGE_MAP.remove(playerUuid);
+        if (e0 != null && e0.isAlive()) e0.discard();
+        net.minecraft.world.entity.Entity e1 = ACTIVE_AIM_MAP.remove(playerUuid);
+        if (e1 != null && e1.isAlive()) e1.discard();
+    }
 }

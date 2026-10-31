@@ -342,6 +342,11 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             com.dragonblockarcanedba.item.GrandSwordItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.item.BraveSwordItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.item.DaburaSwordItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.BlasterGunItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.EvilSpearItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.KatanaItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.OxKingsAxeItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.ZSwordItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.ki.KiTechniqueHandler.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.util.DbaPhysicsAttributes.onPlayerDisconnect(playerUuid);
         });
