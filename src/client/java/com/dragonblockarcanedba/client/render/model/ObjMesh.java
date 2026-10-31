@@ -64,6 +64,11 @@ public class ObjMesh {
         return limbs.get(name.toLowerCase(Locale.ROOT));
     }
 
+    /** True when the model carries its own hair geometry (an OBJ group named "hair"). */
+    public boolean hasModelledHair() {
+        return limbs.containsKey("hair");
+    }
+
     public Set<String> getLimbNames() {
         return limbs.keySet();
     }
@@ -198,6 +203,8 @@ public class ObjMesh {
         Map<String, float[]> pivots = new HashMap<>();
         pivots.put("body", new float[]{bodyMidX, bodyTopY, bodyMidZ});
         pivots.put("head", new float[]{bodyMidX, headB[2], bodyMidZ}); // headB[2] = head bottom Y = neck
+        // Modelled hair rides the head bone; kept in its own group so it does not skew the skull metrics
+        pivots.put("hair", pivots.get("head"));
         // Vanilla arm pivots sit 1 of 4 pixels in from the inner edge and 2 of 12 pixels below the shoulder top.
         float twoPx = Math.max(0.001f, bodyTopY - bodyB[2]) / 6.0f;
         pivots.put("rightarm", new float[]{rArmB[1] - (rArmB[1] - rArmB[0]) * 0.25f, rArmB[3] - twoPx, (rArmB[4] + rArmB[5]) * 0.5f});

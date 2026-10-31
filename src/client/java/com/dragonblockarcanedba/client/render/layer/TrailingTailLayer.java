@@ -85,8 +85,9 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
             // Angled tuft crown extending out
             builder.texOffs(0, 0).addBox(-tipWidth * 0.35F, -tipDepth * 0.35F, length * 0.8F, tipWidth * 0.7F, tipDepth * 0.7F, length * 0.4F);
         } else {
-            // Main fur segment extending along +Z
+            // Main fur segment extending along +Z, with a slightly thicker fur ring at its root
             builder.texOffs(0, 0).addBox(-width / 2.0F, -depth / 2.0F, 0.0F, width, depth, length);
+            builder.texOffs(0, 0).addBox(-width / 2.0F - 0.2F, -depth / 2.0F - 0.2F, 0.1F, width + 0.4F, depth + 0.4F, 1.0F);
         }
 
         return bake("saiyan_seg_" + index, builder);
@@ -240,8 +241,8 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
             } else if (formStr.contains("kaioken")) {
                 baseTailColor = 0xFF992222; // Kaioken aura infused crimson-brown fur
             } else {
-                int hair = dbaState.dba$getHairColor();
-                baseTailColor = hair != 0 ? hair : 0xFF6B4226;
+                // Base form monkey tail is always brown fur, independent of hair color (Goku style)
+                baseTailColor = 0xFF6B4226;
             }
         }
 
@@ -419,7 +420,10 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                         }
                     }
                 } else {
-                    // Saiyan tail
+                    // Saiyan tail: alternating fur bands so the segments read clearly
+                    if (i % 2 == 1) {
+                        segmentColor = scaleRgb(segmentColor, 0.82F);
+                    }
                     if (i == segmentCount - 1) {
                         if (formStr.contains("super_saiyan") || formStr.contains("ssj")) {
                             segmentColor = 0xFFFFEA66; // Bright tip on golden fur
@@ -449,5 +453,13 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
 
             stack.popPose();
         });
+    }
+
+    private static int scaleRgb(int argb, float f) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = Math.min(255, Math.round(((argb >> 16) & 0xFF) * f));
+        int g = Math.min(255, Math.round(((argb >> 8) & 0xFF) * f));
+        int b = Math.min(255, Math.round((argb & 0xFF) * f));
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 }

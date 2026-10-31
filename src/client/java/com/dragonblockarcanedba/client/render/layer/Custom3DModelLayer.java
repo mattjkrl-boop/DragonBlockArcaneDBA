@@ -101,6 +101,7 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
             stack.last().normal().set(pose.normal());
 
             renderLimb(mesh.getLimb("head"), humanoidModel.head, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("hair"), humanoidModel.head, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
             renderLimb(mesh.getLimb("body"), humanoidModel.body, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
             renderLimb(mesh.getLimb("rightarm"), humanoidModel.rightArm, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
             renderLimb(mesh.getLimb("leftarm"), humanoidModel.leftArm, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
@@ -109,7 +110,8 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
         });
 
         // 3D Dynamic Hair Spikes for Saiyan, Half-Saiyan, and humanoid races
-        if (com.dragonblockarcanedba.client.render.model.DbaHairRenderer.hasCodedHair(race)) {
+        // Models with their own hair cubes (hair group, tinted through the mask) skip the coded hair so it does not double up
+        if (com.dragonblockarcanedba.client.render.model.DbaHairRenderer.hasCodedHair(race) && !mesh.hasModelledHair()) {
             final String finalRace = race;
             final Identifier finalActiveFormId = activeFormId;
             final int finalHairColor = hairColor;
