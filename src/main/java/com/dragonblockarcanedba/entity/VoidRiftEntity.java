@@ -103,7 +103,7 @@ public class VoidRiftEntity extends Projectile {
                         DamageSource source = owner instanceof net.minecraft.world.entity.player.Player p 
                             ? serverLevel.damageSources().playerAttack(p) 
                             : serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : victim);
-                        victim.hurtServer(serverLevel, source, this.damage);
+                        victim.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                         // Violent outward launch
                         Vec3 push = victim.position().subtract(center).normalize().scale(2.2).add(0, 0.8, 0);
@@ -153,7 +153,7 @@ public class VoidRiftEntity extends Projectile {
                             DamageSource source = owner instanceof net.minecraft.world.entity.player.Player p 
                                 ? serverLevel.damageSources().playerAttack(p) 
                                 : serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : living);
-                            living.hurtServer(serverLevel, source, 25.0f);
+                            living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (25.0f)));
                         }
                     }
                 }

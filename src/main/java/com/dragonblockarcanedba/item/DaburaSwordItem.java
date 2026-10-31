@@ -279,7 +279,7 @@ public class DaburaSwordItem extends Item {
             enemy.addEffect(new MobEffectInstance(
                 DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false
             ), player);
-            enemy.hurtServer(level, level.damageSources().playerAttack(player), burstDamage);
+            enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
         }
 
         // Spawn falling darkness blades raining from the sky across domain

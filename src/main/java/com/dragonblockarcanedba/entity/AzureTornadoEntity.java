@@ -94,7 +94,7 @@ public class AzureTornadoEntity extends Projectile {
                     net.minecraft.world.damagesource.DamageSource tornadoSource = this.getOwner() instanceof LivingEntity owner
                         ? serverLevel.damageSources().indirectMagic(this, owner)
                         : serverLevel.damageSources().magic();
-                    target.hurtServer(serverLevel, tornadoSource, giant ? 60.0f : 25.0f);
+                    target.hurtServer(serverLevel, tornadoSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (giant ? 60.0f : 25.0f)));
                 }
             }
 

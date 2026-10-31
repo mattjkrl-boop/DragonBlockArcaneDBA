@@ -105,7 +105,7 @@ public class PowerPoleItem extends Item {
                 if (inCone || inClosePerimeter) {
                     // Inverse area damage scaling
                     float damage = 750.0f / (float) Math.max(1.0, distance / 3.0);
-                    t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), damage);
+                    t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
                     
                     // Counter incoming rush velocity and apply overwhelming gale repulsion
                     com.dragonblockarcanedba.util.MovementLimiterHelper.applyPowerPoleGaleForce(t, eyePos, distance);
@@ -176,7 +176,7 @@ public class PowerPoleItem extends Item {
                 hitVec = entityHit.getLocation();
                 
                 // Damage
-                living.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), 750.0f);
+                living.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (750.0f)));
                 
                 // Pole Stun
                 living.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, 100, 0, false, false));

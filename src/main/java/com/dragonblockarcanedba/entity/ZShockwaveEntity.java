@@ -143,7 +143,7 @@ public class ZShockwaveEntity extends Projectile {
                 hitEntityIds.add(target.getId());
 
                 // Deal massive damage
-                target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, owner instanceof LivingEntity ? (LivingEntity) owner : null), this.damage);
+                target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, owner instanceof LivingEntity ? (LivingEntity) owner : null), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                 // Heavy knockback
                 Vec3 knockback = movement.normalize().scale(1.8 + (charge * 2.2));
@@ -162,7 +162,7 @@ public class ZShockwaveEntity extends Projectile {
                     DamageSource crushSource = owner instanceof LivingEntity livingOwner
                         ? serverLevel.damageSources().indirectMagic(this, livingOwner)
                         : serverLevel.damageSources().inWall();
-                    target.hurtServer(serverLevel, crushSource, 250.0f);
+                    target.hurtServer(serverLevel, crushSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (250.0f)));
                 }
             }
 

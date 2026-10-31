@@ -73,7 +73,7 @@ public class VoidSlashEntity extends Projectile {
                 hitEntities.add(target.getId());
 
                 // Massive void damage
-                target.hurtServer(serverLevel, serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : target), this.damage);
+                target.hurtServer(serverLevel, serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : target), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                 // Inflict Dark Faded
                 target.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 80, 1, false, true));

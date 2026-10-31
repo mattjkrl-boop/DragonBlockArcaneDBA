@@ -113,7 +113,7 @@ public class BlasterBoltEntity extends Projectile {
             for (LivingEntity target : targets) {
                 hitEntityIds.add(target.getId());
 
-                target.hurtServer(serverLevel, damageSource, this.damage);
+                target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                 if (owner instanceof LivingEntity livingOwner) {
                     target.addEffect(new net.minecraft.world.effect.MobEffectInstance(
@@ -148,7 +148,7 @@ public class BlasterBoltEntity extends Projectile {
                         LivingEntity.class, aoe, e -> e.isAlive() && e != owner && e != target
                     );
                     for (LivingEntity st : splashTargets) {
-                        st.hurtServer(serverLevel, damageSource, this.damage * 0.6f);
+                        st.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage * 0.6f)));
                     }
                     serverLevel.sendParticles(ParticleTypes.EXPLOSION, target.getX(), target.getY() + 1.0, target.getZ(), 1, 0, 0, 0, 0);
                     serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.4f);

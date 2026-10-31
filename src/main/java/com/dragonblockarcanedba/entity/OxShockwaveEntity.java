@@ -178,7 +178,7 @@ public class OxShockwaveEntity extends Projectile {
                     hitEntityIds.add(target.getId());
 
                     // Deal massive groundbreaker damage
-                    target.hurtServer(serverLevel, damageSource, this.damage);
+                    target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                     // Apply cinematic CC & tracking so Delayed Damage combo locks during knockup airtime
                     if (owner instanceof LivingEntity livingOwner) {

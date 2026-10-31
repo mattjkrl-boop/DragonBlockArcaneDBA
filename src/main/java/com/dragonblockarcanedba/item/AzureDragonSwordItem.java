@@ -182,7 +182,7 @@ public class AzureDragonSwordItem extends Item {
 
             // Damage
             float damage = (isDoubleRushing ? 600.0f : 350.0f) + (float) (accessor.dba$getStrength() * 2.0);
-            enemy.hurtServer(level, level.damageSources().mobAttack(player), damage);
+            enemy.hurtServer(level, level.damageSources().mobAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
 
             // Tweak C: Passing through an enemy creates a miniature tornado that launches them
             if (level.getRandom().nextFloat() < (isDoubleRushing ? 0.8f : 0.4f)) {
@@ -231,7 +231,7 @@ public class AzureDragonSwordItem extends Item {
         List<LivingEntity> targets = level.getEntitiesOfClass(LivingEntity.class, quakeBox, e -> e.isAlive() && e != player && pos.distanceTo(e.position()) <= radius);
 
         for (LivingEntity target : targets) {
-            target.hurtServer(level, level.damageSources().mobAttack(player), quakeDamage);
+            target.hurtServer(level, level.damageSources().mobAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (quakeDamage)));
             // Launch high into the air with MC 26.2 elastic bounciness
             target.setDeltaMovement(target.getDeltaMovement().add(0, 1.4, 0));
             com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(

@@ -74,7 +74,7 @@ public class BraveSlashEntity extends Projectile {
             for (LivingEntity target : targets) {
                 hitEntityIds.add(target.getId());
 
-                target.hurtServer(serverLevel, damageSource, this.damage);
+                target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                 if (owner instanceof LivingEntity livingOwner) {
                     target.addEffect(new net.minecraft.world.effect.MobEffectInstance(

@@ -50,7 +50,7 @@ public class KiDiskEntity extends ThrowableProjectile {
         if (!this.level().isClientSide()) {
             if (result.getEntity() instanceof LivingEntity target) {
                 target.hurtServer((net.minecraft.server.level.ServerLevel) this.level(), 
-                        this.damageSources().indirectMagic(this, this.getOwner()), getDamage());
+                        this.damageSources().indirectMagic(this, this.getOwner()), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (getDamage())));
                 this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                     net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.5f);
                 this.level().playSound(null, this.getX(), this.getY(), this.getZ(),

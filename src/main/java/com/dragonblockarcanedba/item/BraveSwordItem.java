@@ -147,7 +147,7 @@ public class BraveSwordItem extends Item {
                 player.teleportTo(level, past.x, past.y, past.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
 
                 float finisherDmg = 900.0f + (strength * 4.0f);
-                target.hurtServer(level, level.damageSources().playerAttack(player), finisherDmg);
+                target.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finisherDmg)));
 
                 // MC 26.2 Physics: Finisher ricochet bounce
                 com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
@@ -174,7 +174,7 @@ public class BraveSwordItem extends Item {
             } else {
                 // Standard combo strike
                 float hitDmg = 400.0f + (strength * 2.0f);
-                target.hurtServer(level, level.damageSources().playerAttack(player), hitDmg);
+                target.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (hitDmg)));
 
                 // Tweak B: Every 5th hit releases bonus golden energy crescent wave
                 if (combo % 5 == 0) {
@@ -308,7 +308,7 @@ public class BraveSwordItem extends Item {
             boolean anyKilled = false;
             for (LivingEntity t : targets) {
                 t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
-                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage);
+                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalDamage)));
 
                 // MC 26.2 Physics: Piercing dash launch and bounce
                 com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
@@ -339,7 +339,7 @@ public class BraveSwordItem extends Item {
                     LivingEntity.class, shockAoe, e -> e.isAlive() && e != player && !targets.contains(e)
                 );
                 for (LivingEntity st : shockTargets) {
-                    st.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage * 0.4f);
+                    st.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalDamage * 0.4f)));
                 }
 
                 BraveShockwaveEntity shockwave = new BraveShockwaveEntity(serverLevel, player, player.position().add(0, 0.05, 0), shockRadius);

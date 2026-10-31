@@ -98,13 +98,13 @@ public class SpiritSwordItem extends Item {
 
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
             float spiritCleave = target.getMaxHealth() * 0.02f;
-            target.hurtServer(serverLevel, serverLevel.damageSources().magic(), spiritCleave);
+            target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (spiritCleave)));
 
             // Stat-scaled bonus damage: Strength × 2
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) serverPlayer;
             float strengthBonus = (float) (accessor.dba$getStrength() * 2.0);
             if (strengthBonus > 0) {
-                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), strengthBonus);
+                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
             }
 
             // 20% chance to Disarm (drop held item)
@@ -200,11 +200,11 @@ public class SpiritSwordItem extends Item {
                 Optional<Vec3> hitVec = entityBB.clip(eyePos, endPos);
                 if (hitVec.isPresent() && entity instanceof LivingEntity livingTarget) {
                     // Main beam damage
-                    livingTarget.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), beamDamage);
+                    livingTarget.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (beamDamage)));
 
                     // 2% of target's max HP as bonus magic damage
                     float percentDamage = livingTarget.getMaxHealth() * 0.02f;
-                    livingTarget.hurtServer(serverLevel, serverLevel.damageSources().magic(), percentDamage);
+                    livingTarget.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (percentDamage)));
 
                     // Apply Spirit Impale for 5 seconds (100 ticks)
                     livingTarget.addEffect(new MobEffectInstance(DbaEffects.SPIRIT_IMPALE_HOLDER, 100, 0, false, true), player);

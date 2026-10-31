@@ -114,7 +114,7 @@ public class DimensionalSlashEntity extends Projectile {
                     ? serverLevel.damageSources().playerAttack(playerOwner)
                     : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().magic());
 
-                living.hurtServer(serverLevel, source, damage);
+                living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
                 living.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 1, false, true), owner);
 
                 // MC 26.2 Physics: Spatial rift warp friction & drag distortion

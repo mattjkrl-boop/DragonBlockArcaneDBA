@@ -101,7 +101,7 @@ public class GrandCrescentWaveEntity extends Projectile {
                 hitEntityIds.add(target.getId());
 
                 // Pierce and damage
-                target.hurtServer(serverLevel, damageSource, this.damage);
+                target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                 // Apply invisible cinematic tracking effect so Delayed Damage combo locks during wave sweep
                 if (owner instanceof LivingEntity livingOwner) {

@@ -146,7 +146,7 @@ public class ValorFieldEntity extends Projectile {
                             if (caster instanceof Player playerCaster) {
                                 PlayerStatsAccessor acc = (PlayerStatsAccessor) playerCaster;
                                 float fieldPressureDmg = 55.0f + (float) (acc.dba$getStrength() * 0.45f);
-                                entity.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(playerCaster), fieldPressureDmg);
+                                entity.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(playerCaster), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (fieldPressureDmg)));
                                 entity.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 40, 0, false, false, false), playerCaster);
                             }
                         }
@@ -235,7 +235,7 @@ public class ValorFieldEntity extends Projectile {
                         ? (p instanceof KiBlastEntity ? serverLevel.damageSources().indirectMagic(p, livingOwner) : serverLevel.damageSources().mobProjectile(p, livingOwner))
                         : serverLevel.damageSources().generic();
 
-                    victim.hurtServer(serverLevel, dmgSource, fullSpeedDmg);
+                    victim.hurtServer(serverLevel, dmgSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (fullSpeedDmg)));
 
                     if (p instanceof KiBlastEntity kiBlast) {
                         serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.9f, 1.5f);

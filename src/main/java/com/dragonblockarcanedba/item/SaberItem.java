@@ -261,7 +261,7 @@ public class SaberItem extends Item {
                     
                     // Damage & Slash Impact (This is caught and delayed by DelayedDamageMixin because of the Movement Curse!)
                     float baseDamage = 280.0f + (float) (accessor.dba$getStrength() * 1.8);
-                    currentTarget.hurtServer(level, level.damageSources().playerAttack(player), baseDamage);
+                    currentTarget.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (baseDamage)));
                     
                     level.playSound(null, currentTarget.getX(), currentTarget.getY(), currentTarget.getZ(),
                         SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.0f, 1.5f);
@@ -724,7 +724,7 @@ public class SaberItem extends Item {
 
         float pathDamage = 400.0f + (float) (accessor.dba$getStrength() * 2.0);
         for (LivingEntity enemy : crossedEnemies) {
-            enemy.hurtServer(level, level.damageSources().playerAttack(player), pathDamage);
+            enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (pathDamage)));
             Vec3 enemySlashPos = enemy.position().add(0, enemy.getBbHeight() * 0.55, 0);
             SaberSlashEntity pathSlash = new SaberSlashEntity(
                 level, player, enemySlashPos, player.getYRot(), player.getXRot(), 25.0f, 1.1f, false, 8
@@ -869,7 +869,7 @@ public class SaberItem extends Item {
                     DamageSource dmgSource = (!anim.player.isRemoved() && anim.player.isAlive())
                         ? level.damageSources().playerAttack(anim.player)
                         : level.damageSources().generic();
-                    e.hurtServer(level, dmgSource, anim.damage);
+                    e.hurtServer(level, dmgSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (anim.damage)));
 
                     // MC 26.2 Physics: Best-fit line snap shockwave bounce
                     com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(

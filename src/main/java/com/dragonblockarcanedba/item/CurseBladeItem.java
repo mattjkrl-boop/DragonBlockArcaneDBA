@@ -262,7 +262,7 @@ public class CurseBladeItem extends Item {
                         serverLevel.addFreshEntity(lightning);
 
                         // Magic thunder damage
-                        lightningTarget.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), 450.0f);
+                        lightningTarget.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (450.0f)));
                         lightningTarget.igniteForSeconds(5);
                         serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
                             SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 3.0f, 0.7f);
@@ -304,7 +304,7 @@ public class CurseBladeItem extends Item {
                 // Damage and fire
                 AABB strikeBox = new AABB(rx - 3, ry - 3, rz - 3, rx + 3, ry + 3, rz + 3);
                 for (LivingEntity victim : serverLevel.getEntitiesOfClass(LivingEntity.class, strikeBox, e -> e != player)) {
-                    victim.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), 15.0f);
+                    victim.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (15.0f)));
                     victim.igniteForSeconds(5);
                 }
                 
@@ -334,7 +334,7 @@ public class CurseBladeItem extends Item {
                         enemy.hurtMarked = true;
                         
                         // Magic impact damage
-                        enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), 150.0f);
+                        enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (150.0f)));
 
                         // 3 seconds complete root (amp 9)
                         enemy.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 60, 9, false, true), player);

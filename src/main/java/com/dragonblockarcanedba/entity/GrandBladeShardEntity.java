@@ -107,7 +107,7 @@ public class GrandBladeShardEntity extends Projectile {
                         : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().generic());
 
                     // 1. Stackable damage
-                    victim.hurtServer(serverLevel, damageSource, this.damage);
+                    victim.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                     // 2. Valor Stun: Stacks AMPLIFIER (effect level), pinning the target at high stacks
                     int currentAmp = 0;
@@ -159,7 +159,7 @@ public class GrandBladeShardEntity extends Projectile {
                         ? serverLevel.damageSources().playerAttack(playerOwner)
                         : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().generic());
 
-                    victim.hurtServer(serverLevel, damageSource, this.damage);
+                    victim.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                     int currentAmp = 0;
                     if (victim.hasEffect(DbaEffects.VALOR_STUN_HOLDER)) {

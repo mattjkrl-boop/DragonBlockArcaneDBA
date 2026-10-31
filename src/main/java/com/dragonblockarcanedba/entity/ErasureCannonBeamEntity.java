@@ -130,7 +130,7 @@ public class ErasureCannonBeamEntity extends Projectile {
                         ), livingOwner);
                     }
 
-                    t.hurtServer(serverLevel, damageSource, this.totalDamage);
+                    t.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.totalDamage)));
 
                     // Concussive impulse & air drag modification
                     com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
@@ -160,7 +160,7 @@ public class ErasureCannonBeamEntity extends Projectile {
                     AABB endAoe = new AABB(end.subtract(4, 4, 4), end.add(4, 4, 4));
                     List<LivingEntity> endTargets = serverLevel.getEntitiesOfClass(LivingEntity.class, endAoe, e -> e.isAlive() && e != finalCaster);
                     for (LivingEntity et : endTargets) {
-                        et.hurtServer(serverLevel, damageSource, this.totalDamage * 0.5f);
+                        et.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.totalDamage * 0.5f)));
                     }
                 }
 

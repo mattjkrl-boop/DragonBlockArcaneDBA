@@ -61,7 +61,7 @@ public class DarknessBladeEntity extends Projectile {
                 List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, splashBox, e -> e.isAlive() && e != owner);
 
                 for (LivingEntity t : targets) {
-                    t.hurtServer(serverLevel, damageSource, this.damage);
+                    t.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
                 }
 
                 // Physical 3D Void Shatter Shockwave & Ground Fissures

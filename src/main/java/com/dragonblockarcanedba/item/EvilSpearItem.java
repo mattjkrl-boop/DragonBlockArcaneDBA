@@ -287,7 +287,7 @@ public class EvilSpearItem extends Item {
                 net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
             );
 
-            t.hurtServer(level, level.damageSources().playerAttack(player), finalDmg);
+            t.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finalDmg)));
 
             // Spawn Physical 3D Hell Hunt Impact Entity (Tectonic Fissures, Obsidian Spikes, Execution Pillar)
             HellHuntImpactEntity impact = new HellHuntImpactEntity(

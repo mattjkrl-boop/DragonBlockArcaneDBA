@@ -246,7 +246,7 @@ public class OxKingsAxeItem extends Item {
                     if (heldTicks % 5 == 0) {
                         PlayerStatsAccessor acc = (PlayerStatsAccessor) player;
                         float auraPressureDmg = 45.0f + (float) (acc.dba$getStrength() * 0.4f);
-                        enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), auraPressureDmg);
+                        enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (auraPressureDmg)));
                         enemy.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 25, 0, false, false, false), player);
                     }
 
@@ -274,7 +274,7 @@ public class OxKingsAxeItem extends Item {
             // 3. Pressure damage after 10s (heldTicks >= 200): 3% current HP per second
             if (heldTicks >= 200) {
                 float pressureDmg = Math.max(1.0f, player.getHealth() * 0.03f / 20.0f);
-                player.hurtServer(serverLevel, serverLevel.damageSources().generic(), pressureDmg);
+                player.hurtServer(serverLevel, serverLevel.damageSources().generic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (pressureDmg)));
             }
 
             // 4. Critical Peak Window (14.0s – 15.0s / 280–300 ticks)
@@ -296,7 +296,7 @@ public class OxKingsAxeItem extends Item {
                 float maxSlamDamage = 2000.0f + (float) (accessor.dba$getStrength() * 5.0f);
                 float recoilDamage = maxSlamDamage * 0.25f;
 
-                player.hurtServer(serverLevel, serverLevel.damageSources().generic(), recoilDamage);
+                player.hurtServer(serverLevel, serverLevel.damageSources().generic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (recoilDamage)));
                 player.stopUsingItem();
 
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -342,7 +342,7 @@ public class OxKingsAxeItem extends Item {
                     for (LivingEntity target : targets) {
                         double dist = Math.sqrt(target.distanceToSqr(player));
                         if (dist <= slamRadius) {
-                            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), peakDamage);
+                            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (peakDamage)));
                             target.addEffect(new MobEffectInstance(DbaEffects.FISSURE_STUN_HOLDER, 140, 1, false, true));
                             target.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), player);
                             target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 60, 2, false, true), player);
@@ -386,7 +386,7 @@ public class OxKingsAxeItem extends Item {
                     for (LivingEntity target : targets) {
                         double dist = Math.sqrt(target.distanceToSqr(player));
                         if (dist <= slamRadius) {
-                            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalSlamDmg);
+                            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalSlamDmg)));
                             target.addEffect(new MobEffectInstance(DbaEffects.FISSURE_STUN_HOLDER, 80, 0, false, true));
                             target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 40, 0, false, false, false), player);
                             target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER, 40, 1, false, true), player);

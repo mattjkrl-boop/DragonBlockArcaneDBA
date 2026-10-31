@@ -136,7 +136,7 @@ public class DimensionalRiftEntity extends Projectile {
                         ? serverLevel.damageSources().playerAttack(playerOwner)
                         : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().magic());
                     
-                    target.hurtServer(serverLevel, damageSource, this.burstDamage);
+                    target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.burstDamage)));
 
                     // Soul Rend heal from AOE: 1% of burst damage per target hit
                     if (owner instanceof Player playerOwner) {
@@ -150,7 +150,7 @@ public class DimensionalRiftEntity extends Projectile {
                     DamageSource tickSource = owner instanceof Player playerOwner
                         ? serverLevel.damageSources().playerAttack(playerOwner)
                         : serverLevel.damageSources().magic();
-                    target.hurtServer(serverLevel, tickSource, 35.0f);
+                    target.hurtServer(serverLevel, tickSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (35.0f)));
                 }
             }
 

@@ -62,7 +62,7 @@ public class AzureLightningEntity extends Projectile {
                     net.minecraft.world.damagesource.DamageSource boltSource = this.getOwner() instanceof LivingEntity owner
                         ? serverLevel.damageSources().indirectMagic(this, owner)
                         : serverLevel.damageSources().lightningBolt();
-                    victim.hurtServer(serverLevel, boltSource, this.damage);
+                    victim.hurtServer(serverLevel, boltSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
                     victim.setDeltaMovement(victim.getDeltaMovement().add(0, 0.4, 0));
                     victim.hurtMarked = true;
                 }

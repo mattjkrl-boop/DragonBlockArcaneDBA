@@ -219,7 +219,7 @@ public class KatanaItem extends Item {
                 final float finalDamage = damage;
                 // Delayed simultaneous strike 0.3s (6 ticks) later
                 level.getServer().execute(() -> {
-                    finalTarget.hurtServer(level, level.damageSources().playerAttack(player), finalDamage);
+                    finalTarget.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finalDamage)));
 
                     // Spawn physical 3D Swift Crescent model & cross-cleave speed cuts on target
                     Vec3 impactPos = finalTarget.position().add(0, finalTarget.getBbHeight() * 0.5, 0);
@@ -381,7 +381,7 @@ public class KatanaItem extends Item {
 
             for (LivingEntity t : targets) {
                 t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
-                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalDamage);
+                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalDamage)));
 
                 // Cross-cleave physical crescent slashes centered on the target
                 Vec3 targetPos = t.position().add(0, t.getBbHeight() * 0.5, 0);

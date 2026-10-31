@@ -102,7 +102,7 @@ public class EvilSpearProjectileEntity extends Projectile {
                 }
 
                 // Deal damage
-                target.hurtServer(serverLevel, damageSource, finalDamage);
+                target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finalDamage)));
 
                 // Apply Marked by Evil for 8 seconds (160 ticks)
                 target.addEffect(new MobEffectInstance(

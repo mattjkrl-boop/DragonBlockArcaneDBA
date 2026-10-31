@@ -110,7 +110,7 @@ public class SickleOfSorrowItem extends Item {
         // Stat-scaled bonus damage: Strength × 3
         float strengthBonus = (float) (accessor.dba$getStrength() * 3.0);
         if (strengthBonus > 0) {
-            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), strengthBonus);
+            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
         }
 
         // Soul Rend: Steal 3% of total damage dealt as healing

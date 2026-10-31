@@ -198,7 +198,7 @@ public class GrandSwordItem extends Item {
             if (dist <= finisherRadius) {
                 double dot = look.dot(toEnemy.normalize());
                 if (dot > 0.35) { // Frontal sweep arc
-                    enemy.hurtServer(level, level.damageSources().playerAttack(player), finisherDamage);
+                    enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finisherDamage)));
 
                     // Apply invisible cinematic tracking effect so Delayed Damage combo locks during sweep
                     enemy.addEffect(new net.minecraft.world.effect.MobEffectInstance(

@@ -208,7 +208,7 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
                 );
 
                 // Small magic hit damage
-                target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, (LivingEntity) owner), 35.0f);
+                target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, (LivingEntity) owner), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (35.0f)));
 
                 // Lifesteal & Blood Shield (Soul Rend Refinement)
                 if (owner instanceof Player player) {

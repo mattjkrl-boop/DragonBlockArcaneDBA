@@ -159,7 +159,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
                 net.minecraft.world.damagesource.DamageSource shardSource = this.getOwner() instanceof LivingEntity livingOwner
                     ? this.level().damageSources().mobProjectile(this, livingOwner)
                     : this.level().damageSources().magic();
-                target.hurtServer((ServerLevel) this.level(), shardSource, 100.0f);
+                target.hurtServer((ServerLevel) this.level(), shardSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (100.0f)));
                 target.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 60, 0, false, false), this.getOwner());
                 
                 // Recoil / degradation

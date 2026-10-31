@@ -119,7 +119,7 @@ public class DimensionalWarpRiftEntity extends Projectile {
                         ? serverLevel.damageSources().playerAttack(playerOwner)
                         : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().magic());
 
-                    target.hurtServer(serverLevel, damageSource, this.burstDamage);
+                    target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.burstDamage)));
                     target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 200, 1, false, true), owner);
 
                     // MC 26.2 Physics: Spatial rift warp friction & drag distortion

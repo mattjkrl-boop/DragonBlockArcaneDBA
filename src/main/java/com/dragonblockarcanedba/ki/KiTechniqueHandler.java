@@ -150,7 +150,7 @@ public class KiTechniqueHandler {
             if (!hit.isEmpty()) {
                 hitLength = i;
                 for (LivingEntity target : hit) {
-                    target.hurtServer(level, player.damageSources().indirectMagic(player, player), (float) damage);
+                    target.hurtServer(level, player.damageSources().indirectMagic(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) damage)));
                 }
                 break;
             }
@@ -218,7 +218,7 @@ public class KiTechniqueHandler {
                 if (!hit.isEmpty()) {
                     hitLength = i;
                     for (LivingEntity target : hit) {
-                        target.hurtServer(level, player.damageSources().indirectMagic(player, player), (float) perBeam);
+                        target.hurtServer(level, player.damageSources().indirectMagic(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) perBeam)));
                     }
                     break;
                 }
@@ -263,13 +263,13 @@ public class KiTechniqueHandler {
                 if (dist <= radius) {
                     double falloff = 1.0 - (dist / radius);
                     double entityDmg = totalDamage * falloff;
-                    target.hurtServer(level, player.damageSources().indirectMagic(player, player), (float) entityDmg);
+                    target.hurtServer(level, player.damageSources().indirectMagic(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) entityDmg)));
                 }
             }
         }
 
         // Self damage
-        player.hurtServer(level, player.damageSources().magic(), (float) selfDamage);
+        player.hurtServer(level, player.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) selfDamage)));
 
         // Spawn visual explosion entity
         com.dragonblockarcanedba.entity.KiExplosionEntity explosion = new com.dragonblockarcanedba.entity.KiExplosionEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_EXPLOSION, level);

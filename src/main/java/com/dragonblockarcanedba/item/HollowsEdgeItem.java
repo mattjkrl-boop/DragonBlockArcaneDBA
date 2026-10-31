@@ -249,7 +249,7 @@ public class HollowsEdgeItem extends Item {
         List<LivingEntity> enemiesPassed = level.getEntitiesOfClass(LivingEntity.class, pathBox, e -> e.isAlive() && e != player);
 
         for (LivingEntity enemy : enemiesPassed) {
-            enemy.hurtServer(level, level.damageSources().mobAttack(player), baseDmg);
+            enemy.hurtServer(level, level.damageSources().mobAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (baseDmg)));
             enemy.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 80, 0, false, true));
             enemy.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 80, 0, false, false, false), player);
         }

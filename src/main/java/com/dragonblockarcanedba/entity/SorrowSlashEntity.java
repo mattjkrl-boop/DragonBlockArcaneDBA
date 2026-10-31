@@ -102,7 +102,7 @@ public class SorrowSlashEntity extends Projectile {
                 hitEntityIds.add(target.getId());
 
                 // Apply damage
-                target.hurtServer(serverLevel, damageSource, this.damage);
+                target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                 // Apply Melting III (amplifier 2) for 15s (300 ticks)
                 target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 2, false, true), owner);

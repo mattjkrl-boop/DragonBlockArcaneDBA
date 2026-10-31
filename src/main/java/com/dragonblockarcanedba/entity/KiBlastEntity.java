@@ -51,7 +51,7 @@ public class KiBlastEntity extends ThrowableProjectile {
         if (!this.level().isClientSide()) {
             if (result.getEntity() instanceof LivingEntity target) {
                 target.hurtServer((net.minecraft.server.level.ServerLevel) this.level(), 
-                        this.damageSources().indirectMagic(this, this.getOwner()), getDamage());
+                        this.damageSources().indirectMagic(this, this.getOwner()), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (getDamage())));
             }
             explode();
         }

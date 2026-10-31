@@ -269,7 +269,7 @@ public class ZSwordItem extends Item {
                     double dist = player.distanceTo(target);
                     if (dist <= aoeRadius) {
                         // Slam damage
-                        target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), totalSlamDamage);
+                        target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalSlamDamage)));
 
                         // Heavily slowed & shattered by shockwave
                         target.addEffect(new MobEffectInstance(DbaEffects.EARTH_SHATTER_HOLDER, 140, 0, false, true), player);

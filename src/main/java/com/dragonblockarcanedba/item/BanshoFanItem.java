@@ -122,7 +122,7 @@ public class BanshoFanItem extends Item {
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) serverPlayer;
             float strengthBonus = (float) (accessor.dba$getStrength() * 1.5);
             if (strengthBonus > 0) {
-                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), strengthBonus);
+                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
             }
 
             // Cyclone Slash: 30% chance to summon a physical 3D emerald cyclone entity
@@ -145,7 +145,7 @@ public class BanshoFanItem extends Item {
                 );
 
                 for (LivingEntity nearby : nearbyTargets) {
-                    nearby.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), cycloneDamage);
+                    nearby.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (cycloneDamage)));
                     // Knockback nearby targets too
                     Vec3 knockback = nearby.position().subtract(target.position()).normalize().scale(2.0);
                     nearby.setDeltaMovement(nearby.getDeltaMovement().add(knockback.x, 0.5, knockback.z));

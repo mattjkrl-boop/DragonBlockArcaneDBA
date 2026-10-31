@@ -99,7 +99,7 @@ public class BanshoCycloneEntity extends Projectile {
                         ? serverLevel.damageSources().playerAttack(playerOwner)
                         : (this.getOwner() instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().magic());
 
-                    target.hurtServer(serverLevel, source, this.slashDamage * 0.35f);
+                    target.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.slashDamage * 0.35f)));
 
                     // Apply Bleeding I (amplifier 0) for 5 seconds (100 ticks)
                     target.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 100, 0, false, true), this.getOwner());

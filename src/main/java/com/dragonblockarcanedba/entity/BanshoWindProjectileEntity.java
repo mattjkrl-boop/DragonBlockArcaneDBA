@@ -154,7 +154,7 @@ public class BanshoWindProjectileEntity extends Projectile {
             hitEntityIds.add(target.getId());
 
             // Deal impact damage
-            target.hurtServer(serverLevel, damageSource, this.damage);
+            target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
             // Apply Bleeding III (amplifier 2) for 20 seconds (400 ticks)
             target.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 400, 2, false, true), owner);

@@ -123,12 +123,12 @@ public class WhisStaffItem extends Item {
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) serverPlayer;
             float dexBonus = (float) (accessor.dba$getDexterity() * 2.0);
             if (dexBonus > 0) {
-                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), dexBonus);
+                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (dexBonus)));
             }
 
             // Temporal Shatter: 1.5% of target's max HP as bonus magic damage
             float temporalDamage = target.getMaxHealth() * 0.015f;
-            target.hurtServer(serverLevel, serverLevel.damageSources().magic(), temporalDamage);
+            target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (temporalDamage)));
 
             // Physical 3D Time Shatter Entity — Prismatic Glass & Chrono-Mirror Burst
             TimeShatterEntity shatter = new TimeShatterEntity(
@@ -184,7 +184,7 @@ public class WhisStaffItem extends Item {
             for (LivingEntity target : targets) {
                 if (player.distanceTo(target) <= AOE_RADIUS) {
                     // Instant burst magic damage
-                    target.hurtServer(serverLevel, serverLevel.damageSources().magic(), burstDamage);
+                    target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
 
                     // Temporal Stasis: Custom time paralysis for 3 seconds (60 ticks)
                     target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, 60, 0, false, true), player);

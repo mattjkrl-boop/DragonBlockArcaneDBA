@@ -76,7 +76,7 @@ public class OxFissureEntity extends Projectile {
 
                 float hitDamage = this.damagePerSec * 0.5f;
                 for (LivingEntity enemy : enemies) {
-                    enemy.hurtServer(serverLevel, damageSource, hitDamage);
+                    enemy.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (hitDamage)));
                     enemy.igniteForSeconds(2.0f);
                 }
             }
