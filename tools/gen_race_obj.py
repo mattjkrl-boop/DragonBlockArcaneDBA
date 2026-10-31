@@ -195,4 +195,7 @@ def gen_bbmodel(race,out):
     open(out,'w').write('\n'.join(L)+'\n')
 
 for r in sys.argv[1:]:
-    (gen_bbmodel if (BB/(r+'.bbmodel')).exists() else gen)(r,O+r+'.obj')
+    bbp=BB/(r+'.bbmodel')
+    if bbp.exists() and json.load(open(bbp))['meta'].get('model_format')=='free':
+        print('skip',r,'(smooth mesh, exported by tools/gen_smooth_race.py)'); continue
+    (gen_bbmodel if bbp.exists() else gen)(r,O+r+'.obj')

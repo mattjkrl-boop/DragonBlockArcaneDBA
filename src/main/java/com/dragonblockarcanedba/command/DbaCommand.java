@@ -113,6 +113,9 @@ public class DbaCommand {
                     )
                 )
             )
+            .then(Commands.literal("color")
+                .then(colorPart("skin")).then(colorPart("hair")).then(colorPart("eye"))
+            )
             .then(Commands.literal("ap")
                 .then(Commands.literal("add").then(Commands.argument("player", EntityArgument.player()).then(Commands.argument("amount", StringArgumentType.word()).executes(context -> {
                     ServerPlayer target = EntityArgument.getPlayer(context, "player");
@@ -442,5 +445,32 @@ public class DbaCommand {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("Invalid amount: '" + original + "'. Must be a whole number.");
         }
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<net.minecraft.commands.CommandSourceStack> colorPart(String part) {
+        return Commands.literal(part)
+            .then(Commands.argument("player", EntityArgument.player())
+                .then(Commands.argument("hex", StringArgumentType.word())
+                    .executes(context -> {
+                        ServerPlayer target = EntityArgument.getPlayer(context, "player");
+                        String hex = StringArgumentType.getString(context, "hex");
+                        if (hex.startsWith("#")) hex = hex.substring(1);
+                        if (!hex.matches("[0-9a-fA-F]{6}")) {
+                            context.getSource().sendFailure(Component.literal("Color must be a 6 digit hex like 1A1A1A"));
+                            return 0;
+                        }
+                        PlayerStatsAccessor accessor = (PlayerStatsAccessor) target;
+                        String value = "#" + hex.toUpperCase();
+                        switch (part) {
+                            case "hair" -> accessor.dba$setHairColor(value);
+                            case "eye" -> accessor.dba$setEyeColor(value);
+                            default -> accessor.dba$setSkinColor(value);
+                        }
+                        accessor.dba$syncStats();
+                        context.getSource().sendSuccess(() -> Component.literal("Set " + target.getName().getString() + "'s " + part + " color to " + value), true);
+                        return 1;
+                    })
+                )
+            );
     }
 }
