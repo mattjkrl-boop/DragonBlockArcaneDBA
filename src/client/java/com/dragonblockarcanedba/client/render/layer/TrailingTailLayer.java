@@ -228,21 +228,11 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         } else if (race.contains("bio_android") || race.contains("cell")) {
             baseTailColor = 0xFF2E7D32; // Cell emerald carapace
         } else {
-            // Saiyan & Half-Saiyan monkey tail: dynamically matches DBZ transformations!
+            // Saiyan & Half-Saiyan monkey tail: stays brown fur in every Super Saiyan form (only the hair changes);
+            // SSJ4 keeps its canonical crimson body fur
             if (formStr.contains("ssj4") || formStr.contains("super_saiyan_4")) {
-                baseTailColor = 0xFFC41528; // SSJ4 primal crimson fur
-            } else if (formStr.contains("super_saiyan_blue") || formStr.contains("ssj_blue") || formStr.contains("ssjb")) {
-                baseTailColor = 0xFF00E5FF; // SSJ Blue divine cyan fur
-            } else if (formStr.contains("super_saiyan_god") || formStr.contains("ssj_god")) {
-                baseTailColor = 0xFFFF204E; // SSJ God fiery magenta fur
-            } else if (formStr.contains("ultra_instinct")) {
-                baseTailColor = 0xFFE8EEF8; // Ultra Instinct platinum silver fur
-            } else if (formStr.contains("super_saiyan") || formStr.contains("ssj")) {
-                baseTailColor = 0xFFFFD700; // Super Saiyan radiant golden fur!
-            } else if (formStr.contains("kaioken")) {
-                baseTailColor = 0xFF992222; // Kaioken aura infused crimson-brown fur
+                baseTailColor = 0xFFC41528;
             } else {
-                // Base form monkey tail is always brown fur, independent of hair color (Goku style)
                 baseTailColor = 0xFF6B4226;
             }
         }
@@ -427,11 +417,7 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                         segmentColor = scaleRgb(segmentColor, 0.82F);
                     }
                     if (i == segmentCount - 1) {
-                        if (formStr.contains("super_saiyan") || formStr.contains("ssj")) {
-                            segmentColor = 0xFFFFEA66; // Bright tip on golden fur
-                        } else {
-                            segmentColor = 0xFF543118; // Darker brown tuft tip
-                        }
+                        segmentColor = scaleRgb(baseTailColor, 0.78F); // darker tuft tip in the tail's own fur
                     }
                 }
 

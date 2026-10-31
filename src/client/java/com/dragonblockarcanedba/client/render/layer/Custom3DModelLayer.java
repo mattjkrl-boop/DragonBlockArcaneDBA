@@ -106,11 +106,28 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
             ObjMesh.LimbGroup hairLimb = mesh.getLimb("hair");
             if (finalFormForHair != null && finalFormForHair.getPath().contains("super_saiyan_3") && mesh.getLimb("hair_ssj3") != null) {
                 hairLimb = mesh.getLimb("hair_ssj3");
+            } else if (finalFormForHair != null && finalFormForHair.getPath().contains("super_saiyan_2") && mesh.getLimb("hair_ssj2") != null) {
+                hairLimb = mesh.getLimb("hair_ssj2");
             }
-            renderLimb(hairLimb, humanoidModel.head, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            if (hairLimb != null) {
+                // Subtle hair sway: slow idle breathing bob plus a bounce that follows the walk cycle,
+                // pivoting at the middle of the head so the hair stays seated on the scalp
+                float age = state.ageInTicks;
+                float walk = Math.min(1.0f, state.walkAnimationSpeed);
+                float swayX = (float) (Math.sin(age * 0.08f) * 0.025f + Math.abs(Math.sin(state.walkAnimationPos * 0.6662f)) * 0.06f * walk);
+                float swayZ = (float) (Math.sin(age * 0.05f + 1.3f) * 0.02f + Math.sin(state.walkAnimationPos * 0.6662f) * 0.03f * walk);
+                stack.pushPose();
+                humanoidModel.head.translateAndRotate(stack);
+                stack.translate(0.0f, -0.25f, 0.0f);
+                stack.mulPose(com.mojang.math.Axis.XP.rotation(swayX));
+                stack.mulPose(com.mojang.math.Axis.ZP.rotation(swayZ));
+                stack.translate(0.0f, 0.25f, 0.0f);
+                hairLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f);
+                stack.popPose();
+            }
             renderLimb(mesh.getLimb("body"), humanoidModel.body, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
             // Modelled-hair races (blocky Saiyan) hang their arms slightly away from the body
-            float armSplay = mesh.hasModelledHair() ? 0.10f : 0.0f;
+            float armSplay = mesh.hasModelledHair() ? 0.16f : 0.0f;
             renderLimb(mesh.getLimb("rightarm"), humanoidModel.rightArm, stack, buffer, packedLight, armSplay, 1.0f, 1.0f, 1.0f, 1.0f);
             renderLimb(mesh.getLimb("leftarm"), humanoidModel.leftArm, stack, buffer, packedLight, -armSplay, 1.0f, 1.0f, 1.0f, 1.0f);
             renderLimb(mesh.getLimb("rightleg"), humanoidModel.rightLeg, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);

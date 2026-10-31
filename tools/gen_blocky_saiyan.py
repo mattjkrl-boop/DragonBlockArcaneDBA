@@ -90,20 +90,44 @@ HAIR_SPIKES = [
     ('back_lo_side', [2.8, 27.2, 3.6], 6.5, 4.4, (116, 0, -40), True),
 ]
 BANGS = [('bang_in', [1.1, 32.9, -4.3], 4.0, 3.2, (6, 0, 186)), ('bang_out', [3.2, 32.7, -4.2], 3.8, 3.0, (8, 0, 208))]
-for hb in ('hair', 'hair_ssj3'):
+SSJ2_SPIKES = [
+    # SSJ2: spikier and more upright, thinner and longer, a single bang lock
+    ('top', [0.6, 32.4, 0.4], 13.5, 5.2, (16, 0, -4), False),
+    ('upper', [2.4, 32.0, 0.2], 13.0, 4.6, (12, 0, -20), True),
+    ('upper2', [1.4, 32.2, 2.2], 12.0, 4.4, (30, 0, -12), True),
+    ('side_hi', [3.8, 30.8, 0.6], 11.5, 4.2, (10, 0, -44), True),
+    ('side', [4.0, 28.8, 1.2], 9.0, 4.0, (8, 0, -68), True),
+    ('back_hi', [0, 31.0, 3.4], 12.0, 5.0, (46, 0, 0), False),
+    ('back_side', [2.6, 30.0, 3.4], 10.5, 4.4, (58, 0, -34), True),
+    ('back_lo', [0, 27.6, 3.9], 8.5, 4.6, (108, 0, 0), False),
+    ('back_lo_side', [2.8, 27.2, 3.6], 7.5, 4.0, (104, 0, -36), True),
+]
+for hb in ('hair', 'hair_ssj3', 'hair_ssj2'):
     cube(hb + '_top', hb, 'hair', [-4.4, 30.6, -4.5], [4.4, 33.0, 4.5])
     cube(hb + '_back', hb, 'hair', [-4.45, 25.0, 0.2], [4.45, 32.2, 4.6])
     mirror(hb + '_side', (hb, hb), 'hair', [3.9, 29.2, -3.6], [4.5, 32.0, 1.0])
     mirror(hb + '_burn', (hb, hb), 'hair', [3.9, 27.2, -3.2], [4.4, 29.4, -1.4])
-    for n, bs, L, w, r, both in HAIR_SPIKES:
+    for n, bs, L, w, r, both in (SSJ2_SPIKES if hb == 'hair_ssj2' else HAIR_SPIKES):
         spike(n, bs, L, w, r, both, bone=hb)
-    for n, bs, L, w, r in BANGS:
-        spike(n, bs, L, w, r, True, bone=hb)
+    if hb == 'hair_ssj2':
+        spike('bang_one', [1.4, 32.9, -4.4], 6.2, 3.0, (4, 0, 196), False, bone=hb)
+    else:
+        for n, bs, L, w, r in BANGS:
+            spike(n, bs, L, w, r, True, bone=hb)
+# SSJ2 electricity: small zigzag bolts crackling around the crown (unmasked, stay electric blue-white)
+for k, (bx, by, bz, ry) in enumerate([(6.2, 33.5, -0.5, 0), (-6.6, 31.5, 1.0, 0), (2.5, 40.5, -1.0, 90), (-3.5, 37.0, 4.5, 90), (7.0, 27.5, 2.0, 0)]):
+    zz = [(0, 0, 1.8, 18), (0.9, 1.6, 1.8, -28), (0.2, 3.1, 1.6, 22)]
+    for q, (dx, dy, l, rz) in enumerate(zz):
+        o = [bx + dx, by + dy, bz]
+        cube('hair_ssj2_bolt%d_%d' % (k, q), 'hair_ssj2', 'spark', [o[0] - 0.4, o[1], o[2] - 0.4], [o[0] + 0.4, o[1] + l, o[2] + 0.4], o, (0, ry, rz))
 # SSJ3 long mane: thick tapered locks from the back of the scalp down past the waist
 cube('hair_ssj3_mane_root', 'hair_ssj3', 'hair', [-5.0, 22.0, 1.0], [5.0, 31.5, 6.0])
 spike('mane_c', [0, 26.0, 4.8], 22.0, 8.4, (168, 0, 0), False, bone='hair_ssj3')
 spike('mane_s', [2.8, 26.5, 4.0], 19.0, 6.4, (168, 0, 4), True, bone='hair_ssj3')
 spike('mane_o', [4.2, 28.0, 2.6], 15.0, 4.6, (170, 0, 7), True, bone='hair_ssj3')
+# front-visible mane: wide locks falling past the ears to the shoulders and flaring out
+spike('mane_f', [4.5, 29.0, -0.6], 11.0, 3.8, (176, 0, 14), True, bone='hair_ssj3')
+spike('mane_w', [5.0, 28.0, 1.6], 14.0, 4.6, (172, 0, 18), True, bone='hair_ssj3')
 
 # Tail preview (Blockbench only; the runtime tail is the segmented TrailingTailLayer)
 pts = [(0, 13.5, 3.0), (0, 12.2, 5.6), (0, 10.0, 7.8), (0, 7.4, 9.4), (0, 4.8, 10.6), (0, 2.8, 12.6), (0, 2.6, 15.2), (0, 4.4, 17.0), (0, 6.6, 17.2)]
@@ -222,6 +246,8 @@ def paint_texel(c, fn, s, t, W, H, i, j, P):
     if m in ('tail', 'tail_dark', 'tail_tip'):
         k = (0.85 if m == 'tail_dark' else 1.0) * (0.7 if m == 'tail_tip' else 1.0) * (0.9 + 0.15 * n)
         return mul(BROWN, k), None
+    if m == 'spark':
+        return ((235, 250, 255) if (i + j) % 2 == 0 else (120, 200, 255)), None
     if m == 'hair':
         # grayscale value, multiplied by the hair tint in game; lighter toward spike tips, strand streaks
         v = HAIR_V * (0.86 + 0.14 * (1 - t)) * (0.9 + 0.12 * n)
@@ -290,11 +316,11 @@ for c in cubes:
                 MP[u0 + i, v0 + j] = MASKC[ch]
 
 # ------------------------------------------------------------------ OBJ export
-GROUP = {'right_arm': 'rightarm', 'body': 'body', 'left_arm': 'leftarm', 'right_leg': 'rightleg', 'head': 'head', 'left_leg': 'leftleg', 'hair': 'hair', 'hair_ssj3': 'hair_ssj3'}
+GROUP = {'right_arm': 'rightarm', 'body': 'body', 'left_arm': 'leftarm', 'right_leg': 'rightleg', 'head': 'head', 'left_leg': 'leftleg', 'hair': 'hair', 'hair_ssj3': 'hair_ssj3', 'hair_ssj2': 'hair_ssj2'}
 NORM = {'north': (0, 0, -1), 'south': (0, 0, 1), 'east': (1, 0, 0), 'west': (-1, 0, 0), 'up': (0, 1, 0), 'down': (0, -1, 0)}
 L = ['# exported from assets/blockbench/races/saiyan.bbmodel by tools/gen_blocky_saiyan.py']
 vi = 1
-for g in ['rightarm', 'body', 'leftarm', 'rightleg', 'head', 'hair', 'hair_ssj3', 'leftleg']:
+for g in ['rightarm', 'body', 'leftarm', 'rightleg', 'head', 'hair', 'hair_ssj3', 'hair_ssj2', 'leftleg']:
     L.append('o ' + g)
     for c in cubes:
         if not c['export'] or GROUP[c['bone']] != g: continue
@@ -320,12 +346,12 @@ for c in cubes:
     els.append({'name': c['name'], 'type': 'cube', 'uuid': uid(c['name']), 'from': c['f'], 'to': c['t'], 'origin': c['o'],
                 'rotation': c['r'], 'autouv': 0, 'color': 0, 'export': c['export'], 'box_uv': False, 'rescale': False, 'locked': False,
                 'faces': {fn: {'uv': list(c['uv'][fn]), 'texture': 0} for fn in c['uv']}})
-PIV = {'body': [0, 24, 0], 'head': [0, 24, 0], 'hair': [0, 24, 0], 'hair_ssj3': [0, 24, 0], 'right_arm': [6.5, 22, 0], 'left_arm': [-6.5, 22, 0],
+PIV = {'body': [0, 24, 0], 'head': [0, 24, 0], 'hair': [0, 24, 0], 'hair_ssj3': [0, 24, 0], 'hair_ssj2': [0, 24, 0], 'right_arm': [6.5, 22, 0], 'left_arm': [-6.5, 22, 0],
        'right_leg': [2.5, 12, 0], 'left_leg': [-2.5, 12, 0], 'tail': [0, 13.5, 3]}
 def bone(name, kids=()):
     return {'name': name, 'uuid': uid('bone-' + name), 'origin': PIV[name], 'rotation': [0, 0, 0], 'export': True, 'isOpen': True,
             'children': [uid(c['name']) for c in cubes if c['bone'] == name] + list(kids)}
-outliner = [bone('body', [bone('head', [bone('hair'), dict(bone('hair_ssj3'), visibility=False)]), bone('right_arm'), bone('left_arm'), bone('right_leg'), bone('left_leg'), bone('tail')])]
+outliner = [bone('body', [bone('head', [bone('hair'), dict(bone('hair_ssj3'), visibility=False), dict(bone('hair_ssj2'), visibility=False)]), bone('right_arm'), bone('left_arm'), bone('right_leg'), bone('left_leg'), bone('tail')])]
 bb = {'meta': {'format_version': '4.10', 'model_format': 'bedrock', 'box_uv': False}, 'name': 'saiyan',
       'dba_exporter': 'tools/gen_blocky_saiyan.py',
       'geometry_name': 'dba.saiyan', 'visible_box': [3, 3.5, 1.25], 'resolution': {'width': TEX, 'height': TEX},
