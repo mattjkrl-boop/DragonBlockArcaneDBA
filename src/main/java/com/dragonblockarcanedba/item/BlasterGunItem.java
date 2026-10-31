@@ -39,7 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Blaster Gun — Energy Firearm.
  * Real ammunition economy, rapid energy projectiles, heat buildup, charged shots, and devastating beam fire.
  */
-public class BlasterGunItem extends Item {
+public class BlasterGunItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_RIGHT_CHARGE_TICKS = 100; // 5 seconds
     public static final Map<UUID, ErasureChargeOrbEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
 

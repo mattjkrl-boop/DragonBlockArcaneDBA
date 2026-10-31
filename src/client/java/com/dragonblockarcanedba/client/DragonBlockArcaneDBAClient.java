@@ -46,6 +46,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        com.dragonblockarcanedba.client.render.geo.DbaGeoWeaponRenderers.init();
         net.minecraft.client.gui.screens.MenuScreens.register(
             com.dragonblockarcanedba.inventory.DbaMenus.GRAVITY_TRAINING,
             com.dragonblockarcanedba.client.gui.GravityTrainingScreen::new

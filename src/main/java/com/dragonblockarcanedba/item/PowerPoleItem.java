@@ -30,7 +30,7 @@ import java.util.List;
 
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 
-public class PowerPoleItem extends Item {
+public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
 
     public PowerPoleItem(Properties properties) {
         super(properties.attributes(createModifiers()));

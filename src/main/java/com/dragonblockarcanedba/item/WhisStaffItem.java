@@ -48,7 +48,7 @@ import java.util.List;
  * Unbreakable legendary weapon. No durability.
  * Ki Drain: 100% per minute (smooth).
  */
-public class WhisStaffItem extends Item {
+public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     private static final double AOE_RADIUS = 12.0;
 
     public WhisStaffItem(Properties properties) {

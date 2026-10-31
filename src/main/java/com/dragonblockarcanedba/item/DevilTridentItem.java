@@ -24,7 +24,7 @@ import java.util.Map;
 import com.dragonblockarcanedba.util.SwarmHelper;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 
-public class DevilTridentItem extends Item {
+public class DevilTridentItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public DevilTridentItem(Properties properties) {
         super(properties.attributes(createModifiers()));
     }
