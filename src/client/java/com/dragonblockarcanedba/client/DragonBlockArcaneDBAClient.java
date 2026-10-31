@@ -40,6 +40,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        com.dragonblockarcanedba.client.dev.DevPreviewCamera.register();
         com.dragonblockarcanedba.client.render.geo.DbaGeoWeaponRenderers.init();
         com.dragonblockarcanedba.client.render.geo.DbaDragonRenderers.init();
         net.minecraft.client.gui.screens.MenuScreens.register(

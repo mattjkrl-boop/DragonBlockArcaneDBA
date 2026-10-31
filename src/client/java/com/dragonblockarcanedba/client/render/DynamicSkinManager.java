@@ -134,7 +134,7 @@ public final class DynamicSkinManager {
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int baseAbgr = baseImage.getPixel(x, y);
-                int baseArgb = ARGB.fromABGR(baseAbgr);
+                int baseArgb = baseAbgr; // NativeImage.getPixel returns ARGB in 26.x
                 int baseA = ARGB.alpha(baseArgb);
 
                 if (baseA == 0) {
@@ -143,7 +143,7 @@ public final class DynamicSkinManager {
                 }
 
                 int maskAbgr = maskImage.getPixel(x, y);
-                int maskArgb = ARGB.fromABGR(maskAbgr);
+                int maskArgb = maskAbgr;
                 int maskR = ARGB.red(maskArgb);
                 int maskG = ARGB.green(maskArgb);
                 int maskB = ARGB.blue(maskArgb);
@@ -174,7 +174,7 @@ public final class DynamicSkinManager {
                     finalB = Math.min(255, Math.round(eB * eLum));
                 }
 
-                out.setPixel(x, y, ARGB.toABGR(ARGB.color(baseA, finalR, finalG, finalB)));
+                out.setPixel(x, y, ARGB.color(baseA, finalR, finalG, finalB));
             }
         }
 
