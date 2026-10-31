@@ -198,8 +198,10 @@ public class ObjMesh {
         Map<String, float[]> pivots = new HashMap<>();
         pivots.put("body", new float[]{bodyMidX, bodyTopY, bodyMidZ});
         pivots.put("head", new float[]{bodyMidX, headB[2], bodyMidZ}); // headB[2] = head bottom Y = neck
-        pivots.put("rightarm", new float[]{rArmB[1], rArmB[3], (rArmB[4] + rArmB[5]) * 0.5f}); // inner shoulder
-        pivots.put("leftarm", new float[]{lArmB[0], lArmB[3], (lArmB[4] + lArmB[5]) * 0.5f}); // inner shoulder
+        // Vanilla arm pivots sit 1 of 4 pixels in from the inner edge and 2 of 12 pixels below the shoulder top.
+        float twoPx = Math.max(0.001f, bodyTopY - bodyB[2]) / 6.0f;
+        pivots.put("rightarm", new float[]{rArmB[1] - (rArmB[1] - rArmB[0]) * 0.25f, rArmB[3] - twoPx, (rArmB[4] + rArmB[5]) * 0.5f});
+        pivots.put("leftarm", new float[]{lArmB[0] + (lArmB[1] - lArmB[0]) * 0.25f, lArmB[3] - twoPx, (lArmB[4] + lArmB[5]) * 0.5f});
         pivots.put("rightleg", new float[]{(rLegB[0] + rLegB[1]) * 0.5f, rLegB[3], (rLegB[4] + rLegB[5]) * 0.5f}); // hip center
         pivots.put("leftleg", new float[]{(lLegB[0] + lLegB[1]) * 0.5f, lLegB[3], (lLegB[4] + lLegB[5]) * 0.5f}); // hip center
 
@@ -279,14 +281,15 @@ public class ObjMesh {
 
                 if (count == 4) {
                     QuadFace q = new QuadFace();
-                    // Reversed winding order for correct face orientation in Minecraft's renderer
-                    int[] winding = new int[]{0, 3, 2, 1};
+                    // OBJ (Y up, front +Z) maps to model space (Y down, front -Z) by a 180 degree turn about X,
+                    // which is a proper rotation, so the original winding is kept.
+                    int[] winding = new int[]{0, 1, 2, 3};
                     for (int w = 0; w < 4; w++) {
                         int i = winding[w];
                         float[] v = vertices.get(vIdx[i]);
                         q.x[w] = (v[0] - px) * scale;
                         q.y[w] = -(v[1] - py) * scale;
-                        q.z[w] = (v[2] - pz) * scale;
+                        q.z[w] = -(v[2] - pz) * scale;
 
                         if (vtIdx[i] >= 0 && vtIdx[i] < texCoords.size()) {
                             float[] vt = texCoords.get(vtIdx[i]);
@@ -298,20 +301,20 @@ public class ObjMesh {
                             float[] vn = normals.get(vnIdx[i]);
                             q.nx[w] = vn[0];
                             q.ny[w] = -vn[1];
-                            q.nz[w] = vn[2];
+                            q.nz[w] = -vn[2];
                         }
                     }
                     group.faces.add(q);
                 } else if (count == 3) {
                     QuadFace q = new QuadFace();
-                    // Reversed winding for tris (degenerate quad: last vertex doubled)
-                    int[] winding = new int[]{0, 2, 1, 1};
+                    // Tris become a degenerate quad with the last vertex doubled
+                    int[] winding = new int[]{0, 1, 2, 2};
                     for (int w = 0; w < 4; w++) {
                         int i = winding[w];
                         float[] v = vertices.get(vIdx[i]);
                         q.x[w] = (v[0] - px) * scale;
                         q.y[w] = -(v[1] - py) * scale;
-                        q.z[w] = (v[2] - pz) * scale;
+                        q.z[w] = -(v[2] - pz) * scale;
 
                         if (vtIdx[i] >= 0 && vtIdx[i] < texCoords.size()) {
                             float[] vt = texCoords.get(vtIdx[i]);
@@ -323,7 +326,7 @@ public class ObjMesh {
                             float[] vn = normals.get(vnIdx[i]);
                             q.nx[w] = vn[0];
                             q.ny[w] = -vn[1];
-                            q.nz[w] = vn[2];
+                            q.nz[w] = -vn[2];
                         }
                     }
                     group.faces.add(q);
