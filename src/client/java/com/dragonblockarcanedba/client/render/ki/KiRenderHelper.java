@@ -19,12 +19,12 @@ public final class KiRenderHelper {
     /** White texture used as a canvas for vertex-colored rendering. */
     public static final Identifier WHITE_TEXTURE = DragonBlockArcaneDBA.id("textures/entity/ki_white.png");
 
-    /** Emissive translucent render type — glows at full brightness, supports transparency. */
     /** Additive full-bright glow (eyes blend). Use for halos and outer glow shells where alpha fades are not needed. */
     public static RenderType kiAdditiveType() {
         return RenderTypes.eyes(WHITE_TEXTURE);
     }
 
+    /** Emissive translucent render type, glows at full brightness and supports transparency. */
     public static RenderType kiRenderType() {
         return RenderTypes.entityTranslucentEmissive(WHITE_TEXTURE);
     }
@@ -85,7 +85,7 @@ public final class KiRenderHelper {
         vertex(buffer, mat, pose, x2, y1, z1, r, g, b, a, 0, 1, 1, 0, 0);
     }
 
-    private static void vertex(VertexConsumer buffer, Matrix4f mat, PoseStack.Pose pose,
+    public static void vertex(VertexConsumer buffer, Matrix4f mat, PoseStack.Pose pose,
                                 float x, float y, float z,
                                 float r, float g, float b, float a,
                                 float u, float v,

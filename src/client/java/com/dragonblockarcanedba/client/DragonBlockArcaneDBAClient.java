@@ -435,6 +435,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(com.dragonblockarcanedba.network.ScreenShakePayload.TYPE, (payload, context) ->
             com.dragonblockarcanedba.client.fx.ScreenShakeHandler.trigger(payload.intensity(), payload.durationTicks(), payload.hitstopTicks()));
         ClientTickEvents.END_CLIENT_TICK.register(client -> com.dragonblockarcanedba.client.fx.ScreenShakeHandler.tick());
+        com.dragonblockarcanedba.client.fx.SwingTrailRenderer.register();
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openMenuKey.consumeClick()) {
                 if (client.player != null) {
