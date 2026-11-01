@@ -114,8 +114,36 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
         }
     }
 
+    /** Damage one shard deals per hit: flat 100 plus half the owner's Strength. */
+    public static float shardDamage(Player player) {
+        float damage = 100.0f;
+        if (player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor) {
+            damage += (float) (accessor.dba$getStrength() * 0.5);
+        }
+        return damage;
+    }
+
     public static void fireLasers(Player player) {
         if (!player.level().isClientSide()) {
+            // The lasers were free and spammable at 750 damage a click. They now cost
+            // Ki and carry a short cooldown like the other weapons' click abilities.
+            ItemStack tridentStack = player.getMainHandItem().getItem() instanceof DevilTridentItem
+                ? player.getMainHandItem() : player.getOffhandItem();
+            if (tridentStack.getItem() instanceof DevilTridentItem && player.getCooldowns().isOnCooldown(tridentStack)) {
+                return;
+            }
+            if (!WeaponDrainHelper.drainKiDiscrete(player, 60.0, 10)) {
+                if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+                    serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cNot enough Ki!"), true);
+                }
+                return;
+            }
+            if (tridentStack.getItem() instanceof DevilTridentItem) {
+                player.getCooldowns().addCooldown(tridentStack, 10);
+            }
+            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 0.9f);
+
             Vec3 look = player.getLookAngle();
             Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
             if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
@@ -151,7 +179,9 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
             shard.recall();
         }
         SwarmHelper.recallSwarm(stack);
-        player.getCooldowns().addCooldown(stack, 3600); // 3-minute cooldown (3600 ticks)
+        // Manual recall is a choice, so it costs 30 seconds. The 3-minute cooldown is
+        // reserved for the forced recall when the swarm starves on Ki (manageShardSwarm).
+        player.getCooldowns().addCooldown(stack, 600);
     }
 
     // Right Click: Deployment / Recall
@@ -175,10 +205,15 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
                     net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(),
                     net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.7f);
 
+                com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, pos.x, pos.y, pos.z);
+
                 AABB aoe = player.getBoundingBox().inflate(5.0);
                 List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e != player && e.isAlive());
                 for (LivingEntity t : targets) {
-                    t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (750.0f)));
+                    // Distance falloff: full 750 point blank, down to 40 percent at the rim.
+                    double dist = t.distanceTo(player);
+                    double falloff = dist <= 2.5 ? 1.0 : Math.max(0.4, 1.0 - (dist - 2.5) / 2.5 * 0.6);
+                    t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (750.0 * falloff)));
                     t.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 300, 2, false, true), player);
                     t.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 300, 0, false, false, false), player);
                     
@@ -298,14 +333,17 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
             }
             activeShards.clear();
         } else {
-            // 2. Offense: Calculate needed damage
-            List<LivingEntity> enemies = world.getEntitiesOfClass(LivingEntity.class, player.getBoundingBox().inflate(40.0), e -> e.isAlive() && e != player);
-            
+            // 2. Offense: Calculate needed damage. Auto-assignment only hunts actual
+            // enemies; passive and friendly mobs are never targeted on their own
+            // (an explicit swarmTarget set by clicking still hits whatever was clicked).
+            List<LivingEntity> enemies = world.getEntitiesOfClass(LivingEntity.class, player.getBoundingBox().inflate(40.0), e -> e.isAlive() && e != player && e instanceof net.minecraft.world.entity.monster.Enemy);
+
+            float perShard = shardDamage(player);
             for (LivingEntity enemy : enemies) {
                 if (activeShards.isEmpty()) break;
-                
+
                 float enemyHealth = enemy.getHealth();
-                int shardsNeeded = (int) Math.ceil(enemyHealth / 100.0f); // 100 is shard damage
+                int shardsNeeded = (int) Math.ceil(enemyHealth / perShard);
                 
                 // Send only the exact number of shards needed to kill
                 for (int i = 0; i < shardsNeeded && !activeShards.isEmpty(); i++) {

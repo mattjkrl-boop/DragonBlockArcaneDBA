@@ -88,6 +88,8 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
         if (attacker instanceof Player player && !player.level().isClientSide()) {
             WeaponDrainHelper.drainKiDiscrete(player, 35.0, 10);
+            // A basic hit from the petrification sword should petrify, briefly.
+            target.addEffect(new MobEffectInstance(DbaEffects.PETRIFICATION_CURSE_HOLDER, 40, 0, false, true), player);
         }
     }
 
@@ -151,18 +153,19 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
         primaryWave.setDeltaMovement(look.x * speed, look.y * speed, look.z * speed);
         level.addFreshEntity(primaryWave);
 
-        // Tweak A: Fully charged slash creates 2 additional delayed darkness waves
+        // Tweak A: Fully charged slash creates 2 additional trailing darkness waves.
+        // The old code "delayed" them with server.execute, which runs next tick for both,
+        // so all three waves left together. They now spawn together but fly slower
+        // (0.78x and 0.58x), so the sequence actually arrives staggered.
         if (chargeRatio >= 0.95f) {
-            for (int i = 1; i <= 2; i++) {
-                final int delay = i * 4; // 4 and 8 ticks delay
-                final float subDmg = totalDamage * 0.5f;
-                level.getServer().execute(() -> {
-                    // Spawn trailing waves slightly behind
-                    DarknessWaveEntity subWave = new DarknessWaveEntity(level, player, subDmg, true);
-                    subWave.setPos(player.getX() - look.x * 0.5 * delay, player.getY() + 1.0, player.getZ() - look.z * 0.5 * delay);
-                    subWave.setDeltaMovement(look.x * speed * 0.9, look.y * speed * 0.9, look.z * speed * 0.9);
-                    level.addFreshEntity(subWave);
-                });
+            double[] speedFactors = {0.78, 0.58};
+            for (int i = 0; i < speedFactors.length; i++) {
+                DarknessWaveEntity subWave = new DarknessWaveEntity(level, player, totalDamage * 0.5f, true);
+                double back = 1.5 * (i + 1);
+                subWave.setPos(player.getX() - look.x * back, player.getY() + 1.0, player.getZ() - look.z * back);
+                double subSpeed = speed * speedFactors[i];
+                subWave.setDeltaMovement(look.x * subSpeed, look.y * subSpeed, look.z * subSpeed);
+                level.addFreshEntity(subWave);
             }
         }
 
@@ -309,11 +312,44 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
         player.getCooldowns().addCooldown(stack, 100);
     }
 
+    /** A channel released at two thirds charge or more still detonates, weakened. */
+    private static void triggerPartialEclipse(ServerPlayer player, float chargeRatio) {
+        ServerLevel level = (ServerLevel) player.level();
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+        double radius = 8.0 + chargeRatio * 22.0;
+        float burstDamage = (1200.0f + (float) (accessor.dba$getStrength() * 4.0f)) * 0.6f * chargeRatio;
+
+        java.util.List<LivingEntity> enemies = level.getEntitiesOfClass(
+            LivingEntity.class, player.getBoundingBox().inflate(radius),
+            e -> e.isAlive() && e != player && e.distanceToSqr(player) <= radius * radius
+        );
+        for (LivingEntity enemy : enemies) {
+            enemy.setDeltaMovement(0, 0.4, 0);
+            enemy.addEffect(new MobEffectInstance(DbaEffects.PETRIFICATION_CURSE_HOLDER, 40, 1, false, false));
+            enemy.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 40, 0, false, false, false), player);
+            enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
+        }
+
+        DarknessShatterEntity shatter = new DarknessShatterEntity(
+            level, player, player.position().add(0, 0.05, 0), (float) Math.min(12.0, radius * 0.5)
+        );
+        level.addFreshEntity(shatter);
+
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.0f, 0.7f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
+        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§5✦ Abyssal Eclipse (unfinished) ✦"), true);
+    }
+
     @Override
     public boolean releaseUsing(ItemStack stack, Level level, LivingEntity living, int timeLeft) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
             int heldTicks = getUseDuration(stack, living) - timeLeft;
-            if (heldTicks < MAX_RIGHT_CHANNEL_TICKS) {
+            if (heldTicks >= 200 && heldTicks < MAX_RIGHT_CHANNEL_TICKS) {
+                // Two thirds of a 15 second channel used to pay out exactly nothing.
+                triggerPartialEclipse(player, heldTicks / (float) MAX_RIGHT_CHANNEL_TICKS);
+                player.getCooldowns().addCooldown(stack, 80);
+            } else if (heldTicks < MAX_RIGHT_CHANNEL_TICKS) {
                 player.getCooldowns().addCooldown(stack, 40);
             }
         }

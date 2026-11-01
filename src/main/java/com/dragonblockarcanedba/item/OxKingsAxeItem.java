@@ -52,9 +52,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Tweak C: Max charge spawns explosion, destroys weak terrain (blast resistance <= 2.0), and leaves damaging ground fissures (5s).
  * 
  * RIGHT: Colossal Stance (Hold Right Click)
- * - Hold right click to become an immovable object (knockback immunity, stationary, Resistance IV).
+ * - Hold right click to become an immovable object (knockback immunity, stationary, Ox Brace poise and damage reduction).
  * - Physical 3D King's Colossal Aura: Ethereal Titan Aegis avatar, 12-block repulsion boundary seal, and swirling heat dome.
- * - 12-block King's Force repulsion aura: heavily slows enemies (Slowness IV) and pushes them outward.
+ * - 12-block King's Force repulsion aura: applies Fissure Stun to enemies, pressures them with damage, and pushes them outward. Tamed pets are exempt from the aura.
  * - Continuously builds King's Force; takes 3% current HP pressure damage/sec after 10s.
  * - Normal release (0.5s–14.0s) deals scaled AoE ground slam with physical 3D KingsSlamEntity shockwave.
  * - Critical Peak Window (14.0s–15.0s): Flawless King's Slam deals 2000.0 + Strength * 5.0 in 20-block AoE with massive titan crags and vertical magma geysers.
@@ -149,6 +149,13 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.BEACON_AMBIENT, SoundSource.PLAYERS, 0.9f, 0.4f + chargeRatio * 0.4f);
         }
+
+        // Full-charge ready cue: without it a maxed charge felt identical to 95 percent.
+        if (chargeTicks == MAX_LEFT_CHARGE_TICKS - 10) {
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.WARDEN_SONIC_CHARGE, SoundSource.PLAYERS, 1.2f, 1.6f);
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§6Groundbreaker fully charged!"), true);
+        }
     }
 
     public static void onLeftClickRelease(ServerPlayer player, ItemStack stack, int chargeTicks) {
@@ -172,13 +179,14 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
         OxShockwaveEntity wave = new OxShockwaveEntity(level, player, chargeRatio, totalDamage, false);
         level.addFreshEntity(wave);
 
-        // Downward swing sounds & impact
+        // Downward swing sounds & impact, scaled by charge so a tap release and a
+        // full 10-second charge no longer sound identical.
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.5f);
+            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f + chargeRatio, 0.4f + chargeRatio * 0.3f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.8f, 0.6f);
+            SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.0f + chargeRatio * 0.8f, 0.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 0.8f);
+            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.8f + chargeRatio * 0.7f, 0.6f + chargeRatio * 0.3f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // Cooldown based on power
@@ -230,7 +238,10 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
             AABB auraBox = player.getBoundingBox().inflate(auraRadius);
             List<LivingEntity> enemies = serverLevel.getEntitiesOfClass(
                 LivingEntity.class, auraBox,
+                // The aura is battlefield denial pressure, not a pet punisher: tamed
+                // animals standing near their owner are exempt (the slams stay full AoE).
                 e -> e.isAlive() && e != player
+                    && !(e instanceof net.minecraft.world.entity.TamableAnimal tamable && tamable.isTame())
             );
 
             for (LivingEntity enemy : enemies) {
@@ -363,7 +374,6 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
                         SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.6f);
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.6f);
-        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
 
                     player.getCooldowns().addCooldown(stack, 100); // 5 seconds cooldown on flawless slam
                 } else {

@@ -92,6 +92,26 @@ public class BlasterBoltEntity extends Projectile {
         double nextX = this.getX() + movement.x;
         double nextY = this.getY() + movement.y;
         double nextZ = this.getZ() + movement.z;
+
+        // Bolts pierce entities by design, but they used to fly through solid blocks
+        // for their entire 30-tick life. Terrain now stops them, like the beam does.
+        if (movement.lengthSqr() > 0.0) {
+            Vec3 startPos = this.position();
+            Vec3 endPos = new Vec3(nextX, nextY, nextZ);
+            net.minecraft.world.phys.HitResult blockHit = this.level().clip(new net.minecraft.world.level.ClipContext(
+                startPos, endPos, net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, this));
+            if (blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+                if (!this.level().isClientSide() && this.level() instanceof ServerLevel impactLevel) {
+                    Vec3 hitPoint = blockHit.getLocation();
+                    impactLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        hitPoint.x, hitPoint.y, hitPoint.z, 8, 0.2, 0.2, 0.2, 0.03);
+                    impactLevel.playSound(null, hitPoint.x, hitPoint.y, hitPoint.z,
+                        SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 0.7f, 1.6f);
+                }
+                this.discard();
+                return;
+            }
+        }
         this.setPos(nextX, nextY, nextZ);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {

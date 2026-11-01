@@ -25,9 +25,9 @@ public class AzureStormEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> FOLLOWS_PLAYER = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> TARGET_ID = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Boolean> IS_MAX_CHARGED = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.BOOLEAN);
 
     private int maxLifetime = 220; // 11 seconds (Fast, intense, punchy combat duration)
-    private boolean isMaxCharged = false;
     private boolean hasSpawnedGiantTornado = false;
 
     public AzureStormEntity(EntityType<? extends Projectile> entityType, Level level) {
@@ -43,7 +43,11 @@ public class AzureStormEntity extends Projectile {
         this.setRadius(radius);
         this.entityData.set(FOLLOWS_PLAYER, followsPlayer);
         this.entityData.set(TARGET_ID, target != null ? target.getId() : -1);
-        this.isMaxCharged = isMaxCharged;
+        this.entityData.set(IS_MAX_CHARGED, isMaxCharged);
+    }
+
+    public boolean isMaxCharged() {
+        return this.entityData.get(IS_MAX_CHARGED);
     }
 
     @Override
@@ -51,6 +55,23 @@ public class AzureStormEntity extends Projectile {
         builder.define(RADIUS, 12.0f);
         builder.define(FOLLOWS_PLAYER, true);
         builder.define(TARGET_ID, -1);
+        builder.define(IS_MAX_CHARGED, false);
+    }
+
+    // Persist the storm state: the max-charge flag used to live in a plain field and was
+    // silently lost whenever the storm survived a chunk unload or a relog.
+    @Override
+    protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
+        super.addAdditionalSaveData(output);
+        output.putBoolean("IsMaxCharged", this.isMaxCharged());
+        output.putBoolean("HasSpawnedGiantTornado", this.hasSpawnedGiantTornado);
+    }
+
+    @Override
+    protected void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput input) {
+        super.readAdditionalSaveData(input);
+        this.entityData.set(IS_MAX_CHARGED, input.getBooleanOr("IsMaxCharged", false));
+        this.hasSpawnedGiantTornado = input.getBooleanOr("HasSpawnedGiantTornado", false);
     }
 
     public float getRadius() {
@@ -90,7 +111,7 @@ public class AzureStormEntity extends Projectile {
             Vec3 center = this.position();
 
             // Tweak C: Spawn giant tornado at storm center at max charge
-            if (this.isMaxCharged && !this.hasSpawnedGiantTornado) {
+            if (this.isMaxCharged() && !this.hasSpawnedGiantTornado) {
                 this.hasSpawnedGiantTornado = true;
                 AzureTornadoEntity giantTornado = new AzureTornadoEntity(serverLevel, owner instanceof LivingEntity ? (LivingEntity) owner : null, center, 1.8f, true);
                 serverLevel.addFreshEntity(giantTornado);

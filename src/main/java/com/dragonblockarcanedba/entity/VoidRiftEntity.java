@@ -35,6 +35,10 @@ public class VoidRiftEntity extends Projectile {
         this.noPhysics = true;
     }
 
+    public void setDamage(float damage) {
+        this.damage = damage;
+    }
+
     public VoidRiftEntity(Level level, LivingEntity owner, Vec3 pos, float startRadius, float damage) {
         super(DbaEntities.VOID_RIFT, level);
         this.setOwner(owner);
@@ -114,6 +118,8 @@ public class VoidRiftEntity extends Projectile {
                         victim.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 100, 1, false, true), owner);
                     }
 
+                    // The implosion is the weapon's biggest moment: give it camera weight.
+                    com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, center.x, center.y, center.z);
                     serverLevel.playSound(null, center.x, center.y, center.z,
                         SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.5f, 0.6f);
                     serverLevel.playSound(null, center.x, center.y, center.z,
@@ -146,14 +152,16 @@ public class VoidRiftEntity extends Projectile {
                         proj.setDeltaMovement(toCenter.normalize().scale(0.8));
                     }
 
-                    // Damage, slow, and hold enemies inside
+                    // Damage, slow, and hold enemies inside. Enemies used to receive RIFTED,
+                    // which is a buff (speed, strength, jump): the rift now darkens them instead.
+                    // Pull damage scales with the rift's charge-scaled implosion damage.
                     if (e instanceof LivingEntity living) {
-                        living.addEffect(new MobEffectInstance(DbaEffects.RIFTED_HOLDER, 20, 0, false, false), owner);
+                        living.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 20, 0, false, false), owner);
                         if (this.tickCount % 10 == 0) {
-                            DamageSource source = owner instanceof net.minecraft.world.entity.player.Player p 
-                                ? serverLevel.damageSources().playerAttack(p) 
+                            DamageSource source = owner instanceof net.minecraft.world.entity.player.Player p
+                                ? serverLevel.damageSources().playerAttack(p)
                                 : serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : living);
-                            living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (25.0f)));
+                            living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage * 0.05f)));
                         }
                     }
                 }

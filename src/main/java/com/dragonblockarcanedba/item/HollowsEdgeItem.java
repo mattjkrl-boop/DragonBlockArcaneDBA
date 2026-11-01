@@ -158,6 +158,15 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
             SoundEvents.WARDEN_HEARTBEAT, SoundSource.PLAYERS, 1.2f, 1.4f);
     }
 
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        // The highest base damage blade in its group had no on-hit identity at all.
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainKiDiscrete(player, 20.0, 7);
+            target.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 40, 0, false, true), player);
+        }
+    }
+
     public static void onLeftClickDash(ServerPlayer player, ItemStack stack, boolean holdingBackward) {
         ServerLevel level = (ServerLevel) player.level();
         UUID uuid = player.getUUID();
@@ -165,7 +174,18 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
 
         Long expireTime = ACTIVE_RUSH_EXPIRE_TIME.get(uuid);
         if (expireTime == null || now > expireTime) {
-            // Not in active rush sequence — treat as standard instant short blink (3 blocks)
+            // Not in active rush sequence: standard instant short blink (3 blocks).
+            // This fallback used to be completely free with no cooldown, which made the
+            // whole charge and window system optional for mobility. It now costs Ki and
+            // carries a short cooldown; blinks inside the rush window stay free.
+            if (player.getCooldowns().isOnCooldown(stack)) {
+                return;
+            }
+            if (!WeaponDrainHelper.drainKiDiscrete(player, 30.0, 20)) {
+                player.sendSystemMessage(Component.literal("§cNot enough Ki to blink!"), true);
+                return;
+            }
+            player.getCooldowns().addCooldown(stack, 10);
             performBlink(player, stack, 3.0, holdingBackward, false);
             return;
         }
@@ -342,6 +362,10 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
 
                 // Enlarge rift radius (from 2.5 up to 9.0 blocks)
                 rift.setRadius(2.5f + chargeRatio * 6.5f);
+                // Rift damage finally rewards the charge: implosion (and the pull ticks,
+                // which take 5% of it) scale with Strength and charge instead of flat 550.
+                float riftDamage = (550.0f + (float) (((PlayerStatsAccessor) player).dba$getStrength() * 2.0f)) * (0.7f + 0.6f * chargeRatio);
+                rift.setDamage(riftDamage);
             }
         }
     }

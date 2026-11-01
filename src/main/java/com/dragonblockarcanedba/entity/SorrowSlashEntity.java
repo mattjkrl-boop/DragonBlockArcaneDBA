@@ -81,6 +81,18 @@ public class SorrowSlashEntity extends Projectile {
         super.tick();
 
         Vec3 movement = this.getDeltaMovement();
+        if (!isImpactBurst() && movement.lengthSqr() > 0.0) {
+            // The wave is noPhysics and stepped manually; without a clip check it
+            // flew through walls for its whole flight. Die on the first block hit.
+            Vec3 start = this.position();
+            Vec3 end = start.add(movement);
+            net.minecraft.world.phys.HitResult blockHit = this.level().clip(new net.minecraft.world.level.ClipContext(
+                start, end, net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, this));
+            if (blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+                this.discard();
+                return;
+            }
+        }
         this.setPos(this.getX() + movement.x, this.getY() + movement.y, this.getZ() + movement.z);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
@@ -100,6 +112,12 @@ public class SorrowSlashEntity extends Projectile {
 
             for (LivingEntity target : targets) {
                 hitEntityIds.add(target.getId());
+
+                // The melee impact burst spawns with damage 0 because the melee hit
+                // already applied everything directly. It is pure geometry: without
+                // this guard it re-applied Melting, Sorrow Rift, the friction
+                // distortion, and a 0-damage Soul Rend to every bystander in its box.
+                if (this.damage <= 0.0f) continue;
 
                 // Apply damage
                 target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));

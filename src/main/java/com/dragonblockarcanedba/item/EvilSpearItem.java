@@ -88,6 +88,8 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
         if (attacker instanceof Player player && !player.level().isClientSide()) {
             WeaponDrainHelper.drainKiDiscrete(player, 45.0, 8);
+            // Melee did not even mark: the spear could not set up its own Hell Hunt chain.
+            target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER, 120, 0, false, true), player);
         }
     }
 
@@ -192,6 +194,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
                 serverLevel.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 0.5f);
                 serverPlayer.getCooldowns().addCooldown(stack, 40);
+                PENDING_LUNGES.put(serverPlayer.getUUID(), serverLevel.getGameTime() + 8);
                 return InteractionResult.SUCCESS;
             }
         }
@@ -243,16 +246,108 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
             );
             if (nearbyMarked.isEmpty()) break;
 
+            // Nearest first: the chain used to take whatever the entity query returned first.
+            nearbyMarked.sort(java.util.Comparator.comparingDouble(e -> e.distanceToSqr(current)));
             LivingEntity next = nearbyMarked.get(0);
             chainTargets.add(next);
             visited.add(next.getId());
             current = next;
         }
 
-        // Teleport/Rush through each target in chain sequence
-        int chains = chainTargets.size();
-        for (int i = 0; i < chains; i++) {
-            LivingEntity t = chainTargets.get(i);
+        // The whole chain used to execute in a single tick: every teleport, hit, and
+        // impact landed in one frame. Steps now land every 3 ticks (first step immediate),
+        // processed by tickServer, so the execution actually reads as a chain.
+        PendingHunt hunt = new PendingHunt();
+        for (LivingEntity t : chainTargets) {
+            hunt.targetUuids.add(t.getUUID());
+        }
+        hunt.stack = stack;
+        hunt.nextStepTick = level.getGameTime();
+        PENDING_HUNTS.put(player.getUUID(), hunt);
+        // Cooldown starts with the hunt so a second hunt cannot overwrite the pending one.
+        player.getCooldowns().addCooldown(stack, 100);
+    }
+
+    private static class PendingHunt {
+        final java.util.List<UUID> targetUuids = new java.util.ArrayList<>();
+        ItemStack stack;
+        int index = 0;
+        long nextStepTick = 0;
+    }
+
+    private static final java.util.Map<UUID, PendingHunt> PENDING_HUNTS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<UUID, Long> PENDING_LUNGES = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Advances staggered Hell Hunt chains and lunge landings. Called from the main server tick. */
+    public static void tickServer(net.minecraft.server.MinecraftServer server) {
+        if (!PENDING_HUNTS.isEmpty()) {
+            java.util.Iterator<java.util.Map.Entry<UUID, PendingHunt>> it = PENDING_HUNTS.entrySet().iterator();
+            while (it.hasNext()) {
+                java.util.Map.Entry<UUID, PendingHunt> entry = it.next();
+                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+                if (player == null) {
+                    it.remove();
+                    continue;
+                }
+                ServerLevel level = (ServerLevel) player.level();
+                PendingHunt hunt = entry.getValue();
+                if (level.getGameTime() < hunt.nextStepTick) continue;
+
+                if (hunt.index >= hunt.targetUuids.size()) {
+                    // Chain complete: Demon Surge lands at the end (cooldown started with the hunt).
+                    player.addEffect(new MobEffectInstance(DbaEffects.DEMON_SURGE_HOLDER, 40, 0, false, false));
+                    it.remove();
+                    continue;
+                }
+
+                int i = hunt.index++;
+                hunt.nextStepTick = level.getGameTime() + 3;
+                var entity = level.getEntity(hunt.targetUuids.get(i));
+                if (entity instanceof LivingEntity t && t.isAlive()) {
+                    executeHuntStep(player, level, t, i, hunt.targetUuids.size());
+                }
+            }
+        }
+
+        if (!PENDING_LUNGES.isEmpty()) {
+            java.util.Iterator<java.util.Map.Entry<UUID, Long>> it = PENDING_LUNGES.entrySet().iterator();
+            while (it.hasNext()) {
+                java.util.Map.Entry<UUID, Long> entry = it.next();
+                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+                if (player == null) {
+                    it.remove();
+                    continue;
+                }
+                ServerLevel level = (ServerLevel) player.level();
+                if (level.getGameTime() < entry.getValue()) continue;
+                it.remove();
+
+                // The no-target lunge used to have no end state at all. It now lands:
+                // enemies at the landing point take a reduced hunt hit and an impact marker.
+                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+                float lungeDamage = 200.0f + (float) (accessor.dba$getStrength() * 1.0f);
+                java.util.List<LivingEntity> landed = level.getEntitiesOfClass(
+                    LivingEntity.class, player.getBoundingBox().inflate(3.0),
+                    e -> e.isAlive() && e != player
+                );
+                for (LivingEntity victim : landed) {
+                    victim.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (lungeDamage)));
+                    victim.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER, 120, 0, false, true), player);
+                }
+                if (!landed.isEmpty()) {
+                    HellHuntImpactEntity impact = new HellHuntImpactEntity(
+                        level, player, player.position().add(0, 0.05, 0), 2.6f, false
+                    );
+                    level.addFreshEntity(impact);
+                    level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.6f, 0.5f);
+                }
+            }
+        }
+    }
+
+    private static void executeHuntStep(ServerPlayer player, ServerLevel level, LivingEntity t, int i, int chains) {
+        {
+            PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
             boolean isFinal = (i == chains - 1);
 
             // Calculate damage: each chain adds +15% damage (Tweak C)
@@ -296,12 +391,6 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
             level.playSound(null, t.getX(), t.getY(), t.getZ(), SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.8f, 0.5f);
             level.playSound(null, t.getX(), t.getY(), t.getZ(), com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.8f, 0.5f);
         }
-
-        // Demon Surge: Demonic rush speed, attack frenzy, and jump boost for 40 ticks
-        player.addEffect(new MobEffectInstance(DbaEffects.DEMON_SURGE_HOLDER, 40, 0, false, false));
-
-        // 5-second cooldown
-        player.getCooldowns().addCooldown(stack, 100);
     }
 
     /** Discards any charge or stance entities still tracked for a player who logged out. */

@@ -1,17 +1,13 @@
 package com.dragonblockarcanedba.entity;
 
-import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.item.GrandSwordItem;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -120,6 +116,17 @@ public class ValorFieldEntity extends Projectile {
             this.setPos(caster.getX(), caster.getY(), caster.getZ());
             Vec3 center = this.position();
 
+            // Spawn moment: the field used to appear at full power in total silence.
+            if (this.tickCount == 1) {
+                serverLevel.playSound(null, center.x, center.y + 1.0, center.z,
+                    SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.2f, 1.1f);
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        center.x, center.y + 1.0, center.z, Math.round(36 * density), 3.5, 1.2, 3.5, 0.25);
+                }
+            }
+
             // 1. Buffs and Debuffs (Applied every 10 ticks)
             if (this.tickCount % 10 == 0) {
                 // Caster receives Tier 3 Valor (Level III / Amplifier 2)
@@ -147,6 +154,9 @@ public class ValorFieldEntity extends Projectile {
                                 PlayerStatsAccessor acc = (PlayerStatsAccessor) playerCaster;
                                 float fieldPressureDmg = 55.0f + (float) (acc.dba$getStrength() * 0.45f);
                                 entity.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(playerCaster), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (fieldPressureDmg)));
+                                // Pressure hits had no feedback at all: enemies just lost health.
+                                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                                    entity.getX(), entity.getY() + entity.getBbHeight() * 0.6, entity.getZ(), 3, 0.3, 0.3, 0.3, 0.05);
                                 entity.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 40, 0, false, false, false), playerCaster);
                             }
                         }

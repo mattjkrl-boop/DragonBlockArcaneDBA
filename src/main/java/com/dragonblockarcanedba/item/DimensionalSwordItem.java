@@ -81,10 +81,16 @@ public class DimensionalSwordItem extends Item implements com.dragonblockarcaned
 
     public static void fireSlash(Player player, ItemStack stack) {
         if (!player.level().isClientSide()) {
+            // Slashes had no cooldown at all: a full stamina bar bought roughly 90
+            // back-to-back 750 damage projectiles. An 8 tick cadence keeps it fast but paced.
+            if (player.getCooldowns().isOnCooldown(stack)) {
+                return;
+            }
             // Drain Stamina: 100% per minute (~13 ticks cadence)
             if (!WeaponDrainHelper.drainStaminaDiscrete(player, 100.0, 13)) {
                 return;
             }
+            player.getCooldowns().addCooldown(stack, 8);
 
             // Check NBT for tilt state to alternate left and right
             boolean tiltRight = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag().getBoolean("tiltRight").orElse(false);
@@ -93,6 +99,9 @@ public class DimensionalSwordItem extends Item implements com.dragonblockarcaned
             Vec3 look = player.getLookAngle();
             slash.setDeltaMovement(look.x * 2.5, look.y * 2.5, look.z * 2.5); // Fast projectile
             player.level().addFreshEntity(slash);
+            // The slash's audio identity was entirely borrowed vanilla sounds; give it the blade ring.
+            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.3f);
 
             // Toggle tilt for next swing
             net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
@@ -139,9 +148,10 @@ public class DimensionalSwordItem extends Item implements com.dragonblockarcaned
                 targetZ = dest.z;
             }
                 
-            // Phase 1: Physical 3D Departure Origin Rift
+            // Phase 1: Physical 3D Departure Origin Rift. Departure is a shockwave, not a
+            // second full slash: the origin rift bursts for 250, the destination for 750.
             DimensionalWarpRiftEntity originRift = new DimensionalWarpRiftEntity(
-                serverLevel, player, player.position(), 3.5f, false, 750.0f
+                serverLevel, player, player.position(), 3.5f, false, 250.0f
             );
             serverLevel.addFreshEntity(originRift);
             
@@ -154,6 +164,8 @@ public class DimensionalSwordItem extends Item implements com.dragonblockarcaned
                 serverLevel, player, dest, 3.5f, true, 750.0f
             );
             serverLevel.addFreshEntity(destRift);
+            // The destination rift sounds like an explosion but had no camera weight behind it.
+            com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, dest.x, dest.y, dest.z);
 
             // Audio cues
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),

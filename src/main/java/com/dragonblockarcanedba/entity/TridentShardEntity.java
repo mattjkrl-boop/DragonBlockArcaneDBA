@@ -159,11 +159,17 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
                 net.minecraft.world.damagesource.DamageSource shardSource = this.getOwner() instanceof LivingEntity livingOwner
                     ? this.level().damageSources().mobProjectile(this, livingOwner)
                     : this.level().damageSources().magic();
-                target.hurtServer((ServerLevel) this.level(), shardSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (100.0f)));
+                // Shard damage scales with the owner's Strength (100 + Strength x 0.5).
+                float dealt = this.getOwner() instanceof Player ownerPlayer
+                    ? com.dragonblockarcanedba.item.DevilTridentItem.shardDamage(ownerPlayer)
+                    : 100.0f;
+                target.hurtServer((ServerLevel) this.level(), shardSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(dealt));
                 target.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 60, 0, false, false), this.getOwner());
-                
-                // Recoil / degradation
-                this.health -= 100.0f;
+                this.level().playSound(null, target.getX(), target.getY(), target.getZ(),
+                    net.minecraft.sounds.SoundEvents.TRIDENT_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 0.7f, 1.1f);
+
+                // Recoil / degradation: the swarm health budget is spent in damage dealt.
+                this.health -= dealt;
                 this.updateHealthState();
                 if (this.health <= 0) {
                     this.discard();

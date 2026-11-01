@@ -161,6 +161,10 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
 
         if (isOvercharged) {
             setHeat(stack, 0); // Reset heat after overcharged blast
+            // Heat finally has a downside: venting. The barrage pauses for a second
+            // after an overcharged shot (the receiver honors the item cooldown),
+            // instead of heat being a pure buff that converts at 100 for free.
+            player.getCooldowns().addCooldown(stack, 20);
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 1.2f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
@@ -223,6 +227,8 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.BEACON_AMBIENT, SoundSource.PLAYERS, 1.0f, 0.6f + chargeRatio * 0.8f);
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 0.8f, 0.6f + chargeRatio * 0.9f);
             }
         }
     }
@@ -242,11 +248,16 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
             int heldTicks = getUseDuration(stack, living) - timeLeft;
             float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
 
-            // Ammo cost: 10 base, up to 20 at max charge
+            // Ammo cost: 10 base, up to 20 at max charge. The full cost is required:
+            // the shot used to fire at full damage while paying only whatever ammo
+            // happened to remain.
             int ammoCost = 10 + (int) (chargeRatio * 10);
             int available = getAmmoCount(player);
             if (available < ammoCost && !player.isCreative()) {
-                ammoCost = available; // consume remaining
+                player.sendSystemMessage(Component.literal("§cNot enough Blaster Ammo for that charge level!"), true);
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.DISPENSER_FAIL, SoundSource.PLAYERS, 1.0f, 1.8f);
+                return true;
             }
             consumeAmmo(player, ammoCost);
 
@@ -272,6 +283,11 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
             // Spawn physical 3D Erasure Cannon beam entity
             ErasureCannonBeamEntity beam = new ErasureCannonBeamEntity(serverLevel, player, totalDamage, chargeRatio, beamLength);
             serverLevel.addFreshEntity(beam);
+
+            // The biggest single hit in the group lands its shake and hitstop at the
+            // impact point, not silently at the shooter.
+            Vec3 impactPoint = start.add(look.scale(beamLength));
+            com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, impactPoint.x, impactPoint.y, impactPoint.z);
 
             player.getCooldowns().addCooldown(stack, 120); // 6-second cooldown
         }

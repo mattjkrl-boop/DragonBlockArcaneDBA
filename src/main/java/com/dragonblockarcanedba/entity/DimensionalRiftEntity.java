@@ -138,6 +138,13 @@ public class DimensionalRiftEntity extends Projectile {
                     
                     target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.burstDamage)));
 
+                    // Per-target burst feedback so caught targets read as hit, not just hurt.
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                        10, 0.4, 0.5, 0.4, 0.05);
+                    serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
+                        SoundEvents.SOUL_ESCAPE.value(), SoundSource.PLAYERS, 0.9f, 0.6f);
+
                     // Soul Rend heal from AOE: 1% of burst damage per target hit
                     if (owner instanceof Player playerOwner) {
                         float aoeHeal = this.burstDamage * 0.01f;

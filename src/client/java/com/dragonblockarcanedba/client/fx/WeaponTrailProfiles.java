@@ -40,7 +40,7 @@ public final class WeaponTrailProfiles {
         reg(AzureDragonSwordItem.class,   0x3FA9FF, 2.15, 150f, 6, 1.0f,  Kind.ARC, Tip.SPARK);
         reg(DaburaSwordItem.class,        0xC23BFF, 2.05, 145f, 6, 1.0f,  Kind.ARC, Tip.VOID_SMOKE);
         reg(CurseBladeItem.class,         0x8A2BE2, 2.05, 140f, 7, 1.0f,  Kind.ARC, Tip.VOID_SMOKE);
-        reg(HollowsEdgeItem.class,        0x5A5A7A, 2.05, 150f, 6, 1.0f,  Kind.ARC, Tip.NONE);
+        reg(HollowsEdgeItem.class,        0x5A5A7A, 2.05, 150f, 6, 1.0f,  Kind.ARC, Tip.VOID_SMOKE);
         reg(DimensionalSwordItem.class,   0x9B6BFF, 2.2,  150f, 7, 1.0f,  Kind.ARC, Tip.VOID_SMOKE);
         reg(SpiritSwordItem.class,        0x7DF9FF, 2.4,  155f, 7, 1.1f,  Kind.ARC, Tip.SPARK);
         // Polearms: spear and trident stab, the rest sweep with their real length.

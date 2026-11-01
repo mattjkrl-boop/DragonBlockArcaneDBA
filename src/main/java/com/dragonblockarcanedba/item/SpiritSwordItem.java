@@ -107,8 +107,13 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
                 target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
             }
 
-            // 20% chance to Disarm (drop held item)
-            if (serverLevel.getRandom().nextFloat() < 0.20f && target instanceof LivingEntity livingTarget) {
+            // 20% chance to Disarm (drop held item). Bosses and other players are immune:
+            // stripping a boss's or a player's held weapon outright was unguarded.
+            boolean isBossClass = target.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE) >= 0.9
+                || target.getMaxHealth() >= 400f; // Same BOSS rule MobPhysics uses
+            if (serverLevel.getRandom().nextFloat() < 0.20f && target instanceof LivingEntity livingTarget
+                && !(livingTarget instanceof Player)
+                && !isBossClass) {
                 ItemStack heldItem = livingTarget.getMainHandItem();
                 if (!heldItem.isEmpty()) {
                     livingTarget.spawnAtLocation(serverLevel, heldItem.copy());
@@ -116,17 +121,24 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
                 }
             }
 
-            // Physical 3D Spirit Impale Entity (6 celestial swords, 3 ground seals, ascending divine pillar)
-            SpiritImpaleEntity impale = new SpiritImpaleEntity(serverLevel, serverPlayer, target, 1.0f);
-            serverLevel.addFreshEntity(impale);
+            // Physical 3D Spirit Impale Entity (6 celestial swords, 3 ground seals, ascending
+            // divine pillar). At 3 attacks per second a fresh 28-tick entity per hit churns
+            // hard, so a target that already has one following it does not get another.
+            boolean alreadyImpaled = !serverLevel.getEntitiesOfClass(SpiritImpaleEntity.class,
+                target.getBoundingBox().inflate(2.0), e -> e.getTargetId() == target.getId()).isEmpty();
+            if (!alreadyImpaled) {
+                SpiritImpaleEntity impale = new SpiritImpaleEntity(serverLevel, serverPlayer, target, 1.0f);
+                serverLevel.addFreshEntity(impale);
+            }
 
-            // High-impact divine sounds
+            // High-impact divine sounds, pitch jittered so identical stacks do not grate.
+            float pitchJitter = 0.92f + serverLevel.getRandom().nextFloat() * 0.16f;
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, 1.3f, 1.15f);
+                SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, 1.3f, 1.15f * pitchJitter);
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.1f, 1.35f);
+                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.1f, 1.35f * pitchJitter);
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 1.1f, 1.35f);
+                com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 1.1f, 1.35f * pitchJitter);
         }
     }
 
@@ -185,9 +197,11 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
         if (ticksUsed > 0 && ticksUsed % 10 == 0) {
             Vec3 endPos = eyePos.add(lookVec.scale(PULSE_RANGE));
 
-            // Calculate stat-scaled beam damage: 200 + (Spirit × 1.5)
+            // Calculate stat-scaled beam damage: 200 + (Spirit × 1.5). The beam used to be
+            // instant full power from the first tick; it now ramps over the first 2 seconds.
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
-            float beamDamage = 200.0f + (float) (accessor.dba$getSpirit() * 1.5);
+            float ramp = ticksUsed < 20 ? 0.6f : (ticksUsed < 40 ? 0.85f : 1.0f);
+            float beamDamage = (200.0f + (float) (accessor.dba$getSpirit() * 1.5)) * ramp;
 
             // --- Piercing beam: hit ALL entities in the line ---
             AABB searchArea = new AABB(eyePos, endPos).inflate(1.0);
@@ -218,9 +232,17 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
                         net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
                     );
 
-                    // Physical 3D Spirit Impale impact at hit entity
-                    SpiritImpaleEntity hitImpale = new SpiritImpaleEntity(serverLevel, player, livingTarget, 0.75f);
-                    serverLevel.addFreshEntity(hitImpale);
+                    // Physical 3D Spirit Impale impact at hit entity (deduped like melee)
+                    boolean targetAlreadyImpaled = !serverLevel.getEntitiesOfClass(SpiritImpaleEntity.class,
+                        livingTarget.getBoundingBox().inflate(2.0), e -> e.getTargetId() == livingTarget.getId()).isEmpty();
+                    if (!targetAlreadyImpaled) {
+                        SpiritImpaleEntity hitImpale = new SpiritImpaleEntity(serverLevel, player, livingTarget, 0.75f);
+                        serverLevel.addFreshEntity(hitImpale);
+                    }
+                    // Terminus feedback: the beam's impact point used to be silent geometry only.
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        livingTarget.getX(), livingTarget.getY() + livingTarget.getBbHeight() * 0.5, livingTarget.getZ(),
+                        6, 0.3, 0.3, 0.3, 0.12);
 
                     // Impact sound
                     serverLevel.playSound(null, livingTarget.getX(), livingTarget.getY(), livingTarget.getZ(),

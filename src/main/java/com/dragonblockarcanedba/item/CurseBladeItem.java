@@ -86,10 +86,16 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
 
     public static void streamCurseChain(Player player, ItemStack stack) {
         if (!player.level().isClientSide() && player.level() instanceof ServerLevel serverLevel) {
+            // Chains were nearly free and cooldown-less, so 10 curse stacks could be
+            // click-spammed almost instantly. A 5 tick cadence keeps chains fast but paced.
+            if (player.getCooldowns().isOnCooldown(stack)) {
+                return;
+            }
             // Drain Ki: 30% per minute (~4 ticks cadence = 0.1% Max Ki)
             if (!WeaponDrainHelper.drainKiDiscrete(player, 30.0, 4)) {
                 return;
             }
+            player.getCooldowns().addCooldown(stack, 5);
 
             Vec3 eyePos = player.getEyePosition();
             Vec3 look = player.getLookAngle();
@@ -143,7 +149,7 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
         }
     }
 
-    // --- RIGHT CLICK: Abyssal Eclipse (Supernatural Corrupted Storm) ---
+    // --- RIGHT CLICK: Cursed Tempest (Supernatural Corrupted Storm) ---
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
@@ -261,8 +267,10 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                         }
                         serverLevel.addFreshEntity(lightning);
 
-                        // Magic thunder damage
-                        lightningTarget.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (450.0f)));
+                        // Magic thunder damage (scales with Strength like its sibling weapons)
+                        float strikeDamage = 450.0f + (float) (((PlayerStatsAccessor) player).dba$getStrength() * 1.5f);
+                        lightningTarget.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strikeDamage)));
+                        com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, targetPos.x, targetPos.y, targetPos.z);
                         lightningTarget.igniteForSeconds(5);
                         serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
                             SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 3.0f, 0.7f);
@@ -280,10 +288,12 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                 }
             }
 
-            // Environmental ambient lightning (Dramatic, non-spammy pacing ~2-3 per second)
+            // Environmental ambient lightning (Dramatic, non-spammy pacing ~2-3 per second).
+            // Strikes now land inside the actual domain radius instead of a fixed 60 block box
+            // that ignored the channel entirely at low charge.
             if (serverLevel.getRandom().nextFloat() < 0.12f) {
-                double rx = player.getX() + (serverLevel.getRandom().nextDouble() - 0.5) * 60;
-                double rz = player.getZ() + (serverLevel.getRandom().nextDouble() - 0.5) * 60;
+                double rx = player.getX() + (serverLevel.getRandom().nextDouble() - 0.5) * 2.0 * domainRadius;
+                double rz = player.getZ() + (serverLevel.getRandom().nextDouble() - 0.5) * 2.0 * domainRadius;
                 double ry = serverLevel.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, (int)rx, (int)rz);
                 
                 com.dragonblockarcanedba.entity.CurseLightningEntity ambient = new com.dragonblockarcanedba.entity.CurseLightningEntity(
@@ -308,11 +318,8 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                     victim.igniteForSeconds(5);
                 }
                 
-                // Set ground on fire
-                BlockPos firePos = BlockPos.containing(rx, ry, rz);
-                if (serverLevel.getBlockState(firePos).isAir() && serverLevel.getBlockState(firePos.below()).isSolidRender()) {
-                    serverLevel.setBlockAndUpdate(firePos, net.minecraft.world.level.block.Blocks.FIRE.defaultBlockState());
-                }
+                // No world fire here: random untelegraphed strikes setting blocks ablaze
+                // could spread into builds. The telegraphed targeted strike keeps its fire.
             }
 
             // Custom sky cracks
@@ -326,15 +333,21 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
 
             // 4. Tweak C: At maximum charge (15s = 300 ticks) and beyond, full root on heavily cursed enemies
             if (heldTicks >= MAX_ECLIPSE_CHANNEL_TICKS && heldTicks % 20 == 0) {
+                boolean slamImpactPlayed = false;
+                float slamDamage = 150.0f + (float) (((PlayerStatsAccessor) player).dba$getStrength() * 0.8f);
                 for (LivingEntity enemy : enemiesInStorm) {
                     MobEffectInstance curse = enemy.getEffect(DbaEffects.MOVEMENT_CURSE_HOLDER);
                     if (curse != null && curse.getAmplifier() >= 4) { // 5+ stacks
                         // Violent Ground Slam (Soul Hook Refinement)
                         enemy.setDeltaMovement(0, -2.5, 0);
                         com.dragonblockarcanedba.util.DbaCompat.markHurt(enemy);
-                        
-                        // Magic impact damage
-                        enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (150.0f)));
+
+                        // Magic impact damage (scales with Strength)
+                        enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (slamDamage)));
+                        if (!slamImpactPlayed) {
+                            slamImpactPlayed = true;
+                            com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, enemy.getX(), enemy.getY(), enemy.getZ());
+                        }
 
                         // 3 seconds complete root (amp 9)
                         enemy.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 60, 9, false, true), player);

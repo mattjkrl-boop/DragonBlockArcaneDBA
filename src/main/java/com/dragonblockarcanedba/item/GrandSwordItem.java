@@ -1,20 +1,16 @@
 package com.dragonblockarcanedba.item;
 
-import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.GrandCrescentWaveEntity;
 import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.entity.ValorFieldEntity;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -124,6 +120,38 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
         Vec3 drift = new Vec3(look.x, 0, look.z).normalize().scale(0.06 * ccMult);
         MovementPhysics.addVelocity(player, new Vec3(drift.x, 0, drift.z));
 
+        // Spin contact: the class header promises the spin itself damages and knocks away
+        // every 3 ticks, but the tick only ever fired shards. Enemies inside the blade arc
+        // now take contact damage and get thrown outward on the shard cadence.
+        if (spinTicks % 3 == 0) {
+            float contactDamage = 100.0f + (float) (accessor.dba$getStrength() * 0.5f);
+            AABB contactBox = player.getBoundingBox().inflate(2.6, 1.2, 2.6);
+            List<LivingEntity> contactTargets = level.getEntitiesOfClass(
+                LivingEntity.class, contactBox,
+                e -> e.isAlive() && e != player
+            );
+            for (LivingEntity contact : contactTargets) {
+                contact.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (contactDamage)));
+                Vec3 away = contact.position().subtract(player.position());
+                away = new Vec3(away.x, 0, away.z);
+                if (away.lengthSqr() > 0.001) {
+                    away = away.normalize().scale(0.75);
+                    contact.setDeltaMovement(contact.getDeltaMovement().add(away.x, 0.25, away.z));
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(contact);
+                }
+            }
+            // Blade arc ring so the spin reads as a weapon, not just a rotating player.
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (density > 0f) {
+                for (int i = 0; i < 10; i++) {
+                    double angle = (Math.PI * 2.0 * i / 10.0) + spinTicks * 0.5;
+                    level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        player.getX() + Math.cos(angle) * 2.2, player.getY() + 1.0, player.getZ() + Math.sin(angle) * 2.2,
+                        1, 0.0, 0.0, 0.0, 0.0);
+                }
+            }
+        }
+
         // Fire sharp blade shards every 3 ticks outward in the current rotated facing direction
         if (spinTicks % 3 == 0) {
             double spreadX = (level.getRandom().nextDouble() - 0.5) * 0.08;
@@ -180,8 +208,11 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // 1. Decisive outward finisher slash
-        float finisherDamage = 450.0f + (float) (accessor.dba$getStrength() * 2.0f);
+        // 1. Decisive outward finisher slash. Spin time finally matters: MAX_LEFT_SPIN_TICKS
+        // was a dead constant, so a half-second spin released identically to a full 7 second one.
+        float spinRatio = Math.min(1.0f, spinTicks / (float) MAX_LEFT_SPIN_TICKS);
+        float spinMult = 0.7f + 0.6f * spinRatio;
+        float finisherDamage = (450.0f + (float) (accessor.dba$getStrength() * 2.0f)) * spinMult;
         Vec3 eyePos = player.getEyePosition();
         Vec3 look = player.getLookAngle();
         double finisherRadius = 6.0;
@@ -222,7 +253,7 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
         }
 
         // 2. Tweak B: Fire glowing golden-white crescent energy wave
-        float waveDamage = 600.0f + (float) (accessor.dba$getStrength() * 2.5f);
+        float waveDamage = (600.0f + (float) (accessor.dba$getStrength() * 2.5f)) * spinMult;
         GrandCrescentWaveEntity wave = new GrandCrescentWaveEntity(level, player, waveDamage);
         wave.setDeltaMovement(look.scale(2.2));
         level.addFreshEntity(wave);

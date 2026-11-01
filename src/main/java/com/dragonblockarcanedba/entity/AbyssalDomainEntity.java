@@ -20,7 +20,7 @@ public class AbyssalDomainEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(AbyssalDomainEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(AbyssalDomainEntity.class, EntityDataSerializers.INT);
 
-    private int lifetime = 40; // Keeps alive while channeled
+    private int lifetime = 10; // Matches refreshLifetime: alive only while channeled
 
     public AbyssalDomainEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);

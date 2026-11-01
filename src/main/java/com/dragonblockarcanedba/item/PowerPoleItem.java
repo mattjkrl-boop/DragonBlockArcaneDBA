@@ -65,13 +65,18 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
         return builder.build();
     }
 
-    // Left Click: Whirlwind Staff (AoE Knockback and Damage)
+    // Plain melee hit: stamina cost only. The Whirlwind Staff AoE lives in performWindSpin.
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
         if (attacker instanceof Player player && !player.level().isClientSide()) {
             WeaponDrainHelper.drainStaminaDiscrete(player, 20.0, 10);
         }
     }
+
+    // Per-target whirlwind hit gate: the spin is called every 2 ticks while held, and
+    // used to re-damage everything in the cone on every call. A target now takes a
+    // spin hit at most once per 10 ticks.
+    private static final java.util.Map<Integer, Long> SPIN_HIT_TIMES = new java.util.concurrent.ConcurrentHashMap<>();
 
     public static void performWindSpin(Player player, ItemStack stack) {
         if (!player.level().isClientSide()) {
@@ -103,6 +108,16 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                 boolean inClosePerimeter = distance <= 4.5; // Radial barrier around the spinner
 
                 if (inCone || inClosePerimeter) {
+                    long now = serverLevel.getGameTime();
+                    Long lastHit = SPIN_HIT_TIMES.get(t.getId());
+                    if (lastHit != null && now - lastHit < 10) {
+                        continue;
+                    }
+                    SPIN_HIT_TIMES.put(t.getId(), now);
+                    if (SPIN_HIT_TIMES.size() > 512) {
+                        SPIN_HIT_TIMES.entrySet().removeIf(e -> now - e.getValue() >= 10);
+                    }
+
                     // Inverse area damage scaling
                     float damage = 750.0f / (float) Math.max(1.0, distance / 3.0);
                     t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
@@ -136,17 +151,22 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                 }
             }
 
-            // Spawn Physical 3D Conical Aerodynamic Hurricane Vortex Entity
-            PowerPoleWhirlwindEntity whirlwind = new PowerPoleWhirlwindEntity(
-                serverLevel, player, eyePos, player.getYRot(), player.getXRot(), (float) maxRange, 35.0f
-            );
-            serverLevel.addFreshEntity(whirlwind);
+            // Visual entity, particles, and sounds run on a 6-tick cadence instead of
+            // spawning a fresh whirlwind entity on every 2-tick call.
+            if (player.tickCount % 6 == 0) {
+                PowerPoleWhirlwindEntity whirlwind = new PowerPoleWhirlwindEntity(
+                    serverLevel, player, eyePos, player.getYRot(), player.getXRot(), (float) maxRange, 35.0f
+                );
+                serverLevel.addFreshEntity(whirlwind);
 
-            // Auditory feedback
-            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.3f);
-            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.WIND_CHARGE_THROW, SoundSource.PLAYERS, 1.0f, 1.1f);
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                    eyePos.x, eyePos.y, eyePos.z, 14, 2.2, 1.2, 2.2, 0.08);
+
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.3f);
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.0f, 1.1f);
+            }
         }
     }
 
@@ -172,8 +192,10 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
             EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(player, eyePos, endPos, hitBox, e -> !e.isSpectator() && e.isPickable(), reach * reach);
             
             Vec3 hitVec = endPos;
+            boolean hitSomething = false;
             if (entityHit != null && entityHit.getEntity() instanceof LivingEntity living) {
                 hitVec = entityHit.getLocation();
+                hitSomething = true;
                 
                 // Damage
                 living.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (750.0f)));
@@ -190,15 +212,18 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                     net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
                 );
                 
-                // 15% Heavy Concussion Stun
+                // 15% Heavy Concussion Stun: amplifier 1 and always at least as long
+                // as the guaranteed amplifier 0 application (was 60-100 ticks, which
+                // could end sooner than the base stun it was meant to upgrade).
                 if (serverLevel.getRandom().nextFloat() < 0.15f) {
-                    int stunDuration = 60 + serverLevel.getRandom().nextInt(41); // 3-5 seconds
+                    int stunDuration = 100 + serverLevel.getRandom().nextInt(41); // 5-7 seconds
                     living.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, stunDuration, 1, false, false));
                 }
             } else {
                 HitResult blockHit = getPlayerPOVHitResult(level, player, ClipContext.Fluid.NONE);
                 if (blockHit.getType() != HitResult.Type.MISS) {
                     hitVec = blockHit.getLocation();
+                    hitSomething = true;
                 }
             }
             
@@ -210,19 +235,22 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
             );
             serverLevel.addFreshEntity(extension);
 
-            // Spawn Physical 3D Kinetic Impact Shockwave & Shatter Entity
-            PowerPoleImpactEntity impact = new PowerPoleImpactEntity(
-                serverLevel, player, hitVec, player.getYRot(), player.getXRot(), 2.4f
-            );
-            serverLevel.addFreshEntity(impact);
+            // The impact entity and heavy impact sounds only play when the poke
+            // actually connected; a total miss used to detonate them in mid-air.
+            if (hitSomething) {
+                PowerPoleImpactEntity impact = new PowerPoleImpactEntity(
+                    serverLevel, player, hitVec, player.getYRot(), player.getXRot(), 2.4f
+                );
+                serverLevel.addFreshEntity(impact);
 
-            // High-impact auditory feedback
+                serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,
+                    SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.2f, 1.6f);
+                serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,
+                    SoundEvents.HEAVY_CORE_HIT, SoundSource.PLAYERS, 1.3f, 1.2f);
+            }
+
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.TRIDENT_THROW.value(), SoundSource.PLAYERS, 1.4f, 1.4f);
-            serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,
-                SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.2f, 1.6f);
-            serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,
-                SoundEvents.HEAVY_CORE_HIT, SoundSource.PLAYERS, 1.3f, 1.2f);
             
             player.getCooldowns().addCooldown(stack, 40); // 2 second cooldown
             return InteractionResult.SUCCESS;

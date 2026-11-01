@@ -152,7 +152,20 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
         ServerLevel level = (ServerLevel) player.level();
         if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
-            ACTIVE_BLITZ_MAP.remove(player.getUUID());
+            // Clean up before dropping the sequence: chained targets hold near-permanent
+            // Movement Curse and Cinematic Tracking that only the finisher used to remove.
+            BlitzSequence dropped = ACTIVE_BLITZ_MAP.remove(player.getUUID());
+            if (dropped != null) {
+                for (UUID chainedUuid : dropped.chainedEntityUuids) {
+                    var chainedEntity = level.getEntity(chainedUuid);
+                    if (chainedEntity instanceof LivingEntity chainedLiving) {
+                        chainedLiving.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
+                        chainedLiving.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER);
+                    }
+                }
+                clearEscalatingSpeedBuff(player);
+            }
+            player.sendSystemMessage(Component.literal("§c✦ Immobilized! Blitz Ended. ✦"), true);
             return;
         }
 
@@ -250,7 +263,9 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                 progress = net.minecraft.util.Mth.clamp(progress, 0.0f, 1.0f);
 
                 if (progress >= 1.0f) {
-                    // ARRIVED!
+                    // ARRIVED! Count the hit: the escalating speed buff and the strong-slash
+                    // pattern both read totalHits, and nothing ever incremented it.
+                    seq.totalHits++;
                     seq.hasArrived = true;
                     seq.arrivedPos = targetPos;
                     MovementPhysics.teleport(player, targetPos);
@@ -270,7 +285,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                         com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.0f, 1.5f);
                     
                     // Spawn Physical 3D Saber Crescent Slashes
-                    boolean isStrong = (seq.totalHits + 1) >= seq.nextStrongSlashThreshold;
+                    boolean isStrong = seq.totalHits >= seq.nextStrongSlashThreshold;
                     if (isStrong) {
                         seq.nextStrongSlashThreshold = seq.totalHits + 6 + level.getRandom().nextInt(6);
                     }
@@ -293,7 +308,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                         level.addFreshEntity(slash2);
                     }
                     
-                    applyEscalatingSpeedBuff(player, seq.totalHits + 1);
+                    applyEscalatingSpeedBuff(player, seq.totalHits);
                     
                     seq.currentTargetUuid = null;
                     seq.inContinuationWindow = true;
@@ -880,6 +895,8 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                         net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
                     );
                 }
+
+                com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, anim.centroid.x, anim.centroid.y, anim.centroid.z);
 
                 // Violent sounds: neck snap crunch + thunder clap + sweep
                 level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,

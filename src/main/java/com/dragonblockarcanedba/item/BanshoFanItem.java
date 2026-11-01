@@ -21,19 +21,17 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 
-import java.util.List;
-
 /**
  * Bansho Fan — The Storm Emperor. Endgame legendary weapon.
- * 
- * Stamina Drain: 45% per minute (smooth).
- * 
+ *
+ * Stamina cost: 45% per minute charged discretely per action (the swing cost is
+ * charged once per swing by the left-click network handler).
+ *
  * Left-click: 400 + (Strength × 1.5) damage.
- *   - Gale Force: Launches target 10 blocks with strong upward velocity & physics modifiers
+ *   - Gale Force: Launches the target with a strong outward and upward velocity & physics modifiers
  *   - Applies Bleeding II for 15 seconds (wind cuts)
  *   - Spawns physical 3D emerald impact shockwave
  *   - Cyclone Slash: 30% chance to summon a physical 3D geometric emerald cyclone entity that
@@ -89,10 +87,17 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
     // --- Left Click: Massive knockback + Bleeding II + Physical 3D Cyclone Slash ---
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        // Gale Force: Launch target 10 blocks with strong upward velocity & MC 26.2 catapult physics
+        // Gale Force: Launch the target with strong upward velocity & MC 26.2 catapult physics
         Vec3 diff = target.position().subtract(attacker.position()).normalize().scale(5.0);
         target.setDeltaMovement(target.getDeltaMovement().add(diff.x, 1.2, diff.z));
         com.dragonblockarcanedba.util.DbaCompat.markHurt(target); // Force velocity sync to client
+
+        // The launch itself had no visual: add a gust burst at the launch moment.
+        if (target.level() instanceof ServerLevel gustLevel) {
+            gustLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                12, 0.5, 0.6, 0.5, 0.12);
+        }
 
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
             target,
@@ -113,9 +118,9 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
         target.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 300, 1, false, true), attacker);
 
         if (attacker instanceof ServerPlayer serverPlayer) {
-            // Drain Stamina: 45% per minute (~10 ticks cadence = 0.375% Max Stamina)
-            WeaponDrainHelper.drainStaminaDiscrete(serverPlayer, 45.0, 10);
-
+            // No stamina drain here: the left-click network handler already charges
+            // the swing cost once per swing. Charging again on every landed hit made
+            // a connecting swing cost double an air swing.
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
 
             // Stat-scaled bonus damage: Strength × 1.5
@@ -125,11 +130,14 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
                 target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
             }
 
-            // Cyclone Slash: 30% chance to summon a physical 3D emerald cyclone entity
+            // Cyclone Slash: 30% chance to summon a physical 3D emerald cyclone entity.
+            // The cyclone entity is the only damage source: this method used to ALSO
+            // apply the full cycloneDamage instantly in a 3-block AoE, so a proc dealt
+            // the instant hit plus the entity's 25 ticks of shredding, far beyond the
+            // documented 50 percent.
             if (serverLevel.getRandom().nextFloat() < 0.30f) {
                 float cycloneDamage = (400.0f + strengthBonus) * 0.5f; // 50% of main hit
-                
-                // Spawn physical 3D geometric emerald cyclone at target location
+
                 BanshoCycloneEntity cyclone = new BanshoCycloneEntity(
                     serverLevel,
                     serverPlayer,
@@ -137,23 +145,6 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
                     cycloneDamage
                 );
                 serverLevel.addFreshEntity(cyclone);
-
-                AABB cycloneArea = target.getBoundingBox().inflate(3.0);
-                List<LivingEntity> nearbyTargets = serverLevel.getEntitiesOfClass(
-                    LivingEntity.class, cycloneArea,
-                    e -> e != attacker && e != target && e.isAlive()
-                );
-
-                for (LivingEntity nearby : nearbyTargets) {
-                    nearby.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (cycloneDamage)));
-                    // Knockback nearby targets too
-                    Vec3 knockback = nearby.position().subtract(target.position()).normalize().scale(2.0);
-                    nearby.setDeltaMovement(nearby.getDeltaMovement().add(knockback.x, 0.5, knockback.z));
-                    com.dragonblockarcanedba.util.DbaCompat.markHurt(nearby);
-
-                    // Apply Bleeding I to cyclone targets
-                    nearby.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 200, 0, false, true), serverPlayer);
-                }
             }
 
             // Physical 3D impact shockwave on every Gale Force strike (0 particles)
@@ -185,15 +176,15 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
             return InteractionResult.FAIL;
         }
 
-        // Play tempest release sound
-        level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.WIND_CHARGE_THROW, SoundSource.NEUTRAL,
-            1.2F, 0.9F);
-        level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS,
-            1.0F, 1.5F);
-
         if (!level.isClientSide() && level instanceof ServerLevel serverLevel) {
+            // Cast sounds play server side only, in one source category. They used to
+            // play on both logical sides with mixed NEUTRAL and PLAYERS categories.
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.WIND_CHARGE_THROW, SoundSource.PLAYERS,
+                1.2F, 0.9F);
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS,
+                1.0F, 1.5F);
             Vec3 eye = player.getEyePosition();
             Vec3 look = player.getLookAngle();
 

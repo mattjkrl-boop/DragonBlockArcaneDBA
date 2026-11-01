@@ -42,7 +42,23 @@ import net.minecraft.world.phys.Vec3;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 
 public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
-    private static boolean alternatingTilt = false;
+
+    /**
+     * Slash tilt alternation is per stack, not one static shared by every player
+     * (two reapers swinging at once used to flip each other's tilt). Returns the
+     * tilt for this swing and stores the opposite for the next one, the same
+     * pattern DimensionalSwordItem uses.
+     */
+    private static boolean nextTilt(Player player) {
+        ItemStack stack = player.getMainHandItem().getItem() instanceof SickleOfSorrowItem
+            ? player.getMainHandItem() : player.getOffhandItem();
+        if (!(stack.getItem() instanceof SickleOfSorrowItem)) return false;
+        net.minecraft.nbt.CompoundTag tag = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
+        boolean tiltRight = tag.getBoolean("tiltRight").orElse(false);
+        tag.putBoolean("tiltRight", !tiltRight);
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+        return tiltRight;
+    }
 
     public SickleOfSorrowItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -92,6 +108,10 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
     }
 
     public static void executeTechniqueMelee(ServerPlayer serverPlayer, LivingEntity target) {
+        // Swing sound at swing time; before, only entity hit sounds existed downstream.
+        serverPlayer.level().playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.8f);
+
         // Apply Melting III (amplifier 2) for 15 seconds (300 ticks)
         target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 2, false, true), serverPlayer);
 
@@ -119,7 +139,6 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
         serverPlayer.heal(healAmount);
 
         // Spawn 3D Physical Sorrow Slash Impact Geometry directly on target
-        alternatingTilt = !alternatingTilt;
         Vec3 targetCenter = target.position().add(0, target.getBbHeight() * 0.5, 0);
         SorrowSlashEntity impactSlash = new SorrowSlashEntity(
             serverLevel,
@@ -128,7 +147,7 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
             serverPlayer.getYRot(),
             serverPlayer.getXRot(),
             0.0f, // Damage already applied above in melee hit
-            alternatingTilt,
+            nextTilt(serverPlayer),
             true  // isImpactBurst
         );
         serverLevel.addFreshEntity(impactSlash);
@@ -153,7 +172,9 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
             float strengthBonus = (float) (accessor.dba$getStrength() * 3.0);
             float totalDamage = 750.0f + strengthBonus;
 
-            alternatingTilt = !alternatingTilt;
+            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.8f);
+
             Vec3 look = player.getLookAngle();
             Vec3 spawnPos = player.getEyePosition().add(look.scale(1.2));
 
@@ -164,7 +185,7 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
                 player.getYRot(),
                 player.getXRot(),
                 totalDamage,
-                alternatingTilt,
+                nextTilt(player),
                 false // isImpactBurst = false (flying wave)
             );
             slashWave.setDeltaMovement(look.scale(1.6));
@@ -189,7 +210,12 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
     private static final java.util.Map<java.util.UUID, Long> RIFT_COOLDOWNS = new java.util.concurrent.ConcurrentHashMap<>();
 
     public static boolean performTechniqueDimensionalRift(Player player) {
+        // This cooldown map is NOT redundant with the item cooldown in use(): the
+        // technique-active right-click callbacks in DragonBlockArcaneDBA call this
+        // method directly and never pass through use(). It does get cleaned now:
+        // entries older than the cooldown are pruned on every call.
         long gameTime = player.level().getGameTime();
+        RIFT_COOLDOWNS.entrySet().removeIf(e -> gameTime - e.getValue() >= 60);
         long lastUse = RIFT_COOLDOWNS.getOrDefault(player.getUUID(), 0L);
         if (gameTime - lastUse < 60) {
             return false;

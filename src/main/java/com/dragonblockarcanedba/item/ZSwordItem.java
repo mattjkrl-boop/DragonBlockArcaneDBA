@@ -300,6 +300,11 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
 
                 // Cooldown
                 player.getCooldowns().addCooldown(stack, 60 + (int) (powerRatio * 80));
+            } else {
+                // Releasing too early used to waste the stance drain with no feedback at all.
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 0.7f, 0.6f);
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7The Z Sword is too heavy: hold the stance a moment longer."), true);
             }
         }
         return true;

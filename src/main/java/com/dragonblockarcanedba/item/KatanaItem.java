@@ -139,6 +139,11 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
 
         if (player.getCooldowns().isOnCooldown(stack)) return;
 
+        // Charge matters: a tap fires at 55% power, a full 5 second draw at 130%,
+        // and the freeform dash stretches from 8 to 14 blocks with charge.
+        float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
+        float chargeDamageMult = 0.55f + 0.75f * chargeRatio;
+
         // Find enemies within 16 blocks to chain through (up to 5 targets, Tweak A)
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle();
@@ -214,13 +219,19 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
 
                 // Tweak B: +20% damage per consecutive target crossed
                 float streakBonus = 1.0f + (i * 0.2f);
-                float damage = (500.0f + (float) (accessor.dba$getStrength() * 2.5f)) * streakBonus;
+                float damage = (500.0f + (float) (accessor.dba$getStrength() * 2.5f)) * streakBonus * chargeDamageMult;
 
                 final LivingEntity finalTarget = t;
                 final float finalDamage = damage;
                 // Delayed simultaneous strike 0.3s (6 ticks) later
                 level.getServer().execute(() -> {
+                    // The queued strike must not fire on a dead, removed, or dimension-changed target.
+                    if (!finalTarget.isAlive() || finalTarget.isRemoved() || finalTarget.level() != level) return;
                     finalTarget.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finalDamage)));
+                    if (targetIndex == 0) {
+                        com.dragonblockarcanedba.fx.DbaImpactFx.medium(level, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ());
+                        com.dragonblockarcanedba.fx.DbaImpactFx.burst(level, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ());
+                    }
 
                     // Spawn physical 3D Swift Crescent model & cross-cleave speed cuts on target
                     Vec3 impactPos = finalTarget.position().add(0, finalTarget.getBbHeight() * 0.5, 0);
@@ -242,9 +253,20 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
                 });
             }
         } else {
-            // Freeform straight flash dash forward (scaled by CC / movement limiter)
-            Vec3 targetPos = startPos.add(look.scale(14.0 * ccMult));
+            // Freeform straight flash dash forward (scaled by CC / movement limiter, 8 to 14 blocks by charge)
+            double dashDist = (8.0 + 6.0 * chargeRatio) * ccMult;
+            Vec3 targetPos = startPos.add(look.scale(dashDist));
             MovementPhysics.teleport(player, targetPos);
+            level.playSound(null, startPos.x, startPos.y, startPos.z,
+                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.7f);
+            for (int i = 1; i <= 3; i++) {
+                Vec3 trailPos = startPos.add(look.scale(dashDist * i / 4.0)).add(0, player.getBbHeight() * 0.5, 0);
+                SwiftCrescentEntity trail = new SwiftCrescentEntity(
+                    level, player, trailPos, player.getYRot(), player.getXRot(),
+                    i % 2 == 0 ? 35.0f : -35.0f, 0.8f, i % 2, 8
+                );
+                level.addFreshEntity(trail);
+            }
         }
 
         // Blade sheathing ring sound
@@ -378,6 +400,11 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             float baseDamage = 1000.0f + (chargeRatio * 1000.0f);
             float strDamage = (float) (accessor.dba$getStrength() * 4.0f * chargeRatio);
             float totalDamage = baseDamage + strDamage;
+
+            if (!targets.isEmpty()) {
+                LivingEntity firstHit = targets.get(0);
+                com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, firstHit.getX(), firstHit.getY(), firstHit.getZ());
+            }
 
             for (LivingEntity t : targets) {
                 t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);

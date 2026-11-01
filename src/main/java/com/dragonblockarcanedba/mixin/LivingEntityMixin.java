@@ -100,6 +100,9 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
                         player.getX(), player.getY() + player.getBbHeight() * 0.5, player.getZ(),
                         10, 0.3, 0.5, 0.3, 0.1
                     );
+                    // A 50 percent full-damage negation needs an audio cue too, not just dust.
+                    level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                        com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 1.8f);
                     // Give brief invulnerability frames (10 ticks = 0.5 seconds)
                     com.dragonblockarcanedba.util.DbaCompat.setInvulnerableTime(player, Math.max(com.dragonblockarcanedba.util.DbaCompat.getInvulnerableTime(player), 10));
                     return 0.0f; // Negate all damage

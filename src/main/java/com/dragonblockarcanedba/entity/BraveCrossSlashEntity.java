@@ -44,6 +44,11 @@ public class BraveCrossSlashEntity extends Projectile {
         this.entityData.set(SLASH_SCALE, scale);
     }
 
+    /** Seeds the hit set so this entity never re-hits the given entity (the finisher's primary target). */
+    public void excludeEntity(int entityId) {
+        hitEntityIds.add(entityId);
+    }
+
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(SLASH_SCALE, 1.0f);

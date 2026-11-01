@@ -101,6 +101,21 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
         return 0;
     }
 
+    public static long getComboTime(ItemStack stack) {
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+        if (customData != null) {
+            return customData.copyTag().getLongOr("ComboTime", 0L);
+        }
+        return 0L;
+    }
+
+    public static void setComboTime(ItemStack stack, long gameTime) {
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+        CompoundTag tag = customData != null ? customData.copyTag() : new CompoundTag();
+        tag.putLong("ComboTime", gameTime);
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+    }
+
     public static void setCombo(ItemStack stack, int combo) {
         CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
         CompoundTag tag = customData != null ? customData.copyTag() : new CompoundTag();
@@ -111,15 +126,16 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
     // --- LEFT CLICK: Brave Sword Assault (Combo & Finisher) ---
 
     public static void onLeftClickAssaultTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
-        // Drain Ki: 25% per min + Stamina: 20% per min (smooth)
-        if (!WeaponDrainHelper.drainBothPerTick(player, 25.0, 20.0)) {
-            return;
-        }
-
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
         int combo = getCombo(stack);
+        // Combo decays: 5 seconds without a landed hit and the banked combo is gone,
+        // so a player cannot walk into a new fight one hit from a finisher.
+        if (combo > 0 && level.getGameTime() - getComboTime(stack) > 100) {
+            combo = 0;
+            setCombo(stack, 0);
+        }
         // Attack rate scales with combo (Tweak A: higher combo = faster strikes)
         int interval = Math.max(3, 8 - (combo / 2));
         if (chargeTicks % interval != 0) return;
@@ -135,9 +151,15 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
         );
 
         if (!targets.isEmpty()) {
+            // Drain Ki: 25% per min + Stamina: 20% per min (smooth). Only while a target is
+            // actually in the assault box: holding into empty air used to burn both at full rate.
+            if (!WeaponDrainHelper.drainBothPerTick(player, 25.0, 20.0)) {
+                return;
+            }
             LivingEntity target = targets.get(0);
             combo++;
             setCombo(stack, combo);
+            setComboTime(stack, level.getGameTime());
 
             float strength = accessor.dba$getStrength();
 
@@ -159,10 +181,13 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                     net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
                 );
 
-                // Spawn physical 3D volumetric golden-cyan cross slash entity
+                // Spawn physical 3D volumetric golden-cyan cross slash entity. The entity is
+                // splash only: half finisher damage, and it never re-hits the primary target,
+                // who already took the direct finisher hit above.
                 BraveCrossSlashEntity crossSlash = new BraveCrossSlashEntity(
-                    level, player, targetCenter, player.getYRot(), player.getXRot(), finisherDmg, 1.25f
+                    level, player, targetCenter, player.getYRot(), player.getXRot(), finisherDmg * 0.5f, 1.25f
                 );
+                crossSlash.excludeEntity(target.getId());
                 level.addFreshEntity(crossSlash);
 
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.6f);

@@ -121,7 +121,18 @@ public class ErasureCannonBeamEntity extends Projectile {
                     e -> e.isAlive() && e != finalCaster && !hitEntityIds.contains(e.getId())
                 );
 
+                double beamRadius = 1.5 + charge * 1.5;
                 for (LivingEntity t : targets) {
+                    // The candidate box is a fat diagonal AABB; without a real distance
+                    // test, targets several blocks off the beam line (or behind cover
+                    // near the box) took full beam damage. Require the target center
+                    // to actually be within the beam radius of the beam segment.
+                    Vec3 targetCenter = t.position().add(0, t.getBbHeight() * 0.5, 0);
+                    double along = Math.max(0.0, Math.min(length, look.dot(targetCenter.subtract(start))));
+                    Vec3 closest = start.add(look.scale(along));
+                    if (targetCenter.distanceTo(closest) > beamRadius + t.getBbWidth() * 0.5) {
+                        continue;
+                    }
                     hitEntityIds.add(t.getId());
 
                     if (finalCaster instanceof LivingEntity livingOwner) {

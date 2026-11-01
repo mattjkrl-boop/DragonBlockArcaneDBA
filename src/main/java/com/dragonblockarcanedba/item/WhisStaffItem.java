@@ -30,23 +30,24 @@ import java.util.List;
  * Whis Staff — The Temporal God Rod. Endgame legendary weapon.
  * 
  * Left-click: 350 + (Dexterity × 2) damage.
- *   - Time reversal for 10 seconds (200 ticks)
+ *   - Time reversal for 5 seconds (100 ticks, the position history buffer maximum)
  *   - Temporal Shatter: 1.5% of target's max HP as bonus magic damage
- *   - Slowness III for 5 seconds (time distortion)
+ *   - Temporal Stasis amplifier 0 for 100 ticks (full time freeze with temporal drag)
  *   - Physical 3D Time Shatter entity (prismatic tumbling glass shards & fractured chrono-mirror)
- * 
+ *
  * Right-click: "Temporal Rift" — 12-block radius AOE.
- *   - All entities: Temporal Freeze (Slowness 127 = frozen) for 3 seconds, then 15-second reversal
+ *   - All entities in range: Temporal Stasis for 3 seconds (60 ticks), then 5-second reversal
  *   - Instant 400 + (Spirit × 1.5) magic damage to all entities in range
  *   - Self-Buff: Celestial Grace for 10 seconds
  *   - Physical 3D Translucent Celestial Dome & 3D Rotating Clock Astrolabe Entity
  *   - 5-second cooldown
- * 
+ *
  * Passive: Auto-Dodge — 50% chance to negate incoming damage while held in mainhand.
  *   (Implemented via LivingEntityMixin)
- * 
+ *
  * Unbreakable legendary weapon. No durability.
- * Ki Drain: 100% per minute (smooth).
+ * Ki cost: the swing cost (100% per minute over 13 ticks) is charged once per swing
+ * by the left-click network handler; the rift costs 100% per minute over 100 ticks.
  */
 public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     private static final double AOE_RADIUS = 12.0;
@@ -87,12 +88,21 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
         return builder.build();
     }
 
-    // --- Left Click: Damage + Time Reversal + Temporal Shatter + Slowness ---
+    // --- Left Click: Damage + Time Reversal + Temporal Shatter + Temporal Stasis ---
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        // Time reversal for 10 seconds (200 ticks)
+        // Player attackers only: the control package used to apply for any attacker,
+        // so a mob somehow swinging the staff froze and reversed targets for free
+        // while every cost and bonus damage stayed player-only.
+        if (!(attacker instanceof Player)) {
+            return;
+        }
+
+        // Time reversal for 5 seconds (100 ticks). The position history buffer holds
+        // at most 100 entries, so the old 200-tick request ran out of recorded
+        // positions halfway through the rewind.
         if (target instanceof TimeTracker timeTracker) {
-            timeTracker.dba$startReversing(200);
+            timeTracker.dba$startReversing(100);
         }
 
         // Temporal Stasis — time distortion freeze & extreme temporal drag
@@ -114,9 +124,9 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
         );
 
         if (attacker instanceof ServerPlayer serverPlayer) {
-            // Drain Ki: 100% per minute (~13 ticks cadence = 1.08% Max Ki)
-            WeaponDrainHelper.drainKiDiscrete(serverPlayer, 100.0, 13);
-
+            // No Ki drain here: the left-click network handler already charges the
+            // swing cost once per swing. Charging again on every landed hit made a
+            // connecting swing cost double an air swing.
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
 
             // Stat-scaled bonus damage: Dexterity × 2
@@ -189,9 +199,10 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
                     // Temporal Stasis: Custom time paralysis for 3 seconds (60 ticks)
                     target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, 60, 0, false, true), player);
 
-                    // Time reversal for 15 seconds (300 ticks) — starts after freeze ends
+                    // Time reversal for 5 seconds (100 ticks, the history buffer
+                    // maximum) — starts after freeze ends
                     if (target instanceof TimeTracker tracker) {
-                        tracker.dba$startReversing(300);
+                        tracker.dba$startReversing(100);
                     }
                 }
             }
@@ -209,7 +220,16 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             );
             serverLevel.addFreshEntity(rift);
 
+            // Impact feedback for a 12-block time freeze: it used to land with no
+            // shake, no hitstop, and no DBA sound at all.
+            com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, player.getX(), player.getY(), player.getZ());
+
             // Resonant celestial time activation audio
+            serverLevel.playSound(
+                null, player.getX(), player.getY() + 1.0, player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS,
+                1.2f, 1.4f
+            );
             serverLevel.playSound(
                 null, player.getX(), player.getY() + 1.0, player.getZ(),
                 SoundEvents.BEACON_POWER_SELECT, SoundSource.PLAYERS,

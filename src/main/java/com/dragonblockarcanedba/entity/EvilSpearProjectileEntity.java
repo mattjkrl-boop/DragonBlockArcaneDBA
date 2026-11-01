@@ -75,6 +75,24 @@ public class EvilSpearProjectileEntity extends Projectile {
         super.tick();
 
         Vec3 movement = this.getDeltaMovement();
+
+        // Block collision: the spear is noPhysics and stepped manually with no clip check,
+        // so it flew through walls for its full life and marked targets through terrain.
+        if (!this.level().isClientSide()) {
+            Vec3 start = this.position();
+            Vec3 end = start.add(movement);
+            net.minecraft.world.phys.HitResult blockHit = this.level().clip(new net.minecraft.world.level.ClipContext(
+                start, end, net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, this));
+            if (blockHit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                Vec3 hitPos = blockHit.getLocation();
+                this.setPos(hitPos.x, hitPos.y, hitPos.z);
+                this.level().playSound(null, hitPos.x, hitPos.y, hitPos.z,
+                    net.minecraft.sounds.SoundEvents.TRIDENT_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 1.4f, 0.7f);
+                this.discard();
+                return;
+            }
+        }
+
         double nextX = this.getX() + movement.x;
         double nextY = this.getY() + movement.y;
         double nextZ = this.getZ() + movement.z;

@@ -1,6 +1,5 @@
 package com.dragonblockarcanedba.item;
 
-import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.AzureLightningEntity;
 import com.dragonblockarcanedba.entity.AzureRushTrailEntity;
@@ -9,9 +8,6 @@ import com.dragonblockarcanedba.entity.AzureStormEntity;
 import com.dragonblockarcanedba.entity.AzureTempestChannelEntity;
 import com.dragonblockarcanedba.entity.AzureTornadoEntity;
 import com.dragonblockarcanedba.movement.MovementPhysics;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -20,7 +16,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -94,6 +89,28 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
 
     public static final Map<UUID, Long> LAST_RUSH_START_TIME = new ConcurrentHashMap<>();
     public static final Map<UUID, Boolean> DOUBLE_RUSHING_MAP = new ConcurrentHashMap<>();
+
+    @Override
+    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
+        // Basic Azure melee was bare damage with no wind identity at all. A hit now kicks
+        // up a gust at the victim, shoves them lightly along the swing, and sips Ki like
+        // its sibling blades do.
+        if (attacker instanceof Player player && !player.level().isClientSide()) {
+            WeaponDrainHelper.drainKiDiscrete(player, 15.0, 7);
+            if (player.level() instanceof ServerLevel serverLevel) {
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                    target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                    10, 0.4, 0.3, 0.4, 0.2);
+            }
+            Vec3 away = target.position().subtract(player.position());
+            away = new Vec3(away.x, 0, away.z);
+            if (away.lengthSqr() > 0.001) {
+                away = away.normalize().scale(0.3);
+                target.setDeltaMovement(target.getDeltaMovement().add(away.x, 0.12, away.z));
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
+            }
+        }
+    }
 
     public static void onDragonRushTick(ServerPlayer player, ItemStack stack, boolean isSneaking) {
         ServerLevel level = (ServerLevel) player.level();
@@ -173,6 +190,15 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
             // Damage
             float damage = (isDoubleRushing ? 600.0f : 350.0f) + (float) (accessor.dba$getStrength() * 2.0);
             enemy.hurtServer(level, level.damageSources().mobAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
+            // Pass-through hits were silent and weightless. Fresh full hits (invulnerableTime
+            // just reset to 20) get a sweep sound and a spark burst at the victim.
+            if (com.dragonblockarcanedba.util.DbaCompat.getInvulnerableTime(enemy) >= 20) {
+                level.playSound(null, enemy.getX(), enemy.getY(), enemy.getZ(),
+                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 1.3f);
+                level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    enemy.getX(), enemy.getY() + enemy.getBbHeight() * 0.5, enemy.getZ(),
+                    6, 0.3, 0.3, 0.3, 0.15);
+            }
 
             // Tweak C: Passing through an enemy creates a miniature tornado that launches them
             if (level.getRandom().nextFloat() < (isDoubleRushing ? 0.8f : 0.4f)) {
@@ -328,9 +354,10 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
                 LivingEntity target = null;
                 if (targetUuid != null) {
                     net.minecraft.world.entity.Entity ent = serverLevel.getEntity(targetUuid);
-                    if (ent instanceof LivingEntity le && le.isAlive()) {
+                    if (ent instanceof LivingEntity le && le.isAlive() && le.distanceToSqr(player) <= 64.0 * 64.0) {
                         target = le;
                     } else {
+                        // Dead, removed, or long gone: the lock goes stale and the storm follows the player.
                         LOCKED_TARGET_MAP.remove(player.getUUID());
                     }
                 }
@@ -342,9 +369,10 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
 
                 player.sendSystemMessage(Component.literal("§b✦ Tempest Summoned! (" + (int) radius + "m domain) ✦"), true);
 
-                // Sound
+                // Sound and summon impact: a 30 block storm domain should land with weight.
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 3.0f, 0.8f);
+                com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, spawnPos.x, spawnPos.y, spawnPos.z);
 
                 player.getCooldowns().addCooldown(stack, 60 + (int) (chargeRatio * 60));
             }

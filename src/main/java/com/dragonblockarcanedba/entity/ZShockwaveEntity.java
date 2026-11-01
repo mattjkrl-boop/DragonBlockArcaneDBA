@@ -120,6 +120,23 @@ public class ZShockwaveEntity extends Projectile {
         double halfHeight = 1.6;
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Travel feedback: the wave was silent and invisible between launch and hit.
+            // Main waves shed sparks, sub-waves shed embers so the two read differently.
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        subWave ? com.dragonblockarcanedba.particle.DbaParticles.EMBER : com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        this.getX(), this.getY() + 0.6, this.getZ(),
+                        Math.max(2, Math.round((float) halfWidth * 3f * density)),
+                        halfWidth * 0.7, 0.5, halfWidth * 0.7, 0.08);
+                }
+            }
+            if (this.tickCount % 15 == 0) {
+                serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
+                    net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.HOSTILE, 1.1f, 0.55f);
+            }
+
             // Tweak A: Spawn trailing sub-waves at max charge
             if (charge >= 0.90f && !subWave && !hasSpawnedSubWaves && this.tickCount == 3) {
                 this.hasSpawnedSubWaves = true;
@@ -163,6 +180,11 @@ public class ZShockwaveEntity extends Projectile {
                         ? serverLevel.damageSources().indirectMagic(this, livingOwner)
                         : serverLevel.damageSources().inWall();
                     target.hurtServer(serverLevel, crushSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (250.0f)));
+                    // The crush used to be a silent teleport: give it debris, shake, and a crunch.
+                    com.dragonblockarcanedba.fx.SlamDebris.burst(serverLevel, target.position(), 1.6, com.dragonblockarcanedba.fx.SlamDebris.Profile.Z_GRAVITY);
+                    com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, target.getX(), target.getY(), target.getZ());
+                    serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
+                        net.minecraft.sounds.SoundEvents.ANVIL_LAND, net.minecraft.sounds.SoundSource.HOSTILE, 1.2f, 0.7f);
                 }
             }
 

@@ -201,8 +201,14 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                 }
 
                 // Azure Dragon Sword Target lock-on logic (Tweak B)
-                if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem && entity instanceof net.minecraft.world.entity.LivingEntity) {
+                if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem && entity instanceof net.minecraft.world.entity.LivingEntity lockTarget) {
                     com.dragonblockarcanedba.item.AzureDragonSwordItem.LOCKED_TARGET_MAP.put(player.getUUID(), entity.getUUID());
+                    // Lock-on used to be invisible: no sound, no message, no way to know a lock existed.
+                    if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+                        serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal("§b✦ Tempest lock: " + lockTarget.getName().getString() + " ✦"), true);
+                        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                            net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 1.6f);
+                    }
                 }
             }
             return net.minecraft.world.InteractionResult.PASS;
@@ -252,6 +258,9 @@ public class DragonBlockArcaneDBA implements ModInitializer {
 
             // Saber Server Tick (Blitz sequences, Flash Step recharge, Escalating Speed expire)
             com.dragonblockarcanedba.item.SaberItem.tickServer(server);
+
+            // Evil Spear Server Tick (staggered Hell Hunt chains, lunge landings)
+            com.dragonblockarcanedba.item.EvilSpearItem.tickServer(server);
         });
 
         // Register Death Hook (Otherworld mechanics)
