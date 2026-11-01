@@ -61,6 +61,9 @@ public class DbaNetwork {
 
         // Weapon Left Click (C2S)
         PayloadTypeRegistry.serverboundPlay().register(C2SWeaponLeftClickPayload.TYPE, C2SWeaponLeftClickPayload.CODEC);
+
+        // Movement verbs (C2S, Phase 5 movement layer)
+        PayloadTypeRegistry.serverboundPlay().register(C2SMovementPayload.ID, C2SMovementPayload.CODEC);
     }
 
     public static void registerServer() {
