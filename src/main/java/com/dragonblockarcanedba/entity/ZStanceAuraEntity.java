@@ -90,6 +90,19 @@ public class ZStanceAuraEntity extends Projectile {
                 return;
             }
 
+            // Theme particles: the stance field used to be mesh only. Violet
+            // void smoke drifts at the rim while the gravity field is held.
+            if (this.tickCount % 4 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    double spread = 1.6 + getPowerRatio() * 1.8;
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        this.getX(), this.getY() + 0.4, this.getZ(),
+                        Math.max(1, Math.round(3f * density)),
+                        spread * 0.7, 0.7, spread * 0.7, 0.02);
+                }
+            }
+
             this.idleTicksWithoutUpdate++;
             // If no stance update received for 6 ticks, stance ended
             if (this.idleTicksWithoutUpdate > 6) {

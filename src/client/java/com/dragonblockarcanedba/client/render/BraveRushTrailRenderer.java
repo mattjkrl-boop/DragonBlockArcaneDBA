@@ -90,7 +90,7 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
             Matrix4f matrix = pose.pose();
 
             // 1. Supersonic 3D Heroic Mach Cone (Faceted aerodynamic cone expanding backwards)
-            int coneSegments = 16;
+            int coneSegments = 24;
             float coneLength = 3.6f * scale;
             float coneBaseRadius = (state.isFirstPersonOwner ? 1.45f : 1.2f) * scale;
             float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
@@ -161,8 +161,23 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
             for (int r = 1; r <= ringCount; r++) {
                 float ringZ = tipZ - (r * (len / (ringCount + 1)));
                 float ringR = (0.9f + progress * 0.8f + r * 0.3f) * scale;
-                drawRing(matrix, buffer, 0, 0, ringZ, ringR, ringR * 0.78f, 16, 0.0f, 0.95f, 1.0f, alpha * 0.60f);
+                drawRing(matrix, buffer, 0, 0, ringZ, ringR, ringR * 0.78f, 24, 0.0f, 0.95f, 1.0f, alpha * 0.60f);
             }
+
+            // 5. Energy flow pulse: one brighter vortex ring travels down the
+            // trail so the wake reads as flowing energy, not a static tube.
+            float flowProg = (state.age * 0.14f) % 1.0f;
+            float flowZ = tipZ - flowProg * len;
+            float flowR = (0.9f + progress * 0.8f + flowProg * 0.9f) * scale;
+            drawRing(matrix, buffer, 0, 0, flowZ, flowR, flowR * 0.80f, 24, 1.0f, 0.98f, 0.85f, alpha * 0.55f * (1.0f - flowProg * 0.4f));
+        });
+
+        // Additive halo pass: a wider faint copy of the thrust beam core so
+        // the dash path blooms along its length.
+        float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawBeam(matrix, buffer, 0, 0, tipZ + 0.2f, 0, 0, tipZ - len, 0.34f * scale, 1.0f, 0.80f, 0.0f, alpha * 0.16f);
         });
 
         poseStack.popPose();

@@ -112,17 +112,21 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
             Matrix4f matrix = pose.pose();
 
             // 1. Multi-Layered Continuous 3D Cylindrical Laser Core
-            // Layer A: Superdense White-Hot Inner Core Cylinder (12 sides)
+            // The 3-layer prism identity stays (white core, cyan shroud, hex
+            // sheath), but the tube is no longer uniform: drawFlowBeam runs
+            // traveling brightness bands down the length (T7) and tapers each
+            // layer toward the terminus, the sheath most of all.
+            // Layer A: Superdense White-Hot Inner Core Cylinder (16 sides)
             float innerRadius = baseRadius * 0.30f;
-            drawPrismBeam(matrix, buffer, innerRadius, zStart, beamLength, 12, age * 6.0f, 1.0f, 1.0f, 1.0f, alpha * 0.98f);
+            drawFlowBeam(matrix, buffer, innerRadius, zStart, beamLength, 16, age * 6.0f, 1.0f, 1.0f, 1.0f, alpha * 0.98f, 0.15f, 0.0f, age);
 
-            // Layer B: Fluted Radiant Cyan Synchrotron Plasma Shroud (12 sides)
+            // Layer B: Fluted Radiant Cyan Synchrotron Plasma Shroud (16 sides)
             float midRadius = baseRadius * 0.65f;
-            drawPrismBeam(matrix, buffer, midRadius, zStart, beamLength, 12, -age * 10.0f, 0.0f, 0.95f, 1.0f, alpha * 0.75f);
+            drawFlowBeam(matrix, buffer, midRadius, zStart, beamLength, 16, -age * 10.0f, 0.0f, 0.95f, 1.0f, alpha * 0.75f, 0.30f, 2.1f, age);
 
             // Layer C: Hexagonal Outer Synchrotron Containment Sheath (6 sides)
             float outerRadius = baseRadius * 1.05f;
-            drawPrismBeam(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 4.0f, 0.05f, 0.70f, 1.0f, alpha * 0.35f);
+            drawFlowBeam(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 4.0f, 0.05f, 0.70f, 1.0f, alpha * 0.35f, 0.45f, 4.2f, age);
 
             // 2. Quad Helical Synchrotron Energy Drill Ribbons
             int segments = Math.min((int) (beamLength * 3.5f), 128);
@@ -153,12 +157,17 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
                     float x2 = (float) Math.cos(a2) * spiralRadius;
                     float y2 = (float) Math.sin(a2) * spiralRadius;
 
+                    // Energy flow (T7): brightness bands travel down the ribbons
+                    // toward the terminus instead of a flat alpha per ribbon.
+                    float flowBand = 0.5f + 0.5f * (float) Math.sin(p1 * 18.0 - age * 3.0f + h * 1.7f);
+                    float segAlpha = aCol * (0.72f + 0.28f * flowBand);
+
                     drawQuad(matrix, buffer,
                         x1 - ribbonSize, y1 - ribbonSize, z1,
                         x1 + ribbonSize, y1 + ribbonSize, z1,
                         x2 + ribbonSize, y2 + ribbonSize, z2,
                         x2 - ribbonSize, y2 - ribbonSize, z2,
-                        rCol, gCol, bCol, aCol
+                        rCol, gCol, bCol, segAlpha
                     );
                 }
             }
@@ -170,7 +179,7 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
                 float ringPhase = (float) Math.sin(age * 0.5f + k * 1.1f);
                 float ringR = (baseRadius * 1.35f + ringPhase * 0.08f);
 
-                drawPlaneRing(matrix, buffer, 0, 0, z, ringR, ringR * 0.82f, 16, age * (20.0f + k * 6.0f),
+                drawPlaneRing(matrix, buffer, 0, 0, z, ringR, ringR * 0.82f, 24, age * (20.0f + k * 6.0f),
                     0.0f, 0.95f, 1.0f, alpha * 0.80f);
             }
 
@@ -181,27 +190,67 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
             drawTerminusImpact(matrix, buffer, beamLength, age, pulse, alpha, charge);
         });
 
+        // Additive glow halo (T1): a wide faint sheath around the whole beam
+        // with the same flow bands and terminus taper, so the beam blooms.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawFlowBeam(matrix, buffer, baseRadius * 1.45f, zStart, beamLength, 12, age * 4.0f,
+                0.10f, 0.75f, 1.0f, alpha * 0.15f, 0.45f, 1.0f, age);
+        });
+
         poseStack.popPose();
     }
 
-    private static void drawPrismBeam(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float length, int sides, float rotDeg, float r, float g, float b, float a) {
+    // Beam tube with energy flow (T7): the length is drawn in bands, each band
+    // shaded by a traveling sine brightness wave (phase runs from muzzle to
+    // terminus as age advances) and the radius tapers by the taper factor
+    // toward the terminus. Replaces the old single-quad uniform prism.
+    private static void drawFlowBeam(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float length, int sides, float rotDeg, float r, float g, float b, float a, float taper, float flowPhase, float age) {
         double rotRad = Math.toRadians(rotDeg);
-        for (int i = 0; i < sides; i++) {
-            double a1 = (i / (double) sides) * Math.PI * 2.0 + rotRad;
-            double a2 = ((i + 1) / (double) sides) * Math.PI * 2.0 + rotRad;
+        float span = length - zStart;
+        if (span <= 0.0f) return;
+        int bands = Math.max(6, Math.min(20, (int) (span / 2.5f)));
 
-            float x1 = (float) Math.cos(a1) * radius;
-            float y1 = (float) Math.sin(a1) * radius;
-            float x2 = (float) Math.cos(a2) * radius;
-            float y2 = (float) Math.sin(a2) * radius;
+        for (int band = 0; band < bands; band++) {
+            float p1 = band / (float) bands;
+            float p2 = (band + 1) / (float) bands;
 
-            drawQuad(matrix, consumer,
-                x1, y1, zStart,
-                x2, y2, zStart,
-                x2, y2, length,
-                x1, y1, length,
-                r, g, b, a
-            );
+            float z1 = zStart + p1 * span;
+            float z2 = zStart + p2 * span;
+
+            float rad1 = radius * (1.0f - taper * p1);
+            float rad2 = radius * (1.0f - taper * p2);
+
+            float wave1 = 0.5f + 0.5f * (float) Math.sin(p1 * 14.0 - age * 2.4f + flowPhase);
+            float wave2 = 0.5f + 0.5f * (float) Math.sin(p2 * 14.0 - age * 2.4f + flowPhase);
+            float a1Band = a * (0.70f + 0.30f * wave1);
+            float a2Band = a * (0.70f + 0.30f * wave2);
+
+            for (int i = 0; i < sides; i++) {
+                double ang1 = (i / (double) sides) * Math.PI * 2.0 + rotRad;
+                double ang2 = ((i + 1) / (double) sides) * Math.PI * 2.0 + rotRad;
+
+                float x1a = (float) Math.cos(ang1) * rad1;
+                float y1a = (float) Math.sin(ang1) * rad1;
+                float x2a = (float) Math.cos(ang2) * rad1;
+                float y2a = (float) Math.sin(ang2) * rad1;
+
+                float x1b = (float) Math.cos(ang1) * rad2;
+                float y1b = (float) Math.sin(ang1) * rad2;
+                float x2b = (float) Math.cos(ang2) * rad2;
+                float y2b = (float) Math.sin(ang2) * rad2;
+
+                consumer.addVertex(matrix, x1a, y1a, z1).setColor(r, g, b, a1Band).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2a, y2a, z1).setColor(r, g, b, a1Band).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2b, y2b, z2).setColor(r, g, b, a2Band).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x1b, y1b, z2).setColor(r, g, b, a2Band).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+                // Reverse side, same gradient
+                consumer.addVertex(matrix, x1b, y1b, z2).setColor(r, g, b, a2Band).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+                consumer.addVertex(matrix, x2b, y2b, z2).setColor(r, g, b, a2Band).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+                consumer.addVertex(matrix, x2a, y2a, z1).setColor(r, g, b, a1Band).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+                consumer.addVertex(matrix, x1a, y1a, z1).setColor(r, g, b, a1Band).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            }
         }
     }
 

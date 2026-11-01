@@ -53,14 +53,15 @@ public class OxFissureEntity extends Projectile {
             }
             LivingEntity owner = this.getOwner() instanceof LivingEntity living ? living : null;
 
-            // Ambient magma/flame embers
-            if (this.tickCount % 4 == 0) {
+            // Ambient magma/flame embers, scaled by effect density (redesign T5)
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (density > 0f && this.tickCount % 4 == 0) {
                 double ox = (serverLevel.getRandom().nextDouble() - 0.5) * 2.5;
                 double oz = (serverLevel.getRandom().nextDouble() - 0.5) * 2.5;
                 serverLevel.sendParticles(
                     com.dragonblockarcanedba.particle.DbaParticles.EMBER,
                     pos.x + ox, pos.y + 0.1, pos.z + oz,
-                    1, 0, 0.03, 0, 0.01
+                    Math.max(1, Math.round(1f * density)), 0, 0.03, 0, 0.01
                 );
             }
 

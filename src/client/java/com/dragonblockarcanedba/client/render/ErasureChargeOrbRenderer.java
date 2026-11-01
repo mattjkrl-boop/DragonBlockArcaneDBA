@@ -107,13 +107,13 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
             drawRotatingOctahedron(matrix, buffer, coreRadius, age * 45.0f, age * 30.0f, 1.0f, 1.0f, 1.0f, 0.98f * (0.25f + charge * 0.75f));
 
             // 2. Middle Radiant Cyan Plasma Geodesic Sphere
-            drawGeodesicSphere(matrix, buffer, orbRadius * 0.75f, age * -25.0f, 12, 0.0f, 0.95f, 1.0f, alpha * 0.85f);
+            drawGeodesicSphere(matrix, buffer, orbRadius * 0.75f, age * -25.0f, 18, 0.0f, 0.95f, 1.0f, alpha * 0.85f);
 
             // 3. Outer Hexagonal Synchrotron Energy Cage
-            drawGeodesicSphere(matrix, buffer, orbRadius, age * 18.0f, 8, 0.10f, 0.70f, 1.0f, alpha * 0.45f);
+            drawGeodesicSphere(matrix, buffer, orbRadius, age * 18.0f, 12, 0.10f, 0.70f, 1.0f, alpha * 0.45f);
 
             // 4. 3 Concentric Synchrotron Muzzle Accelerator Rings (perpendicular to look vector)
-            int ringSegments = 24;
+            int ringSegments = 32;
             // Outer Ring
             drawPlaneRing(matrix, buffer, 0, 0, 0, orbRadius * 1.45f, orbRadius * 1.25f, ringSegments, age * 35.0f,
                 0.0f, 0.90f, 1.0f, alpha * 0.85f);
@@ -180,6 +180,16 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
             }
         });
 
+        // Additive glow halo (T1): an oversized faint shell and a bloomed core
+        // octahedron, both riding the same charge-driven alpha so the bloom
+        // materializes with the orb instead of popping in.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawGeodesicSphere(matrix, buffer, orbRadius * 1.22f, age * 18.0f, 12, 0.10f, 0.80f, 1.0f, alpha * 0.20f);
+            drawRotatingOctahedron(matrix, buffer, orbRadius * 0.42f * 1.5f, age * 45.0f, age * 30.0f,
+                0.60f, 0.95f, 1.0f, 0.25f * (0.25f + charge * 0.75f));
+        });
+
         poseStack.popPose();
     }
 
@@ -210,7 +220,7 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
 
     private static void drawGeodesicSphere(Matrix4f matrix, VertexConsumer consumer, float radius, float rotDeg, int segments, float r, float g, float b, float a) {
         double rotRad = Math.toRadians(rotDeg);
-        int rings = 6;
+        int rings = 8;
         for (int i = 0; i < rings; i++) {
             double v1 = (i / (double) rings) * Math.PI - Math.PI / 2.0;
             double v2 = ((i + 1) / (double) rings) * Math.PI - Math.PI / 2.0;
@@ -219,6 +229,24 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
             float r1 = (float) Math.cos(v1) * radius;
             float y2 = (float) Math.sin(v2) * radius;
             float r2 = (float) Math.cos(v2) * radius;
+
+            // 3-stop latitude gradient (T2): the shells used to be one flat
+            // color per shell. Each band now shades from a deep shade of the
+            // shell hue at the bottom pole, through the shell color at the
+            // equator, to a white-hot tint at the top pole.
+            float bandT = (i + 0.5f) / (float) rings;
+            float rr, gg, bb;
+            if (bandT < 0.5f) {
+                float k = bandT / 0.5f;
+                rr = r * (0.50f + 0.50f * k);
+                gg = g * (0.50f + 0.50f * k);
+                bb = b * (0.50f + 0.50f * k);
+            } else {
+                float k = (bandT - 0.5f) / 0.5f;
+                rr = r + (1.0f - r) * 0.55f * k;
+                gg = g + (1.0f - g) * 0.55f * k;
+                bb = b + (1.0f - b) * 0.55f * k;
+            }
 
             for (int j = 0; j < segments; j++) {
                 double u1 = (j / (double) segments) * Math.PI * 2.0 + rotRad;
@@ -234,7 +262,7 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
                 float x4 = (float) Math.cos(u1) * r2;
                 float z4 = (float) Math.sin(u1) * r2;
 
-                drawQuad(matrix, consumer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, r, g, b, a);
+                drawQuad(matrix, consumer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, rr, gg, bb, a);
             }
         }
     }

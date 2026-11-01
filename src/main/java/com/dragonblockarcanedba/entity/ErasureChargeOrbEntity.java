@@ -89,6 +89,24 @@ public class ErasureChargeOrbEntity extends Projectile {
                     }
                 }
 
+                // Theme particles (T5): sparks gather around the orb as it
+                // charges, denser and tighter as the charge ratio rises. The
+                // orb emitted no particles before.
+                if (this.level() instanceof ServerLevel serverLevel && this.tickCount % 2 == 0) {
+                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                    if (density > 0f) {
+                        float charge = getChargeRatio();
+                        double gatherRadius = 0.9 - charge * 0.45;
+                        double sparkAngle = serverLevel.getRandom().nextDouble() * Math.PI * 2.0;
+                        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                            this.getX() + Math.cos(sparkAngle) * gatherRadius,
+                            this.getY() + (serverLevel.getRandom().nextDouble() - 0.5) * 0.6,
+                            this.getZ() + Math.sin(sparkAngle) * gatherRadius,
+                            Math.max(1, Math.round((1f + charge * 3f) * density)),
+                            0.05, 0.05, 0.05, 0.01);
+                    }
+                }
+
                 this.idleTicksWithoutUpdate++;
                 if (this.idleTicksWithoutUpdate > 6) {
                     this.discard();

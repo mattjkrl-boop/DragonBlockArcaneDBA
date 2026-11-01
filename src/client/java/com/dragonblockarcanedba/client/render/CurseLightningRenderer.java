@@ -164,8 +164,8 @@ public class CurseLightningRenderer extends EntityRenderer<CurseLightningEntity,
             float groundRingRadius = Math.min(4.5f, flashTime * 0.85f);
             float ringAlpha = finalAlpha * Math.max(0.0f, 1.0f - (flashTime / 12.0f));
             if (ringAlpha > 0.01f) {
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, groundRingRadius, groundRingRadius * 0.78f, 20, outerR, outerG, outerB, ringAlpha * 0.85f);
-                drawGroundRing(matrix, buffer, 0, 0.06f, 0, groundRingRadius * 0.55f, 0.0f, 16, 1.0f, 0.95f, 0.95f, ringAlpha * 0.95f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, groundRingRadius, groundRingRadius * 0.78f, 28, outerR, outerG, outerB, ringAlpha * 0.85f);
+                drawGroundRing(matrix, buffer, 0, 0.06f, 0, groundRingRadius * 0.55f, 0.0f, 24, 1.0f, 0.95f, 0.95f, ringAlpha * 0.95f);
             }
 
             // Ground Crawling Jagged Electrical Arc Fissures (8 radiating crawler lines)
@@ -188,6 +188,19 @@ public class CurseLightningRenderer extends EntityRenderer<CurseLightningEntity,
                 }
             }
         });
+
+        // Pass 3 (T1): additive impact flare echoing the detonation rings
+        // slightly wider, so the strike point blooms. The bolt texture itself
+        // is the identity of this effect and is left untouched.
+        float flareRadius = Math.min(4.5f, flashTime * 0.85f) * 1.12f;
+        float flareAlpha = finalAlpha * Math.max(0.0f, 1.0f - (flashTime / 12.0f));
+        if (flareAlpha > 0.01f) {
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, flareRadius, flareRadius * 0.78f, 28, outerR * 0.6f, outerG * 0.6f, outerB * 0.6f, flareAlpha * 0.45f);
+                drawGroundRing(matrix, buffer, 0, 0.07f, 0, flareRadius * 0.42f, 0.0f, 24, 0.60f, 0.57f, 0.57f, flareAlpha * 0.40f);
+            });
+        }
     }
 
     private static void renderBoltSegmentTextured(Matrix4f matrix, VertexConsumer consumer,

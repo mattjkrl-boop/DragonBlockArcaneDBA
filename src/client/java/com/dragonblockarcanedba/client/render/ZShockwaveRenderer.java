@@ -90,7 +90,7 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         float chord = (sub ? (1.0f + charge * 0.6f) : (1.6f + charge * 1.4f)) * fpScale;
         float height = (sub ? (0.9f + charge * 0.8f) : (1.5f + charge * 1.8f)) * fpScale;
         float thickness = (sub ? (0.22f + charge * 0.15f) : (0.38f + charge * 0.32f)) * fpScale;
-        int segments = 28;
+        int segments = 36;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -133,15 +133,27 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
             }
 
             // 6. Central Solar Apex Core & Leading Kinetic Compression Rings
+            // The core breathes while it travels (secondary motion).
             float coreZ = chord + 0.15f;
-            drawApexSolarCore(matrix, buffer, 0, 0, coreZ, 0.45f + charge * 0.35f,
+            float corePulse = 0.94f + 0.10f * (float) Math.sin(age * 0.8f);
+            drawApexSolarCore(matrix, buffer, 0, 0, coreZ, (0.45f + charge * 0.35f) * corePulse,
                 1.0f, 1.0f, 0.95f, 1.0f * fade);
 
             // Rotating front compression rings
-            drawFrontCompressionRing(matrix, buffer, 0, 0, coreZ + 0.25f, 0.65f + charge * 0.45f, 0.08f, 20, age * 24.0f,
+            drawFrontCompressionRing(matrix, buffer, 0, 0, coreZ + 0.25f, 0.65f + charge * 0.45f, 0.08f, 28, age * 24.0f,
                 1.0f, 0.90f, 0.30f, 0.90f * fade);
-            drawFrontCompressionRing(matrix, buffer, 0, 0, coreZ + 0.50f, 0.45f + charge * 0.35f, 0.06f, 16, age * -32.0f,
+            drawFrontCompressionRing(matrix, buffer, 0, 0, coreZ + 0.50f, 0.45f + charge * 0.35f, 0.06f, 24, age * -32.0f,
                 1.0f, 1.0f, 0.85f, 0.95f * fade);
+        });
+
+        // Additive halo pass: a wider faint copy of the golden sheath and the
+        // solar core so the wave front blooms as it travels.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawVolumetricCrescent(matrix, buffer, span + 0.95f, chord + 0.75f, height + 0.55f, thickness + 0.28f,
+                1.6f, segments, 1.0f, 0.70f, 0.08f, 0.16f * fade, 0.0f);
+            drawApexSolarCore(matrix, buffer, 0, 0, chord + 0.15f, (0.45f + charge * 0.35f) * 1.7f,
+                1.0f, 1.0f, 0.95f, 0.18f * fade);
         });
 
         poseStack.popPose();

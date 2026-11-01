@@ -66,7 +66,7 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
             Matrix4f matrix = pose.pose();
 
             // 1. Raised Beveled 3D Heroic Golden Shockwave Ring
-            int segments = 32;
+            int segments = 44;
             float ringWidth = Math.min(1.5f, currentRadius * 0.35f);
             float rOuter = currentRadius;
             float rInner = Math.max(0.1f, currentRadius - ringWidth);
@@ -80,7 +80,7 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
             // 2. Secondary Inner Cyan Harmonic Compression Ring
             float rSubOuter = currentRadius * 0.58f;
             float rSubInner = Math.max(0.05f, rSubOuter - (ringWidth * 0.6f));
-            drawFlatRing(matrix, buffer, 0, 0.08f, 0, rSubOuter, rSubInner, 24, 0.0f, 0.95f, 1.0f, alpha * 0.70f);
+            drawFlatRing(matrix, buffer, 0, 0.08f, 0, rSubOuter, rSubInner, 32, 0.0f, 0.95f, 1.0f, alpha * 0.70f);
 
             // 3. Physical Vertical Heroic Valor Blades / Crystalline Needles
             int shardCount = 18;
@@ -118,7 +118,17 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
 
             // 4. Ground Epicenter Starburst Core
             float coreRadius = Math.max(0.2f, (1.0f - progress) * 2.2f);
-            drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreRadius, 0.0f, 16, 1.0f, 0.98f, 0.85f, alpha * 0.95f);
+            drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreRadius, 0.0f, 24, 1.0f, 0.98f, 0.85f, alpha * 0.95f);
+        });
+
+        // Additive halo pass: a wider faint copy of the crest ring and the
+        // epicenter disc so the shockwave blooms and anchors to the ground.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawFlatRing(matrix, buffer, 0, 0.05f, 0, currentRadius * 1.08f, Math.max(0.1f, currentRadius * 0.92f), 44,
+                1.0f, 0.84f, 0.0f, alpha * 0.16f);
+            float coreRadius = Math.max(0.2f, (1.0f - progress) * 2.2f);
+            drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreRadius * 1.3f, 0.0f, 24, 1.0f, 0.98f, 0.85f, alpha * 0.18f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

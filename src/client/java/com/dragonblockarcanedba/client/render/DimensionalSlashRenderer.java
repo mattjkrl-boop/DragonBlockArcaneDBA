@@ -90,7 +90,7 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
 
             float span = 3.4f;
             float chord = 1.05f;
-            int segments = 20;
+            int segments = 28;
             float pulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f);
 
             // Fade envelope: every alpha in this renderer used to be constant,
@@ -121,9 +121,9 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
                 1.0f, 0.15f, 0.85f, 0.95f * fade,
                 1.0f, 1.0f, 1.0f, 1.0f * fade);
 
-            drawConcentricRing(matrix, buffer, 0, 0, chord * 0.3f, 0.75f * pulse, 0.55f * pulse, 16, state.age * 22.0f,
+            drawConcentricRing(matrix, buffer, 0, 0, chord * 0.3f, 0.75f * pulse, 0.55f * pulse, 24, state.age * 22.0f,
                 0.60f, 0.05f, 0.95f, 0.85f * fade);
-            drawConcentricRing(matrix, buffer, 0, 0, chord * 0.3f, 0.50f * pulse, 0.38f * pulse, 12, -state.age * 30.0f,
+            drawConcentricRing(matrix, buffer, 0, 0, chord * 0.3f, 0.50f * pulse, 0.38f * pulse, 16, -state.age * 30.0f,
                 1.0f, 0.15f, 0.35f, 0.95f * fade);
 
             // 6. Trailing High-Velocity Spatial Wake Ribbons
@@ -137,6 +137,21 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
                     0.75f, 0.05f, 0.90f, 0.80f * fade,
                     1.0f, 0.15f, 0.45f, 0.0f);
             }
+        });
+
+        // T1: additive halo pass tracing the magenta razor core slightly
+        // larger, sharing the fade envelope from the previous pass, so the
+        // slash blooms around its violet rift shell.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float haloPulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f);
+            float haloFadeIn = Math.min(1.0f, state.age / 4.0f);
+            float haloFadeOut = state.age <= 70.0f ? 1.0f : Math.max(0.0f, 1.0f - (state.age - 70.0f) / 30.0f);
+            float haloFade = haloFadeIn * haloFadeOut;
+
+            drawVolumetricCrescent(matrix, buffer, 3.4f + 0.22f, 1.05f + 0.22f, 0.20f * haloPulse, 0.42f, 28,
+                0.55f, 0.05f, 0.30f, 0.30f * haloFade);
         });
 
         poseStack.popPose();

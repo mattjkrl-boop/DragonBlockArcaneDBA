@@ -93,6 +93,18 @@ public class HollowAfterimageEntity extends Projectile {
         super.tick();
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles: the ghost used to be mesh only. Void smoke
+            // curls off the body while it lingers.
+            if (this.tickCount % 4 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        this.getX(), this.getY() + 1.0, this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        0.4, 1.0, 0.4, 0.02);
+                }
+            }
+
             // Apply Dark Faded to all nearby enemies within 4 blocks
             if (this.tickCount % 5 == 0) {
                 AABB auraBox = this.getBoundingBox().inflate(4.0);

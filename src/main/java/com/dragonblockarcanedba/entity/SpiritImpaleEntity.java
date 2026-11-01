@@ -90,6 +90,19 @@ public class SpiritImpaleEntity extends Projectile {
         }
 
         if (!this.level().isClientSide()) {
+            // Theme particles (redesign T5): divine ki motes rise through the
+            // impale pillar so the judgement array sheds light while it holds.
+            if (this.tickCount % 2 == 0 && this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                        this.getX(), this.getY() + 0.4, this.getZ(),
+                        Math.max(1, Math.round(3f * density)),
+                        0.8, 1.2, 0.8, 0.03);
+                }
+            }
+
             this.lifetime--;
             if (this.lifetime <= 0) {
                 this.discard();

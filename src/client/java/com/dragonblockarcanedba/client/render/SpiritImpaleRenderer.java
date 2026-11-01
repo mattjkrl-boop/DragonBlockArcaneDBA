@@ -76,18 +76,18 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
             float baseRadius = 2.4f * scale * slam;
             if (fade > 0.02f) {
                 // Outer Cyan Script Ring
-                drawGroundRing(matrix, buffer, 0, 0.03f, 0, baseRadius, baseRadius * 0.82f, 24, age * 22.0f, 0.0f, 0.90f, 1.0f, fade * 0.85f);
+                drawGroundRing(matrix, buffer, 0, 0.03f, 0, baseRadius, baseRadius * 0.82f, 32, age * 22.0f, 0.0f, 0.90f, 1.0f, fade * 0.85f);
                 // Middle Golden Lotus Ring
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 0.68f, baseRadius * 0.48f, 18, -age * 30.0f, 1.0f, 0.82f, 0.15f, fade * 0.90f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 0.68f, baseRadius * 0.48f, 24, -age * 30.0f, 1.0f, 0.82f, 0.15f, fade * 0.90f);
                 // Inner White Flash Disk
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.35f * pulse, 0.0f, 12, age * 15.0f, 1.0f, 1.0f, 1.0f, fade * 0.95f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.35f * pulse, 0.0f, 16, age * 15.0f, 1.0f, 1.0f, 1.0f, fade * 0.95f);
             }
 
             // 2. Ascending Vertical Divine Ki Pillar & Helical Aura Ribbons
             float pillarHeight = 6.0f * slam;
             float pillarRadius = 0.65f * scale * pulse;
-            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius, pillarHeight, 8, 0.0f, 0.92f, 1.0f, fade * 0.60f);
-            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius * 0.42f, pillarHeight * 1.05f, 6, 1.0f, 1.0f, 1.0f, fade * 0.90f);
+            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius, pillarHeight, 12, 0.0f, 0.92f, 1.0f, fade * 0.60f);
+            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius * 0.42f, pillarHeight * 1.05f, 8, 1.0f, 1.0f, 1.0f, fade * 0.90f);
 
             // Helical Aura Ribbons around the pillar
             drawAscendingHelices(matrix, buffer, age, pillarHeight, pillarRadius * 1.25f, fade);
@@ -145,6 +145,21 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
                 );
             }
         });
+
+        // Additive glow halo (redesign T1): the judgement array and pillar get
+        // a soft additive bloom shell so the cyan and gold read as light
+        // instead of matte geometry.
+        if (fade > 0.02f) {
+            float haloRadius = 2.4f * scale * slam;
+            float haloPillarRadius = 0.65f * scale * pulse * 1.35f;
+            float haloPillarHeight = 6.0f * slam;
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+                drawGroundRing(matrix, buffer, 0, 0.03f, 0, haloRadius * 1.06f, haloRadius * 0.80f, 32, age * 22.0f, 0.0f, 0.90f, 1.0f, fade * 0.20f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, haloRadius * 0.68f, haloRadius * 0.46f, 24, -age * 30.0f, 1.0f, 0.82f, 0.15f, fade * 0.16f);
+                drawCylinderPillar(matrix, buffer, 0, 0, haloPillarRadius, haloPillarHeight, 12, 0.0f, 0.92f, 1.0f, fade * 0.14f);
+            });
+        }
     }
 
     private static void draw3DSpiritSword(Matrix4f matrix, VertexConsumer consumer,

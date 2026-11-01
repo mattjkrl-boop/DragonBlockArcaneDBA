@@ -83,7 +83,7 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
                 float coneRadius = state.maxRadius * (0.3f + 0.9f * expansion);
 
                 // 1. Forward-Surging 3D Conical Compression Shockwave (Outer & Inner Shells)
-                int coneSegments = 24;
+                int coneSegments = 32;
                 for (int i = 0; i < coneSegments; i++) {
                     double a1 = (i / (double) coneSegments) * Math.PI * 2.0;
                     double a2 = ((i + 1) / (double) coneSegments) * Math.PI * 2.0;
@@ -111,11 +111,11 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
                 // 2. Dual Forward-Expanding Supersonic Vapor Rings
                 float ringZ1 = coneLength * 0.6f;
                 float ringR1 = coneRadius * 0.7f;
-                drawRingZ(matrix, buffer, ringZ1, ringR1, ringR1 * 0.75f, 20, 0.2f, 1.0f, 0.75f, alpha * 0.80f);
+                drawRingZ(matrix, buffer, ringZ1, ringR1, ringR1 * 0.75f, 28, 0.2f, 1.0f, 0.75f, alpha * 0.80f);
 
                 float ringZ2 = coneLength * 0.95f;
                 float ringR2 = coneRadius * 1.05f;
-                drawRingZ(matrix, buffer, ringZ2, ringR2, ringR2 * 0.80f, 20, 0.0f, 1.0f, 0.55f, alpha * 0.60f);
+                drawRingZ(matrix, buffer, ringZ2, ringR2, ringR2 * 0.80f, 28, 0.0f, 1.0f, 0.55f, alpha * 0.60f);
 
                 // 3. Radiating Forward Wind Needles / Flare Spikes
                 int needleCount = 10;
@@ -136,7 +136,35 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
                 }
 
                 // 4. Epicenter White-Emerald Muzzle Flare
-                drawRingZ(matrix, buffer, 0.05f, 0.45f * (1.0f - progress), 0.05f, 16, 1.0f, 1.0f, 1.0f, alpha);
+                drawRingZ(matrix, buffer, 0.05f, 0.45f * (1.0f - progress), 0.05f, 24, 1.0f, 1.0f, 1.0f, alpha);
+            });
+
+            // Additive glow halo (T1): the cone shell redrawn wider and faint
+            // so the launch wave blooms instead of reading matte.
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+
+                float expansion = (float) Math.sin(progress * (Math.PI / 2.0));
+                float coneLength = state.maxRadius * (0.4f + 0.8f * expansion) * 1.05f;
+                float coneRadius = state.maxRadius * (0.3f + 0.9f * expansion) * 1.15f;
+
+                int haloSegments = 32;
+                for (int i = 0; i < haloSegments; i++) {
+                    double a1 = (i / (double) haloSegments) * Math.PI * 2.0;
+                    double a2 = ((i + 1) / (double) haloSegments) * Math.PI * 2.0;
+
+                    float x1 = (float) Math.cos(a1) * coneRadius;
+                    float y1 = (float) Math.sin(a1) * coneRadius;
+                    float x2 = (float) Math.cos(a2) * coneRadius;
+                    float y2 = (float) Math.sin(a2) * coneRadius;
+
+                    drawTriangle(matrix, buffer,
+                        0, 0, 0.1f,
+                        x1, y1, coneLength,
+                        x2, y2, coneLength,
+                        0.2f, 1.0f, 0.75f, alpha * 0.22f
+                    );
+                }
             });
         } else {
             // Radial Planar / Impact Shockwave (Gale Force / Wind Projectile Hit)
@@ -153,7 +181,7 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
 
                 float expansionEase = (float) Math.sin(progress * (Math.PI / 2.0));
                 float currentRadius = Math.max(0.4f, expansionEase * state.maxRadius);
-                int segments = 28;
+                int segments = 40;
 
                 // 1. Raised Beveled 3D Emerald Shockwave Ring
                 float ringWidth = Math.min(1.2f, currentRadius * 0.4f);
@@ -169,7 +197,7 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
                 // 2. Secondary Inner Jade Harmonic Ring
                 float rSubOuter = currentRadius * 0.60f;
                 float rSubInner = Math.max(0.05f, rSubOuter - (ringWidth * 0.55f));
-                drawFlatRing(matrix, buffer, 0, 0.08f, 0, rSubOuter, rSubInner, 20, 0.3f, 1.0f, 0.85f, alpha * 0.65f);
+                drawFlatRing(matrix, buffer, 0, 0.08f, 0, rSubOuter, rSubInner, 28, 0.3f, 1.0f, 0.85f, alpha * 0.65f);
 
                 // 3. Physical Intersecting Emerald Wind Crescent Blades (Cross Slash Slices)
                 int bladeCount = 6;
@@ -194,7 +222,24 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
 
                 // 4. Epicenter Radiating White-Emerald Core
                 float coreR = Math.max(0.1f, (state.maxRadius * 0.3f) * (1.0f - progress));
-                drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreR, 0.02f, 16, 0.95f, 1.0f, 0.98f, alpha);
+                drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreR, 0.02f, 24, 0.95f, 1.0f, 0.98f, alpha);
+            });
+
+            // Additive glow halo (T1): a soft emerald wash just outside the
+            // beveled crest plus a bloomed core, inside the same oriented pose
+            // as the burst itself.
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+
+                float expansionEase = (float) Math.sin(progress * (Math.PI / 2.0));
+                float currentRadius = Math.max(0.4f, expansionEase * state.maxRadius);
+
+                drawFlatRing(matrix, buffer, 0, 0.06f, 0, currentRadius * 1.05f, currentRadius * 0.82f, 40,
+                    0.3f, 1.0f, 0.8f, alpha * 0.26f);
+
+                float coreR = Math.max(0.1f, (state.maxRadius * 0.3f) * (1.0f - progress));
+                drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreR * 1.3f, 0.02f, 24,
+                    0.9f, 1.0f, 0.95f, alpha * 0.30f);
             });
         }
 

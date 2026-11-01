@@ -114,6 +114,23 @@ public class BanshoCycloneEntity extends Projectile {
                     SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 1.0f, 1.3f);
             }
 
+            // Theme particles (T5): wind wisps spiral around the funnel wall.
+            // The cyclone emitted no particles before.
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    double wispAngle = serverLevel.getRandom().nextDouble() * Math.PI * 2.0;
+                    double wispRadius = radius * (0.4 + serverLevel.getRandom().nextDouble() * 0.5);
+                    double wispY = serverLevel.getRandom().nextDouble() * height * 0.8;
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                        center.x + Math.cos(wispAngle) * wispRadius,
+                        center.y + wispY,
+                        center.z + Math.sin(wispAngle) * wispRadius,
+                        Math.max(1, Math.round(2f * density)),
+                        0.15, 0.3, 0.15, 0.06);
+                }
+            }
+
             if (this.tickCount >= this.maxLifetime) {
                 this.discard();
             }

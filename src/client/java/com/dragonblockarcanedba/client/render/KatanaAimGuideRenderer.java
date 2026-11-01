@@ -101,6 +101,17 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
             float coreRadius = 0.012f + (charge * 0.008f);
             drawLaserBeam(matrix, buffer, zStart, range, coreRadius, 1.0f, 1.0f, 1.0f, alpha * 0.95f);
 
+            // 2b. Energy flow bands: brighter sheath segments travel down the
+            // beam so the guide reads as flowing energy, not a static tube.
+            int bandCount = 3;
+            for (int b = 0; b < bandCount; b++) {
+                float bandProg = (age * 0.10f + (b / (float) bandCount)) % 1.0f;
+                float bandZ = zStart + bandProg * (range - zStart);
+                float bandEnd = Math.min(range, bandZ + 1.4f);
+                drawLaserBeam(matrix, buffer, bandZ, bandEnd, sheathRadius * 1.20f,
+                    0.55f, 0.95f, 1.0f, alpha * 0.55f * (1.0f - bandProg * 0.35f));
+            }
+
             // 3. Calibrating Concentric Reticle Rings along the guide line (every 6 blocks)
             int stationCount = (int) (range / 6.0f);
             for (int s = 1; s <= stationCount; s++) {
@@ -108,13 +119,13 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
                 if (state.isFirstPersonOwner && dist < 3.0f) continue;
                 float ringR = (0.18f + charge * 0.12f) * (1.0f + 0.1f * (float) Math.sin(age * 0.3f + s));
                 float ringRot = age * (15.0f + s * 10.0f);
-                drawRingZ(matrix, buffer, dist, ringR, ringR * 0.80f, 16, ringRot, 0.1f, 0.9f, 1.0f, alpha * 0.75f);
+                drawRingZ(matrix, buffer, dist, ringR, ringR * 0.80f, 24, ringRot, 0.1f, 0.9f, 1.0f, alpha * 0.75f);
                 drawDiamondBracket(matrix, buffer, dist, ringR * 1.25f, 0.85f, 0.98f, 1.0f, alpha * 0.85f);
             }
 
             // 4. Terminal Aim Crosshair & Focusing Target Diamond at endpoint
             float endR = 0.30f + (charge * 0.20f);
-            drawRingZ(matrix, buffer, range, endR, endR * 0.82f, 16, -age * 40.0f, 0.0f, 0.95f, 1.0f, alpha * 0.90f);
+            drawRingZ(matrix, buffer, range, endR, endR * 0.82f, 24, -age * 40.0f, 0.0f, 0.95f, 1.0f, alpha * 0.90f);
             drawDiamondBracket(matrix, buffer, range, endR * 1.35f, 1.0f, 1.0f, 1.0f, alpha);
             drawCrosshairSpokes(matrix, buffer, range, endR * 1.5f, 0.0f, 0.9f, 1.0f, alpha * 0.8f);
 
@@ -125,6 +136,15 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
                 float nodeZ = 0.5f + nodeProg * (range - 0.5f);
                 drawDiamondSparkZ(matrix, buffer, nodeZ, 0.08f * (1.0f + charge * 0.5f), 1.0f, 1.0f, 1.0f, alpha * (1.0f - nodeProg * 0.3f));
             }
+        });
+
+        // Additive halo pass: the terminal reticle and the beam sheath get a
+        // soft bloom so the aim point glows against the world.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float endR = 0.30f + (charge * 0.20f);
+            drawRingZ(matrix, buffer, range, endR * 1.25f, endR * 0.95f, 24, -age * 40.0f, 0.0f, 0.95f, 1.0f, alpha * 0.20f);
+            drawLaserBeam(matrix, buffer, zStart, range, (0.035f + (charge * 0.025f)) * 1.9f, 0.0f, 0.85f, 1.0f, alpha * 0.10f);
         });
 
         poseStack.popPose();

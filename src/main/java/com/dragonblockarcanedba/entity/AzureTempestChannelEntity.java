@@ -65,6 +65,20 @@ public class AzureTempestChannelEntity extends Projectile {
             if (caster instanceof LivingEntity living && living.isAlive() && !living.isRemoved()) {
                 this.setPos(living.getX(), living.getY(), living.getZ());
 
+                // Theme particles (T5): wind spiraling up around the caster,
+                // widening and thickening as the charge builds.
+                if (this.tickCount % 2 == 0) {
+                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                    if (density > 0f) {
+                        float charge = getChargeRatio();
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                            living.getX(), living.getY() + 0.4, living.getZ(),
+                            Math.max(1, Math.round((2f + charge * 4f) * density)),
+                            1.2 + charge * 1.8, 0.8, 1.2 + charge * 1.8, 0.04);
+                    }
+                }
+
                 if (living instanceof Player player) {
                     boolean isHolding = player.getMainHandItem().getItem() instanceof AzureDragonSwordItem ||
                                         player.getOffhandItem().getItem() instanceof AzureDragonSwordItem;

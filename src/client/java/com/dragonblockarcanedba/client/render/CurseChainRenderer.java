@@ -105,6 +105,15 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
             drawHexCore(matrix, buffer, 0, 0, 0, coreSize);
         });
 
+        // T1: additive halo pass, a larger ghost of the hex core drawn under
+        // the same spin and scale, so the chain's heart blooms.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float haloPulse = 0.85f + 0.15f * (float) Math.sin(age * 0.35f + orbit);
+            drawHexCore(matrix, buffer, 0, 0, 0, 0.38f * haloPulse * 1.7f);
+        });
+
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -118,7 +127,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         float rBase = 0.12f, gBase = 0.08f, bBase = 0.16f;
         float rRune = 0.65f * pulse, gRune = 0.05f, bRune = 0.85f * pulse;
 
-        int segs = 8;
+        int segs = 12;
         for (int s = 0; s < segs; s++) {
             double a1 = (s / (double) segs) * Math.PI * 2.0;
             double a2 = ((s + 1) / (double) segs) * Math.PI * 2.0;
@@ -182,7 +191,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
             }
 
             // Add Barbed Gothic Spikes at 4 diagonal corners of the link
-            if (s % 2 == 0) {
+            if (s % 3 == 0) {
                 float midAngle = (float) ((a1 + a2) * 0.5);
                 float mx = (float) Math.cos(midAngle) * outerR;
                 float my = (float) Math.sin(midAngle) * outerR;
@@ -211,7 +220,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
     }
 
     private static void drawDemonicShackleCollar(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float pulse) {
-        int segs = 12;
+        int segs = 16;
         float rOut = 0.85f;
         float rIn = 0.65f;
         float halfH = 0.16f;
@@ -244,7 +253,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
             );
 
             // 4 Demonic Horn Spikes protruding outwards from the collar
-            if (i % 3 == 0) {
+            if (i % 4 == 0) {
                 float hornLen = 0.45f * pulse;
                 float midA = (float) ((a1 + a2) * 0.5);
                 float hx = (float) Math.cos(midA) * (rOut + hornLen);

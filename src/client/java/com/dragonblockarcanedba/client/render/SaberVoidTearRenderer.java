@@ -77,7 +77,7 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
             Matrix4f matrix = pose.pose();
 
             // 1. Dual Counter-Rotating Concentric Sonic Shock Rings
-            int ringSegments = 20;
+            int ringSegments = 28;
             float rOuter = 1.8f * scale;
             float rInner = rOuter * 0.72f;
             drawShockRing(matrix, buffer, rOuter, rInner, ringSegments, state.age * 25.0f,
@@ -102,6 +102,15 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
                 float tipY = (float) Math.sin(angle) * spikeLen;
                 drawSpike(matrix, buffer, tipX, tipY, 0.16f * (1.0f - progress), fade);
             }
+        });
+
+        // Additive halo pass: a wider faint copy of the outer shock ring so
+        // the tear blooms around its dark rim.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float rOuter = 1.8f * scale * 1.12f;
+            drawShockRing(matrix, buffer, rOuter, rOuter * 0.70f, 28, state.age * 25.0f,
+                0.0f, 0.85f, 1.0f, fade * 0.16f);
         });
 
         poseStack.popPose();
@@ -132,7 +141,7 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
     }
 
     private static void drawSonicCone(Matrix4f matrix, VertexConsumer consumer, float scale, float progress, float fade) {
-        int segments = 12;
+        int segments = 16;
         float coneLen = 2.2f * progress * scale;
         float coneBaseRadius = 0.2f * scale;
         float coneTipRadius = 1.4f * scale;

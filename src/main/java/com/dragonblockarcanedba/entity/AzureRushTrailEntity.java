@@ -3,6 +3,7 @@ package com.dragonblockarcanedba.entity;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -69,7 +70,19 @@ public class AzureRushTrailEntity extends Projectile {
     public void tick() {
         super.tick();
 
-        if (!this.level().isClientSide()) {
+        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles (T5): wind streaming off the rush trail. Trails
+            // spawn every tick while rushing, so emission stays sparse.
+            if (this.tickCount % 3 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                        this.getX(), this.getY() + 0.5, this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        0.5, 0.5, 0.5, 0.05);
+                }
+            }
             if (this.tickCount >= this.maxLifetime) {
                 this.discard();
             }

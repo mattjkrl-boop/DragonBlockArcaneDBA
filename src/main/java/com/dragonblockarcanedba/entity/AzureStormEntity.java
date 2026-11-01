@@ -143,6 +143,17 @@ public class AzureStormEntity extends Projectile {
                     center.x, center.y + 3.0, center.z, 3,
                     radius * 0.15, 2.0, radius * 0.15, 0.05);
             }
+            // Theme particles (T5): ki motes rising through the storm eye,
+            // feeding the updraft column the renderer draws.
+            if (this.tickCount % 5 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                        center.x, center.y + 1.0, center.z,
+                        Math.max(1, Math.round(4f * density)),
+                        radius * 0.12, 2.5, radius * 0.12, 0.03);
+                }
+            }
 
             // Periodic Azure Lightning strikes on enemies inside storm
             if (!enemies.isEmpty() && this.tickCount % 25 == 0) {

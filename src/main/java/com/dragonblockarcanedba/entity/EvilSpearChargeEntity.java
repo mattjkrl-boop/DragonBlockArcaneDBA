@@ -69,6 +69,20 @@ public class EvilSpearChargeEntity extends Projectile {
             if (caster instanceof LivingEntity living && living.isAlive() && !living.isRemoved()) {
                 this.setPos(living.getX(), living.getY(), living.getZ());
 
+                // Theme particles (redesign T5): blood embers spiral up as
+                // the impale charge gathers, thickening with the charge.
+                if (this.tickCount % 2 == 0) {
+                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                    if (density > 0f) {
+                        float charge = getChargeRatio();
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                            this.getX(), this.getY() + 0.3, this.getZ(),
+                            Math.max(1, Math.round((2f + charge * 4f) * density)),
+                            1.0 + charge * 1.2, 0.8, 1.0 + charge * 1.2, 0.04);
+                    }
+                }
+
                 if (living instanceof Player player) {
                     boolean isHolding = player.getMainHandItem().getItem() instanceof EvilSpearItem ||
                                         player.getOffhandItem().getItem() instanceof EvilSpearItem;

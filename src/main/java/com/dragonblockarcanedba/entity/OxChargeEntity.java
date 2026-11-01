@@ -69,6 +69,20 @@ public class OxChargeEntity extends Projectile {
             if (caster instanceof LivingEntity living && living.isAlive() && !living.isRemoved()) {
                 this.setPos(living.getX(), living.getY(), living.getZ());
 
+                // Theme particles (redesign T5): magma embers rise off the
+                // cracking ground, thickening as the Groundbreaker charges.
+                if (this.tickCount % 2 == 0) {
+                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                    if (density > 0f) {
+                        float charge = getChargeRatio();
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                            this.getX(), this.getY() + 0.2, this.getZ(),
+                            Math.max(1, Math.round((2f + charge * 4f) * density)),
+                            0.8 + charge * 1.6, 0.5, 0.8 + charge * 1.6, 0.04);
+                    }
+                }
+
                 if (living instanceof Player player) {
                     boolean isHolding = player.getMainHandItem().getItem() instanceof OxKingsAxeItem ||
                                         player.getOffhandItem().getItem() instanceof OxKingsAxeItem;

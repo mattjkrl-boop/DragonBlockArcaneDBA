@@ -65,6 +65,24 @@ public class KingsSlamEntity extends Projectile {
             if (this.tickCount == 1) {
                 com.dragonblockarcanedba.fx.SlamDebris.burst(serverLevel, this.position(), getRadius(), com.dragonblockarcanedba.fx.SlamDebris.Profile.KINGS_SLAM);
             }
+
+            // Theme particles (redesign T5): embers ride the expanding crest
+            // while the dome is young, so the slam front keeps burning.
+            if (this.tickCount <= 21 && this.tickCount % 3 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    double shockR = Math.min(getRadius() * 1.35, this.tickCount * (isFlawless() ? 0.95 : 0.70));
+                    int emberCount = Math.max(2, Math.round(8f * density));
+                    for (int i = 0; i < emberCount; i++) {
+                        double ang = serverLevel.getRandom().nextDouble() * Math.PI * 2.0;
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                            this.getX() + Math.cos(ang) * shockR, this.getY() + 0.3, this.getZ() + Math.sin(ang) * shockR,
+                            1, 0.1, 0.25, 0.1, 0.03);
+                    }
+                }
+            }
+
             if (this.tickCount >= getLifetime()) {
                 this.discard();
             }

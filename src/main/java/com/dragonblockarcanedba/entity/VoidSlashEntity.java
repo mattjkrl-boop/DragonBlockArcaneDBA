@@ -64,6 +64,19 @@ public class VoidSlashEntity extends Projectile {
         this.setPos(this.getX() + movement.x, this.getY() + movement.y, this.getZ() + movement.z);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles (T5): the crescent sheds void smoke along its
+            // flight path so the cut reads between the aura layers.
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        this.getX(), this.getY(), this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        0.8, 0.5, 0.8, 0.02);
+                }
+            }
+
             // Hit detection
             AABB hitbox = this.getBoundingBox().inflate(2.5, 1.2, 2.5);
             List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, hitbox, e -> e.isAlive() && e != this.getOwner() && !hitEntities.contains(e.getId()));

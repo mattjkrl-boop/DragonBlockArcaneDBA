@@ -92,13 +92,19 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
             Matrix4f matrix = pose.pose();
 
             // 1. Supersonic 3D Mach Cone (Faceted aerodynamic cone expanding backwards)
-            int coneSegments = 16;
+            int coneSegments = 24;
             float coneLength = 3.2f * scale;
             // In first person, shift the cone tip behind the camera plane and widen slightly for cockpit peripheral windstream
             float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
             float baseZ = tipZ - coneLength;
             float coneBaseRadius = (state.isFirstPersonOwner ? 1.45f : 1.1f) * scale;
             float coneAlpha = state.isFirstPersonOwner ? (alpha * 0.35f) : (alpha * 0.70f);
+
+            // T2 gradient stops: near-white hot tint at the cone tip cooling
+            // to the rush color at the base.
+            float hotR = r + (1.0f - r) * 0.8f;
+            float hotG = g + (1.0f - g) * 0.8f;
+            float hotB = b + (1.0f - b) * 0.8f;
 
             for (int i = 0; i < coneSegments; i++) {
                 double a1 = (i / (double) coneSegments) * Math.PI * 2.0;
@@ -110,7 +116,9 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
                 float y2 = (float) Math.sin(a2) * coneBaseRadius;
 
                 // Outer cone face
-                drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, r, g, b, coneAlpha);
+                drawTriangleGrad(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ,
+                    hotR, hotG, hotB, coneAlpha,
+                    r, g, b, coneAlpha * 0.85f);
             }
 
             // 2. Twin Helical Dragon Streamlines / Wing Vanes (Counter-spiraling aerodynamic ribbons)
@@ -157,7 +165,33 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
             // 4. Expanding Wake Vortex Ring
             float ringZ = baseZ - 0.4f * scale;
             float ringR = coneBaseRadius * 1.25f;
-            drawRing(matrix, buffer, 0, 0, ringZ, ringR, ringR * 0.78f, 16, r, g, b, alpha * 0.50f);
+            drawRing(matrix, buffer, 0, 0, ringZ, ringR, ringR * 0.78f, 24, r, g, b, alpha * 0.50f);
+        });
+
+        // T1: additive halo pass, a slightly wider ghost of the Mach cone so
+        // the rush blooms instead of reading flat and matte.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            int haloSegments = 24;
+            float haloLength = 3.2f * scale;
+            float haloTipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
+            float haloBaseZ = haloTipZ - haloLength;
+            float haloRadius = (state.isFirstPersonOwner ? 1.45f : 1.1f) * scale * 1.20f;
+            float haloAlpha = (state.isFirstPersonOwner ? (alpha * 0.35f) : (alpha * 0.70f)) * 0.22f;
+
+            for (int i = 0; i < haloSegments; i++) {
+                double a1 = (i / (double) haloSegments) * Math.PI * 2.0;
+                double a2 = ((i + 1) / (double) haloSegments) * Math.PI * 2.0;
+
+                float x1 = (float) Math.cos(a1) * haloRadius;
+                float y1 = (float) Math.sin(a1) * haloRadius;
+                float x2 = (float) Math.cos(a2) * haloRadius;
+                float y2 = (float) Math.sin(a2) * haloRadius;
+
+                drawTriangle(matrix, buffer, 0, 0, haloTipZ, x1, y1, haloBaseZ, x2, y2, haloBaseZ,
+                    r * 0.6f, g * 0.6f, b * 0.6f, haloAlpha);
+            }
         });
 
         poseStack.popPose();
@@ -195,6 +229,24 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
         consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+    }
+
+    // Triangle with a two-stop gradient: vertex 1 takes the first color,
+    // vertices 2 and 3 take the second.
+    private static void drawTriangleGrad(Matrix4f matrix, VertexConsumer consumer,
+                                         float x1, float y1, float z1,
+                                         float x2, float y2, float z2,
+                                         float x3, float y3, float z3,
+                                         float r1, float g1, float b1, float a1,
+                                         float r2, float g2, float b2, float a2) {
+        consumer.addVertex(matrix, x1, y1, z1).setColor(r1, g1, b1, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2, y2, z2).setColor(r2, g2, b2, a2).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r2, g2, b2, a2).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+        // Reverse
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r2, g2, b2, a2).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x2, y2, z2).setColor(r2, g2, b2, a2).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x1, y1, z1).setColor(r1, g1, b1, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 
     private static void drawRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float r, float g, float b, float a) {

@@ -89,6 +89,29 @@ public class VoidRiftEntity extends Projectile {
         Entity owner = this.getOwner();
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles (T5): void smoke feeding the accretion disk and
+            // sparks at the core, running through the whole channel phase.
+            if (this.tickCount % 3 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        center.x, center.y, center.z,
+                        Math.max(1, Math.round(3f * density)),
+                        radius * 0.8, 0.4, radius * 0.8, 0.03);
+                }
+            }
+            if (this.tickCount % 6 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        center.x, center.y, center.z,
+                        Math.max(1, Math.round(2f * density)),
+                        radius * 0.3, 0.2, radius * 0.3, 0.04);
+                }
+            }
+
             // Check if implosion countdown is active
             if (this.implosionTimer > 0) {
                 this.implosionTimer--;

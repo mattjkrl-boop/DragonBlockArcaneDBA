@@ -75,7 +75,7 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
             Matrix4f matrix = pose.pose();
 
             // 1. Dual Ground Whirlpool Suction Discs (Base Vortex)
-            int groundSegments = 24;
+            int groundSegments = 36;
             float gRadius = baseRadius * 0.95f;
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, gRadius, gRadius * 0.55f, groundSegments, age * 38.0f,
                 0.0f, 1.0f, 0.55f, 0.65f * finalAlphaMult);
@@ -84,7 +84,7 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
 
             // 2. High-Speed 3D Inverted Tornado Funnel (10-tiered twisting cone)
             int coreLevels = 10;
-            int coreSegments = 18;
+            int coreSegments = 28;
             float coreRot = age * 30.0f * (float) (Math.PI / 180.0);
 
             for (int lvl = 0; lvl < coreLevels; lvl++) {
@@ -94,10 +94,24 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
                 float y1 = p1 * totalHeight;
                 float y2 = p2 * totalHeight;
 
-                float r1 = (baseRadius * 0.38f) * (0.28f + 0.72f * p1);
-                float r2 = (baseRadius * 0.38f) * (0.28f + 0.72f * p2);
+                // Secondary motion (T4): the funnel wall breathes as it climbs.
+                float breathe1 = 1.0f + 0.03f * (float) Math.sin(age * 0.9f + p1 * 5.0f);
+                float breathe2 = 1.0f + 0.03f * (float) Math.sin(age * 0.9f + p2 * 5.0f);
+                float r1 = (baseRadius * 0.38f) * (0.28f + 0.72f * p1) * breathe1;
+                float r2 = (baseRadius * 0.38f) * (0.28f + 0.72f * p2) * breathe2;
 
                 float alpha = (0.65f * (1.0f - p1 * 0.25f)) * finalAlphaMult;
+
+                // 3-stop gradient (T2): deep emerald at the base, full emerald
+                // mid-funnel, pale jade at the crown.
+                float crF, cgF, cbF;
+                if (p1 < 0.5f) {
+                    float k = p1 / 0.5f;
+                    crF = 0.0f + (0.15f - 0.0f) * k; cgF = 0.82f + (1.0f - 0.82f) * k; cbF = 0.42f + (0.65f - 0.42f) * k;
+                } else {
+                    float k = (p1 - 0.5f) / 0.5f;
+                    crF = 0.15f + (0.55f - 0.15f) * k; cgF = 1.0f; cbF = 0.65f + (0.85f - 0.65f) * k;
+                }
 
                 for (int i = 0; i < coreSegments; i++) {
                     double a1 = ((i / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.4);
@@ -116,13 +130,13 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
                     float z4 = (float) Math.sin(a4) * r2;
 
                     drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
-                        0.15f, 1.0f, 0.65f, alpha);
+                        crF, cgF, cbF, alpha);
                 }
             }
 
             // 3. Ascending Triple-Helical Jade Wind Ribbons
             int strands = 3;
-            int ribbonSteps = 16;
+            int ribbonSteps = 22;
             for (int s = 0; s < strands; s++) {
                 float strandOffset = (s / (float) strands) * (float) (Math.PI * 2.0);
 
@@ -152,12 +166,14 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
                     float tx2 = (float) -Math.sin(ang2) * bandWidth2;
                     float tz2 = (float) Math.cos(ang2) * bandWidth2;
 
+                    // Gradient along the climb (T2): deep jade at the base
+                    // brightening to pale jade at the top of the strand.
                     drawQuad(matrix, buffer,
                         x1 - tx1, y1, z1 - tz1,
                         x1 + tx1, y1, z1 + tz1,
                         x2 + tx2, y2, z2 + tz2,
                         x2 - tx2, y2, z2 - tz2,
-                        0.0f, 1.0f, 0.60f, 0.60f * finalAlphaMult
+                        0.45f * t1, 1.0f, 0.48f + 0.34f * t1, 0.60f * finalAlphaMult
                     );
                 }
             }
@@ -234,8 +250,47 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
             // 6. Upper Crown Outflow Rim (Flared top storm rim)
             float crownY = totalHeight;
             float crownR = baseRadius * 1.12f;
-            drawRotatingRing(matrix, buffer, 0, crownY, 0, crownR, crownR * 0.72f, 20, -age * 26.0f,
+            drawRotatingRing(matrix, buffer, 0, crownY, 0, crownR, crownR * 0.72f, 30, -age * 26.0f,
                 0.05f, 0.95f, 0.65f, 0.50f * finalAlphaMult);
+        });
+
+        // Additive glow pass (T1 + T6): a wide faint funnel silhouette blooms
+        // around the matte funnel, and a ground glow wash anchors the vortex
+        // to the floor it is tearing up.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float coreRot = age * 30.0f * (float) (Math.PI / 180.0);
+
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.10f, baseRadius * 0.30f, 36, age * 38.0f,
+                0.0f, 1.0f, 0.60f, 0.15f * finalAlphaMult);
+
+            int haloLevels = 8;
+            int haloSegments = 28;
+            for (int lvl = 0; lvl < haloLevels; lvl++) {
+                float p1 = lvl / (float) haloLevels;
+                float p2 = (lvl + 1) / (float) haloLevels;
+
+                float y1 = p1 * totalHeight;
+                float y2 = p2 * totalHeight;
+                float r1 = (baseRadius * 0.38f) * (0.28f + 0.72f * p1) * 1.20f;
+                float r2 = (baseRadius * 0.38f) * (0.28f + 0.72f * p2) * 1.20f;
+                float haloAlpha = 0.10f * (1.0f - p1 * 0.4f) * finalAlphaMult;
+
+                for (int i = 0; i < haloSegments; i++) {
+                    double a1 = ((i / (double) haloSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.4);
+                    double a2 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.4);
+                    double a3 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + coreRot + (p2 * 1.4);
+                    double a4 = ((i / (double) haloSegments) * Math.PI * 2.0) + coreRot + (p2 * 1.4);
+
+                    drawQuad(matrix, buffer,
+                        (float) Math.cos(a1) * r1, y1, (float) Math.sin(a1) * r1,
+                        (float) Math.cos(a2) * r1, y1, (float) Math.sin(a2) * r1,
+                        (float) Math.cos(a3) * r2, y2, (float) Math.sin(a3) * r2,
+                        (float) Math.cos(a4) * r2, y2, (float) Math.sin(a4) * r2,
+                        0.2f, 1.0f, 0.7f, haloAlpha
+                    );
+                }
+            }
         });
 
         poseStack.popPose();

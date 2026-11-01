@@ -88,7 +88,7 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
             Matrix4f matrix = pose.pose();
 
             // 1. Outer Deep Cyan Spatial Distortion Sheath (Cylindrical volumetric beam)
-            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, outerRadius, 12,
+            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, outerRadius, 16,
                 0.0f, 0.65f, 1.0f, 0.45f * fade);
 
             // 2. Radiant Cyan Plasma Mantle (Diamond cross-section)
@@ -111,6 +111,26 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
             drawShockRing(matrix, buffer, -halfLen, outerRadius * 1.5f, 0.0f, 0.9f, 1.0f, fade * 0.8f);
             drawShockRing(matrix, buffer, 0.0f, outerRadius * 1.8f, 1.0f, 1.0f, 1.0f, fade * 0.9f);
             drawShockRing(matrix, buffer, halfLen, outerRadius * 1.5f, 0.0f, 0.9f, 1.0f, fade * 0.8f);
+
+            // 6. Energy flow bands: bright rings travel along the beam so the
+            // cut reads as flowing energy instead of a uniform tube.
+            int bandCount = 3;
+            for (int b = 0; b < bandCount; b++) {
+                float bandProg = (state.age * 0.07f + (b / (float) bandCount)) % 1.0f;
+                float bandZ = -halfLen + bandProg * (halfLen * 2.0f);
+                drawShockRing(matrix, buffer, bandZ, outerRadius * 1.30f, 0.65f, 0.95f, 1.0f,
+                    fade * 0.50f * (1.0f - bandProg * 0.30f));
+            }
+        });
+
+        // Additive halo pass: a wider faint copy of the outer sheath and the
+        // white core so the whole line blooms along its length.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, outerRadius * 1.35f, 16,
+                0.0f, 0.65f, 1.0f, 0.13f * fade);
+            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, coreRadius * 1.8f, 8,
+                1.0f, 1.0f, 1.0f, 0.16f * fade);
         });
 
         poseStack.popPose();
@@ -144,7 +164,7 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
     }
 
     private static void drawShockRing(Matrix4f matrix, VertexConsumer consumer, float z, float radius, float r, float g, float b, float a) {
-        int segments = 16;
+        int segments = 24;
         float rInner = radius * 0.75f;
         for (int i = 0; i < segments; i++) {
             double a1 = (i / (double) segments) * Math.PI * 2.0;

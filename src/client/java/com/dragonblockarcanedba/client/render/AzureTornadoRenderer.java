@@ -75,14 +75,14 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
             Matrix4f matrix = pose.pose();
 
             // 1. Ground Whirlpool Suction Discs (Base vortex)
-            int groundSegments = 24;
+            int groundSegments = 32;
             float gRadius = baseRadius * 0.9f;
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, gRadius, gRadius * 0.6f, groundSegments, age * 35.0f, 0.0f, 0.9f, 1.0f, (giant ? 0.70f : 0.50f) * fade);
             drawRotatingRing(matrix, buffer, 0, 0.10f, 0, gRadius * 0.75f, gRadius * 0.3f, groundSegments, -age * 45.0f, 0.2f, 1.0f, 0.9f, (giant ? 0.60f : 0.40f) * fade);
 
             // 2. High-Speed Inner Core Funnel (Dense inverted vortex cone)
             int coreLevels = 8;
-            int coreSegments = 16;
+            int coreSegments = 24;
             float coreRot = age * 28.0f * (float) (Math.PI / 180.0);
 
             for (int lvl = 0; lvl < coreLevels; lvl++) {
@@ -96,6 +96,12 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
                 float r2 = (baseRadius * 0.35f) * (0.25f + 0.75f * p2);
 
                 float alpha = (giant ? 0.75f : 0.55f) * (1.0f - p1 * 0.2f) * fade;
+
+                // T2 gradient: near-white cyan at the funnel base cooling to a
+                // deeper teal at the crown, instead of one flat color per layer.
+                float gradR = 0.85f - (0.55f * p1);
+                float gradG = 1.0f - (0.12f * p1);
+                float gradB = 1.0f - (0.05f * p1);
 
                 for (int i = 0; i < coreSegments; i++) {
                     double a1 = ((i / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.2);
@@ -113,7 +119,7 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
                     float x4 = (float) Math.cos(a4) * r2;
                     float z4 = (float) Math.sin(a4) * r2;
 
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, 0.7f, 1.0f, 1.0f, alpha);
+                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, gradR, gradG, gradB, alpha);
                 }
             }
 
@@ -198,7 +204,49 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
             // 5. Crown Outflow Ring (Flared upper storm rim)
             float crownY = totalHeight;
             float crownR = baseRadius * 1.15f;
-            drawRotatingRing(matrix, buffer, 0, crownY, 0, crownR, crownR * 0.75f, 20, -age * 22.0f, 0.0f, 0.8f, 1.0f, (giant ? 0.60f : 0.40f) * fade);
+            drawRotatingRing(matrix, buffer, 0, crownY, 0, crownR, crownR * 0.75f, 28, -age * 22.0f, 0.0f, 0.8f, 1.0f, (giant ? 0.60f : 0.40f) * fade);
+        });
+
+        // T1: additive halo pass over the core funnel silhouette, slightly
+        // wider than the funnel, so the vortex blooms instead of reading matte.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            int haloLevels = 8;
+            int haloSegments = 24;
+            float haloRot = age * 28.0f * (float) (Math.PI / 180.0);
+
+            for (int lvl = 0; lvl < haloLevels; lvl++) {
+                float p1 = lvl / (float) haloLevels;
+                float p2 = (lvl + 1) / (float) haloLevels;
+
+                float y1 = p1 * totalHeight;
+                float y2 = p2 * totalHeight;
+
+                float r1 = (baseRadius * 0.35f) * (0.25f + 0.75f * p1) * 1.18f;
+                float r2 = (baseRadius * 0.35f) * (0.25f + 0.75f * p2) * 1.18f;
+
+                float haloAlpha = 0.16f * fade * (1.0f - p1 * 0.3f);
+
+                for (int i = 0; i < haloSegments; i++) {
+                    double a1 = ((i / (double) haloSegments) * Math.PI * 2.0) + haloRot + (p1 * 1.2);
+                    double a2 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + haloRot + (p1 * 1.2);
+                    double a3 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + haloRot + (p2 * 1.2);
+                    double a4 = ((i / (double) haloSegments) * Math.PI * 2.0) + haloRot + (p2 * 1.2);
+
+                    float x1 = (float) Math.cos(a1) * r1;
+                    float z1 = (float) Math.sin(a1) * r1;
+                    float x2 = (float) Math.cos(a2) * r1;
+                    float z2 = (float) Math.sin(a2) * r1;
+
+                    float x3 = (float) Math.cos(a3) * r2;
+                    float z3 = (float) Math.sin(a3) * r2;
+                    float x4 = (float) Math.cos(a4) * r2;
+                    float z4 = (float) Math.sin(a4) * r2;
+
+                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, 0.0f, 0.45f, 0.50f, haloAlpha);
+                }
+            }
         });
 
         poseStack.popPose();

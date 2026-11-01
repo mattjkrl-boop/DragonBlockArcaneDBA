@@ -79,7 +79,7 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
 
         float span = 2.6f;
         float chord = 0.95f;
-        int segments = 18;
+        int segments = 24;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -109,6 +109,16 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
                 drawDiamondSpark(matrix, buffer, 0, 0, 0, 0.45f * (1.0f - progress * 0.5f),
                     1.0f, 1.0f, 1.0f, fade);
             }
+        });
+
+        // Additive halo pass: wider faint copies of the wake and crest layers
+        // so the cyan slash blooms at the edges.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawVolumetricCrescent(matrix, buffer, span + 0.60f, chord + 0.50f, 0.28f, 0.55f, segments,
+                0.0f, 0.75f, 1.0f, 0.20f * fade);
+            drawVolumetricCrescent(matrix, buffer, span, chord, 0.16f, 0.34f, segments,
+                0.80f, 0.95f, 1.0f, 0.13f * fade);
         });
 
         poseStack.popPose();

@@ -72,7 +72,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
             Random rng = new Random(state.seed);
 
             // 1. Gravitational Compression Ground Disc & Singularity Eye
-            int groundSegments = 36;
+            int groundSegments = 48;
             drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.05f, baseRadius * 0.92f, groundSegments, age * 6.0f,
                 0.40f, 0.10f, 0.80f, baseAlpha * 0.85f);
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 0.92f, baseRadius * 0.80f, groundSegments, age * -8.0f,
@@ -89,7 +89,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
                 if (currentR > 0.3f && currentR < baseRadius) {
                     float fade = (currentR / baseRadius) * baseAlpha * 0.85f;
                     float ringY = 0.06f + (1.0f - currentR / baseRadius) * 0.8f;
-                    drawRotatingRing(matrix, buffer, 0, ringY, 0, currentR, Math.max(0.1f, currentR - 0.25f), 28, age * 12.0f + k * 45.0f,
+                    drawRotatingRing(matrix, buffer, 0, ringY, 0, currentR, Math.max(0.1f, currentR - 0.25f), 36, age * 12.0f + k * 45.0f,
                         0.55f, 0.15f, 0.95f, fade);
                 }
             }
@@ -141,7 +141,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
                 float r1 = (0.3f + p1 * baseRadius) * pulse;
                 float r2 = (0.3f + p2 * baseRadius) * pulse;
 
-                int segs = 20;
+                int segs = 28;
                 for (int i = 0; i < segs; i++) {
                     double a1 = (i / (double) segs) * Math.PI * 2.0 + (age * 0.12f + p1 * 1.5f);
                     double a2 = ((i + 1) / (double) segs) * Math.PI * 2.0 + (age * 0.12f + p1 * 1.5f);
@@ -191,6 +191,17 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
                         1.0f, 0.80f, 0.20f, baseAlpha * 0.85f * (1.0f - prog1 * 0.4f));
                 }
             }
+        });
+
+        // Additive halo pass: the singularity eye and the outer ground ring
+        // get a faint bloom, and a soft violet disc anchors the field to the
+        // ground under the caster.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, 0.95f, 0.0f, 28, age * 24.0f,
+                0.55f, 0.20f, 0.95f, baseAlpha * 0.22f);
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.16f, baseRadius * 1.02f, 48, age * 6.0f,
+                0.40f, 0.10f, 0.80f, baseAlpha * 0.12f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

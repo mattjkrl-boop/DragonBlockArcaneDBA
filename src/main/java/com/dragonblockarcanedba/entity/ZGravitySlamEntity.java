@@ -65,6 +65,22 @@ public class ZGravitySlamEntity extends Projectile {
             if (this.tickCount == 1) {
                 com.dragonblockarcanedba.fx.SlamDebris.burst(serverLevel, this.position(), getRadius(), com.dragonblockarcanedba.fx.SlamDebris.Profile.Z_GRAVITY);
             }
+            // Theme particles: gold sparks and embers keep rising off the
+            // trenches for the whole slam instead of only the first tick.
+            if (this.tickCount % 3 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    double spread = getRadius() * 0.6;
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        this.getX(), this.getY() + 0.3, this.getZ(),
+                        Math.max(2, Math.round((2f + getPowerRatio() * 3f) * density)),
+                        spread, 0.4, spread, 0.06);
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                        this.getX(), this.getY() + 0.3, this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        spread, 0.4, spread, 0.04);
+                }
+            }
             if (this.tickCount >= getLifetime()) {
                 this.discard();
             }

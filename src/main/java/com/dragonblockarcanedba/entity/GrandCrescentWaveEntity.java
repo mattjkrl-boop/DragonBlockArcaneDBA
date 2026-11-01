@@ -80,6 +80,18 @@ public class GrandCrescentWaveEntity extends Projectile {
         this.setPos(nextX, nextY, nextZ);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles: gold spark trail shed along the flight path,
+            // mirroring the Z Shockwave travel feedback pattern.
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        this.getX(), this.getY() + 0.4, this.getZ(),
+                        Math.max(2, Math.round(6f * density)),
+                        1.6, 0.8, 1.6, 0.06);
+                }
+            }
+
             Entity owner = this.getOwner();
             DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
                 ? serverLevel.damageSources().playerAttack(playerOwner)

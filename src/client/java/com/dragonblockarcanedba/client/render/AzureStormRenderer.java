@@ -77,7 +77,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
             Matrix4f matrix = pose.pose();
 
             // 1. Quad-Tier Ground Whirlpool & Wave Surges (4 counter-rotating wind bands)
-            int groundSegments = 32;
+            int groundSegments = 48;
             for (int band = 0; band < 4; band++) {
                 float rOuter = radius * (0.30f + band * 0.23f);
                 float rInner = rOuter * 0.84f;
@@ -95,8 +95,8 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
             float domeHeight = Math.min(22.0f, radius * 1.35f);
 
             // Layer A: Outer Massive Rotating Cyclone Dome
-            int domeLatitudes = 10;
-            int domeLongitudes = 24;
+            int domeLatitudes = 12;
+            int domeLongitudes = 36;
             for (int lat = 0; lat < domeLatitudes; lat++) {
                 float latProgress1 = lat / (float) domeLatitudes;
                 float latProgress2 = (lat + 1) / (float) domeLatitudes;
@@ -133,7 +133,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
 
             // Layer B: Inner Turbulent Stratus Cyclone Ceiling (Counter-Rotating)
             int innerLats = 6;
-            int innerLons = 18;
+            int innerLons = 24;
             float innerDomeHeight = domeHeight * 0.70f;
             float innerRadius = radius * 0.85f;
 
@@ -191,6 +191,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
 
             // 4. Central Tempest Eye Updraft Column (Intense central cyclone core)
             int eyeLevels = 6;
+            int eyeSegments = 16;
             float eyeRadius = radius * 0.18f;
             for (int lvl = 0; lvl < eyeLevels; lvl++) {
                 float ey1 = (lvl / (float) eyeLevels) * domeHeight;
@@ -198,10 +199,17 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                 float er1 = eyeRadius * (0.6f + 0.4f * (lvl / (float) eyeLevels));
                 float er2 = eyeRadius * (0.6f + 0.4f * ((lvl + 1) / (float) eyeLevels));
 
+                // T2 gradient: near-white at the eye base cooling to a deeper
+                // storm cyan as the updraft climbs.
+                float lvlT = lvl / (float) eyeLevels;
+                float eyeR = 0.85f - (0.60f * lvlT);
+                float eyeG = 1.0f - (0.20f * lvlT);
+                float eyeB = 1.0f;
+
                 float rotEye = age * (30.0f + lvl * 5.0f) * (float) (Math.PI / 180.0);
-                for (int i = 0; i < 12; i++) {
-                    double a1 = ((i / 12.0) * Math.PI * 2.0) + rotEye;
-                    double a2 = (((i + 1) / 12.0) * Math.PI * 2.0) + rotEye;
+                for (int i = 0; i < eyeSegments; i++) {
+                    double a1 = ((i / (double) eyeSegments) * Math.PI * 2.0) + rotEye;
+                    double a2 = (((i + 1) / (double) eyeSegments) * Math.PI * 2.0) + rotEye;
 
                     float x1 = (float) Math.cos(a1) * er1;
                     float z1 = (float) Math.sin(a1) * er1;
@@ -213,7 +221,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                     float x4 = (float) Math.cos(a1) * er2;
                     float z4 = (float) Math.sin(a1) * er2;
 
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.8f, 1.0f, 1.0f, 0.45f * fade);
+                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, eyeR, eyeG, eyeB, 0.45f * fade);
                 }
             }
 
@@ -240,6 +248,45 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                     curX = nxtX; curY = nxtY; curZ = nxtZ;
                 }
             }
+        });
+
+        // T1 plus T6: one additive pass holding a halo shell around the eye
+        // column and a soft ground glow disc, so the storm blooms at its core
+        // and sits anchored in the scene.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float glowDomeHeight = Math.min(22.0f, radius * 1.35f);
+            float glowEyeRadius = radius * 0.18f * 1.5f;
+            int glowLevels = 6;
+            int glowSegments = 16;
+
+            for (int lvl = 0; lvl < glowLevels; lvl++) {
+                float ey1 = (lvl / (float) glowLevels) * glowDomeHeight;
+                float ey2 = ((lvl + 1) / (float) glowLevels) * glowDomeHeight;
+                float er1 = glowEyeRadius * (0.6f + 0.4f * (lvl / (float) glowLevels));
+                float er2 = glowEyeRadius * (0.6f + 0.4f * ((lvl + 1) / (float) glowLevels));
+
+                float rotEye = age * (30.0f + lvl * 5.0f) * (float) (Math.PI / 180.0);
+                for (int i = 0; i < glowSegments; i++) {
+                    double a1 = ((i / (double) glowSegments) * Math.PI * 2.0) + rotEye;
+                    double a2 = (((i + 1) / (double) glowSegments) * Math.PI * 2.0) + rotEye;
+
+                    float x1 = (float) Math.cos(a1) * er1;
+                    float z1 = (float) Math.sin(a1) * er1;
+                    float x2 = (float) Math.cos(a2) * er1;
+                    float z2 = (float) Math.sin(a2) * er1;
+
+                    float x3 = (float) Math.cos(a2) * er2;
+                    float z3 = (float) Math.sin(a2) * er2;
+                    float x4 = (float) Math.cos(a1) * er2;
+                    float z4 = (float) Math.sin(a1) * er2;
+
+                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.0f, 0.50f, 0.55f, 0.14f * fade);
+                }
+            }
+
+            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, radius * 0.50f, 0.0f, 48, age * 10.0f, 0.0f, 0.45f, 0.50f, 0.10f * fade);
         });
     }
 

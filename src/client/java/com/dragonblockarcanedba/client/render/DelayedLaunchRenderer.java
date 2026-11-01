@@ -55,10 +55,10 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
             Matrix4f matrix = pose.pose();
 
             // Outer violet ring band, alpha 0 at both edges, bright at the crest line.
-            drawGroundRing(matrix, buffer, radius, 0.45f, 24, 0.0f,
+            drawGroundRing(matrix, buffer, radius, 0.45f, 32, 0.0f,
                 0.58f, 0.10f, 0.98f, ringAlpha);
             // Inner gold ring closing tighter.
-            drawGroundRing(matrix, buffer, radius * 0.62f, 0.22f, 24, 0.0f,
+            drawGroundRing(matrix, buffer, radius * 0.62f, 0.22f, 32, 0.0f,
                 1.0f, 0.85f, 0.30f, ringAlpha * 0.9f);
 
             // Four rune ticks at the cardinal points, rotating as the launch nears.
@@ -69,6 +69,14 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
                 drawRuneTick(matrix, buffer, cx, cz, (float) a, 0.55f,
                     1.0f, 0.95f, 0.55f, Math.min(1.0f, ringAlpha + 0.25f));
             }
+        });
+
+        // Additive halo pass: a wider faint violet ring under the telegraph so
+        // the warning glows against the ground as the launch nears.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawGroundRing(matrix, buffer, radius * 1.12f, 0.60f, 32, 0.0f,
+                0.58f, 0.10f, 0.98f, ringAlpha * 0.35f);
         });
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);

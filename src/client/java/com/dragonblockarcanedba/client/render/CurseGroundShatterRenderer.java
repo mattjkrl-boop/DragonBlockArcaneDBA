@@ -74,8 +74,8 @@ public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatte
             // 1. Expanding Ground Impact Shockwave Disks
             float shockR = Math.min(radius * 1.3f, age * 0.45f);
             if (fade > 0.05f) {
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.82f, 24, 0.95f, 0.05f, 0.25f, fade * 0.85f);
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 18, 0.70f, 0.02f, 0.95f, fade * 0.75f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.82f, 36, 0.95f, 0.05f, 0.25f, fade * 0.85f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 28, 0.70f, 0.02f, 0.95f, fade * 0.75f);
             }
 
             // 2. 8 Radiating 3D Tectonic Fissure Trenches
@@ -128,6 +128,18 @@ public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatte
                 );
             }
         });
+
+        // T1: additive glow echo of the expanding shock ring, slightly wider
+        // than the main pass, sharing the same corrected fade.
+        if (fade > 0.05f) {
+            float haloShockR = Math.min(radius * 1.3f, age * 0.45f) * 1.07f;
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, haloShockR, haloShockR * 0.82f, 36, 0.55f, 0.03f, 0.15f, fade * 0.30f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, haloShockR * 0.60f, 0.0f, 28, 0.42f, 0.01f, 0.57f, fade * 0.20f);
+            });
+        }
     }
 
     private static void drawTrenchSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {

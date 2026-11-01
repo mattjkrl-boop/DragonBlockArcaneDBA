@@ -76,7 +76,7 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
 
             float span = 4.6f * scale;
             float chord = 1.4f * scale;
-            int segments = 20;
+            int segments = 28;
 
             // Render Blade 1: Tilted +45 degrees
             poseStack.pushPose();
@@ -106,6 +106,17 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
                 float vy = (float) Math.sin(angle) * vaneLen;
                 drawTaperedBeam(matrix, buffer, 0, 0, 0.05f, vx, vy, 0.05f, vaneWidth, 1.0f, 0.95f, 0.4f, fade * 0.90f);
             }
+        });
+
+        // Additive halo pass: an oversized faint copy of the starburst core
+        // so the center of the X blooms where the blades cross.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float flareRadius = (1.4f + progress * 0.8f) * scale * 1.25f;
+            drawGeometricStarburst(matrix, buffer, 0, 0, 0.1f, flareRadius, 8, state.age * 25.0f,
+                1.0f, 0.88f, 0.20f, fade * 0.20f,
+                0.15f, 0.95f, 1.0f, fade * 0.16f
+            );
         });
 
         poseStack.popPose();

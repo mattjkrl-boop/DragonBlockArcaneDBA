@@ -76,9 +76,9 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
             float shockR = Math.min(radius * 1.35f, age * 0.55f);
             if (fade > 0.05f) {
                 // Outer Shock Ring: Crimson Hellfire
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.84f, 28, 0.85f, 0.0f, 0.12f, fade * 0.85f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.84f, 40, 0.85f, 0.0f, 0.12f, fade * 0.85f);
                 // Inner Blood Ring: Concentrated Demonic Surge
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 20, 1.0f, 0.05f, 0.20f, fade * 0.75f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 28, 1.0f, 0.05f, 0.20f, fade * 0.75f);
                 // Perimeter Runic Teeth / Glyph Marks
                 int teeth = 12;
                 for (int i = 0; i < teeth; i++) {
@@ -150,9 +150,26 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
                 float pillarRadius = 0.75f * (1.0f + pillarProgress * 0.4f);
 
                 // Outer Translucent Crimson Energy Shroud
-                drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius, pillarHeight, 8, 0.85f, 0.0f, 0.12f, pillarAlpha * 0.65f);
+                drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius, pillarHeight, 12, 0.85f, 0.0f, 0.12f, pillarAlpha * 0.65f);
                 // Inner Dense Core Beam
-                drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius * 0.45f, pillarHeight * 1.05f, 6, 1.0f, 0.80f, 0.85f, pillarAlpha * 0.95f);
+                drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius * 0.45f, pillarHeight * 1.05f, 8, 1.0f, 0.80f, 0.85f, pillarAlpha * 0.95f);
+            }
+        });
+
+        // Additive glow halo (redesign T1): the seal and the hellfire column
+        // bloom in dark crimson so the deploy slam lands as light and fire.
+        float haloShockR = Math.min(radius * 1.35f, age * 0.55f);
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            if (fade > 0.05f) {
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, haloShockR * 0.65f, 0.0f, 28, 1.0f, 0.05f, 0.20f, fade * 0.22f);
+            }
+            if (age < 14.0f) {
+                float haloProgress = age / 14.0f;
+                float haloAlpha = (1.0f - haloProgress) * 0.85f;
+                float haloHeight = 6.5f * Math.min(1.0f, age * 0.4f);
+                float haloRadius = 0.75f * (1.0f + haloProgress * 0.4f) * 0.62f;
+                drawCylinderPillar(matrix, buffer, 0, 0, haloRadius, haloHeight * 1.05f, 8, 1.0f, 0.80f, 0.85f, haloAlpha * 0.35f);
             }
         });
     }

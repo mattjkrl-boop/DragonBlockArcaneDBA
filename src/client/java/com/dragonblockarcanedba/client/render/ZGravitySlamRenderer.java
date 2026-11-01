@@ -81,13 +81,13 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
             float shockR = Math.min(radius * 1.35f, age * (0.85f + power * 0.45f));
             if (fade > 0.05f) {
                 // Outer Golden Shockwave Crest
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.85f, 36, rCol, gCol, bCol, fade * 0.90f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.85f, 48, rCol, gCol, bCol, fade * 0.90f);
                 // Inner Violet Gravitational Core Bed
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 28, 0.55f, 0.15f, 0.95f, fade * 0.75f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 36, 0.55f, 0.15f, 0.95f, fade * 0.75f);
 
                 // Expanding 3D Hemispherical Kinetic Repulsion Dome Wall
                 float domeH = (3.0f + power * 3.5f) * (1.0f - progress * 0.55f);
-                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR, domeH, 32, rCol, gCol, bCol, fade * 0.65f);
+                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR, domeH, 44, rCol, gCol, bCol, fade * 0.65f);
             }
 
             // 2. Radiating 3D Tectonic Gravity Canyon Fractures / Branching Rupture Trenches
@@ -155,6 +155,18 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
                 float gWidth = 0.60f + power * 0.25f;
 
                 drawVerticalGeyser(matrix, buffer, gx, gz, gHeight, gWidth, fade);
+            }
+        });
+
+        // Additive halo pass: a wider faint copy of the shock crest and dome
+        // wall so the slam blooms and sits in the ground instead of floating.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float shockR = Math.min(radius * 1.35f, age * (0.85f + power * 0.45f));
+            if (fade > 0.05f) {
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR * 1.10f, shockR * 0.80f, 48, rCol, gCol, bCol, fade * 0.16f);
+                float domeH = (3.0f + power * 3.5f) * (1.0f - progress * 0.55f);
+                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR * 1.05f, domeH, 44, rCol, gCol, bCol, fade * 0.10f);
             }
         });
     }

@@ -3,6 +3,7 @@ package com.dragonblockarcanedba.entity;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -53,7 +54,24 @@ public class DarknessShatterEntity extends Projectile {
     public void tick() {
         super.tick();
 
-        if (!this.level().isClientSide()) {
+        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles (T5): the shatter vents void smoke and sparks
+            // while the fissures are fresh, then settles.
+            if (this.tickCount <= 8 && this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        this.getX(), this.getY() + 0.3, this.getZ(),
+                        Math.max(1, Math.round(4f * density)),
+                        getRadius() * 0.5, 0.4, getRadius() * 0.5, 0.04);
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        this.getX(), this.getY() + 0.3, this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        getRadius() * 0.4, 0.3, getRadius() * 0.4, 0.06);
+                }
+            }
             this.lifetime--;
             if (this.lifetime <= 0) {
                 this.discard();

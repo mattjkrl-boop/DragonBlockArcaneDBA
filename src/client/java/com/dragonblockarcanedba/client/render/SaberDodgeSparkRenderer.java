@@ -139,6 +139,15 @@ public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntit
         collector.submitCustomGeometry(poseStack, renderType, geometry);
         poseStack.popPose();
 
+        // Additive halo pass (light touch for a 12 tick burst): an oversized
+        // faint copy of the core flash and one clash ring so the impact blooms.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float coreSize = (0.8f * (1.0f - progress * 0.6f)) * scale * 1.6f;
+            drawDiamondSpark(matrix, buffer, 0, 0, 0, coreSize, 1.0f, 1.0f, 0.95f, fade * 0.22f);
+            drawClashRing(matrix, buffer, 1.8f * scale * 1.15f, 1.8f * scale * 0.80f, 28, state.age * 35.0f, 1.0f, 0.85f, 0.15f, fade * 0.14f);
+        });
+
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }

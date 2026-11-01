@@ -44,6 +44,20 @@ public class DelayedLaunchEntity extends Projectile {
 
         if (this.level().isClientSide()) return;
 
+        // Theme particles: violet void smoke hangs over the contracting
+        // telegraph ring while the launch counts down.
+        if (this.level() instanceof ServerLevel serverLevel && this.tickCount % 3 == 0) {
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (density > 0f) {
+                float progress = Math.min(1.0f, this.tickCount / (float) this.delayTicks);
+                double ringRadius = 5.0 - progress * 3.8;
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                    this.getX(), this.getY() + 0.3, this.getZ(),
+                    Math.max(1, Math.round(5f * density)),
+                    ringRadius * 0.7, 0.3, ringRadius * 0.7, 0.01);
+            }
+        }
+
         if (this.tickCount >= this.delayTicks) {
             for (LivingEntity target : targets) {
                 if (target != null && target.isAlive()) {

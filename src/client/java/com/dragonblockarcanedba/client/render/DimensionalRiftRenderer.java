@@ -69,7 +69,7 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
             Matrix4f matrix = pose.pose();
 
             // 1. Concentric 3D Ground Accretion Shockwave Rings (Expanding across terrain)
-            int ringSegments = 32;
+            int ringSegments = 48;
 
             // Outer Accretion Shockwave (Primary ring at current radius)
             float outerWidth = Math.min(2.0f, radius * 0.25f);
@@ -82,14 +82,14 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
             // Middle Accretion Shockwave (Counter-rotating at 65% radius)
             float midRadius = radius * 0.65f;
             float midWidth = Math.min(1.6f, midRadius * 0.28f);
-            drawRotatingFlatRing(matrix, buffer, -rot * 1.4f, midRadius, midRadius - midWidth, 24,
+            drawRotatingFlatRing(matrix, buffer, -rot * 1.4f, midRadius, midRadius - midWidth, 32,
                 0.85f, 0.05f, 0.95f, 0.80f * fade
             );
 
             // Inner Accretion Compression Disk (High speed at 35% radius)
             float innerRadius = radius * 0.35f;
             float innerWidth = Math.min(1.2f, innerRadius * 0.35f);
-            drawRotatingFlatRing(matrix, buffer, rot * 2.2f, innerRadius, innerRadius - innerWidth, 20,
+            drawRotatingFlatRing(matrix, buffer, rot * 2.2f, innerRadius, innerRadius - innerWidth, 28,
                 0.20f, 0.90f, 1.0f, 0.85f * fade
             );
 
@@ -120,10 +120,14 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
                 float perpX = -(float) Math.sin(shardAngle) * shardThickness;
                 float perpZ = (float) Math.cos(shardAngle) * shardThickness;
 
+                // Secondary motion (redesign T4): each shard bobs on its own
+                // phase instead of the whole ring riding one flat plane.
+                float bobY = 0.06f + 0.16f * (0.5f + 0.5f * (float) Math.sin(state.age * 0.35f + i * 0.7f));
+
                 draw3DShardPyramid(matrix, buffer,
-                    sx - perpX, 0.06f, sz - perpZ,
-                    sx + perpX, 0.06f, sz + perpZ,
-                    sx + leanInX, 0.06f + shardHeight, sz + leanInZ,
+                    sx - perpX, bobY, sz - perpZ,
+                    sx + perpX, bobY, sz + perpZ,
+                    sx + leanInX, bobY + shardHeight, sz + leanInZ,
                     0.50f, 0.0f, 0.85f, 0.85f * fade,
                     0.95f, 0.2f, 1.0f, 0.95f * fade
                 );
@@ -133,6 +137,19 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
             float coreSize = Math.max(0.6f, 1.2f * pulse);
             drawSingularityOctahedron(matrix, buffer, coreSize, 0.02f, 0.0f, 0.05f, 0.98f * fade);
             drawSingularityOctahedron(matrix, buffer, coreSize * 0.55f, 0.95f, 0.90f, 1.0f, 1.0f * fade);
+        });
+
+        // Additive glow halo (redesign T1): the white singularity heart and
+        // the magenta accretion ring bloom so the rift glows against the void.
+        float haloCore = Math.max(0.6f, 1.2f * pulse) * 0.85f;
+        float haloMidRadius = radius * 0.65f;
+        float haloMidWidth = Math.min(1.6f, haloMidRadius * 0.28f);
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawSingularityOctahedron(matrix, buffer, haloCore, 0.95f, 0.90f, 1.0f, 0.35f * fade);
+            drawRotatingFlatRing(matrix, buffer, -rot * 1.4f, haloMidRadius, haloMidRadius - haloMidWidth, 32,
+                0.85f, 0.05f, 0.95f, 0.16f * fade
+            );
         });
 
         poseStack.popPose();

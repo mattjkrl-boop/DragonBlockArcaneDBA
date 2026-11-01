@@ -76,15 +76,17 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
             Random rng = new Random(state.seed);
 
             // 1. Expanding Demonic Ground Impact Shockwave Disks & Execution Seals
+            // The seals now counter-rotate slowly (redesign T4); they used to
+            // sit frozen while the trenches and spikes animated around them.
             float shockR = Math.min(radius * 1.35f, age * 0.50f);
             if (fade > 0.05f) {
                 // Outer Shock Ring: Dark Crimson Runes
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.82f, 24, 0.85f, 0.0f, 0.15f, fade * 0.85f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.82f, 32, age * 10.0f, 0.85f, 0.0f, 0.15f, fade * 0.85f);
                 // Inner Blood Ring: Concentrated Blood Surge
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 18, 1.0f, 0.05f, 0.25f, fade * 0.75f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 24, -age * 14.0f, 1.0f, 0.05f, 0.25f, fade * 0.75f);
                 if (isFinal) {
                     // Extra Halos on Final Finisher Impact
-                    drawGroundRing(matrix, buffer, 0, 0.06f, 0, shockR * 1.15f, shockR * 0.95f, 24, 1.0f, 0.85f, 0.90f, fade * 0.90f);
+                    drawGroundRing(matrix, buffer, 0, 0.06f, 0, shockR * 1.15f, shockR * 0.95f, 32, age * 6.0f, 1.0f, 0.85f, 0.90f, fade * 0.90f);
                 }
             }
 
@@ -147,11 +149,25 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
                 float pillarRadius = (isFinal ? 0.85f : 0.55f) * (1.0f + pillarProgress * 0.3f);
 
                 // Outer Translucent Crimson Energy Shroud
-                drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius, pillarHeight, 8, 0.85f, 0.0f, 0.15f, pillarAlpha * 0.65f);
+                drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius, pillarHeight, 12, 0.85f, 0.0f, 0.15f, pillarAlpha * 0.65f);
                 // Inner Dense Core Beam
-                drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius * 0.45f, pillarHeight * 1.05f, 6, 1.0f, 0.85f, 0.90f, pillarAlpha * 0.95f);
+                drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius * 0.45f, pillarHeight * 1.05f, 8, 1.0f, 0.85f, 0.90f, pillarAlpha * 0.95f);
             }
         });
+
+        // Additive glow halo (redesign T1): the execution pillar core blooms
+        // while it stands so the impact point burns instead of sitting matte.
+        float haloPillarLife = isFinal ? 18.0f : 12.0f;
+        if (age < haloPillarLife) {
+            float haloProgress = age / haloPillarLife;
+            float haloAlpha = (1.0f - haloProgress) * (isFinal ? 1.0f : 0.85f);
+            float haloHeight = (isFinal ? 8.5f : 5.5f) * Math.min(1.0f, age * 0.4f);
+            float haloRadius = (isFinal ? 0.85f : 0.55f) * (1.0f + haloProgress * 0.3f) * 0.60f;
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+                drawCylinderPillar(matrix, buffer, 0, 0, haloRadius, haloHeight * 1.05f, 8, 1.0f, 0.85f, 0.90f, haloAlpha * 0.35f);
+            });
+        }
     }
 
     private static void drawTrenchSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {
@@ -187,10 +203,11 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
         consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 
-    private static void drawGroundRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float r, float g, float b, float a) {
+    private static void drawGroundRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
+        double rotRad = Math.toRadians(rotDeg);
         for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2;
+            double a1 = (i / (double) segments) * Math.PI * 2 + rotRad;
+            double a2 = ((i + 1) / (double) segments) * Math.PI * 2 + rotRad;
 
             float x1 = cx + (float) Math.cos(a1) * rOuter;
             float z1 = cz + (float) Math.sin(a1) * rOuter;

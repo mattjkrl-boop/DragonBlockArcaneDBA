@@ -135,6 +135,19 @@ public class BanshoWindProjectileEntity extends Projectile {
                 return;
             }
 
+            // Theme particles (T5): a thin wind trail streams off the drill
+            // in flight. Hits and the timeout already had feedback; the flight
+            // itself had none.
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                        this.getX(), this.getY(), this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        0.12, 0.12, 0.12, 0.02);
+                }
+            }
+
             if (this.tickCount >= 50) { // 2.5s maximum range
                 // Timeout puff so the drill does not just vanish mid-flight
                 // (hits already get a shockwave; timeouts got nothing).

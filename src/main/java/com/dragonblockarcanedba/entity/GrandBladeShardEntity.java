@@ -184,6 +184,18 @@ public class GrandBladeShardEntity extends Projectile {
                     this.discard();
                     return;
                 }
+
+                // Theme particles: the flying shard sheds a thin gold spark
+                // trail (the class header always promised trailing sparks).
+                if (this.tickCount % 2 == 0) {
+                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                    if (density > 0f) {
+                        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                            this.getX(), this.getY(), this.getZ(),
+                            Math.max(1, Math.round(2f * density)),
+                            0.15, 0.15, 0.15, 0.03);
+                    }
+                }
             }
 
             // Block collision clip

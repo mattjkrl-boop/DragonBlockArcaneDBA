@@ -66,7 +66,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
             Matrix4f matrix = pose.pose();
 
             // 1. Planar 3D Ground Heroic Runes (3 counter-rotating ground rings)
-            int groundSegments = 28;
+            int groundSegments = 40;
             // Outer Ring: Radiant Gold Starburst Ring
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.15f, baseRadius * 0.98f, groundSegments, age * -16.0f,
                 1.0f, 0.84f, 0.0f, baseAlpha * 0.80f);
@@ -165,6 +165,16 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
                     );
                 }
             }
+        });
+
+        // Additive halo pass: a wider faint copy of the outer gold ground ring
+        // and the octahedron core so the charge blooms and anchors to the ground.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.30f, baseRadius * 1.10f, 40, age * -16.0f,
+                1.0f, 0.84f, 0.0f, baseAlpha * 0.15f);
+            float coreSize = (0.70f - charge * 0.20f) * pulse * 1.25f;
+            drawOctahedron(matrix, buffer, coreSize, 0.85f, age * 22.0f, 1.0f, 0.84f, 0.0f, baseAlpha * 0.18f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

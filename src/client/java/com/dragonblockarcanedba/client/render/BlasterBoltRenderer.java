@@ -93,7 +93,7 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            int sides = 8;
+            int sides = 12;
 
             // 1. Outer Fluted Plasma Sheath (Faceted cylinder with nose cone and ion tail)
             drawPlasmaBolt(matrix, buffer, radius, headLength, tailLength, sides, age * 20.0f, r, g, b, 0.88f);
@@ -121,8 +121,8 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
             }
 
             // 4. Plasma Compression Ringlets (Orbital energy nodes)
-            drawPlaneRing(matrix, buffer, 0, 0, 0, radius * 1.35f, radius * 1.05f, 12, age * 40.0f, r, g, b, 0.85f);
-            drawPlaneRing(matrix, buffer, 0, 0, -headLength * 0.5f, radius * 1.20f, radius * 0.95f, 12, -age * 45.0f, 1.0f, 1.0f, 0.9f, 0.90f);
+            drawPlaneRing(matrix, buffer, 0, 0, 0, radius * 1.35f, radius * 1.05f, 18, age * 40.0f, r, g, b, 0.85f);
+            drawPlaneRing(matrix, buffer, 0, 0, -headLength * 0.5f, radius * 1.20f, radius * 0.95f, 18, -age * 45.0f, 1.0f, 1.0f, 0.9f, 0.90f);
 
             // 5. Leading Edge Cross-Flare (at bolt apex)
             float flareSize = radius * 1.6f;
@@ -133,6 +133,14 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
                 0, flareSize, headLength,
                 1.0f, 1.0f, 1.0f, 0.95f
             );
+        });
+
+        // Additive glow halo (T1): a fat faint sheath in the bolt's own heat
+        // color blooms around the matte body. The heat palette above is
+        // untouched; this pass only reuses its result.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawPlasmaBolt(matrix, buffer, radius * 1.5f, headLength, tailLength * 0.8f, 12, age * 20.0f, r, g, b, 0.16f);
         });
 
         poseStack.popPose();

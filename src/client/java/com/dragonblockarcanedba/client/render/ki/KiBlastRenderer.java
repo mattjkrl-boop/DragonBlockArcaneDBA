@@ -71,8 +71,8 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
             float headLen = 0.75f;
             float tailLen = 1.6f;
 
-            // 1. Outer Aerodynamic Plasma Sheath (8-sided tapered cylinder with nose cone and wake tail)
-            drawLaserBoltBody(matrix, buffer, radius, headLen, tailLen, 8, r, g, b, 0.85f);
+            // 1. Outer Aerodynamic Plasma Sheath (12-sided tapered cylinder with nose cone and wake tail)
+            drawLaserBoltBody(matrix, buffer, radius, headLen, tailLen, 12, r, g, b, 0.85f);
 
             // 2. White-Hot Intense Piercing Energy Core Spindle
             drawLaserBoltBody(matrix, buffer, radius * 0.45f, headLen * 0.95f, tailLen * 0.65f, 6, 1.0f, 1.0f, 0.95f, 1.0f);
@@ -81,7 +81,15 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
             drawHelicalVortex(matrix, buffer, radius * 1.35f, tailLen, state.ageInTicks, r, g, b);
 
             // 4. Perpendicular Energy Resonance Ring
-            drawResonanceRing(matrix, buffer, 0, 0, 0, radius * 1.5f, radius * 1.1f, 12, r, g, b, 0.75f);
+            drawResonanceRing(matrix, buffer, 0, 0, 0, radius * 1.5f, radius * 1.1f, 16, r, g, b, 0.75f);
+        });
+
+        // Additive glow halo (redesign T1): a soft sheath in the bolt's own
+        // synced color so every bolt blooms in its shooter's color.
+        float haloRadius = 0.20f * pulse * 1.55f;
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawLaserBoltBody(matrix, buffer, haloRadius, 0.75f, 1.6f, 12, r, g, b, 0.20f);
         });
 
         poseStack.popPose();
@@ -91,6 +99,11 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
     private static void drawLaserBoltBody(Matrix4f matrix, VertexConsumer consumer,
                                          float radius, float headLen, float tailLen, int sides,
                                          float r, float g, float b, float a) {
+        // Three-stop gradient (redesign T2): the piercing nose runs hot
+        // toward white, the body holds the bolt color, the tail fades out.
+        float tipR = r + (1.0f - r) * 0.55f;
+        float tipG = g + (1.0f - g) * 0.55f;
+        float tipB = b + (1.0f - b) * 0.55f;
         for (int i = 0; i < sides; i++) {
             double a1 = (i / (double) sides) * Math.PI * 2;
             double a2 = ((i + 1) / (double) sides) * Math.PI * 2;
@@ -101,10 +114,10 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
             float y2 = (float) Math.sin(a2) * radius;
 
             // Forward Cone (Piercing Nose)
-            consumer.addVertex(matrix, 0, 0, headLen).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, 0, 0, headLen).setColor(tipR, tipG, tipB, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
             consumer.addVertex(matrix, x2, y2, 0).setColor(r, g, b, a).setUv(1, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
             consumer.addVertex(matrix, x1, y1, 0).setColor(r, g, b, a).setUv(0, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, 0, 0, headLen).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, 0, 0, headLen).setColor(tipR, tipG, tipB, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
 
             // Backward Tracer Tail (Tapered to trailing point with alpha fade)
             consumer.addVertex(matrix, x1, y1, 0).setColor(r, g, b, a).setUv(0, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);

@@ -43,6 +43,19 @@ public class KiBlastEntity extends ThrowableProjectile {
     @Override
     public void tick() {
         super.tick();
+
+        // Theme particles (redesign T5): a sparse spark trail so the bolt's
+        // path reads in flight; shared by every weapon that fires this bolt.
+        if (!this.level().isClientSide() && this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (density > 0f) {
+                serverLevel.sendParticles(
+                    com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    this.getX(), this.getY(), this.getZ(),
+                    Math.max(1, Math.round(1f * density)),
+                    0.08, 0.08, 0.08, 0.01);
+            }
+        }
     }
 
     @Override
@@ -71,6 +84,17 @@ public class KiBlastEntity extends ThrowableProjectile {
                 net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(), net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.4f);
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                 net.minecraft.sounds.SoundEvents.LIGHTNING_BOLT_IMPACT, net.minecraft.sounds.SoundSource.PLAYERS, 0.5f, 1.6f);
+            // Impact burst (redesign T5): the hit used to be sound only.
+            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        this.getX(), this.getY(), this.getZ(),
+                        Math.max(2, Math.round(10f * density)),
+                        0.3, 0.3, 0.3, 0.12);
+                }
+            }
         }
         this.discard();
     }

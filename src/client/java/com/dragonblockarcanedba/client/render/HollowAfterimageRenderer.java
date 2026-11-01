@@ -133,7 +133,7 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
 
             // 6. Spatial Footstep Ripple Ring
             float ringR = (0.5f + (state.age * 0.03f) % 0.8f);
-            drawRippleRing(matrix, buffer, 0, 0.03f, 0, ringR, ringR * 0.85f, 16,
+            drawRippleRing(matrix, buffer, 0, 0.03f, 0, ringR, ringR * 0.85f, 24,
                 0.0f, 0.85f, 1.0f, alpha * (1.0f - (ringR / 1.3f)));
 
             // 7. Ascending Disintegrating Phantom Polygon Motes & Diamond Sparks
@@ -148,6 +148,12 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
 
                 drawMoteDiamond(matrix, buffer, mx, my, mz, mSize, 0.1f, 0.85f, 1.0f, mMoteAlpha);
             }
+        });
+
+        // Additive halo pass: a slightly expanded cyan ghost shell so the
+        // afterimage glows at its silhouette instead of only tinting flat.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            renderGhostBody(pose, buffer, 0.13f, 0.10f, 0.80f, 1.0f, alpha * 0.16f * pulse);
         });
 
         poseStack.popPose();

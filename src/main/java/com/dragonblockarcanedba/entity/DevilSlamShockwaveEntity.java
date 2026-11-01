@@ -54,6 +54,28 @@ public class DevilSlamShockwaveEntity extends Projectile {
         super.tick();
 
         if (!this.level().isClientSide()) {
+            // Theme particles (redesign T5): hellfire embers vent while the
+            // pillar stands, with a spark burst on the first tick.
+            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    if (this.tickCount == 1) {
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                            this.getX(), this.getY() + 0.3, this.getZ(),
+                            Math.max(2, Math.round(10f * density)),
+                            getRadius() * 0.5, 0.4, getRadius() * 0.5, 0.10);
+                    }
+                    if (this.tickCount <= 12) {
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                            this.getX(), this.getY() + 0.2, this.getZ(),
+                            Math.max(1, Math.round(3f * density)),
+                            getRadius() * 0.45, 0.5, getRadius() * 0.45, 0.06);
+                    }
+                }
+            }
+
             this.lifetime--;
             if (this.lifetime <= 0) {
                 this.discard();

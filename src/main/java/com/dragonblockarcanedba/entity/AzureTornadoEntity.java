@@ -130,6 +130,18 @@ public class AzureTornadoEntity extends Projectile {
                     radius * 0.55, 0.6, radius * 0.55, 0.06);
             }
 
+            // Theme particles (T5): sparking debris flecks kicked up at the
+            // funnel base, density scaled like the other entity emitters.
+            if (this.tickCount % 5 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        center.x, center.y + 0.4, center.z,
+                        Math.max(1, Math.round((giant ? 4f : 2f) * density)),
+                        radius * 0.5, 0.4, radius * 0.5, 0.05);
+                }
+            }
+
             if (this.tickCount >= this.maxLifetime) {
                 this.discard();
             }

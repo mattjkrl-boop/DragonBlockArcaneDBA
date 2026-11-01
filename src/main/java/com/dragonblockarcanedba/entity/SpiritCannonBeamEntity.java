@@ -108,6 +108,27 @@ public class SpiritCannonBeamEntity extends Projectile {
                 }
                 this.setBeamLength(currentLength);
 
+                // Theme particles (redesign T5): sparks shed at the impact
+                // point and motes at the muzzle while the cannon channels.
+                if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel && this.tickCount % 2 == 0) {
+                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                    if (density > 0f) {
+                        Vec3 hitPoint = eye.add(look.scale(currentLength));
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                            hitPoint.x, hitPoint.y, hitPoint.z,
+                            Math.max(1, Math.round(3f * density)),
+                            0.25, 0.25, 0.25, 0.06);
+                        if (this.tickCount % 6 == 0) {
+                            serverLevel.sendParticles(
+                                com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                                eye.x, eye.y, eye.z,
+                                Math.max(1, Math.round(2f * density)),
+                                0.3, 0.3, 0.3, 0.02);
+                        }
+                    }
+                }
+
                 if (living instanceof Player player) {
                     boolean isHolding = player.getMainHandItem().getItem() instanceof SpiritSwordItem ||
                                         player.getOffhandItem().getItem() instanceof SpiritSwordItem;

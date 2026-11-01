@@ -71,7 +71,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
             Random rng = new Random(state.seed);
 
             // 1. Radiating Divine Ground Seal Mandala & Sacred Pressure Spokes
-            int groundSegments = 32;
+            int groundSegments = 48;
             drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.05f, baseRadius * 0.94f, groundSegments, age * 8.0f,
                 1.0f, 0.85f, 0.15f, baseAlpha * 0.85f);
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.68f, baseRadius * 0.56f, groundSegments, age * -14.0f,
@@ -124,7 +124,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
             }
 
             // 3. Multi-Tier Counter-Rotating Concentric 3D Celestial Energy Rings
-            int ringSegments = 24;
+            int ringSegments = 32;
             // Ring 1 (Tilted outer golden ring)
             drawInclinedRing(matrix, buffer, 0, coreY + 0.3f, 0, baseRadius * 0.90f, 0.08f, ringSegments, age * 16.0f, 25.0f,
                 1.0f, 0.75f, 0.05f, baseAlpha * 0.85f);
@@ -171,6 +171,16 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
                         1.0f, 1.0f, 0.85f, baseAlpha * 0.90f);
                 }
             }
+        });
+
+        // Additive halo pass: a wider faint copy of the mandala ring and the
+        // outer celestial ring so the charge blooms and anchors to the ground.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.18f, baseRadius * 1.02f, 48, age * 8.0f,
+                1.0f, 0.85f, 0.15f, baseAlpha * 0.15f);
+            drawInclinedRing(matrix, buffer, 0, 1.3f, 0, baseRadius * 0.90f, 0.10f, 32, age * 16.0f, 25.0f,
+                1.0f, 0.75f, 0.05f, baseAlpha * 0.16f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

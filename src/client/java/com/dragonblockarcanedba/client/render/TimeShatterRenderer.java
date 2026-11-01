@@ -83,7 +83,7 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
             Random rng = new Random(state.seed);
 
             // 1. Splintering Celestial Chrono-Dial Ring
-            int ringSegments = 24;
+            int ringSegments = 36;
             float ringR = 1.8f * scale;
             float ringWidth = 0.12f * (1.0f - progress * 0.6f);
             drawSplinteringDial(matrix, buffer, ringR, ringWidth, ringSegments, state.age * 25.0f, progress, fade);
@@ -103,6 +103,15 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
                     0.95f, 0.98f, 1.0f, fade * 0.9f,
                     0.50f, 0.85f, 1.0f, fade * 0.7f);
             }
+        });
+
+        // Additive glow halo (T1) for the billboarded layer: the dial redrawn
+        // slightly larger and faint, so the shatter blooms toward the viewer.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float ringR = 1.8f * scale * 1.07f;
+            float ringWidth = 0.12f * (1.0f - progress * 0.6f) * 1.8f;
+            drawSplinteringDial(matrix, buffer, ringR, ringWidth, 36, state.age * 25.0f, progress, fade * 0.30f);
         });
 
         poseStack.popPose();
@@ -138,6 +147,14 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
             drawOctahedralCore(matrix, buffer, 0, 0, 0, coreSize, state.age * 40.0f, 0.98f, 0.98f, 1.0f, fade);
         });
 
+        // Additive glow halo (T1) for the world-space layer: an oversized faint
+        // core octahedron blooms behind the shards.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float coreSize = 0.85f * (1.0f - progress * 0.7f) * scale * 1.45f;
+            drawOctahedralCore(matrix, buffer, 0, 0, 0, coreSize, state.age * 40.0f, 0.70f, 0.90f, 1.0f, fade * 0.30f);
+        });
+
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -168,16 +185,22 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
             float g = i % 2 == 0 ? 0.98f : 0.90f;
             float b = 1.0f;
 
-            consumer.addVertex(matrix, ix1, iy1, 0).setColor(r, g, b, alpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, ix2, iy2, 0).setColor(r, g, b, alpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            // Radial gradient (T2): the inner edge of each segment runs hotter,
+            // halfway to white, cooling to the segment color at the rim.
+            float ir = r + (1.0f - r) * 0.5f;
+            float ig = g + (1.0f - g) * 0.5f;
+            float ib = 1.0f;
+
+            consumer.addVertex(matrix, ix1, iy1, 0).setColor(ir, ig, ib, alpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, ix2, iy2, 0).setColor(ir, ig, ib, alpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
             consumer.addVertex(matrix, x2, y2, 0).setColor(r, g, b, alpha).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
             consumer.addVertex(matrix, x1, y1, 0).setColor(r, g, b, alpha).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
 
             // Double sided
             consumer.addVertex(matrix, x1, y1, 0).setColor(r, g, b, alpha).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
             consumer.addVertex(matrix, x2, y2, 0).setColor(r, g, b, alpha).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
-            consumer.addVertex(matrix, ix2, iy2, 0).setColor(r, g, b, alpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
-            consumer.addVertex(matrix, ix1, iy1, 0).setColor(r, g, b, alpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
+            consumer.addVertex(matrix, ix2, iy2, 0).setColor(ir, ig, ib, alpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
+            consumer.addVertex(matrix, ix1, iy1, 0).setColor(ir, ig, ib, alpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
         }
     }
 

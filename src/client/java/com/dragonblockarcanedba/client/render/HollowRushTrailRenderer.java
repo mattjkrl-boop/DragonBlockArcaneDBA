@@ -89,8 +89,8 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // 1. Volumetric 3D Void Mach Corridor (Faceted 8-sided spatial tunnel)
-            int tunnelSegments = 8;
+            // 1. Volumetric 3D Void Mach Corridor (Faceted spatial tunnel)
+            int tunnelSegments = 12;
             float corridorRadius = 0.55f * widthScale;
             float coreRadius = 0.22f * widthScale;
 
@@ -163,8 +163,8 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
 
             // 3. Origin and Destination Dimensional Puncture Rings
             float ringRadius = (0.75f + progress * 0.6f) * widthScale;
-            drawRingXY(matrix, buffer, 0, 0, 0, ringRadius, ringRadius * 0.70f, 16, 0.40f, 0.05f, 0.85f, alpha * 0.85f);
-            drawRingXY(matrix, buffer, 0, 0, len, ringRadius * 1.2f, ringRadius * 0.80f, 16, 0.15f, 0.95f, 1.0f, alpha * 0.95f);
+            drawRingXY(matrix, buffer, 0, 0, 0, ringRadius, ringRadius * 0.70f, 24, 0.40f, 0.05f, 0.85f, alpha * 0.85f);
+            drawRingXY(matrix, buffer, 0, 0, len, ringRadius * 1.2f, ringRadius * 0.80f, 24, 0.15f, 0.95f, 1.0f, alpha * 0.95f);
 
             // 4. Hyper-Velocity Void Core Spike
             float spikeR = 0.08f * widthScale;
@@ -172,6 +172,33 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
             drawQuad(matrix, buffer, -spikeR, spikeR, -0.2f, spikeR, spikeR, -0.2f, spikeR, spikeR, len + 0.4f, -spikeR, spikeR, len + 0.4f, 1.0f, 1.0f, 1.0f, alpha * 0.98f);
             drawQuad(matrix, buffer, -spikeR, -spikeR, -0.2f, -spikeR, spikeR, -0.2f, -spikeR, spikeR, len + 0.4f, -spikeR, -spikeR, len + 0.4f, 1.0f, 1.0f, 1.0f, alpha * 0.98f);
             drawQuad(matrix, buffer, spikeR, -spikeR, -0.2f, spikeR, spikeR, -0.2f, spikeR, spikeR, len + 0.4f, spikeR, -spikeR, len + 0.4f, 1.0f, 1.0f, 1.0f, alpha * 0.98f);
+        });
+
+        // T1: additive halo pass around the cyan core tunnel, a wider ghost
+        // of the corridor's bright heart, so the dash blooms as it passes.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            int haloSegments = 12;
+            float haloRadius = 0.22f * widthScale * 1.5f;
+
+            for (int i = 0; i < haloSegments; i++) {
+                double a1 = (i / (double) haloSegments) * Math.PI * 2.0;
+                double a2 = ((i + 1) / (double) haloSegments) * Math.PI * 2.0;
+
+                float x1 = (float) Math.cos(a1) * haloRadius;
+                float y1 = (float) Math.sin(a1) * haloRadius;
+                float x2 = (float) Math.cos(a2) * haloRadius;
+                float y2 = (float) Math.sin(a2) * haloRadius;
+
+                drawQuad(matrix, buffer,
+                    x1, y1, 0,
+                    x2, y2, 0,
+                    x2, y2, len,
+                    x1, y1, len,
+                    0.08f, 0.50f, 0.55f, alpha * 0.30f
+                );
+            }
         });
 
         poseStack.popPose();

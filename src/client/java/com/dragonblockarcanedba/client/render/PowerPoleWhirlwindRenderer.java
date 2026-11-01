@@ -95,6 +95,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         }
 
         final float finalAlpha = alphaMult;
+        final float coneTanSubmit = (float) Math.tan(Math.toRadians(state.coneAngle));
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -110,12 +111,12 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
             float spinRot = age * 65.0f * (float) (Math.PI / 180.0);
             float discR1 = 2.2f * fpScale;
             float discR2 = 1.6f * fpScale;
-            drawOriginDisc(matrix, buffer, 0.4f, discR1, 20, spinRot, 0.0f, 1.0f, 0.75f, 0.70f * finalAlpha);
-            drawOriginDisc(matrix, buffer, 0.8f, discR2, 16, -spinRot * 1.3f, 1.0f, 0.85f, 0.2f, 0.60f * finalAlpha);
+            drawOriginDisc(matrix, buffer, 0.4f, discR1, 28, spinRot, 0.0f, 1.0f, 0.75f, 0.70f * finalAlpha);
+            drawOriginDisc(matrix, buffer, 0.8f, discR2, 24, -spinRot * 1.3f, 1.0f, 0.85f, 0.2f, 0.60f * finalAlpha);
 
             // 2. Multi-Tiered Conical Aerodynamic Hurricane Vortex Tunnel
             int tiers = 12;
-            int segments = 20;
+            int segments = 28;
             float coneTan = (float) Math.tan(Math.toRadians(state.coneAngle));
 
             // Layer A: Dense Inner Wind Sheath (Cyan-White)
@@ -129,6 +130,18 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
                 float tierAlpha = 0.55f * (1.0f - (t / (float) tiers) * 0.45f) * finalAlpha;
                 float twist1 = spinRot + (z1 * 0.35f);
                 float twist2 = spinRot + (z2 * 0.35f);
+
+                // 3-stop gradient: near-white hot at the staff origin, cyan-white
+                // through the middle, deeper cyan at the far mouth.
+                float tfA = t / (float) tiers;
+                float crA, cgA, cbA;
+                if (tfA < 0.5f) {
+                    float k = tfA / 0.5f;
+                    crA = 0.95f + (0.75f - 0.95f) * k; cgA = 1.0f; cbA = 1.0f;
+                } else {
+                    float k = (tfA - 0.5f) / 0.5f;
+                    crA = 0.75f + (0.40f - 0.75f) * k; cgA = 1.0f + (0.92f - 1.0f) * k; cbA = 1.0f;
+                }
 
                 for (int i = 0; i < segments; i++) {
                     double a1 = ((i / (double) segments) * Math.PI * 2.0) + twist1;
@@ -150,7 +163,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
                         x2, y2, z1,
                         x3, y3, z2,
                         x4, y4, z2,
-                        0.75f, 1.0f, 1.0f, tierAlpha
+                        crA, cgA, cbA, tierAlpha
                     );
                 }
             }
@@ -167,6 +180,18 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
                 float twist1 = -spinRot * 0.8f + (z1 * 0.25f);
                 float twist2 = -spinRot * 0.8f + (z2 * 0.25f);
 
+                // 3-stop gradient: pale emerald at the origin, full emerald mid,
+                // deep emerald at the far mouth.
+                float tfB = t / (float) tiers;
+                float crB, cgB, cbB;
+                if (tfB < 0.5f) {
+                    float k = tfB / 0.5f;
+                    crB = 0.45f + (0.0f - 0.45f) * k; cgB = 1.0f; cbB = 0.80f + (0.55f - 0.80f) * k;
+                } else {
+                    float k = (tfB - 0.5f) / 0.5f;
+                    crB = 0.0f; cgB = 1.0f + (0.80f - 1.0f) * k; cbB = 0.55f + (0.42f - 0.55f) * k;
+                }
+
                 for (int i = 0; i < segments; i++) {
                     double a1 = ((i / (double) segments) * Math.PI * 2.0) + twist1;
                     double a2 = (((i + 1) / (double) segments) * Math.PI * 2.0) + twist1;
@@ -187,14 +212,14 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
                         x2, y2, z1,
                         x3, y3, z2,
                         x4, y4, z2,
-                        0.0f, 1.0f, 0.55f, tierAlpha
+                        crB, cgB, cbB, tierAlpha
                     );
                 }
             }
 
             // 3. Quad Counter-Rotating Helical Wind Ribbons
             int ribbons = 4;
-            int ribbonSteps = 18;
+            int ribbonSteps = 24;
             for (int r = 0; r < ribbons; r++) {
                 float ribbonOffset = (r / (float) ribbons) * (float) (Math.PI * 2.0);
                 boolean isCyan = (r % 2 == 0);
@@ -289,7 +314,44 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
                 float waveR = waveZ * coneTan * 0.90f;
                 float waveAlpha = (1.0f - waveProgress) * 0.75f * finalAlpha;
 
-                drawOriginDisc(matrix, buffer, waveR * 0.85f, waveR * 1.05f, 20, waveZ, 0.4f, 1.0f, 0.9f, waveAlpha);
+                drawOriginDisc(matrix, buffer, waveR * 0.85f, waveR * 1.05f, 28, waveZ, 0.4f, 1.0f, 0.9f, waveAlpha);
+            }
+        });
+
+        // Additive glow halo (T1): enlarged origin discs and a wide soft cone
+        // sheath bloom around the matte body so the vortex reads as energy.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float spinRot = age * 65.0f * (float) (Math.PI / 180.0);
+            float discR1 = 2.2f * fpScale;
+
+            drawOriginDisc(matrix, buffer, 0.4f, discR1 * 1.3f, 28, spinRot, 0.2f, 1.0f, 0.8f, 0.20f * finalAlpha);
+
+            int haloTiers = 8;
+            int haloSegments = 28;
+            for (int t = 0; t < haloTiers; t++) {
+                float z1 = (t / (float) haloTiers) * range + 0.5f;
+                float z2 = ((t + 1) / (float) haloTiers) * range + 0.5f;
+                float r1 = z1 * coneTanSubmit * 1.08f;
+                float r2 = z2 * coneTanSubmit * 1.08f;
+                float twist1 = -spinRot * 0.8f + (z1 * 0.25f);
+                float twist2 = -spinRot * 0.8f + (z2 * 0.25f);
+                float haloAlpha = 0.10f * (1.0f - (t / (float) haloTiers) * 0.5f) * finalAlpha;
+
+                for (int i = 0; i < haloSegments; i++) {
+                    double a1 = ((i / (double) haloSegments) * Math.PI * 2.0) + twist1;
+                    double a2 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + twist1;
+                    double a3 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + twist2;
+                    double a4 = ((i / (double) haloSegments) * Math.PI * 2.0) + twist2;
+
+                    drawQuad(matrix, buffer,
+                        (float) Math.cos(a1) * r1, (float) Math.sin(a1) * r1, z1,
+                        (float) Math.cos(a2) * r1, (float) Math.sin(a2) * r1, z1,
+                        (float) Math.cos(a3) * r2, (float) Math.sin(a3) * r2, z2,
+                        (float) Math.cos(a4) * r2, (float) Math.sin(a4) * r2, z2,
+                        0.1f, 1.0f, 0.6f, haloAlpha
+                    );
+                }
             }
         });
 

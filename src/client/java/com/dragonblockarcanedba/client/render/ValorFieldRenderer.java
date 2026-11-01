@@ -87,7 +87,10 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
 
         float radius = state.radius;
         float age = state.ageInTicks;
-        float pulse = 0.88f + 0.12f * (float) Math.sin(age * 0.18f);
+        // Spawn fade-in over the first 6 ticks: the 9 block dome used to appear
+        // at full strength in a single tick when cast.
+        float spawnIn = Math.min(1.0f, age / 6.0f);
+        float pulse = (0.88f + 0.12f * (float) Math.sin(age * 0.18f)) * spawnIn;
 
         poseStack.pushPose();
 
@@ -95,8 +98,8 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
             Matrix4f matrix = pose.pose();
 
             // 1. Volumetric 3D Translucent Golden Dome Shell (Multi-Latitude Mesh)
-            int domeLatitudes = 10;
-            int domeLongitudes = 24;
+            int domeLatitudes = 14;
+            int domeLongitudes = 36;
             float domeHeight = radius * 1.05f;
 
             for (int lat = 0; lat < domeLatitudes; lat++) {
@@ -110,6 +113,21 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
                 float r2 = radius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
 
                 float domeAlpha = (0.16f + latProgress1 * 0.18f) * pulse;
+
+                // Three-stop gradient: deep gold at the base, the main valor
+                // gold mid shell, near-white gold toward the zenith.
+                float bandR, bandG, bandB;
+                if (latProgress1 < 0.5f) {
+                    float k = latProgress1 * 2.0f;
+                    bandR = 0.85f + (1.0f - 0.85f) * k;
+                    bandG = 0.60f + (0.88f - 0.60f) * k;
+                    bandB = 0.10f + (0.25f - 0.10f) * k;
+                } else {
+                    float k = (latProgress1 - 0.5f) * 2.0f;
+                    bandR = 1.0f;
+                    bandG = 0.88f + (0.97f - 0.88f) * k;
+                    bandB = 0.25f + (0.70f - 0.25f) * k;
+                }
 
                 for (int lon = 0; lon < domeLongitudes; lon++) {
                     double angleOffset = (age * (1.2f + lat * 0.3f)) * (Math.PI / 180.0);
@@ -127,12 +145,12 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
                     float z4 = (float) Math.sin(a1) * r2;
 
                     drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
-                        1.0f, 0.88f, 0.25f, domeAlpha);
+                        bandR, bandG, bandB, domeAlpha);
                 }
             }
 
             // 2. Ground Sanctum Mandala (Multi-Tier Golden Valor Seals)
-            int groundSegments = 32;
+            int groundSegments = 48;
 
             // Outer Perimeter Runic Ring
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius, radius * 0.88f, groundSegments, age * 8.0f,
@@ -170,7 +188,7 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
             // 4. 8 Dynamic Vertical Meridian Energy Ribs
             for (int rib = 0; rib < 8; rib++) {
                 double ribAngle = (rib / 8.0) * Math.PI * 2.0 + Math.toRadians(age * 5.0f);
-                drawMeridianRib(matrix, buffer, ribAngle, radius, domeHeight, 14,
+                drawMeridianRib(matrix, buffer, ribAngle, radius, domeHeight, 18,
                     1.0f, 0.92f, 0.35f, 0.85f * pulse);
             }
 
@@ -182,6 +200,52 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
                 drawStasisCage(matrix, buffer, sx, sy, sz, 0.65f, age * 35.0f,
                     1.0f, 0.88f, 0.20f, 0.95f * pulse);
             }
+        });
+
+        // Additive halo pass: a slightly larger, very faint dome shell plus
+        // the equator and ground rings, so the whole field blooms and anchors
+        // to the ground instead of reading as a flat matte shell.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float haloRadius = radius * 1.03f;
+            float haloHeight = haloRadius * 1.05f;
+            int haloLatitudes = 8;
+            int haloLongitudes = 24;
+
+            for (int lat = 0; lat < haloLatitudes; lat++) {
+                float latProgress1 = lat / (float) haloLatitudes;
+                float latProgress2 = (lat + 1) / (float) haloLatitudes;
+
+                float y1 = 0.1f + (float) Math.sin(latProgress1 * (Math.PI / 2.0)) * haloHeight;
+                float y2 = 0.1f + (float) Math.sin(latProgress2 * (Math.PI / 2.0)) * haloHeight;
+
+                float r1 = haloRadius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
+                float r2 = haloRadius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
+
+                for (int lon = 0; lon < haloLongitudes; lon++) {
+                    double angleOffset = (age * (1.2f + lat * 0.3f)) * (Math.PI / 180.0);
+                    double a1 = ((lon / (double) haloLongitudes) * Math.PI * 2.0) + angleOffset;
+                    double a2 = (((lon + 1) / (double) haloLongitudes) * Math.PI * 2.0) + angleOffset;
+
+                    float x1 = (float) Math.cos(a1) * r1;
+                    float z1 = (float) Math.sin(a1) * r1;
+                    float x2 = (float) Math.cos(a2) * r1;
+                    float z2 = (float) Math.sin(a2) * r1;
+
+                    float x3 = (float) Math.cos(a2) * r2;
+                    float z3 = (float) Math.sin(a2) * r2;
+                    float x4 = (float) Math.cos(a1) * r2;
+                    float z4 = (float) Math.sin(a1) * r2;
+
+                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
+                        1.0f, 0.95f, 0.60f, 0.05f * pulse);
+                }
+            }
+
+            drawRing3D(matrix, buffer, 0, 1.0f, 0, radius * 1.01f, radius * 0.94f, 36,
+                1.0f, 0.85f, 0.20f, 0.16f * pulse);
+            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius * 1.06f, radius * 0.90f, 48, age * 8.0f,
+                1.0f, 0.85f, 0.20f, 0.13f * pulse);
         });
 
         poseStack.popPose();
@@ -229,7 +293,7 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
     }
 
     private static void drawTiltedOrbitalRing(Matrix4f matrix, VertexConsumer consumer, float radius, float tiltDeg, float rotDeg, float r, float g, float b, float a) {
-        int segments = 28;
+        int segments = 36;
         float width = 0.14f;
         double tiltRad = Math.toRadians(tiltDeg);
         double rotRad = Math.toRadians(rotDeg);

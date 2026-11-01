@@ -79,7 +79,10 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
             draw3DGreatsword(matrix, buffer, bladeWidth, bladeLength, 0.16f, 0.06f, 0.0f, 0.12f, 0.98f * fade);
 
             // 3. Central Glowing Crimson Blood Fuller / Rune
-            draw3DGreatsword(matrix, buffer, bladeWidth * 0.32f, bladeLength * 0.85f, 0.18f, 1.0f, 0.05f, 0.25f, 1.0f * fade);
+            // T4: the fuller breathes while the blade falls, so the rune reads
+            // as living energy instead of a flat red stripe.
+            float fullerPulse = 0.82f + 0.18f * (float) Math.sin(age * 0.8f);
+            draw3DGreatsword(matrix, buffer, bladeWidth * 0.32f, bladeLength * 0.85f, 0.18f, 1.0f, 0.05f, 0.25f, fullerPulse * fade);
 
             // 4. 3D Horned Crossguard
             drawCrossguard(matrix, buffer, bladeWidth * 2.2f, 0.4f, 0.22f, 0.10f, 0.0f, 0.20f, 1.0f * fade);
@@ -97,6 +100,14 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
 
                 drawPlungeCone(matrix, buffer, coneWidth, coneLen, coneZ, 0.55f, 0.05f, 0.90f, alpha);
             }
+        });
+
+        // T1: additive halo pass, a wider ghost of the greatsword silhouette,
+        // so the falling blade blooms against the sky instead of reading matte.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            draw3DGreatsword(matrix, buffer, bladeWidth + 0.85f, bladeLength + 0.9f, 0.42f, 0.38f, 0.03f, 0.55f, 0.20f * fade);
         });
 
         poseStack.popPose();

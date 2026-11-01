@@ -145,6 +145,19 @@ public class DarknessWaveEntity extends Projectile {
                     net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.6f);
             }
 
+            // Theme particles (T5): the wave sheds void smoke as it travels,
+            // so its path reads between the crescent and the trailing shards.
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        this.getX(), this.getY() + 0.5, this.getZ(),
+                        Math.max(1, Math.round(3f * density)),
+                        1.2, 0.7, 1.2, 0.02);
+                }
+            }
+
             // Wave passes through terrain, expires after 32 blocks / 40 ticks
             if (this.tickCount > 40) {
                 this.discard();

@@ -91,7 +91,7 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
             }
 
             // 2. Inward-Gathering Earthen Compression Rings
-            int ringSegments = 28;
+            int ringSegments = 40;
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.05f, baseRadius * 0.92f, ringSegments, age * 12.0f,
                 0.90f, 0.35f, 0.02f, baseAlpha * 0.80f);
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.70f, baseRadius * 0.58f, ringSegments, age * -18.0f,
@@ -144,6 +144,17 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
                         0.06f, 1.0f, 0.55f, 0.05f, baseAlpha * 0.75f);
                 }
             }
+        });
+
+        // Additive glow halo and ground anchor (redesign T1 and T6): the
+        // compression rings bloom and a soft molten disc glows under the
+        // caster so the charge sits in the world instead of floating on it.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.70f, baseRadius * 0.58f, 40, age * -18.0f,
+                1.0f, 0.65f, 0.05f, baseAlpha * 0.20f);
+            drawRotatingRing(matrix, buffer, 0, 0.02f, 0, baseRadius * 0.55f, 0.05f, 40, 0.0f,
+                1.0f, 0.55f, 0.05f, baseAlpha * 0.10f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

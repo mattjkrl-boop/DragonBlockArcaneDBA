@@ -86,10 +86,14 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
                 float x1 = fx[i], z1 = fz[i];
                 float x2 = fx[i + 1], z2 = fz[i + 1];
 
+                // Along-length gradient (redesign T2): the crack burns
+                // hottest at its root near the slam and cools toward the tip.
+                float segShade = 1.0f - (i / (float) mainSegments) * 0.35f;
+
                 // Magma Trench Base
-                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.45f, 1.0f, 0.25f * pulse, 0.0f, 0.95f * fade);
+                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.45f, 1.0f, 0.25f * pulse * segShade, 0.0f, 0.95f * fade);
                 // Glowing Heat Core
-                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.18f, 1.0f, 0.90f * pulse, 0.2f, 1.0f * fade);
+                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.18f, 1.0f, 0.90f * pulse * segShade, 0.2f, fade * (0.70f + 0.30f * segShade));
 
                 // Small 3D stone fissure teeth along edges
                 if (i % 2 == 0) {
@@ -124,6 +128,29 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
                     drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.12f, 1.0f, 0.90f * pulse, 0.2f, 0.95f * fade);
                     bx = nx2; bz = nz2;
                 }
+            }
+        });
+
+        // Additive glow halo (redesign T1): the heat core of the main trench
+        // blooms so the crack reads as molten light in the ground. The point
+        // path is rebuilt from the same seed, so the glow follows the crack.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            Random rng = new Random(state.seed);
+            int mainSegments = 8;
+            float totalLength = 3.6f;
+            float[] fx = new float[mainSegments + 1];
+            float[] fz = new float[mainSegments + 1];
+            fx[0] = 0; fz[0] = -totalLength * 0.5f;
+            for (int i = 1; i <= mainSegments; i++) {
+                float progress = i / (float) mainSegments;
+                fz[i] = -totalLength * 0.5f + (progress * totalLength);
+                fx[i] = fx[i - 1] + (rng.nextFloat() - 0.5f) * 0.7f;
+            }
+            for (int i = 0; i < mainSegments; i++) {
+                float segShade = 1.0f - (i / (float) mainSegments) * 0.35f;
+                drawTrenchSegment(matrix, buffer, fx[i], fz[i], fx[i + 1], fz[i + 1], 0.20f,
+                    1.0f, 0.90f * pulse * segShade, 0.2f, 0.35f * fade * (0.70f + 0.30f * segShade));
             }
         });
 

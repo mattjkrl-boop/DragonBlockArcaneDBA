@@ -85,7 +85,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                 }
 
                 // Ground Warning Ring
-                drawGroundRing(matrix, buffer, 0.75f, 0.60f, 16, 1.0f, 0.80f, 0.10f, 0.65f * pulse);
+                drawGroundRing(matrix, buffer, 0.75f, 0.60f, 24, 1.0f, 0.80f, 0.10f, 0.65f * pulse);
 
                 // 2. Vertical Radiant Golden Hazard Beacon Stele (Telegraphs Tripping Hazard in 3D)
                 float beaconHeight = 1.6f * pulse;
@@ -99,6 +99,24 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                 bladeStack.scale(0.85f, 0.85f, 0.85f);
 
                 drawPhysicalBlade(bladeStack.last().pose(), buffer, state.ageInTicks, 1.0f);
+            });
+
+            // Additive halo pass: the fracture cracks, warning ring, and
+            // beacon get a faint bloom so the hazard reads at a distance.
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+                float pulse = 0.85f + 0.15f * (float) Math.sin(state.ageInTicks * 0.25f);
+
+                int crackRays = 6;
+                for (int c = 0; c < crackRays; c++) {
+                    double angle = (c / (double) crackRays) * Math.PI * 2.0;
+                    float crackLen = 0.75f + (c % 2 == 0 ? 0.35f : 0.0f);
+                    float x2 = (float) Math.cos(angle) * crackLen;
+                    float z2 = (float) Math.sin(angle) * crackLen;
+                    drawCrackLine(matrix, buffer, 0, 0.03f, 0, x2, 0.03f, z2, 0.10f, 1.0f, 0.85f, 0.20f, 0.30f * pulse);
+                }
+                drawGroundRing(matrix, buffer, 0.85f, 0.55f, 24, 1.0f, 0.80f, 0.10f, 0.25f * pulse);
+                drawBeaconPlume(matrix, buffer, 0, 0, 0.10f, 1.6f * pulse, 1.0f, 0.90f, 0.30f, 0.22f * pulse);
             });
 
         } else {
@@ -115,6 +133,14 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                 drawPhysicalBlade(matrix, buffer, state.ageInTicks, 1.0f);
 
                 // 2. Volumetric 3D Helical Energy Trail Ribbon Vortex
+                drawHelicalWake(matrix, buffer, state.ageInTicks);
+            });
+
+            // Additive halo pass: a faint copy of the blade and its helical
+            // wake so the spinning shard blooms in flight.
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+                drawPhysicalBlade(matrix, buffer, state.ageInTicks, 0.28f);
                 drawHelicalWake(matrix, buffer, state.ageInTicks);
             });
         }

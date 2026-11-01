@@ -83,7 +83,7 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
             drawSingularityOctahedron(matrix, buffer, coreSize * 0.35f, 1.0f, 1.0f, 1.0f, 1.0f);
 
             // 2. Primary 3D Beveled Horizontal Accretion Disk (Spins Clockwise)
-            int diskSegments = 32;
+            int diskSegments = 48;
             float rOut1 = radius * collapseScale;
             float rIn1 = radius * 0.45f * collapseScale;
             float diskHeight = 0.18f * pulse;
@@ -97,7 +97,7 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
             // 3. Secondary 3D Inclined Accretion Disk (Tilted at 28°, Spins Counter-Clockwise)
             float rOut2 = radius * 0.82f * collapseScale;
             float rIn2 = radius * 0.38f * collapseScale;
-            drawInclinedDisk(matrix, buffer, 28.0f, -rot * 1.4f, rOut2, rIn2, 24,
+            drawInclinedDisk(matrix, buffer, 28.0f, -rot * 1.4f, rOut2, rIn2, 32,
                 0.15f, 0.90f, 1.0f, 0.80f,
                 0.80f, 0.10f, 0.95f, 0.90f
             );
@@ -139,9 +139,26 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
             if (imploding) {
                 float burstR = radius * (1.2f + implodeAge * 0.35f);
                 float burstAlpha = Math.max(0.0f, 1.0f - implodeAge * 0.10f);
-                drawFlatRing(matrix, buffer, rot * 3.0f, burstR, burstR * 0.85f, 28, 0.95f, 0.20f, 1.0f, burstAlpha * 0.95f);
-                drawFlatRing(matrix, buffer, -rot * 2.5f, burstR * 0.70f, burstR * 0.55f, 24, 0.15f, 0.95f, 1.0f, burstAlpha * 0.85f);
+                drawFlatRing(matrix, buffer, rot * 3.0f, burstR, burstR * 0.85f, 36, 0.95f, 0.20f, 1.0f, burstAlpha * 0.95f);
+                drawFlatRing(matrix, buffer, -rot * 2.5f, burstR * 0.70f, burstR * 0.55f, 32, 0.15f, 0.95f, 1.0f, burstAlpha * 0.85f);
             }
+        });
+
+        // T1: additive halo pass over the primary accretion disk, the rift's
+        // signature shape, at slightly wider radii with the same 3-stop
+        // gradient dimmed down, so the disk blooms while it feeds.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float haloOut = radius * collapseScale * 1.10f;
+            float haloIn = radius * 0.45f * collapseScale * 1.10f;
+            float haloHeight = 0.18f * pulse;
+
+            draw3DBeveledDisk(matrix, buffer, 0, 0, 0, haloOut, haloIn, haloHeight, 48, rot,
+                0.40f, 0.02f, 0.70f, 0.30f,
+                0.85f, 0.10f, 1.0f, 0.33f,
+                0.15f, 0.90f, 1.0f, 0.32f
+            );
         });
 
         poseStack.popPose();

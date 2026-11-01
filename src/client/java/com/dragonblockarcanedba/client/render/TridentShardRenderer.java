@@ -78,6 +78,43 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
             drawHelicalWake(matrix, buffer, state.ageInTicks);
         });
 
+        // Additive glow halo (redesign T1): the blade silhouette blooms at a
+        // slightly larger scale so each shard in the swarm carries a halo.
+        poseStack.pushPose();
+        poseStack.scale(1.20f, 1.20f, 1.12f);
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float haloLength = 0.95f;
+            float haloHalfWidth = 0.20f;
+            float haloSpine = 0.065f;
+            float haloBaseZ = -0.30f;
+            drawTriangle(matrix, buffer,
+                0, haloSpine, haloBaseZ,
+                -haloHalfWidth, 0, 0,
+                0, 0, haloLength,
+                0.85f, 0.05f, 0.15f, 0.20f
+            );
+            drawTriangle(matrix, buffer,
+                0, haloSpine, haloBaseZ,
+                0, 0, haloLength,
+                haloHalfWidth, 0, 0,
+                0.85f, 0.05f, 0.15f, 0.20f
+            );
+            drawTriangle(matrix, buffer,
+                0, -haloSpine, haloBaseZ,
+                0, 0, haloLength,
+                -haloHalfWidth, 0, 0,
+                0.85f, 0.05f, 0.15f, 0.20f
+            );
+            drawTriangle(matrix, buffer,
+                0, -haloSpine, haloBaseZ,
+                haloHalfWidth, 0, 0,
+                0, 0, haloLength,
+                0.85f, 0.05f, 0.15f, 0.20f
+            );
+        });
+        poseStack.popPose();
+
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -89,33 +126,32 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
         float baseZ = -0.30f;
 
         // 1. Faceted Obsidian / Crimson Blade Faces
+        // Three-stop gradient (redesign T2): the faces used to be two flat
+        // tones. They now ramp from the dark base tones up to a hot crimson
+        // white tip, so the blade reads as heated energy along its length.
         // Top Left Face (Dark Demonic Steel)
-        drawTriangle(matrix, consumer,
-            0, spineThickness, baseZ,
-            -bladeHalfWidth, 0, 0,
-            0, 0, bladeLength,
-            0.18f, 0.02f, 0.06f, 0.95f
+        drawGradientTriangle(matrix, consumer,
+            0, spineThickness, baseZ, 0.18f, 0.02f, 0.06f, 0.95f,
+            -bladeHalfWidth, 0, 0, 0.18f, 0.02f, 0.06f, 0.95f,
+            0, 0, bladeLength, 1.0f, 0.38f, 0.48f, 0.95f
         );
         // Top Right Face (Crimson Bevel)
-        drawTriangle(matrix, consumer,
-            0, spineThickness, baseZ,
-            0, 0, bladeLength,
-            bladeHalfWidth, 0, 0,
-            0.45f, 0.02f, 0.08f, 0.95f
+        drawGradientTriangle(matrix, consumer,
+            0, spineThickness, baseZ, 0.45f, 0.02f, 0.08f, 0.95f,
+            0, 0, bladeLength, 1.0f, 0.38f, 0.48f, 0.95f,
+            bladeHalfWidth, 0, 0, 0.45f, 0.02f, 0.08f, 0.95f
         );
         // Bottom Left Face
-        drawTriangle(matrix, consumer,
-            0, -spineThickness, baseZ,
-            0, 0, bladeLength,
-            -bladeHalfWidth, 0, 0,
-            0.18f, 0.02f, 0.06f, 0.95f
+        drawGradientTriangle(matrix, consumer,
+            0, -spineThickness, baseZ, 0.18f, 0.02f, 0.06f, 0.95f,
+            0, 0, bladeLength, 1.0f, 0.38f, 0.48f, 0.95f,
+            -bladeHalfWidth, 0, 0, 0.18f, 0.02f, 0.06f, 0.95f
         );
         // Bottom Right Face
-        drawTriangle(matrix, consumer,
-            0, -spineThickness, baseZ,
-            bladeHalfWidth, 0, 0,
-            0, 0, bladeLength,
-            0.45f, 0.02f, 0.08f, 0.95f
+        drawGradientTriangle(matrix, consumer,
+            0, -spineThickness, baseZ, 0.45f, 0.02f, 0.08f, 0.95f,
+            bladeHalfWidth, 0, 0, 0.45f, 0.02f, 0.08f, 0.95f,
+            0, 0, bladeLength, 1.0f, 0.38f, 0.48f, 0.95f
         );
 
         // 2. Central Raised Blood-Red Spine / Fuller
@@ -199,6 +235,16 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
                 drawCrackLine(matrix, consumer, x1, y1, z1, x2, y2, z2, 0.035f, 0.95f, 0.05f, 0.20f, alpha);
             }
         }
+    }
+
+    private static void drawGradientTriangle(Matrix4f matrix, VertexConsumer consumer,
+                                             float x1, float y1, float z1, float r1, float g1, float b1, float a1,
+                                             float x2, float y2, float z2, float r2, float g2, float b2, float a2,
+                                             float x3, float y3, float z3, float r3, float g3, float b3, float a3) {
+        consumer.addVertex(matrix, x1, y1, z1).setColor(r1, g1, b1, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2, y2, z2).setColor(r2, g2, b2, a2).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r3, g3, b3, a3).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r3, g3, b3, a3).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawTriangle(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float x3, float y3, float z3, float r, float g, float b, float a) {

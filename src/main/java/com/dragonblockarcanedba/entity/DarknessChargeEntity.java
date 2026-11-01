@@ -69,6 +69,19 @@ public class DarknessChargeEntity extends Projectile {
             if (caster instanceof LivingEntity living && living.isAlive() && !living.isRemoved()) {
                 this.setPos(living.getX(), living.getY(), living.getZ());
 
+                // Theme particles (T5): void smoke curling around the caster
+                // while the abyssal charge builds.
+                if (this.tickCount % 3 == 0) {
+                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                    if (density > 0f) {
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                            living.getX(), living.getY() + 0.8, living.getZ(),
+                            Math.max(1, Math.round(2f * density)),
+                            1.0, 0.6, 1.0, 0.02);
+                    }
+                }
+
                 if (living instanceof Player player) {
                     boolean isHolding = player.getMainHandItem().getItem() instanceof DaburaSwordItem ||
                                         player.getOffhandItem().getItem() instanceof DaburaSwordItem;

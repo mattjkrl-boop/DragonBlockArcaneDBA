@@ -136,6 +136,19 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
             return;
         }
 
+        // Theme particles (T5): void smoke wisps shedding off the chain while
+        // it flies and while it holds its target.
+        if (this.tickCount % 4 == 0) {
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (density > 0f) {
+                serverLevel.sendParticles(
+                    com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                    this.getX(), this.getY() + 0.3, this.getZ(),
+                    Math.max(1, Math.round(2f * density)),
+                    0.4, 0.4, 0.4, 0.02);
+            }
+        }
+
         // Resolve target if null
         if (target == null && getTargetId() != -1) {
             Entity e = serverLevel.getEntity(getTargetId());

@@ -75,7 +75,7 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
             Matrix4f matrix = pose.pose();
 
             // 1. Planar Runic Storm Vortex Base Array (3 counter-rotating ground rings)
-            int groundSegments = 24;
+            int groundSegments = 32;
             for (int b = 0; b < 3; b++) {
                 float rOut = (tunnelRadius * 0.7f) * (0.6f + b * 0.35f);
                 float rIn = rOut * 0.82f;
@@ -88,7 +88,7 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
 
             // 2. Expanding Geometric Cyclonic Wind Tunnel (Faceted vertical vortex column)
             int levels = 8;
-            int segments = 20;
+            int segments = 28;
             for (int lvl = 0; lvl < levels; lvl++) {
                 float y1 = (lvl / (float) levels) * tunnelHeight;
                 float y2 = ((lvl + 1) / (float) levels) * tunnelHeight;
@@ -98,6 +98,13 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
 
                 float rotLvl = age * (18.0f + lvl * 4.0f) * (float) (Math.PI / 180.0);
                 float lvlAlpha = (baseAlpha * 0.40f) * (1.0f - (lvl / (float) levels) * 0.4f);
+
+                // T2 gradient: hot near-white cyan at the tunnel base cooling
+                // to a deeper storm cyan at the top of the column.
+                float lvlT = lvl / (float) levels;
+                float colR = 0.55f * (1.0f - lvlT);
+                float colG = 1.0f - (0.20f * lvlT);
+                float colB = 1.0f;
 
                 for (int i = 0; i < segments; i++) {
                     double a1 = ((i / (double) segments) * Math.PI * 2.0) + rotLvl;
@@ -113,7 +120,7 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
                     float x4 = (float) Math.cos(a1) * r2;
                     float z4 = (float) Math.sin(a1) * r2;
 
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, 0.0f, 0.90f, 1.0f, lvlAlpha);
+                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, colR, colG, colB, lvlAlpha);
                 }
             }
 
@@ -180,6 +187,15 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
                     }
                 }
             }
+        });
+
+        // T6 plus T1: a soft additive ground glow disc under the caster so the
+        // channel column sits in the scene instead of floating over it.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, tunnelRadius * 0.95f, 0.0f, 32, age * 10.0f,
+                0.0f, 0.45f, 0.50f, baseAlpha * 0.30f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

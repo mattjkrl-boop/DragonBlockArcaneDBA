@@ -86,7 +86,7 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
             Random rng = new Random(state.seed);
 
             // 1. Ground-Plane 3D Rotating Spacetime Astrolabe & Concentric Shock Rings
-            int groundSegments = 32;
+            int groundSegments = 48;
 
             // Outer Crimson Rift Ring
             drawRotatingRing(matrix, buffer, 0, 0.04f, 0, radius * 1.05f, radius * 0.92f, groundSegments, state.age * 8.0f,
@@ -101,7 +101,7 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
                 1.0f, 0.15f, 0.85f, fade * 0.95f * pulse);
 
             // Central Pure White Singularity Eye Disk
-            drawRotatingRing(matrix, buffer, 0, 0.10f, 0, radius * 0.22f, 0.0f, 16, -state.age * 28.0f,
+            drawRotatingRing(matrix, buffer, 0, 0.10f, 0, radius * 0.22f, 0.0f, 24, -state.age * 28.0f,
                 1.0f, 0.95f, 1.0f, fade * 1.0f);
 
             // 2. 8 Radiating 3D Tectonic Spatial Fissure Trenches
@@ -199,10 +199,24 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
             // 7. Central Spinning Singularity Octahedron Core
             float coreSize = 0.45f * entrance * pulse * (state.isDestination ? (1.0f + progress * 0.4f) : (1.0f - progress * 0.4f));
             drawSingularityOctahedron(matrix, buffer, 0, tearY, 0, coreSize, state.age * 35.0f,
-                0.02f, 0.0f, 0.05f, 0.99f,
+                0.02f, 0.0f, 0.05f, 0.99f * fade,
                 0.90f, 0.10f, 0.95f, fade * 0.95f,
                 1.0f, 1.0f, 1.0f, fade
             );
+        });
+
+        // T1: additive halo pass over the tear slit on its two main planes,
+        // slightly wider than the slit, sharing the sine fade envelope, so
+        // the warp tear blooms like the standard this renderer sets.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float haloTearH = (2.6f + pulse * 0.4f) * entrance * (state.isDestination ? 1.1f : (1.0f - progress * 0.3f));
+            float haloTearW = 0.45f * entrance * (state.isDestination ? (1.0f + progress * 0.3f) : (1.0f - progress * 0.5f));
+            float haloTearY = 1.4f;
+
+            drawVerticalTearSlit(matrix, buffer, haloTearW * 1.30f, haloTearH * 1.05f, haloTearY, 0.0f, fade * 0.30f);
+            drawVerticalTearSlit(matrix, buffer, haloTearW * 1.30f, haloTearH * 1.05f, haloTearY, 90.0f, fade * 0.30f);
         });
 
         poseStack.popPose();
@@ -284,8 +298,10 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
             1.0f, 0.15f, 0.85f, fade * 0.90f);
 
         // Core Pitch-Black Event Horizon Slit
+        // The black core now follows the same fade as every other layer; it
+        // used to sit at a fixed 0.98 alpha and outlive the sine envelope.
         drawTearQuad(matrix, consumer, x1 * 0.5f, cy, z1 * 0.5f, x2 * 0.5f, cy, z2 * 0.5f, 0, cy + halfH * 0.7f, 0, 0, cy - halfH * 0.7f, 0,
-            0.02f, 0.0f, 0.05f, 0.98f);
+            0.02f, 0.0f, 0.05f, 0.98f * fade);
 
         // Center White-Hot Reality Seam
         drawTearQuad(matrix, consumer, x1 * 0.15f, cy, z1 * 0.15f, x2 * 0.15f, cy, z2 * 0.15f, 0, cy + halfH * 0.9f, 0, 0, cy - halfH * 0.9f, 0,
@@ -318,7 +334,7 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
     }
 
     private static void drawTiltedOrbitalRing(Matrix4f matrix, VertexConsumer consumer, float radius, float cy, float tiltDeg, float rotDeg, float r, float g, float b, float a) {
-        int segments = 24;
+        int segments = 32;
         float width = 0.12f;
         double tiltRad = Math.toRadians(tiltDeg);
         double rotRad = Math.toRadians(rotDeg);

@@ -86,6 +86,26 @@ public class DimensionalSlashEntity extends Projectile {
                 SoundEvents.RESPAWN_ANCHOR_SET_SPAWN, SoundSource.PLAYERS, 1.2f, 1.6f);
         }
 
+        // Theme particles (T5): void smoke and sparks shedding off the tear
+        // as the dimensional crescent travels.
+        if (this.level() instanceof ServerLevel serverLevel) {
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        this.getX(), this.getY(), this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        0.7, 0.5, 0.7, 0.02);
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        this.getX(), this.getY(), this.getZ(),
+                        Math.max(1, Math.round(1f * density)),
+                        0.5, 0.3, 0.5, 0.04);
+                }
+            }
+        }
+
         HitResult hitResult = ProjectileUtil.getHitResultOnMoveVector(this, this::canHitEntity);
         if (hitResult.getType() != HitResult.Type.MISS) {
             this.onHit(hitResult);

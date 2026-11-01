@@ -127,6 +127,18 @@ public class ValorFieldEntity extends Projectile {
                 }
             }
 
+            // Theme particles: gold sparks drift slowly around the dome rim
+            // so the field volume reads even where the shell is faint.
+            if (this.tickCount % 4 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        center.x, center.y + 0.6, center.z,
+                        Math.max(1, Math.round(4f * density)),
+                        FIELD_RADIUS * 0.65, 1.2, FIELD_RADIUS * 0.65, 0.02);
+                }
+            }
+
             // 1. Buffs and Debuffs (Applied every 10 ticks)
             if (this.tickCount % 10 == 0) {
                 // Caster receives Tier 3 Valor (Level III / Amplifier 2)

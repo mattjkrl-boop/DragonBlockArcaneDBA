@@ -63,7 +63,7 @@ public class HollowChargeRenderer extends EntityRenderer<HollowChargeEntity, Hol
             Matrix4f matrix = pose.pose();
 
             // 1. Planar 3D Ground Spatial Containment Runes (3 counter-rotating ground rings)
-            int groundSegments = 28;
+            int groundSegments = 36;
             // Outer Ring: Deep Void Violet
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.15f, baseRadius * 0.98f, groundSegments, age * -14.0f,
                 0.35f, 0.02f, 0.65f, baseAlpha * 0.75f);
@@ -157,6 +157,19 @@ public class HollowChargeRenderer extends EntityRenderer<HollowChargeEntity, Hol
                     );
                 }
             }
+        });
+
+        // T1 plus T6: one additive pass holding a halo shell around the
+        // singularity octahedron and a soft ground glow disc under the runes,
+        // so the charge construct blooms and sits anchored while it builds.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float haloCoreSize = (0.75f - charge * 0.25f) * pulse * 1.35f;
+            drawSingularityOctahedron(matrix, buffer, haloCoreSize, 0.85f, age * 20.0f, 0.40f, 0.06f, 0.60f, baseAlpha * 0.25f);
+
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.25f, 0.0f, 36, age * -10.0f,
+                0.25f, 0.35f, 0.55f, baseAlpha * 0.22f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

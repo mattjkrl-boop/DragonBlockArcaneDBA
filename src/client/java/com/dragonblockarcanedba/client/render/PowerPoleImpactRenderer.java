@@ -84,17 +84,22 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
             Matrix4f matrix = pose.pose();
 
             // 1. Concentric Expanding Dual Shockwave Disks
-            float shockProgress = Math.min(1.0f, age / 8.0f);
+            // Ease-out cubic expansion: the burst snaps out fast, then settles,
+            // instead of the old mechanical linear ramp.
+            float rawProgress = Math.min(1.0f, age / 8.0f);
+            float shockProgress = 1.0f - (1.0f - rawProgress) * (1.0f - rawProgress) * (1.0f - rawProgress);
             float outerR = scale * (0.3f + shockProgress * 1.5f);
             float innerR = outerR * 0.72f;
 
-            // Outer Golden Shockwave Ring
-            drawShockRing(matrix, buffer, 0, innerR, outerR, 24,
+            // Outer Golden Shockwave Ring (radial gradient: white-gold hot inner
+            // edge cooling to full gold at the rim)
+            drawShockRingGradient(matrix, buffer, 0, innerR, outerR, 36,
+                1.0f, 0.97f, 0.75f, fade * 0.85f,
                 1.0f, 0.85f, 0.15f, fade * 0.85f);
 
             // Inner Crimson Compression Ring
             float crimsonR = outerR * 0.55f;
-            drawShockRing(matrix, buffer, 0.05f, crimsonR * 0.6f, crimsonR, 20,
+            drawShockRing(matrix, buffer, 0.05f, crimsonR * 0.6f, crimsonR, 30,
                 0.90f, 0.08f, 0.12f, fade * 0.75f);
 
             // 4. Detonation Starburst Spikes
@@ -118,12 +123,13 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
         SubmitNodeCollector.CustomGeometryRenderer geometryVolume = (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
-            float shockProgress = Math.min(1.0f, age / 8.0f);
+            float rawProgress = Math.min(1.0f, age / 8.0f);
+            float shockProgress = 1.0f - (1.0f - rawProgress) * (1.0f - rawProgress) * (1.0f - rawProgress);
 
             // 2. Kinetic Compression Shockwave Dome
             float domeR = scale * (0.4f + shockProgress * 1.1f);
-            int domeLat = 6;
-            int domeLon = 16;
+            int domeLat = 8;
+            int domeLon = 24;
             for (int lat = 0; lat < domeLat; lat++) {
                 float phi1 = (lat / (float) domeLat) * (float) (Math.PI * 0.5);
                 float phi2 = ((lat + 1) / (float) domeLat) * (float) (Math.PI * 0.5);
@@ -196,7 +202,63 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
         collector.submitCustomGeometry(poseStack, renderType, geometryPlanar);
         poseStack.popPose();
 
+        // Additive glow halo (T1): a soft gold bloom ring and star behind the
+        // matte burst, on the facing plane only.
+        SubmitNodeCollector.CustomGeometryRenderer geometryGlow = (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float rawProgress = Math.min(1.0f, age / 8.0f);
+            float shockProgress = 1.0f - (1.0f - rawProgress) * (1.0f - rawProgress) * (1.0f - rawProgress);
+            float outerR = scale * (0.3f + shockProgress * 1.5f) * 1.12f;
+            float innerR = outerR * 0.66f;
+
+            drawShockRing(matrix, buffer, -0.02f, innerR, outerR, 36,
+                1.0f, 0.80f, 0.30f, fade * 0.26f);
+
+            float starR = scale * (0.8f * (1.0f - shockProgress * 0.4f)) * 1.15f;
+            int points = 8;
+            for (int p = 0; p < points; p++) {
+                double ang = (p / (double) points) * Math.PI * 2.0 + (age * 0.1);
+                float px = (float) Math.cos(ang) * starR;
+                float py = (float) Math.sin(ang) * starR;
+
+                drawQuad(matrix, buffer,
+                    -px * 0.1f, -py * 0.1f, 0.0f,
+                    px * 0.1f, py * 0.1f, 0.0f,
+                    px, py, 0.06f,
+                    0, 0, 0.12f,
+                    1.0f, 0.88f, 0.35f, fade * 0.28f
+                );
+            }
+        };
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), geometryGlow);
+
         poseStack.popPose();
+    }
+
+    // Ring with a radial two-color gradient: inner edge uses the first color,
+    // outer edge the second (the drawQuad helper only supports one flat color).
+    private static void drawShockRingGradient(Matrix4f matrix, VertexConsumer buffer, float z, float innerR, float outerR, int segments,
+                                              float rIn, float gIn, float bIn, float aIn,
+                                              float rOut, float gOut, float bOut, float aOut) {
+        for (int i = 0; i < segments; i++) {
+            double a1 = (i / (double) segments) * Math.PI * 2.0;
+            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
+
+            float x1 = (float) Math.cos(a1) * innerR;
+            float y1 = (float) Math.sin(a1) * innerR;
+            float x2 = (float) Math.cos(a2) * innerR;
+            float y2 = (float) Math.sin(a2) * innerR;
+
+            float x3 = (float) Math.cos(a2) * outerR;
+            float y3 = (float) Math.sin(a2) * outerR;
+            float x4 = (float) Math.cos(a1) * outerR;
+            float y4 = (float) Math.sin(a1) * outerR;
+
+            buffer.addVertex(matrix, x1, y1, z).setColor(rIn, gIn, bIn, aIn).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            buffer.addVertex(matrix, x2, y2, z).setColor(rIn, gIn, bIn, aIn).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            buffer.addVertex(matrix, x3, y3, z).setColor(rOut, gOut, bOut, aOut).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            buffer.addVertex(matrix, x4, y4, z).setColor(rOut, gOut, bOut, aOut).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        }
     }
 
     private static void drawShockRing(Matrix4f matrix, VertexConsumer buffer, float z, float innerR, float outerR, int segments, float r, float g, float b, float a) {

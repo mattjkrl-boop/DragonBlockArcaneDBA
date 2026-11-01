@@ -126,18 +126,20 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
             }
 
             // 2. Multi-Layered 3D Magma Shockwave Crests & Ground Displacement Ridge
-            int segments = 32;
+            int segments = 48;
             float ringWidth = (0.9f + charge * 0.7f) * waveScale;
 
             // Outer Ground Displacement Wall (Molten orange-red)
             drawContinuousShockwaveRing(matrix, buffer, 0, 0.05f, 0, radius, Math.max(0.1f, radius - ringWidth), cragMaxHeight * 0.45f, segments,
                 1.0f, subWave ? 0.65f : 0.30f, 0.02f, alpha * 0.85f,
-                0.85f, 0.15f, 0.0f, 0.0f);
+                0.85f, 0.15f, 0.0f, 0.0f, 0.0f);
 
-            // Inner Blazing White-Gold Pressure Ridge
+            // Inner Blazing White-Gold Pressure Ridge. Its crest carries a
+            // traveling brightness band (redesign T7) so the pressure wave
+            // visibly surges around the ring instead of glowing uniformly.
             drawContinuousShockwaveRing(matrix, buffer, 0, 0.08f, 0, radius - ringWidth * 0.2f, Math.max(0.1f, radius - ringWidth * 0.75f), cragMaxHeight * 0.75f, segments,
                 1.0f, 0.90f, 0.25f, alpha * 0.95f,
-                1.0f, 0.45f, 0.05f, alpha * 0.80f);
+                1.0f, 0.45f, 0.05f, alpha * 0.80f, age * 1.2f);
 
             // 3. Erupted Stone Spikes & Debris Shards along leading edge
             int shardCount = 14;
@@ -162,6 +164,16 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
                     0.20f, 0.16f, 0.14f, alpha
                 );
             }
+        });
+
+        // Additive glow halo (redesign T1): the white-gold pressure ridge
+        // blooms over the crag line so the wave front reads as a wall of heat.
+        float haloRingWidth = (0.9f + charge * 0.7f) * waveScale;
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawContinuousShockwaveRing(matrix, buffer, 0, 0.08f, 0, radius - haloRingWidth * 0.2f, Math.max(0.1f, radius - haloRingWidth * 0.75f), cragMaxHeight * 0.75f, 48,
+                1.0f, 0.90f, 0.25f, alpha * 0.28f,
+                1.0f, 0.45f, 0.05f, 0.0f, age * 1.2f);
         });
 
         super.submit(state, poseStack, collector, cameraState);
@@ -198,10 +210,19 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
                                                     float rOuter, float rInner, float height,
                                                     int segments,
                                                     float rTop, float gTop, float bTop, float aTop,
-                                                    float rBot, float gBot, float bBot, float aBot) {
+                                                    float rBot, float gBot, float bBot, float aBot,
+                                                    float flowPhase) {
         for (int i = 0; i < segments; i++) {
             double a1 = (i / (double) segments) * Math.PI * 2.0;
             double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
+
+            // Traveling brightness band (redesign T7): with a nonzero phase,
+            // the crest alpha surges in a wave running around the ring.
+            float segTop = aTop;
+            if (flowPhase != 0.0f) {
+                float band = 0.75f + 0.45f * (0.5f + 0.5f * (float) Math.sin(a1 * 6.0 - flowPhase));
+                segTop = aTop * band;
+            }
 
             float x1Out = cx + (float) Math.cos(a1) * rOuter;
             float z1Out = cz + (float) Math.sin(a1) * rOuter;
@@ -216,12 +237,12 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
             // Outer rising wall
             consumer.addVertex(matrix, x1Out, cy, z1Out).setColor(rBot, gBot, bBot, aBot).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
             consumer.addVertex(matrix, x2Out, cy, z2Out).setColor(rBot, gBot, bBot, aBot).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, aTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, aTop).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, segTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, segTop).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
 
             // Top ridge connecting outer to inner
-            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, aTop).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, aTop).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, segTop).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, segTop).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
             consumer.addVertex(matrix, x2In, cy, z2In).setColor(rBot, gBot, bBot, aBot).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
             consumer.addVertex(matrix, x1In, cy, z1In).setColor(rBot, gBot, bBot, aBot).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         }

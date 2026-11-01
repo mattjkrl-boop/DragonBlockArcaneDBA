@@ -68,14 +68,14 @@ public class CurseTelegraphRenderer extends EntityRenderer<CurseTelegraphEntity,
             float pulse = 0.8f + 0.2f * (float) Math.sin(age * pulseSpeed * 20.0f);
 
             // 1. Base Corrupted Runic Ground Star (Dual counter-rotating pentagram rings)
-            int segments = 24;
+            int segments = 32;
             drawRotatingRing(matrix, buffer, 0, 0.04f, 0, radius, radius * 0.88f, segments, age * 18.0f, 0.95f, 0.02f, 0.15f, 0.85f * pulse);
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius * 0.75f, radius * 0.62f, segments, -age * 25.0f, 0.65f, 0.01f, 0.85f, 0.75f * pulse);
 
             // 2. Concentrating Implosion Indicator Ring (Shrinks from radius down to 0 as progress -> 1.0)
             float shrinkR = radius * (1.0f - progress);
             if (shrinkR > 0.05f) {
-                drawRotatingRing(matrix, buffer, 0, 0.06f, 0, shrinkR, shrinkR * 0.82f, 20, age * 40.0f, 1.0f, 0.9f, 0.95f, 0.95f);
+                drawRotatingRing(matrix, buffer, 0, 0.06f, 0, shrinkR, shrinkR * 0.82f, 28, age * 40.0f, 1.0f, 0.9f, 0.95f, 0.95f);
             }
 
             // 3. Rising 3D Cursed Beacon Tendrils (Pillars extending upward around decal edge)
@@ -93,6 +93,23 @@ public class CurseTelegraphRenderer extends EntityRenderer<CurseTelegraphEntity,
             // 4. Central Corrupted Hex Eye (Flashes violently right before strike)
             float coreSize = (0.25f + (progress * 0.25f)) * pulse;
             drawOctahedron(matrix, buffer, 0, 0.08f, 0, coreSize, 1.0f, 0.05f, 0.15f, 0.95f);
+        });
+
+        // T1: additive warning glow tracing the contracting ring and the hex
+        // eye, so the strike marker burns brighter as the countdown completes.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float pulseSpeed = 0.3f + (progress * 0.7f);
+            float pulse = 0.8f + 0.2f * (float) Math.sin(age * pulseSpeed * 20.0f);
+
+            float shrinkR = radius * (1.0f - progress);
+            if (shrinkR > 0.05f) {
+                drawRotatingRing(matrix, buffer, 0, 0.06f, 0, shrinkR * 1.08f, shrinkR * 0.88f, 28, age * 40.0f, 0.55f, 0.50f, 0.52f, 0.25f);
+            }
+
+            float coreSize = (0.25f + (progress * 0.25f)) * pulse * 1.5f;
+            drawOctahedron(matrix, buffer, 0, 0.08f, 0, coreSize, 0.55f, 0.03f, 0.08f, 0.30f);
         });
     }
 

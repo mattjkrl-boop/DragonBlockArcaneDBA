@@ -148,10 +148,26 @@ public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity,
             float groundRingRadius = Math.min(4.2f, flashTime * 0.85f);
             float ringAlpha = finalAlpha * Math.max(0.0f, 1.0f - (flashTime / 10.0f));
             if (ringAlpha > 0.01f) {
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, groundRingRadius, groundRingRadius * 0.78f, 18, outerR, outerG, outerB, ringAlpha * 0.8f);
-                drawGroundRing(matrix, buffer, 0, 0.06f, 0, groundRingRadius * 0.55f, 0.0f, 14, 0.9f, 1.0f, 1.0f, ringAlpha * 0.95f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, groundRingRadius, groundRingRadius * 0.78f, 28, outerR, outerG, outerB, ringAlpha * 0.8f);
+                drawGroundRing(matrix, buffer, 0, 0.06f, 0, groundRingRadius * 0.55f, 0.0f, 20, 0.9f, 1.0f, 1.0f, ringAlpha * 0.95f);
             }
         });
+
+        // Pass 3 (T1): additive impact flare echoing the ground rings slightly
+        // wider, so the strike point blooms. The bolt texture itself is the
+        // identity of this effect and is left untouched.
+        float flareRadius = Math.min(4.2f, flashTime * 0.85f) * 1.15f;
+        float flareAlpha = finalAlpha * Math.max(0.0f, 1.0f - (flashTime / 10.0f));
+        if (flareAlpha > 0.01f) {
+            float flareR = (state.isRare ? 0.2f : 0.0f) * 0.6f;
+            float flareG = (state.isRare ? 1.0f : 0.88f) * 0.6f;
+            float flareB = 0.6f;
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, flareRadius, flareRadius * 0.78f, 28, flareR, flareG, flareB, flareAlpha * 0.45f);
+                drawGroundRing(matrix, buffer, 0, 0.07f, 0, flareRadius * 0.40f, 0.0f, 20, 0.55f, 0.60f, 0.60f, flareAlpha * 0.40f);
+            });
+        }
     }
 
     private static void renderBoltSegmentTextured(Matrix4f matrix, VertexConsumer consumer,

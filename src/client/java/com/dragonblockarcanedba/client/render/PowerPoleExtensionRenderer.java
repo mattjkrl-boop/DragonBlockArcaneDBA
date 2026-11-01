@@ -119,9 +119,21 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             Matrix4f matrix = pose.pose();
 
             // 1. Solid 3D Crimson Shaft (scaled down in first person)
+            // 3-stop gradient along the length: hot bright crimson at the hand,
+            // full crimson mid-shaft, deep crimson toward the striking tip.
             float shaftRadius = 0.13f * fpScale;
-            draw12SidedShaft(matrix, buffer, shaftRadius, Math.max(baseZStart, 0.4f), currentLength - 0.4f,
-                0.85f, 0.08f, 0.08f, finalAlpha);
+            float shaftZ1 = Math.max(baseZStart, 0.4f);
+            float shaftZ2 = currentLength - 0.4f;
+            if (shaftZ2 > shaftZ1) {
+                float band1 = shaftZ1 + (shaftZ2 - shaftZ1) / 3.0f;
+                float band2 = shaftZ1 + (shaftZ2 - shaftZ1) * 2.0f / 3.0f;
+                draw12SidedShaft(matrix, buffer, shaftRadius, shaftZ1, band1,
+                    1.0f, 0.22f, 0.16f, finalAlpha);
+                draw12SidedShaft(matrix, buffer, shaftRadius, band1, band2,
+                    0.85f, 0.08f, 0.08f, finalAlpha);
+                draw12SidedShaft(matrix, buffer, shaftRadius, band2, shaftZ2,
+                    0.58f, 0.03f, 0.05f, finalAlpha);
+            }
 
             // Inner glowing red power core
             draw12SidedShaft(matrix, buffer, shaftRadius * 0.55f, Math.max(baseZStart, 0.2f), currentLength - 0.2f,
@@ -201,11 +213,24 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             }
         });
 
+        // Additive glow halo (T1): a soft crimson aura sheath around the shaft
+        // and a bloomed tip star, so the pole reads as charged energy.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float shaftRadius = 0.13f * fpScale;
+            draw12SidedShaft(matrix, buffer, shaftRadius * 1.9f, Math.max(baseZStart, 0.3f), currentLength - 0.3f,
+                0.90f, 0.15f, 0.05f, 0.16f * finalAlpha);
+            if (currentLength > 1.0f) {
+                float starR = 0.55f * (1.0f + 0.15f * (float) Math.sin(age * 3.0f)) * fpScale;
+                drawStarburst(matrix, buffer, currentLength, starR * 1.5f, 1.0f, 0.85f, 0.30f, 0.25f * finalAlpha);
+            }
+        });
+
         poseStack.popPose();
     }
 
     private static void draw12SidedShaft(Matrix4f matrix, VertexConsumer buffer, float radius, float z1, float z2, float r, float g, float b, float a) {
-        int sides = 12;
+        int sides = 18;
         for (int i = 0; i < sides; i++) {
             double a1 = (i / (double) sides) * Math.PI * 2.0;
             double a2 = ((i + 1) / (double) sides) * Math.PI * 2.0;
@@ -228,7 +253,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
     }
 
     private static void drawBevelRing(Matrix4f matrix, VertexConsumer buffer, float radius, float z, float r, float g, float b, float a) {
-        int sides = 12;
+        int sides = 18;
         float ringThick = 0.08f;
         for (int i = 0; i < sides; i++) {
             double a1 = (i / (double) sides) * Math.PI * 2.0;
@@ -250,7 +275,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
     }
 
     private static void drawDomeTip(Matrix4f matrix, VertexConsumer buffer, float radius, float baseZ, float r, float g, float b, float a) {
-        int sides = 12;
+        int sides = 18;
         float tipZ = baseZ + 0.25f;
         for (int i = 0; i < sides; i++) {
             double a1 = (i / (double) sides) * Math.PI * 2.0;
@@ -266,7 +291,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
     }
 
     private static void drawMachCone(Matrix4f matrix, VertexConsumer buffer, float tipZ, float baseZ, float baseR, float r, float g, float b, float a) {
-        int sides = 12;
+        int sides = 18;
         for (int i = 0; i < sides; i++) {
             double a1 = (i / (double) sides) * Math.PI * 2.0;
             double a2 = ((i + 1) / (double) sides) * Math.PI * 2.0;

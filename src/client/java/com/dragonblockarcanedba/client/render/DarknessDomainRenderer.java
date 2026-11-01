@@ -70,7 +70,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
             Matrix4f matrix = pose.pose();
 
             // 1. Quad-Tier Counter-Rotating Ground Whirlpools (4 dark corrupted energy bands)
-            int groundSegments = 32;
+            int groundSegments = 48;
             for (int band = 0; band < 4; band++) {
                 float rOuter = radius * (0.30f + band * 0.23f);
                 float rInner = rOuter * 0.83f;
@@ -88,8 +88,8 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
             float domeHeight = Math.min(26.0f, radius * 1.35f);
 
             // Layer A: Outer Massive Rotating Void Cloud Dome
-            int domeLatitudes = 10;
-            int domeLongitudes = 24;
+            int domeLatitudes = 12;
+            int domeLongitudes = 36;
             for (int lat = 0; lat < domeLatitudes; lat++) {
                 float latProgress1 = lat / (float) domeLatitudes;
                 float latProgress2 = (lat + 1) / (float) domeLatitudes;
@@ -126,7 +126,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
 
             // Layer B: Inner Turbulent Demonic Stratus Ceiling (Counter-Rotating)
             int innerLats = 6;
-            int innerLons = 18;
+            int innerLons = 24;
             float innerDomeHeight = domeHeight * 0.75f;
             float innerRadius = radius * 0.85f;
 
@@ -141,6 +141,12 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                 float ir2 = innerRadius * (float) Math.cos(p2 * (Math.PI / 2.0));
 
                 float alpha = 0.28f + (p1 * 0.22f);
+
+                // T2 gradient: deep violet at the inner ceiling base rising to
+                // the demonic crimson of the spires at the crown.
+                float inR = 0.55f + (p1 * 0.45f);
+                float inG = 0.03f;
+                float inB = 0.30f + (p1 * 0.30f);
 
                 for (int lon = 0; lon < innerLons; lon++) {
                     double angleOffset = (-age * (5.5f + lat * 2.0f)) * (Math.PI / 180.0);
@@ -157,7 +163,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                     float x4 = (float) Math.cos(a1) * ir2;
                     float z4 = (float) Math.sin(a1) * ir2;
 
-                    drawQuad(matrix, buffer, x1, iy1, z1, x2, iy1, z2, x3, iy2, z3, x4, iy2, z4, 0.85f, 0.05f, 0.45f, alpha);
+                    drawQuad(matrix, buffer, x1, iy1, z1, x2, iy1, z2, x3, iy2, z3, x4, iy2, z4, inR, inG, inB, alpha);
                 }
             }
 
@@ -194,6 +200,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
 
             // 4. Central Abyssal Vortex Funnel Column (Towering vertical cyclonic vortex)
             int eyeLevels = 8;
+            int eyeSegments = 16;
             float eyeRadius = Math.max(1.8f, radius * 0.16f);
             for (int lvl = 0; lvl < eyeLevels; lvl++) {
                 float ey1 = (lvl / (float) eyeLevels) * domeHeight;
@@ -201,10 +208,17 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                 float er1 = eyeRadius * (0.6f + 0.5f * (lvl / (float) eyeLevels));
                 float er2 = eyeRadius * (0.6f + 0.5f * ((lvl + 1) / (float) eyeLevels));
 
+                // T2 gradient: saturated violet at the funnel base warming
+                // toward violet-crimson at the top of the column.
+                float lvlT = lvl / (float) eyeLevels;
+                float eyeR = 0.45f + (0.45f * lvlT);
+                float eyeG = 0.03f;
+                float eyeB = 0.85f - (0.25f * lvlT);
+
                 float rotEye = age * (22.0f + lvl * 4.0f) * (float) (Math.PI / 180.0);
-                for (int i = 0; i < 12; i++) {
-                    double a1 = ((i / 12.0) * Math.PI * 2.0) + rotEye;
-                    double a2 = (((i + 1) / 12.0) * Math.PI * 2.0) + rotEye;
+                for (int i = 0; i < eyeSegments; i++) {
+                    double a1 = ((i / (double) eyeSegments) * Math.PI * 2.0) + rotEye;
+                    double a2 = (((i + 1) / (double) eyeSegments) * Math.PI * 2.0) + rotEye;
 
                     float x1 = (float) Math.cos(a1) * er1;
                     float z1 = (float) Math.sin(a1) * er1;
@@ -216,7 +230,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                     float x4 = (float) Math.cos(a1) * er2;
                     float z4 = (float) Math.sin(a1) * er2;
 
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.65f, 0.05f, 0.95f, 0.45f);
+                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, eyeR, eyeG, eyeB, 0.45f);
                 }
             }
 
@@ -243,6 +257,45 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                     curX = nxtX; curY = nxtY; curZ = nxtZ;
                 }
             }
+        });
+
+        // T1 plus T6: one additive pass holding a halo shell around the
+        // vortex column and a soft ground glow disc, so the domain blooms at
+        // its core and sits anchored in the scene.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float glowDomeHeight = Math.min(26.0f, radius * 1.35f);
+            float glowEyeRadius = Math.max(1.8f, radius * 0.16f) * 1.45f;
+            int glowLevels = 8;
+            int glowSegments = 16;
+
+            for (int lvl = 0; lvl < glowLevels; lvl++) {
+                float ey1 = (lvl / (float) glowLevels) * glowDomeHeight;
+                float ey2 = ((lvl + 1) / (float) glowLevels) * glowDomeHeight;
+                float er1 = glowEyeRadius * (0.6f + 0.5f * (lvl / (float) glowLevels));
+                float er2 = glowEyeRadius * (0.6f + 0.5f * ((lvl + 1) / (float) glowLevels));
+
+                float rotEye = age * (22.0f + lvl * 4.0f) * (float) (Math.PI / 180.0);
+                for (int i = 0; i < glowSegments; i++) {
+                    double a1 = ((i / (double) glowSegments) * Math.PI * 2.0) + rotEye;
+                    double a2 = (((i + 1) / (double) glowSegments) * Math.PI * 2.0) + rotEye;
+
+                    float x1 = (float) Math.cos(a1) * er1;
+                    float z1 = (float) Math.sin(a1) * er1;
+                    float x2 = (float) Math.cos(a2) * er1;
+                    float z2 = (float) Math.sin(a2) * er1;
+
+                    float x3 = (float) Math.cos(a2) * er2;
+                    float z3 = (float) Math.sin(a2) * er2;
+                    float x4 = (float) Math.cos(a1) * er2;
+                    float z4 = (float) Math.sin(a1) * er2;
+
+                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.35f, 0.03f, 0.50f, 0.15f);
+                }
+            }
+
+            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, radius * 0.50f, 0.0f, 48, age * 10.0f, 0.30f, 0.02f, 0.45f, 0.10f);
         });
     }
 

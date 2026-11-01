@@ -79,7 +79,7 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
 
         float span = 2.4f;
         float chord = 0.85f;
-        int segments = 18;
+        int segments = 24;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -108,8 +108,18 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
             drawDiamondSpark(matrix, buffer, -0.2f, -0.1f, 0.1f, 0.22f * (1.0f - progress * 0.6f), 0.2f, 0.9f, 1.0f, fade * 0.85f);
 
             // 6. Radial Slicing Shockwave Ring
-            drawShockRing(matrix, buffer, 0, span * 0.65f, span * 0.48f, 16, state.age * 20.0f,
+            drawShockRing(matrix, buffer, 0, span * 0.65f, span * 0.48f, 24, state.age * 20.0f,
                 0.0f, 0.85f, 1.0f, fade * 0.7f);
+        });
+
+        // Additive halo pass: a wider faint copy of the wake crescent and the
+        // silver crest so the slash blooms instead of reading matte.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawVolumetricCrescent(matrix, buffer, span + 0.60f, chord + 0.50f, 0.26f, 0.50f, segments,
+                0.0f, 0.80f, 1.0f, 0.20f * fade);
+            drawVolumetricCrescent(matrix, buffer, span, chord, 0.14f, 0.30f, segments,
+                0.85f, 0.95f, 1.0f, 0.14f * fade);
         });
 
         poseStack.popPose();

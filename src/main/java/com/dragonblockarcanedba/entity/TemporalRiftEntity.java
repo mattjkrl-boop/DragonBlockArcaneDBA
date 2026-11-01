@@ -84,6 +84,22 @@ public class TemporalRiftEntity extends Projectile {
                 );
             }
 
+            // Theme particles (T5): ki motes drift inside the dome under the
+            // meridian streams. The rift emitted no particles before.
+            if (this.tickCount % 3 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    double moteAngle = serverLevel.getRandom().nextDouble() * Math.PI * 2.0;
+                    double moteRadius = getRadius() * (0.3 + serverLevel.getRandom().nextDouble() * 0.6);
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                        this.getX() + Math.cos(moteAngle) * moteRadius,
+                        this.getY() + 0.3,
+                        this.getZ() + Math.sin(moteAngle) * moteRadius,
+                        Math.max(1, Math.round(2f * density)),
+                        0.2, 1.2, 0.2, 0.02);
+                }
+            }
+
             this.lifetime--;
             if (this.lifetime <= 0) {
                 this.discard();

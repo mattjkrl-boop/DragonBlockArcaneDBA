@@ -86,13 +86,24 @@ public class DimensionalRiftEntity extends Projectile {
 
             // Ambient core sparks: the rift used to emit particles only on a
             // burst hit, so its singularity core sat particle silent for 3 s.
-            if (this.tickCount % 8 == 0) {
+            // Counts now scale with effect density (redesign T5), and the
+            // collapse opens with a denser inrush burst.
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (density > 0f && this.tickCount % 8 == 0) {
                 serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
-                    center.x, center.y + 1.2, center.z, 4,
+                    center.x, center.y + 1.2, center.z, Math.max(1, Math.round(4f * density)),
                     currentRadius * 0.25, 0.8, currentRadius * 0.25, 0.04);
                 serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
-                    center.x, center.y + 0.6, center.z, 2,
+                    center.x, center.y + 0.6, center.z, Math.max(1, Math.round(2f * density)),
                     currentRadius * 0.4, 0.5, currentRadius * 0.4, 0.02);
+            }
+            if (density > 0f && this.tickCount == MAX_LIFETIME - 10) {
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                    center.x, center.y + 0.8, center.z, Math.max(2, Math.round(14f * density)),
+                    currentRadius * 0.5, 0.8, currentRadius * 0.5, 0.05);
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    center.x, center.y + 1.2, center.z, Math.max(2, Math.round(10f * density)),
+                    currentRadius * 0.3, 0.8, currentRadius * 0.3, 0.08);
             }
 
             // Scan living entities in expanding radius

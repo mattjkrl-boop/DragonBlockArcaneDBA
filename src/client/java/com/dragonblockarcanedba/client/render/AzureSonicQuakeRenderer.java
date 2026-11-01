@@ -65,7 +65,7 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
             Matrix4f matrix = pose.pose();
 
             // 1. High-Pressure 3D Supersonic Shockwave Ring (Raised Beveled Crest)
-            int segments = 32;
+            int segments = 48;
             float ringWidth = Math.min(1.4f, currentRadius * 0.35f);
             float rOuter = currentRadius;
             float rInner = Math.max(0.1f, currentRadius - ringWidth);
@@ -79,7 +79,7 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
             // 2. Secondary Inner Sonic Compression Ring
             float rSubOuter = currentRadius * 0.55f;
             float rSubInner = Math.max(0.05f, rSubOuter - (ringWidth * 0.6f));
-            drawFlatRing(matrix, buffer, 0, 0.08f, 0, rSubOuter, rSubInner, 24, 0.0f, 1.0f, 0.8f, alpha * 0.65f);
+            drawFlatRing(matrix, buffer, 0, 0.08f, 0, rSubOuter, rSubInner, 32, 0.0f, 1.0f, 0.8f, alpha * 0.65f);
 
             // 3. Physical Vertical Aerodynamic Shards / Pressure Needles
             int shardCount = 18;
@@ -110,7 +110,24 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
 
             // 4. Ground Burst Epicenter Star / Shatter Core
             float coreRadius = Math.max(0.2f, (1.0f - progress) * 2.0f);
-            drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreRadius, 0.0f, 12, 1.0f, 1.0f, 1.0f, alpha * 0.90f);
+            drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreRadius, 0.0f, 16, 1.0f, 1.0f, 1.0f, alpha * 0.90f);
+        });
+
+        // T1: additive echo of the beveled crest ring, slightly wider, so the
+        // shock crest glows instead of reading as a flat matte band.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float haloRadius = currentRadius * 1.05f;
+            float haloWidth = Math.min(1.4f, haloRadius * 0.35f);
+            float haloOuter = haloRadius;
+            float haloInner = Math.max(0.1f, haloRadius - haloWidth);
+            float haloCrest = 0.65f * (1.0f - progress * 0.8f);
+
+            drawBeveledShockRing(matrix, buffer, 0, 0.05f, 0, haloOuter, haloInner, haloCrest, 48,
+                0.0f, 0.45f, 0.50f, alpha * 0.28f,
+                0.45f, 0.55f, 0.55f, alpha * 0.28f
+            );
         });
 
         super.submit(state, poseStack, collector, cameraState);

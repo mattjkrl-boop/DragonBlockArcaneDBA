@@ -97,7 +97,7 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
             drawFin(matrix, buffer, -0.35f, 0, 1.2f, 0.7f, 1.0f, 0.1f, 0.25f, 0.95f * bodyFade);
 
             // 4. Supersonic Demonic 3D Mach Shock Cone
-            int coneSegments = 16;
+            int coneSegments = 24;
             float tipZ = 2.85f;
             float coneLength = 2.6f;
             float coneBaseRadius = 0.95f;
@@ -160,11 +160,19 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
                 float ringRadius = (0.35f + ringPhase * 1.2f);
                 float ringAlpha = (float) Math.sin(ringPhase * Math.PI) * 0.65f;
 
-                drawRing(matrix, buffer, 0, 0, ringZ, ringRadius, ringRadius * 0.80f, 16, 0.95f, 0.05f, 0.20f, ringAlpha);
+                drawRing(matrix, buffer, 0, 0, ringZ, ringRadius, ringRadius * 0.80f, 24, 0.95f, 0.05f, 0.20f, ringAlpha);
             }
 
             // 7. Kinetic Plasma Thrust Core Beam
             drawBeam(matrix, buffer, 0, 0, trailStart + 0.2f, 0, 0, trailStart - trailLength * 0.75f, 0.08f, 1.0f, 0.80f, 0.85f, 0.95f * bodyFade);
+        });
+
+        // Additive glow halo (redesign T1): the burning core and spearhead
+        // bloom through the obsidian shaft so the throw reads as light.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawCylinder(matrix, buffer, 0.075f, -1.9f, 1.35f, 8, 1.0f, 0.15f, 0.30f, 0.30f * bodyFade);
+            drawSpearHead(matrix, buffer, 0.27f, 1.35f, 2.95f, 1.0f, 0.85f, 0.90f, 0.25f * bodyFade);
         });
 
         poseStack.popPose();

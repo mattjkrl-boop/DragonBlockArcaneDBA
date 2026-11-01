@@ -68,7 +68,7 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
 
             // 1. 12-Block Battlefield Denial Repulsion Boundary Disc on the Ground
             float auraR = 12.0f;
-            int groundSegments = 36;
+            int groundSegments = 48;
             float repulseWave = (age * 0.35f) % auraR;
 
             // Outer Boundary Perimeter Teeth & Runic Ring
@@ -114,9 +114,16 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
             // Titan Ethereal Chestplate & Aegis Shell
             drawAegisPlate(matrix, buffer, 0, 1.2f, 0.65f, avatarW * 0.8f, 1.4f, rCol, gCol, bCol, alpha * 0.75f);
             drawAegisPlate(matrix, buffer, 0, 1.2f, -0.65f, avatarW * 0.8f, 1.4f, rCol, gCol, bCol, alpha * 0.75f);
+            // Inner hot core plates (redesign T2): the avatar plates were one
+            // flat tone; a smaller, hotter plate inside each shell gives the
+            // chest a depth ramp toward white heat at its heart.
+            float coreG = Math.min(1.0f, gCol + 0.30f);
+            float coreB = Math.min(1.0f, bCol + 0.15f);
+            drawAegisPlate(matrix, buffer, 0, 1.2f, 0.67f, avatarW * 0.44f, 0.8f, 1.0f, coreG, coreB, alpha * 0.85f);
+            drawAegisPlate(matrix, buffer, 0, 1.2f, -0.67f, avatarW * 0.44f, 0.8f, 1.0f, coreG, coreB, alpha * 0.85f);
 
             // 3. 3D Swirling Molten Heat Dome & Upward Energy Helices
-            int domeSegments = 24;
+            int domeSegments = 32;
             float domeR = (2.2f + intensity * 0.8f) * pulse;
             drawHeatDome(matrix, buffer, 0, 0.1f, 0, domeR, avatarH * 0.85f, domeSegments, age * 16.0f,
                 rCol, gCol, bCol, alpha * 0.40f);
@@ -164,6 +171,25 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
                     drawSegment(matrix, buffer, sx1, sz1, sx2, sz2, 0.15f, 1.0f, 1.0f, 0.60f, 1.0f);
                 }
             }
+        });
+
+        // Additive glow halo and ground anchor (redesign T1 and T6): the heat
+        // dome and boundary ring bloom, and a soft molten disc glows under
+        // the caster so the stance sits in the world. Peak keeps its hotter
+        // gold through the same color pair as the body.
+        float haloRCol = 1.0f;
+        float haloGCol = isPeak ? 0.92f : 0.48f;
+        float haloBCol = isPeak ? 0.35f : 0.05f;
+        float haloDomeR = (2.2f + intensity * 0.8f) * pulse * 1.08f;
+        float haloDomeH = 3.6f * pulse * 0.85f;
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawHeatDome(matrix, buffer, 0, 0.1f, 0, haloDomeR, haloDomeH, 32, age * 16.0f,
+                haloRCol, haloGCol, haloBCol, alpha * 0.16f);
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, 12.24f, 11.52f, 48, age * 6.0f,
+                haloRCol, haloGCol, haloBCol, alpha * 0.14f);
+            drawRotatingRing(matrix, buffer, 0, 0.02f, 0, 2.8f, 0.05f, 48, 0.0f,
+                haloRCol, haloGCol, haloBCol, alpha * 0.10f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

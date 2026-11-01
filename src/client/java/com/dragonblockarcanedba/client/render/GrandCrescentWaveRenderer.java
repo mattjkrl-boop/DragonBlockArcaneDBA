@@ -82,7 +82,7 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
             : 1.0f;
         float span = 4.8f * fpScale;
         float chord = 1.6f * fpScale;
-        int segments = 22;
+        int segments = 30;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -111,7 +111,16 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
             drawTrailingArc(matrix, buffer, span * 0.70f, chord * 0.70f, -1.05f, segments, 1.0f, 0.65f, 0.05f, 0.40f * fade);
 
             // 4. Inscribed Sacred Valor Glyphs across center arc
-            drawValorGlyphs(matrix, buffer, span, chord, fade);
+            drawValorGlyphs(matrix, buffer, span, chord, fade, state.ageInTicks);
+        });
+
+        // Additive halo pass: a wider faint copy of the golden canopy and one
+        // trailing arc so the great wave blooms along its whole span.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawVolumetricCrescent(matrix, buffer, span + 0.70f, chord + 0.65f, 0.36f, 0.80f, segments,
+                1.0f, 0.82f, 0.15f, 0.17f * fade);
+            drawTrailingArc(matrix, buffer, span * 0.90f, chord * 0.90f, -0.55f, segments, 1.0f, 0.75f, 0.10f, 0.14f * fade);
         });
 
         poseStack.popPose();
@@ -193,18 +202,22 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         }
     }
 
-    private static void drawValorGlyphs(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float fade) {
+    private static void drawValorGlyphs(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float fade, float age) {
         int glyphCount = 7;
         for (int g = 0; g < glyphCount; g++) {
             float t = (g / (float) (glyphCount - 1)) * 1.6f - 0.8f;
             float gx = t * span;
             float gz = (1.0f - t * t) * chord - 0.15f;
 
+            // Energy flow: a brightness pulse travels glyph to glyph along
+            // the arc instead of every glyph sitting at one flat alpha.
+            float glyphAlpha = fade * (0.70f + 0.30f * (float) Math.sin(age * 0.6f - g * 0.9f));
+
             float gSize = 0.12f;
-            consumer.addVertex(matrix, gx - gSize, 0.08f, gz).setColor(1.0f, 1.0f, 0.90f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, gx, 0.08f, gz + gSize).setColor(1.0f, 1.0f, 0.90f, fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, gx + gSize, 0.08f, gz).setColor(1.0f, 1.0f, 0.90f, fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, gx, 0.08f, gz - gSize).setColor(1.0f, 1.0f, 0.90f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, gx - gSize, 0.08f, gz).setColor(1.0f, 1.0f, 0.90f, glyphAlpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, gx, 0.08f, gz + gSize).setColor(1.0f, 1.0f, 0.90f, glyphAlpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, gx + gSize, 0.08f, gz).setColor(1.0f, 1.0f, 0.90f, glyphAlpha).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, gx, 0.08f, gz - gSize).setColor(1.0f, 1.0f, 0.90f, glyphAlpha).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         }
     }
 }

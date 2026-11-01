@@ -77,7 +77,7 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
             Random rng = new Random(state.seed);
 
             // 1. Planar 3D Ground Iaido Focus Rings
-            int segments = 24;
+            int segments = 36;
             float rOuter = 1.3f + (charge * 0.4f);
             // Outer Ring: Electric Cyan
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, rOuter, rOuter * 0.88f, segments, age * 25.0f,
@@ -110,6 +110,17 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
 
                 drawDiamondSpark(matrix, buffer, mx, my, mz, mSize, 0.8f, 0.95f, 1.0f, mAlpha);
             }
+        });
+
+        // Additive halo pass: a wider, faint copy of the outer cyan ring and
+        // the hilt spark so the charge blooms and anchors to the ground
+        // instead of reading matte.
+        float haloRadius = (1.3f + (charge * 0.4f)) * 1.15f;
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, haloRadius, haloRadius * 0.82f, 36, age * 25.0f,
+                0.15f, 0.85f, 1.0f, 0.16f * alpha);
+            drawDiamondSpark(matrix, buffer, -0.28f, 0.75f, -0.05f, (0.12f + charge * 0.10f) * 1.7f, 1.0f, 1.0f, 1.0f, 0.20f * alpha);
         });
 
         poseStack.popPose();

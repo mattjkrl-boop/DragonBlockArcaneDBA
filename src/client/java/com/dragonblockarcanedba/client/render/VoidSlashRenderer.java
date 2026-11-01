@@ -71,9 +71,13 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
             poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(-42.0f)));
         }
 
+        // T4: a gentle in-flight roll oscillation around the signature tilt,
+        // so the crescent feels alive while it travels instead of frozen.
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees((float) Math.sin(state.age * 0.25f) * 4.0f)));
+
         float span = 4.2f;
         float chord = 1.35f;
-        int segments = 20;
+        int segments = 28;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -96,6 +100,15 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
 
             // 5. Transversal Tip Winglet Flares (3D sharp tip spurs)
             drawTipSpurs(matrix, buffer, span, chord, 0.18f, fade);
+        });
+
+        // T1: additive halo pass tracing the violet blade crescent slightly
+        // larger, so the slash blooms around its dark outer aura.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            drawVolumetricCrescent(matrix, buffer, span + 0.30f, chord + 0.28f, 0.34f, 0.55f, segments,
+                0.34f, 0.03f, 0.54f, 0.26f * fade);
         });
 
         poseStack.popPose();

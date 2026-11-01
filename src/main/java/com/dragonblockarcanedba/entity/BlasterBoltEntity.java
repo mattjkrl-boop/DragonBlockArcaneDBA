@@ -115,6 +115,16 @@ public class BlasterBoltEntity extends Projectile {
         this.setPos(nextX, nextY, nextZ);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles (T5): a sparse spark trail in flight, building on
+            // the bolt's existing hit bursts rather than replacing them.
+            float trailDensity = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (trailDensity > 0f) {
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    this.getX(), this.getY(), this.getZ(),
+                    Math.max(1, Math.round(2f * trailDensity)),
+                    0.08, 0.08, 0.08, 0.02);
+            }
+
             Entity owner = this.getOwner();
             DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
                 ? serverLevel.damageSources().playerAttack(playerOwner)

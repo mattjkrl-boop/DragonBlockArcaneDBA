@@ -124,6 +124,19 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
             this.discard(); // Despawn immediately if chunk loaded but owner not online/around
             return;
         }
+
+        // Theme particles (redesign T5): each shard sheds a slow ember so the
+        // orbiting swarm reads as burning blades, not silent knives.
+        if (this.tickCount % 3 == 0 && this.level() instanceof ServerLevel serverLevel) {
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (density > 0f) {
+                serverLevel.sendParticles(
+                    com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                    this.getX(), this.getY(), this.getZ(),
+                    Math.max(1, Math.round(1f * density)),
+                    0.08, 0.08, 0.08, 0.01);
+            }
+        }
         if (!owner.isAlive() || this.distanceToSqr(owner) > 64 * 64) {
             this.discard(); // Despawn if owner dead or far away
             return;

@@ -72,7 +72,21 @@ public class HeavenSplitterEntity extends Projectile {
     public void tick() {
         super.tick();
 
-        if (!this.level().isClientSide() && this.level() instanceof ServerLevel) {
+        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles: sparks spray along the reality cut while the
+            // wall stands, sampled at random points along the dash path.
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    Vec3 dir = getDashDirection();
+                    double along = this.getRandom().nextDouble() * getDashLength();
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        this.getX() + dir.x * along, this.getY() + 1.2 + dir.y * along, this.getZ() + dir.z * along,
+                        Math.max(1, Math.round(3f * density)),
+                        0.3, 1.4, 0.3, 0.05);
+                }
+            }
+
             if (this.tickCount >= getMaxLifetime()) {
                 this.discard();
             }

@@ -101,6 +101,30 @@ public class DimensionalWarpRiftEntity extends Projectile {
                 }
             }
 
+            // Theme particles (T5): void smoke wisping off the tear for its
+            // whole life, with sparks on the destination side where the
+            // travel finishes.
+            if (this.tickCount % 3 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        center.x, center.y + 1.2, center.z,
+                        Math.max(1, Math.round(3f * density)),
+                        radius * 0.6, 1.2, radius * 0.6, 0.03);
+                }
+            }
+            if (isDest && this.tickCount % 6 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        center.x, center.y + 1.2, center.z,
+                        Math.max(1, Math.round(2f * density)),
+                        radius * 0.3, 0.8, radius * 0.3, 0.04);
+                }
+            }
+
             // Damage and Physics distortion for entities in the rift area
             AABB aoeBox = new AABB(
                 center.x - radius, center.y - 1.5, center.z - radius,

@@ -89,7 +89,7 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
 
         float span = 4.2f;
         float chord = 1.35f;
-        int segments = 20;
+        int segments = 28;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -113,6 +113,16 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
             }
         });
 
+        // Additive glow halo (redesign T1): the magenta crest and cyan edge
+        // bloom over the void silhouette so the crescent cuts as light.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawCrescentArc(matrix, buffer, span, chord, 0.14f, segments,
+                0.80f, 0.05f, 0.85f, 0.30f * fade);
+            drawCrescentArc(matrix, buffer, span * 0.72f, chord * 0.72f, 0.06f, segments,
+                0.90f, 0.98f, 1.0f, 0.22f * fade);
+        });
+
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -133,17 +143,22 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
             float z1Trail = z1 - 0.5f * (1.0f - Math.abs(t1));
             float z2Trail = z2 - 0.5f * (1.0f - Math.abs(t2));
 
+            // Three-stop shading (redesign T2): the arc burns hottest at its
+            // center and deepens toward the horn tips.
+            float shade1 = 1.0f - Math.abs(t1) * 0.35f;
+            float shade2 = 1.0f - Math.abs(t2) * 0.35f;
+
             // Top Face
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, th1, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, th1, z1).setColor(r * shade1, g * shade1, b * shade1, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, th2, z2).setColor(r * shade2, g * shade2, b * shade2, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, th2, z2Trail).setColor(r * shade2, g * shade2, b * shade2, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, th1, z1Trail).setColor(r * shade1, g * shade1, b * shade1, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
 
             // Bottom Face
-            consumer.addVertex(matrix, x1, -th1, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x1, -th1, z1Trail).setColor(r * shade1, g * shade1, b * shade1, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x2, -th2, z2Trail).setColor(r * shade2, g * shade2, b * shade2, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x2, -th2, z2).setColor(r * shade2, g * shade2, b * shade2, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x1, -th1, z1).setColor(r * shade1, g * shade1, b * shade1, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         }
     }
 }

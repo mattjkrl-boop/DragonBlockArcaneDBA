@@ -74,6 +74,31 @@ public class DarknessDomainEntity extends Projectile {
             this.setPos(owner.getX(), owner.getY(), owner.getZ());
         }
 
+        // Theme particles (T5): void smoke drifting through the domain and
+        // sparks crawling at the vortex, density scaled like other emitters.
+        if (this.level() instanceof ServerLevel serverLevel) {
+            if (this.tickCount % 4 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        this.getX(), this.getY() + 1.0, this.getZ(),
+                        Math.max(1, Math.round(5f * density)),
+                        getRadius() * 0.6, 1.5, getRadius() * 0.6, 0.03);
+                }
+            }
+            if (this.tickCount % 12 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        this.getX(), this.getY() + 0.6, this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        getRadius() * 0.25, 0.8, getRadius() * 0.25, 0.04);
+                }
+            }
+        }
+
         if (!this.level().isClientSide()) {
             this.lifetime--;
             if (this.lifetime <= 0 || (owner != null && !owner.isAlive())) {

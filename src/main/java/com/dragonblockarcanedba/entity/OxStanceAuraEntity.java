@@ -76,6 +76,27 @@ public class OxStanceAuraEntity extends Projectile {
             if (caster instanceof LivingEntity living && living.isAlive() && !living.isRemoved()) {
                 this.setPos(living.getX(), living.getY(), living.getZ());
 
+                // Theme particles (redesign T5): heat embers rise inside the
+                // dome while the stance holds, with sparks at the peak window.
+                if (this.tickCount % 2 == 0) {
+                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                    if (density > 0f) {
+                        float intensity = Math.min(1.0f, getHeldTicks() / 100.0f);
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                            this.getX(), this.getY() + 0.3, this.getZ(),
+                            Math.max(1, Math.round((2f + intensity * 3f) * density)),
+                            1.2 + intensity * 0.8, 0.9, 1.2 + intensity * 0.8, 0.04);
+                        if (isPeak() && this.tickCount % 4 == 0) {
+                            serverLevel.sendParticles(
+                                com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                                this.getX(), this.getY() + 1.2, this.getZ(),
+                                Math.max(1, Math.round(3f * density)),
+                                1.0, 0.8, 1.0, 0.06);
+                        }
+                    }
+                }
+
                 if (living instanceof Player player) {
                     boolean isUsing = player.isUsingItem() && (
                         player.getUseItem().getItem() instanceof OxKingsAxeItem

@@ -104,10 +104,20 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
 
             // 3. Volumetric Longitudinal Plasma Beam along cutting trajectory
             float mantleRadius = 0.45f * scale;
-            drawVolumetricBeamZ(matrix, buffer, 0, len, mantleRadius, 8,
+            drawVolumetricBeamZ(matrix, buffer, 0, len, mantleRadius, 12,
                 0.80f, 0.95f, 1.0f, 0.85f * fade);
-            drawVolumetricBeamZ(matrix, buffer, 0, len, 0.15f * scale, 6,
+            drawVolumetricBeamZ(matrix, buffer, 0, len, 0.15f * scale, 8,
                 1.0f, 1.0f, 1.0f, 1.0f * fade);
+
+            // 3b. Energy flow bands: bright rings travel along the cut so the
+            // beam and wall read as flowing energy, not a uniform tube.
+            int bandCount = 3;
+            for (int b = 0; b < bandCount; b++) {
+                float bandProg = (state.age * 0.09f + (b / (float) bandCount)) % 1.0f;
+                float bandZ = bandProg * len;
+                drawShockRingZ(matrix, buffer, bandZ, mantleRadius * 2.1f, mantleRadius * 1.55f, 24, state.age * 30.0f,
+                    0.65f, 0.95f, 1.0f, fade * 0.55f * (1.0f - bandProg * 0.30f));
+            }
 
             // 4. Twin Vacuum Shockwave Wings Flaring Outward
             float wingSpan = 1.2f * scale;
@@ -126,9 +136,9 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
 
             // 6. Concentric Sonic Shock Rings at Start, Midpoint, and Destination
             float ringR = 2.2f * scale;
-            drawShockRingZ(matrix, buffer, 0, ringR, ringR * 0.75f, 20, state.age * 20.0f, 0.0f, 0.85f, 1.0f, fade * 0.85f);
-            drawShockRingZ(matrix, buffer, halfLen, ringR * 1.4f, ringR * 1.05f, 20, -state.age * 30.0f, 1.0f, 1.0f, 1.0f, fade * 0.95f);
-            drawShockRingZ(matrix, buffer, len, ringR * 1.6f, ringR * 1.20f, 20, state.age * 40.0f, 0.0f, 0.95f, 1.0f, fade * 0.90f);
+            drawShockRingZ(matrix, buffer, 0, ringR, ringR * 0.75f, 28, state.age * 20.0f, 0.0f, 0.85f, 1.0f, fade * 0.85f);
+            drawShockRingZ(matrix, buffer, halfLen, ringR * 1.4f, ringR * 1.05f, 28, -state.age * 30.0f, 1.0f, 1.0f, 1.0f, fade * 0.95f);
+            drawShockRingZ(matrix, buffer, len, ringR * 1.6f, ringR * 1.20f, 28, state.age * 40.0f, 0.0f, 0.95f, 1.0f, fade * 0.90f);
 
             // 8. Cascading Angled 3D Spatial Cross-Cleave Crescent Blades along dash corridor
             int slashArcCount = Math.max(5, (int) (len / 3.0f));
@@ -139,6 +149,16 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
                 drawAngledCrossCleave(matrix, buffer, z, arcSpan, angle,
                     0.0f, 0.90f, 1.0f, fade * 0.75f);
             }
+        });
+
+        // Additive halo pass: a thicker faint copy of the blade wall and the
+        // mantle beam so the whole cut blooms along its length.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawVerticalBladeWall(matrix, buffer, 0, len, slashHeight, 0.20f * scale,
+                0.0f, 0.85f, 1.0f, 0.13f * fade);
+            drawVolumetricBeamZ(matrix, buffer, 0, len, 0.68f * scale, 12,
+                0.80f, 0.95f, 1.0f, 0.13f * fade);
         });
 
         poseStack.popPose();

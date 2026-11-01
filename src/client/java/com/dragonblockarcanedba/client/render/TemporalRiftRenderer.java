@@ -80,8 +80,8 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             Matrix4f matrix = pose.pose();
 
             // 1. Volumetric 3D Translucent Celestial Dome Shell (Multi-Latitude Mesh)
-            int domeLatitudes = 11;
-            int domeLongitudes = 28;
+            int domeLatitudes = 14;
+            int domeLongitudes = 40;
             float domeHeight = radius * 1.05f;
 
             for (int lat = 0; lat < domeLatitudes; lat++) {
@@ -96,9 +96,11 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
 
                 float domeAlpha = (0.13f + latProgress1 * 0.15f) * pulse * fade;
 
-                // Color shift from celestial cyan at base to diamond silver at apex
-                float cr = 0.55f + latProgress1 * 0.40f;
-                float cg = 0.85f + latProgress1 * 0.13f;
+                // Color shift from celestial cyan at base to diamond silver at apex.
+                // 3-stop ramp (T2): the base band now starts in a deeper cyan so
+                // the dome has real depth against the silver apex.
+                float cr = 0.38f + latProgress1 * 0.57f;
+                float cg = 0.76f + latProgress1 * 0.22f;
                 float cb = 1.0f;
 
                 for (int lon = 0; lon < domeLongitudes; lon++) {
@@ -122,7 +124,7 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             }
 
             // 2. Physical 3D Rotating Clock Decal & Ground Chronometer Mandala
-            int groundSegments = 36;
+            int groundSegments = 48;
 
             // Outer Chrono Rim
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius, radius * 0.91f, groundSegments, age * 6.0f,
@@ -191,13 +193,64 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             // 5. 12 Vertical Meridian Time Streams Rising to Apex
             for (int stream = 0; stream < 12; stream++) {
                 double streamAngle = (stream / 12.0) * Math.PI * 2.0 + Math.toRadians(age * 6.0f);
-                drawMeridianStream(matrix, buffer, streamAngle, radius, domeHeight, 12,
+                drawMeridianStream(matrix, buffer, streamAngle, radius, domeHeight, 16,
                     0.70f, 0.92f, 1.0f, 0.80f * pulse * fade);
             }
 
             // 6. Zenith Stasis Apex Jewel
             drawOctahedralJewel(matrix, buffer, 0, domeHeight + 0.1f, 0, 0.85f * scaleMultiplier, age * 30.0f,
                 0.95f, 0.98f, 1.0f, 0.95f * fade);
+        });
+
+        // Additive glow pass (T1 + T6): a faint oversized dome shell blooms
+        // around the matte dome, and a soft ground glow disc anchors the rift
+        // to the floor so it sits in the scene instead of floating over it.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            int haloLatitudes = 10;
+            int haloLongitudes = 32;
+            float haloRadius = radius * 1.03f;
+            float haloHeight = haloRadius * 1.05f;
+
+            for (int lat = 0; lat < haloLatitudes; lat++) {
+                float latProgress1 = lat / (float) haloLatitudes;
+                float latProgress2 = (lat + 1) / (float) haloLatitudes;
+
+                float y1 = 0.1f + (float) Math.sin(latProgress1 * (Math.PI / 2.0)) * haloHeight;
+                float y2 = 0.1f + (float) Math.sin(latProgress2 * (Math.PI / 2.0)) * haloHeight;
+
+                float r1 = haloRadius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
+                float r2 = haloRadius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
+
+                float haloAlpha = (0.05f + latProgress1 * 0.05f) * pulse * fade;
+
+                for (int lon = 0; lon < haloLongitudes; lon++) {
+                    double angleOffset = (age * (1.0f + lat * 0.25f)) * (Math.PI / 180.0);
+                    double a1 = ((lon / (double) haloLongitudes) * Math.PI * 2.0) + angleOffset;
+                    double a2 = (((lon + 1) / (double) haloLongitudes) * Math.PI * 2.0) + angleOffset;
+
+                    float x1 = (float) Math.cos(a1) * r1;
+                    float z1 = (float) Math.sin(a1) * r1;
+                    float x2 = (float) Math.cos(a2) * r1;
+                    float z2 = (float) Math.sin(a2) * r1;
+
+                    float x3 = (float) Math.cos(a2) * r2;
+                    float z3 = (float) Math.sin(a2) * r2;
+                    float x4 = (float) Math.cos(a1) * r2;
+                    float z4 = (float) Math.sin(a1) * r2;
+
+                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
+                        0.50f, 0.85f, 1.0f, haloAlpha);
+                }
+            }
+
+            // Ground anchor glow: wide faint wash under the astrolabe plus a
+            // brighter heart disc at the center.
+            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, radius * 1.02f, radius * 0.50f, 48, age * 6.0f,
+                0.45f, 0.85f, 1.0f, 0.13f * pulse * fade);
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, radius * 0.45f, 0.0f, 24, -age * 10.0f,
+                0.70f, 0.95f, 1.0f, 0.10f * pulse * fade);
         });
 
         poseStack.popPose();
@@ -261,7 +314,7 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
     }
 
     private static void drawTiltedOrbitalRing(Matrix4f matrix, VertexConsumer consumer, float radius, float tiltDeg, float rotDeg, float r, float g, float b, float a) {
-        int segments = 28;
+        int segments = 40;
         float width = 0.16f;
         double tiltRad = Math.toRadians(tiltDeg);
         double rotRad = Math.toRadians(rotDeg);

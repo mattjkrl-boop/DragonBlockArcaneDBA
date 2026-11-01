@@ -80,9 +80,10 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
             Matrix4f matrix = pose.pose();
 
             // 1. High-Speed Spinning Aerodynamic Wind Drill (Central conical core)
-            int drillSegments = 12;
+            int drillSegments = 18;
             float drillLength = 1.35f * fpScale;
-            float drillRadius = 0.32f * fpScale;
+            // Secondary motion (T4): the drill radius breathes as it spins.
+            float drillRadius = 0.32f * fpScale * (1.0f + 0.05f * (float) Math.sin(age * 1.5f));
             float drillRot = age * 45.0f * (float) (Math.PI / 180.0);
 
             for (int i = 0; i < drillSegments; i++) {
@@ -94,12 +95,26 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                 float x2 = (float) Math.cos(a2) * drillRadius;
                 float y2 = (float) Math.sin(a2) * drillRadius;
 
-                // Outer emerald vortex drill cone (tapers to tip at +Z = drillLength * 0.5)
-                drawTriangle(matrix, buffer,
+                // Outer emerald vortex drill cone in two bands (T2 gradient):
+                // deep emerald at the tail band, bright jade from mid-cone to
+                // the tip (the cone tapers to a point at +Z = drillLength * 0.5).
+                float midX1 = (float) Math.cos(a1) * drillRadius * 0.52f;
+                float midY1 = (float) Math.sin(a1) * drillRadius * 0.52f;
+                float midX2 = (float) Math.cos(a2) * drillRadius * 0.52f;
+                float midY2 = (float) Math.sin(a2) * drillRadius * 0.52f;
+
+                drawQuad(matrix, buffer,
                     x1, y1, -drillLength * 0.5f,
                     x2, y2, -drillLength * 0.5f,
+                    midX2, midY2, 0.0f,
+                    midX1, midY1, 0.0f,
+                    0.0f, 0.82f, 0.42f, 0.85f * envelope
+                );
+                drawTriangle(matrix, buffer,
+                    midX1, midY1, 0.0f,
+                    midX2, midY2, 0.0f,
                     0, 0, drillLength * 0.5f,
-                    0.0f, 1.0f, 0.60f, 0.85f * envelope
+                    0.45f, 1.0f, 0.82f, 0.85f * envelope
                 );
 
                 // Inner luminous jade spindle
@@ -165,7 +180,7 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                 float ringR = drillRadius * (0.8f + ringProgress * 0.9f);
                 float ringAlpha = (1.0f - ringProgress) * 0.70f * envelope;
 
-                drawRingZ(matrix, buffer, ringZ, ringR, ringR * 0.75f, 16, 0.15f, 1.0f, 0.75f, ringAlpha);
+                drawRingZ(matrix, buffer, ringZ, ringR, ringR * 0.75f, 24, 0.15f, 1.0f, 0.75f, ringAlpha);
             }
 
             // 4. Radiant Diamond Needle Tip (+Z Apex)
@@ -186,6 +201,34 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                     x2, y2, tipZ,
                     0, 0, tipZ + tipLen,
                     1.0f, 1.0f, 1.0f, 0.98f * envelope
+                );
+            }
+        });
+
+        // Additive glow halo (T1): the drill cone redrawn as a fat faint
+        // silhouette, following the same age envelope as the body.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            int haloSegments = 18;
+            float drillLength = 1.35f * fpScale;
+            float drillRadius = 0.32f * fpScale * 1.55f;
+            float drillRot = age * 45.0f * (float) (Math.PI / 180.0);
+
+            for (int i = 0; i < haloSegments; i++) {
+                double a1 = ((i / (double) haloSegments) * Math.PI * 2.0) + drillRot;
+                double a2 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + drillRot;
+
+                float x1 = (float) Math.cos(a1) * drillRadius;
+                float y1 = (float) Math.sin(a1) * drillRadius;
+                float x2 = (float) Math.cos(a2) * drillRadius;
+                float y2 = (float) Math.sin(a2) * drillRadius;
+
+                drawTriangle(matrix, buffer,
+                    x1, y1, -drillLength * 0.5f,
+                    x2, y2, -drillLength * 0.5f,
+                    0, 0, drillLength * 0.55f,
+                    0.1f, 1.0f, 0.65f, 0.20f * envelope
                 );
             }
         });

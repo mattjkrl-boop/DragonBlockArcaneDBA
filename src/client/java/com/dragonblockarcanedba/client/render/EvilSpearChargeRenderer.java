@@ -65,7 +65,7 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
             Matrix4f matrix = pose.pose();
 
             // 1. Planar 3D Demonic Ground Seals (3 counter-rotating runic rings)
-            int groundSegments = 28;
+            int groundSegments = 40;
             // Outer Ring: Dark Crimson Jagged Seal
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.18f, baseRadius * 1.0f, groundSegments, age * -18.0f,
                 0.80f, 0.0f, 0.10f, baseAlpha * 0.85f);
@@ -85,7 +85,7 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
                 float currentY = 0.3f + ringPhase * 0.9f;
                 float ringAlpha = (float) Math.sin(ringPhase * Math.PI) * baseAlpha * 0.85f;
 
-                drawRotatingRing(matrix, buffer, 0, currentY, 0, currentR, currentR * 0.86f, 20, age * (30.0f + r * 15.0f),
+                drawRotatingRing(matrix, buffer, 0, currentY, 0, currentR, currentR * 0.86f, 28, age * (30.0f + r * 15.0f),
                     1.0f, 0.05f + ringPhase * 0.4f, 0.15f + ringPhase * 0.5f, ringAlpha);
             }
 
@@ -177,6 +177,18 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
                     );
                 }
             }
+        });
+
+        // Additive glow halo (redesign T1): the seal rings and the octahedron
+        // core bloom in crimson so the charge reads as gathered light.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.24f, baseRadius * 1.02f, 40, age * -18.0f,
+                0.80f, 0.0f, 0.10f, baseAlpha * 0.18f);
+            drawRotatingRing(matrix, buffer, 0, 0.09f, 0, baseRadius * 0.52f, baseRadius * 0.32f, 40, age * -42.0f,
+                1.0f, 0.65f, 0.75f, baseAlpha * 0.22f);
+            float haloCore = (0.72f - charge * 0.20f) * pulse * 1.25f;
+            drawOctahedron(matrix, buffer, haloCore, 0.85f, age * 24.0f, 0.85f, 0.0f, 0.12f, baseAlpha * 0.16f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

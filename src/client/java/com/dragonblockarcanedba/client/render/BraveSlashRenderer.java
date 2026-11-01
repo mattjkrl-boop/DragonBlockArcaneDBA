@@ -59,7 +59,7 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
 
         float span = 3.2f * growth;
         float chord = 1.1f * growth;
-        int segments = 16;
+        int segments = 24;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -72,6 +72,14 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
 
             // 3. Blinding White Cutting Edge
             drawCrescentArc(matrix, buffer, span * 0.7f, chord * 0.7f, 0.05f, segments, 1.0f, 1.0f, 1.0f, 1.0f * fade);
+        });
+
+        // Additive halo pass: wider faint copies of the gold and cyan layers
+        // so the basic slash blooms like its richer siblings.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawCrescentArc(matrix, buffer, span + 0.60f, chord + 0.55f, 0.32f, segments, 1.0f, 0.84f, 0.0f, 0.18f * fade);
+            drawCrescentArc(matrix, buffer, span, chord, 0.16f, segments, 0.0f, 0.95f, 1.0f, 0.13f * fade);
         });
 
         poseStack.popPose();

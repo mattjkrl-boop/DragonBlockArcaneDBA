@@ -181,6 +181,28 @@ public class ErasureCannonBeamEntity extends Projectile {
                     com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.PLAYERS, 2.2f, 0.6f);
             }
 
+            // Theme particles (T5): while the beam burns, sparks shed along its
+            // whole path and embers boil off the terminus. Only the max-charge
+            // endpoint explosion existed before.
+            if (this.tickCount <= 3) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    Vec3 beamStart = this.position();
+                    Vec3 beamLook = this.calculateViewVector(getBeamXRot(), getBeamYRot());
+                    int sparkCount = Math.max(2, Math.round(10f * density));
+                    for (int i = 0; i < sparkCount; i++) {
+                        Vec3 sparkPos = beamStart.add(beamLook.scale(serverLevel.getRandom().nextDouble() * getBeamLength()));
+                        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                            sparkPos.x, sparkPos.y, sparkPos.z, 1, 0.25, 0.25, 0.25, 0.05);
+                    }
+                    Vec3 beamEnd = beamStart.add(beamLook.scale(getBeamLength()));
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                        beamEnd.x, beamEnd.y, beamEnd.z,
+                        Math.max(2, Math.round(6f * density)),
+                        0.6, 0.6, 0.6, 0.08);
+                }
+            }
+
             if (this.tickCount >= MAX_LIFETIME) {
                 this.discard();
             }

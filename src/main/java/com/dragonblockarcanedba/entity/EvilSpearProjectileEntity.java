@@ -99,6 +99,19 @@ public class EvilSpearProjectileEntity extends Projectile {
         this.setPos(nextX, nextY, nextZ);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles (redesign T5): the spear sheds blood embers in
+            // flight so its path reads between the trail ribbons.
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                        this.getX(), this.getY(), this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        0.15, 0.15, 0.15, 0.02);
+                }
+            }
+
             Entity owner = this.getOwner();
             DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
                 ? serverLevel.damageSources().playerAttack(playerOwner)

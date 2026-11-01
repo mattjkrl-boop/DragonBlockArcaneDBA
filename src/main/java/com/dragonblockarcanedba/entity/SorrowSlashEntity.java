@@ -96,6 +96,19 @@ public class SorrowSlashEntity extends Projectile {
         this.setPos(this.getX() + movement.x, this.getY() + movement.y, this.getZ() + movement.z);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles (redesign T5): the flying wave trails void
+            // smoke so its path lingers a beat behind the crescent.
+            if (!isImpactBurst() && this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                        this.getX(), this.getY(), this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        0.5, 0.3, 0.5, 0.02);
+                }
+            }
+
             Entity owner = this.getOwner();
             DamageSource damageSource = owner instanceof Player playerOwner
                 ? serverLevel.damageSources().playerAttack(playerOwner)

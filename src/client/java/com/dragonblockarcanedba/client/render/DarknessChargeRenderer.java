@@ -64,7 +64,7 @@ public class DarknessChargeRenderer extends EntityRenderer<DarknessChargeEntity,
             Matrix4f matrix = pose.pose();
 
             // 1. Planar 3D Ground Demonic Seals (3 counter-rotating ground rings)
-            int groundSegments = 28;
+            int groundSegments = 36;
             // Outer Ring: Abyssal Obsidian & Violet Demonic Boundary
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.15f, baseRadius * 0.98f, groundSegments, age * -14.0f,
                 0.12f, 0.0f, 0.25f, baseAlpha * 0.85f);
@@ -163,6 +163,19 @@ public class DarknessChargeRenderer extends EntityRenderer<DarknessChargeEntity,
                     );
                 }
             }
+        });
+
+        // T1 plus T6: one additive pass holding a halo shell around the void
+        // octahedron core and a soft ground glow disc under the seals, so the
+        // charge construct blooms and sits anchored while it builds.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            float haloCoreSize = (0.70f - charge * 0.20f) * pulse * 1.35f;
+            drawOctahedron(matrix, buffer, haloCoreSize, 0.85f, age * 20.0f, 0.35f, 0.03f, 0.50f, baseAlpha * 0.25f);
+
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.25f, 0.0f, 36, age * -10.0f,
+                0.30f, 0.02f, 0.45f, baseAlpha * 0.22f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

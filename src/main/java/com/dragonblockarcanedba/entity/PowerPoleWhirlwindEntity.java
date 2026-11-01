@@ -3,6 +3,7 @@ package com.dragonblockarcanedba.entity;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -103,7 +104,20 @@ public class PowerPoleWhirlwindEntity extends Projectile {
             this.setEntityPitch(owner.getXRot());
         }
 
-        if (!this.level().isClientSide()) {
+        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Theme particles (T5): the vortex sheds wind wisps partway down
+            // the cone while it spins. It emitted none before.
+            if (this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    Vec3 look = this.calculateViewVector(this.getEntityPitch(), this.getEntityYaw());
+                    Vec3 mid = this.position().add(look.scale(getRange() * 0.4));
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                        mid.x, mid.y, mid.z,
+                        Math.max(1, Math.round(3f * density)),
+                        1.2, 1.2, 1.2, 0.05);
+                }
+            }
             if (this.tickCount >= this.maxLifetime) {
                 this.discard();
             }

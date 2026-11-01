@@ -73,8 +73,12 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         float span = (state.isSecondary ? 3.0f : 4.4f) * fpScale;
         float chord = (state.isSecondary ? 1.0f : 1.5f) * fpScale;
         float height = (state.isSecondary ? 1.4f : 2.0f) * fpScale;
-        int segments = 24;
+        int segments = 32;
         float age = state.age;
+
+        // T4: a slow breathing pulse on the hot inner layers so the wave
+        // seethes while it flies instead of holding one flat brightness.
+        float pulse = 0.90f + 0.10f * (float) Math.sin(age * 0.6f);
 
         // Fade out over the last 10 ticks of the 40 tick flight: the wave used
         // to hold constant alpha and pop out mid flight at its discard.
@@ -90,10 +94,10 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
             draw3DVolumetricCrescent(matrix, buffer, span, chord, height, 0.24f, segments, 0.58f, 0.05f, 0.90f, 0.96f * fade);
 
             // 3. Demonic Crimson Razor Leading Edge & Runes
-            draw3DVolumetricCrescent(matrix, buffer, span * 0.78f, chord * 0.78f, height * 0.75f, 0.12f, segments, 0.95f, 0.08f, 0.35f, 1.0f * fade);
+            draw3DVolumetricCrescent(matrix, buffer, span * 0.78f, chord * 0.78f, height * 0.75f, 0.12f, segments, 0.95f, 0.08f, 0.35f, 1.0f * fade * pulse);
 
             // 4. Blinding Pure White-Purple Void Core Spine
-            draw3DVolumetricCrescent(matrix, buffer, span * 0.45f, chord * 0.45f, height * 0.45f, 0.06f, segments, 1.0f, 0.85f, 1.0f, 1.0f * fade);
+            draw3DVolumetricCrescent(matrix, buffer, span * 0.45f, chord * 0.45f, height * 0.45f, 0.06f, segments, 1.0f, 0.85f, 1.0f, 1.0f * fade * pulse);
 
             // 5. Orbiting Trailing 3D Shadow Crescents / Void Shards
             int trailingShards = 6;
@@ -109,6 +113,14 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
 
                 drawMiniShardCrescent(matrix, buffer, sx, sy, sz, shardSpan, shardChord, side, 0.65f, 0.05f, 0.95f, 0.90f * fade);
             }
+        });
+
+        // T1: additive halo pass tracing the violet core crescent slightly
+        // larger, so the wave's body blooms around its obsidian shell.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+
+            draw3DVolumetricCrescent(matrix, buffer, span + 0.30f, chord + 0.28f, height * 1.12f, 0.30f, segments, 0.35f, 0.03f, 0.55f, 0.26f * fade);
         });
 
         poseStack.popPose();

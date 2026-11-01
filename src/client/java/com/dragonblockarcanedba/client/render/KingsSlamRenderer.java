@@ -81,13 +81,13 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
             float shockR = Math.min(radius * 1.35f, age * (isFlawless ? 0.95f : 0.70f));
             if (fade > 0.05f) {
                 // Outer Shockwave Crest
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.84f, 32, rCol, gCol, bCol, fade * 0.85f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.84f, 48, rCol, gCol, bCol, fade * 0.85f);
                 // Inner Incandescent Caldera Bed
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 24, 1.0f, isFlawless ? 0.95f : 0.60f, 0.10f, fade * 0.70f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 32, 1.0f, isFlawless ? 0.95f : 0.60f, 0.10f, fade * 0.70f);
 
                 // Expanding 3D Hemispherical Volcanic Dome Wall
                 float domeH = (2.5f + (isFlawless ? 3.0f : 1.5f)) * (1.0f - progress * 0.6f);
-                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR, domeH, 28, rCol, gCol, bCol, fade * 0.65f);
+                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR, domeH, 40, rCol, gCol, bCol, fade * 0.65f);
             }
 
             // 2. Radiating 3D Tectonic Canyon Fissure Trenches
@@ -154,10 +154,26 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
                     float gHeight = 6.0f + rng.nextFloat() * 2.5f;
                     float gWidth = 0.55f;
 
+                    // Secondary motion (redesign T4): geyser heights flicker
+                    // on their own phases instead of standing frozen.
+                    gHeight *= 0.90f + 0.10f * (float) Math.sin(age * 0.9f + g * 1.7f);
+
                     drawVerticalGeyser(matrix, buffer, gx, gz, gHeight, gWidth, fade);
                 }
             }
         });
+
+        // Additive glow halo (redesign T1): the dome wall and crest bloom in
+        // the slam's own color, orange normally and pale gold when Flawless.
+        float haloShockR = Math.min(radius * 1.35f, age * (isFlawless ? 0.95f : 0.70f));
+        if (fade > 0.05f) {
+            float haloDomeH = (2.5f + (isFlawless ? 3.0f : 1.5f)) * (1.0f - progress * 0.6f);
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, haloShockR, haloShockR * 0.84f, 48, rCol, gCol, bCol, fade * 0.22f);
+                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, haloShockR, haloDomeH, 40, rCol, gCol, bCol, fade * 0.25f);
+            });
+        }
     }
 
     private static void drawTrenchSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {

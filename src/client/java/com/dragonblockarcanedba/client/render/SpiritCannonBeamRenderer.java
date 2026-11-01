@@ -114,8 +114,10 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
             drawPrismBeam(matrix, buffer, midRadius, zStart, beamLength, 8, -age * 8.0f, 0.0f, 0.92f, 1.0f, 0.65f * fadeIn);
 
             // Layer C: Hexagonal Outer Energy Sheath with Traveling Wave (6 sides)
+            // Drawn in segments with a traveling brightness band (redesign T7)
+            // so energy visibly flows down the beam instead of sitting uniform.
             float outerRadius = 0.42f * pulse * fpScale;
-            drawPrismBeam(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 3.0f, 0.05f, 0.70f, 1.0f, 0.30f * fadeIn);
+            drawPrismBeamFlow(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 3.0f, age, 0.05f, 0.70f, 1.0f, 0.30f * fadeIn);
 
             // 2. Quad Helical Energy Drill Ribbons
             int segments = Math.min((int) (beamLength * 3.0f), 96);
@@ -165,7 +167,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
                 float ringPhase = (float) Math.sin(age * 0.4f + k * 1.2f);
                 float ringR = (0.55f + ringPhase * 0.12f) * pulse * fpScale;
 
-                drawPlaneRing(matrix, buffer, 0, 0, z, ringR, ringR * 0.82f, 16, age * (15.0f + k * 4.0f),
+                drawPlaneRing(matrix, buffer, 0, 0, z, ringR, ringR * 0.82f, 24, age * (15.0f + k * 4.0f),
                     0.0f, 0.95f, 1.0f, 0.70f * fadeIn);
             }
 
@@ -174,6 +176,14 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
 
             // 5. Terminus Impact Geometry (at Hit Point Z=beamLength)
             drawTerminusImpact(matrix, buffer, beamLength, age, pulse);
+        });
+
+        // Additive glow halo (redesign T1): a wider soft sheath around the
+        // beam so the cannon blooms instead of reading as flat prisms.
+        float haloRadius = 0.42f * pulse * fpScale * 1.45f;
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawPrismBeam(matrix, buffer, haloRadius, zStart, beamLength, 8, age * 3.0f, 0.05f, 0.70f, 1.0f, 0.16f * fadeIn);
         });
 
         poseStack.popPose();
@@ -200,6 +210,22 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         }
     }
 
+    /**
+     * Segmented prism beam with a traveling brightness band (redesign T7).
+     * Alpha pulses in a sine wave whose phase runs along the beam length and
+     * advances with age, so the sheath reads as flowing energy.
+     */
+    private static void drawPrismBeamFlow(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float length, int sides, float rotDeg, float age, float r, float g, float b, float a) {
+        int flowSegments = 12;
+        for (int sgm = 0; sgm < flowSegments; sgm++) {
+            float z1 = zStart + (length - zStart) * (sgm / (float) flowSegments);
+            float z2 = zStart + (length - zStart) * ((sgm + 1) / (float) flowSegments);
+            float p = sgm / (float) flowSegments;
+            float band = 0.70f + 0.55f * (0.5f + 0.5f * (float) Math.sin(p * Math.PI * 6.0 - age * 0.9f));
+            drawPrismBeam(matrix, consumer, radius, z1, z2, sides, rotDeg, r, g, b, a * band);
+        }
+    }
+
     private static void drawPlaneRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
         double rotRad = Math.toRadians(rotDeg);
         for (int i = 0; i < segments; i++) {
@@ -222,8 +248,8 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
 
     private static void drawMuzzleEmitter(Matrix4f matrix, VertexConsumer consumer, float age, float pulse) {
         // 2 Concentric Rotating Celestial Muzzle Seals
-        drawPlaneRing(matrix, consumer, 0, 0, 0.15f, 0.70f * pulse, 0.52f * pulse, 16, age * 30.0f, 0.0f, 0.90f, 1.0f, 0.85f);
-        drawPlaneRing(matrix, consumer, 0, 0, 0.20f, 0.48f * pulse, 0.32f * pulse, 12, -age * 45.0f, 1.0f, 0.85f, 0.20f, 0.90f);
+        drawPlaneRing(matrix, consumer, 0, 0, 0.15f, 0.70f * pulse, 0.52f * pulse, 24, age * 30.0f, 0.0f, 0.90f, 1.0f, 0.85f);
+        drawPlaneRing(matrix, consumer, 0, 0, 0.20f, 0.48f * pulse, 0.32f * pulse, 16, -age * 45.0f, 1.0f, 0.85f, 0.20f, 0.90f);
 
         // 4 Inward Convergence Spikes
         for (int s = 0; s < 4; s++) {
@@ -244,7 +270,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
     private static void drawTerminusImpact(Matrix4f matrix, VertexConsumer consumer, float beamLength, float age, float pulse) {
         // Expanding Impact Dome at Impact Contact Point
         float domeRadius = 0.85f * pulse;
-        int segments = 12;
+        int segments = 16;
 
         for (int i = 0; i < segments; i++) {
             double a1 = (i / (double) segments) * Math.PI * 2.0;

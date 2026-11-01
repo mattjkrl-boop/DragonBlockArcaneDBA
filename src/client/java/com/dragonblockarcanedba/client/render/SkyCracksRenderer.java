@@ -121,6 +121,34 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
                 drawSkyVoidShard(matrix, buffer, sx, sy, sz, shardSize, state.age * 12.0f + i * 45.0f, pulse);
             }
         });
+
+        // 3 (T1): additive bloom pass along the fissure rays. It replays the
+        // exact seeded ray walk of pass 2 and redraws only the incandescent
+        // inner arcs, slightly wider, so the cracks glow against the sky. The
+        // textured quad itself is the identity of this effect and is untouched.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            Random rng = new Random(state.seed);
+
+            int rayCount = 12;
+            for (int r = 0; r < rayCount; r++) {
+                double angle = (r / (double) rayCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.35);
+                float rayLen = 140.0f + rng.nextFloat() * 220.0f;
+
+                float curX = 0, curZ = 0;
+                int steps = 7;
+                for (int s = 0; s < steps; s++) {
+                    float nxtX = curX + (float) Math.cos(angle) * (rayLen / steps) + (rng.nextFloat() - 0.5f) * 22.0f;
+                    float nxtZ = curZ + (float) Math.sin(angle) * (rayLen / steps) + (rng.nextFloat() - 0.5f) * 22.0f;
+
+                    float width = 3.2f * (1.0f - (s / (float) steps));
+
+                    drawSkyRay(matrix, buffer, curX, curZ, nxtX, nxtZ, width * 0.55f, 0.60f, 0.54f, 0.57f, 0.30f * pulse);
+
+                    curX = nxtX; curZ = nxtZ;
+                }
+            }
+        });
     }
 
     private static void drawSkyRay(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {
@@ -142,19 +170,25 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
         float cos = (float) Math.cos(rad) * s;
         float sin = (float) Math.sin(rad) * s;
 
+        // The shard alphas now follow the shared pulse and lifetime envelope;
+        // they used to be fixed constants, so the shards ignored the fade the
+        // sky quad and rays already had.
+        float bodyAlpha = 0.85f * pulse;
+        float tipAlpha = 0.95f * pulse;
+
         // 3D Octahedron crystal
         float[][] pts = { {cos,0,sin}, {-sin,0,cos}, {-cos,0,-sin}, {sin,0,-cos} };
         for (int i = 0; i < 4; i++) {
             int nxt = (i + 1) % 4;
-            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.65f, 0.02f, 0.95f, 0.85f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.65f, 0.02f, 0.95f, 0.85f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx, cy + s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx, cy + s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.65f, 0.02f, 0.95f, bodyAlpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.65f, 0.02f, 0.95f, bodyAlpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx, cy + s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, tipAlpha).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx, cy + s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, tipAlpha).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
 
-            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.65f, 0.02f, 0.95f, 0.85f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.65f, 0.02f, 0.95f, 0.85f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, cx, cy - s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, cx, cy - s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.65f, 0.02f, 0.95f, bodyAlpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.65f, 0.02f, 0.95f, bodyAlpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx, cy - s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, tipAlpha).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx, cy - s * 1.6f, cz).setColor(1.0f, 0.15f, 0.45f, tipAlpha).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         }
     }
 }
