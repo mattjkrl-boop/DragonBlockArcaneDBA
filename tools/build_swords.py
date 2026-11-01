@@ -102,6 +102,15 @@ SPECS = {
                 "metal": (92, 112, 114), "glow": (0, 255, 204),
                 "metal_dark": (54, 68, 70), "accent": (0, 255, 204)},
     },
+    "saber": {
+        "grip_len": 8.5, "blade_w": 1.9, "blade_len": 22.0, "thick": 0.5,
+        "curve": 0.05, "guard": "double_bar", "pommel": "gem",
+        "swing_len": 0.28, "charge_tilt": -9,
+        "pal": {"blade_light": (226, 232, 240), "blade_dark": (140, 150, 164),
+                "grip_main": (22, 19, 28), "grip_second": (52, 48, 60),
+                "metal": (96, 102, 116), "glow": (102, 204, 255),
+                "metal_dark": (40, 42, 52), "accent": (102, 204, 255)},
+    },
     "azure_dragon_sword": {
         "grip_len": 9.5, "blade_w": 2.2, "blade_len": 21.5, "thick": 0.55,
         "curve": 0.16, "guard": "dragon_wings", "pommel": "orb", "scale_grip": True,
@@ -242,15 +251,15 @@ def animations(spec):
         "idle": {"loop": True, "animation_length": 3.0, "bones": {
             "weapon": {"rotation": {"0.0": [0, 0, 0], "1.5": [0, 0, 1.5], "3.0": [0, 0, 0]},
                        "position": {"0.0": [0, 0, 0], "1.5": [0, 0.25, 0], "3.0": [0, 0, 0]}},
-            "blade_glow": {"scale": {"0.0": [1, 1, 1], "1.5": [1.06, 1, 1.06], "3.0": [1, 1, 1]}}}},
+}},
         "swing": {"loop": True, "animation_length": sl, "bones": {
             "weapon": {"rotation": {"0.0": [0, 0, 0], "0.1": [0, 0, 26], "0.25": [0, 0, -18], str(sl): [0, 0, 0]},
                        "scale": {"0.0": [1, 1, 1], "0.1": [1.04, 1.04, 1.04], str(sl): [1, 1, 1]}},
-            "blade_glow": {"scale": {"0.0": [1, 1, 1], "0.1": [1.25, 1, 1.25], str(sl): [1, 1, 1]}}}},
+}},
         "charge": {"loop": True, "animation_length": 0.8, "bones": {
             "weapon": {"rotation": {"0.0": [0, 0, tilt], "0.2": [0.6, 0, tilt + 1], "0.4": [-0.6, 0, tilt - 1], "0.6": [0.6, 0, tilt + 1], "0.8": [0, 0, tilt]},
                        "position": {"0.0": [0, 0.3, 0], "0.8": [0, 0.3, 0]}},
-            "blade_glow": {"scale": {"0.0": [1, 1, 1], "0.4": [1.35, 1, 1.35], "0.8": [1, 1, 1]}},
+
             "blade": {"rotation": {"0.0": [0, 0, 0], "0.2": [0, 0, 0.5], "0.4": [0, 0, -0.5], "0.6": [0, 0, 0.5], "0.8": [0, 0, 0]}}}},
     }}
 

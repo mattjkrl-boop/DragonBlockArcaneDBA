@@ -1,0 +1,5 @@
+# Saber + Glow Strip Fix (Nov 1, 2026)
+
+Saber rebuilt to the Phase 1 standard: slim silver blade, light blue glow edge matching its 0x66CCFF trail, gunmetal double bar guard, black ringed grip, glowing blue gem pommel, fastest swing (0.28) and strongest charge tilt of the blades. That completes all 9 swords. SaberItem.java is untouched; this is assets plus the MIGRATED entry only, same as every other weapon.
+
+Bug found by the 3D renderer and fixed in the same pass: the idle, swing, and charge animations scaled the blade_glow bone (up to 1.35 in charge) about the grip pivot, which peels the glow strip away from the blade toward the tip. A mid-swing Saber render showed the blue strip floating beside the blade with a clear gap. All glow scale keyframes were removed from both builders and all 9 rebuilt weapons' animation files were regenerated; the re-rendered swing pose shows the edge hugging the blade for its full length. Glow pulsing, if wanted, belongs to the Phase 3 effects pass where it can be done with overlays and particles instead of bone scale.
