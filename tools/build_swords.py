@@ -196,36 +196,64 @@ def build_geo(spec):
 
     blade = []
     glow = []
-    segs = 7
+    segs = 8
     seg_h = bl / segs
     for i in range(segs):
         y0 = 4.1 + i * seg_h
-        if i < segs - 2:
-            w = bw * (1.0 - 0.055 * i)
-        elif i == segs - 2:
+        # Profile: gentle taper, then the last three segments converge to a real point.
+        # Width shrinks hard and the center shifts toward the spine (+x), so the cutting
+        # edge line runs straight into the point while the spine drops to meet it, and
+        # the final piece is thin in both width and thickness. No flat ends.
+        # No rotated tip pieces: rotations about the base pivot opened gaps. The point
+        # is pure convergence - full-height segments, hard width and thickness taper,
+        # center shifting toward the spine, ending in one micro segment.
+        if i < segs - 3:
+            w = bw * (1.0 - 0.05 * i)
+            shift = 0.0
+            th_i = th
+            hh = seg_h
+        elif i == segs - 3:
             w = bw * 0.74
+            shift = (bw - w) * 0.3
+            th_i = th * 0.94
+            hh = seg_h
+        elif i == segs - 2:
+            w = bw * 0.48
+            shift = (bw - w) * 0.35
+            th_i = th * 0.8
+            hh = seg_h
         else:
-            w = bw * 0.56
-        xoff = spec["curve"] * (i / (segs - 1)) ** 2 * 2.2
-        tip = i == segs - 1
-        hh = seg_h * (0.7 if tip else 1.0)
-        rot = [0, 0, -16] if tip else None
-        piv = [xoff, y0, 0] if tip else None
-        blade.append(cube([xoff - w / 2, y0, -th / 2], [w, hh, th], "blade_light", "blade_dark",
+            w = bw * 0.2
+            shift = (bw - w) * 0.4
+            th_i = th * 0.55
+            hh = seg_h * 0.92
+        xoff = spec["curve"] * (i / (segs - 1)) ** 2 * 2.2 + shift
+        rot = None
+        piv = None
+        blade.append(cube([xoff - w / 2, y0, -th_i / 2], [w, hh, th_i], "blade_light", "blade_dark",
                           rotation=rot, pivot=piv))
         # edge bevel facets on both faces: thin angled boxes hugging the faces near
         # the cutting edge, so the blade reads faceted like real steel, not a slab
         bx = xoff - w / 2 + w * 0.15
-        zc = th / 2 - 0.13
-        blade.append(cube([bx - w * 0.17, y0, zc - 0.06], [w * 0.34, hh, 0.12], "blade_dark",
-                          rotation=[0, 14, 0], pivot=[bx, y0, zc]))
-        blade.append(cube([bx - w * 0.17, y0, -zc - 0.06], [w * 0.34, hh, 0.12], "blade_dark",
-                          rotation=[0, -14, 0], pivot=[bx, y0, -zc]))
-        glow.append(cube([xoff - w / 2 - 0.1, y0, -th / 2 - 0.02], [0.34, hh, th + 0.04], "glow",
+        zc = th_i / 2 - 0.13
+        if zc > 0.02:
+            blade.append(cube([bx - w * 0.17, y0, zc - 0.06], [w * 0.34, hh, 0.12], "blade_dark",
+                              rotation=[0, 14, 0], pivot=[bx, y0, zc]))
+            blade.append(cube([bx - w * 0.17, y0, -zc - 0.06], [w * 0.34, hh, 0.12], "blade_dark",
+                              rotation=[0, -14, 0], pivot=[bx, y0, -zc]))
+        gw_ = max(0.12, 0.3 * (w / bw))
+        glow.append(cube([xoff - w / 2 - 0.1, y0, -th_i / 2 - 0.02], [gw_, hh, th_i + 0.04], "glow",
                          rotation=rot, pivot=piv))
         if spec.get("dual_edge"):
-            glow.append(cube([xoff + w / 2 - 0.24, y0, -th / 2 - 0.02], [0.34, hh, th + 0.04], "glow",
+            glow.append(cube([xoff + w / 2 - 0.2, y0, -th_i / 2 - 0.02], [gw_, hh, th_i + 0.04], "glow",
                              rotation=rot, pivot=piv))
+    # micro point: the actual tip, centered on the convergence line
+    last_w = bw * 0.2
+    last_shift = (bw - last_w) * 0.4
+    tip_x = spec["curve"] * 2.2 + last_shift
+    tip_y = 4.1 + segs * seg_h - seg_h * 0.08
+    blade.append(cube([tip_x - 0.11, tip_y, -th * 0.14], [0.22, seg_h * 0.52, th * 0.28],
+                      "blade_light", "blade_dark"))
     if spec.get("ember"):
         # ember crack cubes sitting proud of the blade faces
         for (ex, ey) in ((-1.6, 8.0), (0.4, 12.5), (-0.8, 17.0), (1.2, 20.0)):
