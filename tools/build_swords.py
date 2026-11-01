@@ -75,6 +75,33 @@ SPECS = {
                 "metal": (128, 102, 66), "glow": (255, 106, 43),
                 "metal_dark": (70, 62, 58), "accent": (255, 150, 60)},
     },
+    "dabura_sword": {
+        "grip_len": 9.5, "blade_w": 3.6, "blade_len": 20.0, "thick": 0.75,
+        "curve": 0.0, "guard": "fangs", "pommel": "spike",
+        "swing_len": 0.42, "charge_tilt": -5,
+        "pal": {"blade_light": (96, 100, 114), "blade_dark": (52, 55, 66),
+                "grip_main": (104, 32, 28), "grip_second": (66, 20, 18),
+                "metal": (74, 76, 88), "glow": (198, 202, 210),
+                "metal_dark": (42, 44, 54), "accent": (178, 34, 44)},
+    },
+    "cursed_blade": {
+        "grip_len": 9.0, "blade_w": 2.4, "blade_len": 21.0, "thick": 0.55,
+        "curve": 0.08, "guard": "wings", "pommel": "gem", "dual_edge": True,
+        "swing_len": 0.36, "charge_tilt": -7,
+        "pal": {"blade_light": (34, 27, 50), "blade_dark": (18, 14, 30),
+                "grip_main": (56, 22, 84), "grip_second": (36, 13, 55),
+                "metal": (26, 22, 38), "glow": (150, 40, 255),
+                "metal_dark": (13, 11, 21), "accent": (176, 80, 255)},
+    },
+    "hollows_edge": {
+        "grip_len": 9.0, "blade_w": 2.3, "blade_len": 21.5, "thick": 0.5,
+        "curve": 0.13, "guard": "double_bar", "pommel": "orb",
+        "swing_len": 0.32, "charge_tilt": -8,
+        "pal": {"blade_light": (198, 226, 221), "blade_dark": (122, 163, 156),
+                "grip_main": (40, 54, 58), "grip_second": (25, 35, 39),
+                "metal": (92, 112, 114), "glow": (0, 255, 204),
+                "metal_dark": (54, 68, 70), "accent": (0, 255, 204)},
+    },
     "azure_dragon_sword": {
         "grip_len": 9.5, "blade_w": 2.2, "blade_len": 21.5, "thick": 0.55,
         "curve": 0.16, "guard": "dragon_wings", "pommel": "orb", "scale_grip": True,
@@ -128,6 +155,15 @@ def build_geo(spec):
         guard.append(cube([3.1, 3.0, -0.45], [3.2, 1.15, 0.9], "metal"))
         guard.append(cube([-7.0, 3.95, -0.35], [2.1, 0.9, 0.7], "metal"))
         guard.append(cube([4.9, 3.95, -0.35], [2.1, 0.9, 0.7], "metal"))
+    elif spec["guard"] == "fangs":
+        # crossguard bars whose ends hook toward the blade, Dabura's claw guard
+        guard.append(cube([-1.5, 1.6, -1.5], [3.0, 0.9, 3.0], "metal"))
+        guard.append(cube([-4.6, 1.75, -0.6], [3.4, 1.2, 1.2], "metal"))
+        guard.append(cube([1.2, 1.75, -0.6], [3.4, 1.2, 1.2], "metal"))
+        guard.append(cube([-5.3, 2.6, -0.5], [1.6, 1.6, 1.0], "metal"))
+        guard.append(cube([3.7, 2.6, -0.5], [1.6, 1.6, 1.0], "metal"))
+        guard.append(cube([-5.0, 4.0, -0.4], [1.0, 1.3, 0.8], "metal_dark"))
+        guard.append(cube([4.0, 4.0, -0.4], [1.0, 1.3, 0.8], "metal_dark"))
     elif spec["guard"] == "plate":
         guard.append(cube([-gw / 2, 1.3, -1.7], [gw, 2.2, 3.4], "metal"))
         guard.append(cube([-gw / 2 + 0.5, 2.1, -1.95], [1.1, 1.1, 0.4], "metal_dark"))
@@ -149,6 +185,9 @@ def build_geo(spec):
                           rotation=rot, pivot=[xoff, y0, 0] if tip else None))
         glow.append(cube([xoff - w / 2 - 0.26, y0, -th / 2 - 0.03], [0.5, hh, th + 0.06], "glow",
                          rotation=rot, pivot=[xoff, y0, 0] if tip else None))
+        if spec.get("dual_edge"):
+            glow.append(cube([xoff + w / 2 - 0.24, y0, -th / 2 - 0.03], [0.5, hh, th + 0.06], "glow",
+                             rotation=rot, pivot=[xoff, y0, 0] if tip else None))
     if spec.get("ember"):
         # ember crack cubes sitting proud of the blade faces
         for (ex, ey) in ((-1.6, 8.0), (0.4, 12.5), (-0.8, 17.0), (1.2, 20.0)):
