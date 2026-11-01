@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.ZChargeEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.entity.ZGravitySlamEntity;
 import com.dragonblockarcanedba.entity.ZShockwaveEntity;
 import com.dragonblockarcanedba.entity.ZStanceAuraEntity;
@@ -164,7 +165,7 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
 
         // Player recoil: Launched backwards depending on charge
         Vec3 recoil = look.scale(-0.4 - (chargeRatio * 1.4));
-        player.setDeltaMovement(player.getDeltaMovement().add(recoil.x, 0.15 + (chargeRatio * 0.2), recoil.z));
+        MovementPhysics.addVelocity(player, new Vec3(recoil.x, 0.15 + (chargeRatio * 0.2), recoil.z));
         player.hurtMarked = true;
 
         // Sounds & shockwave burst
@@ -214,9 +215,7 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
             float stanceRatio = Math.min(1.0f, heldTicks / 200.0f); // 10s max power
 
             // 1. Knockback immunity & movement lock
-            Vec3 vel = player.getDeltaMovement();
-            player.setDeltaMovement(0.0, vel.y < 0 ? vel.y : 0.0, 0.0);
-            player.hurtMarked = true;
+            MovementPhysics.rootInPlace(player);
 
             // 2. Heavy divine damage reduction and grounding (Ancient Weight)
             player.addEffect(new MobEffectInstance(DbaEffects.ANCIENT_WEIGHT_HOLDER, 10, 1, false, false));

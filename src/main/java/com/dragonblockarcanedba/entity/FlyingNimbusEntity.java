@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.item.DbaItems;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.util.DbaLivingEntityInput;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -134,7 +135,9 @@ public class FlyingNimbusEntity extends Mob {
                 dz = (fz * forward - fx * strafe) * speed;
             }
 
-            this.setDeltaMovement(new Vec3(dx, verticalSpeed, dz));
+            // Shared flight model (MovementPhysics): spool from rest and blend toward
+            // the input velocity instead of snapping to it, same curve as player flight.
+            this.setDeltaMovement(MovementPhysics.flightVelocity(this.getDeltaMovement(), new Vec3(dx, verticalSpeed, dz), 0.45));
             this.move(net.minecraft.world.entity.MoverType.SELF, this.getDeltaMovement());
             
             // Apply slight inertia/deceleration

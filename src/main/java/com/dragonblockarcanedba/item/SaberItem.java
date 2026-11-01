@@ -9,6 +9,7 @@ import com.dragonblockarcanedba.entity.SaberDodgeSparkEntity;
 import com.dragonblockarcanedba.entity.SaberDimensionalLineSlashEntity;
 import com.dragonblockarcanedba.entity.SaberSlashEntity;
 import com.dragonblockarcanedba.entity.SaberVoidTearEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -252,8 +253,8 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     // ARRIVED!
                     seq.hasArrived = true;
                     seq.arrivedPos = targetPos;
-                    player.teleportTo(targetPos.x, targetPos.y, targetPos.z);
-                    player.setDeltaMovement(0, 0, 0);
+                    MovementPhysics.teleport(player, targetPos);
+                    MovementPhysics.setVelocity(player, Vec3.ZERO);
                     
                     // Crowd Control: Apply Movement Curse amplifier 9 (full root + darkness) forever until snap!
                     currentTarget.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 999999, 9, false, true, false));
@@ -320,7 +321,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     }
                     
                     // Forcefully teleport the player along the exact mathematical curve
-                    player.teleportTo(currentX, currentY, currentZ);
+                    MovementPhysics.teleport(player, new Vec3(currentX, currentY, currentZ));
 
                     // Camera Auto-Pan logic
                     if (seq.nextTargetUuid != null) {
@@ -351,8 +352,8 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
             // WE HAVE ARRIVED AND ARE WAITING TO CHAIN
             // Forcefully freeze the player in mid-air at the exact spot they hit the mob
             if (!player.isSpectator()) player.noPhysics = true;
-            player.setDeltaMovement(0, 0, 0);
-            player.teleportTo(seq.arrivedPos.x, seq.arrivedPos.y, seq.arrivedPos.z);
+            MovementPhysics.setVelocity(player, Vec3.ZERO);
+            MovementPhysics.teleport(player, seq.arrivedPos);
             
             // Keep looking at the next target if it exists
             if (seq.nextTargetUuid != null) {
@@ -380,8 +381,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
         // Only push if they didn't just arrive at a target
         if (seq.currentTargetUuid != null && !seq.hasArrived) {
             Vec3 look = player.getLookAngle();
-            player.setDeltaMovement(look.scale(0.7).add(0, 0.1, 0));
-            player.hurtMarked = true;
+            MovementPhysics.setVelocity(player, look.scale(0.7).add(0, 0.1, 0));
             seq.currentTargetUuid = null; // Clear so next hold can acquire
         }
         
@@ -698,7 +698,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
         level.addFreshEntity(originTear);
 
         // Perform instant teleport
-        player.teleportTo(destination.x, destination.y, destination.z);
+        MovementPhysics.teleport(player, destination);
         if (targetedEnemy != null) {
             player.setYRot(targetedEnemy.getYRot());
             player.setXRot(targetedEnemy.getXRot());

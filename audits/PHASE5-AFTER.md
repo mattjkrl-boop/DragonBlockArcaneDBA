@@ -9,3 +9,5 @@ Built the shared layer the scope doc calls for, as the core slice:
 Audit: the three new files compile clean against the real 26.2, loader, API, and GeckoLib jars with zero errors (PLAYER_BIG_FALL, hurtMarked velocity sync, look-angle math, and the disconnect event all verified by the compiler, not assumed). This is an audit result, not a Gradle build; the build remains waived per BUILD-VERIFY.md.
 
 Deliberately left for later slices, per the scope doc's one-at-a-time rule: migrating weapon rushes and Ki techniques onto this layer, unifying the flight acceleration and banking model across races and forms, and fall-damage interplay tuning for Ki step and fast fall landings.
+
+Follow-up completed the same day at Carter's direction: see audits/MOVEMENT-MOB-FOLLOWUP-AFTER.md. All three deferred slices are done.

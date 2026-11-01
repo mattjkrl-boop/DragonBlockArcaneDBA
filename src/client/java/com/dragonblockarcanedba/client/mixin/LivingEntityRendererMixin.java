@@ -161,6 +161,10 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
         if (state instanceof com.dragonblockarcanedba.client.render.layer.DbaTumbleState tumble) {
             tumble.dba$setTumble(com.dragonblockarcanedba.client.fx.TumbleFx.strengthFor(entity.getId()));
         }
+        if (state instanceof com.dragonblockarcanedba.client.render.layer.DbaStaggerState stagger) {
+            stagger.dba$setStagger(com.dragonblockarcanedba.client.fx.StaggerFx.strengthFor(entity.getId()));
+            stagger.dba$setStaggerProgress(com.dragonblockarcanedba.client.fx.StaggerFx.progressFor(entity.getId()));
+        }
     }
 
     @Inject(method = "setupRotations", at = @At("TAIL"))
@@ -169,6 +173,18 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
                 && tumble.dba$getTumble() > 0f && state.deathTime > 0f) {
             float spin = Math.min(1f, state.deathTime / 16f) * 260f * tumble.dba$getTumble();
             poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(spin));
+        }
+    }
+
+    @Inject(method = "setupRotations", at = @At("TAIL"))
+    protected void dba$applyStagger(S state, com.mojang.blaze3d.vertex.PoseStack poseStack, float bodyRot, float scale, CallbackInfo ci) {
+        if (state instanceof com.dragonblockarcanedba.client.render.layer.DbaStaggerState stagger
+                && stagger.dba$getStagger() > 0f && state.deathTime <= 0f) {
+            float progress = stagger.dba$getStaggerProgress();
+            float envelope = (float) Math.sin(Math.PI * Math.min(1f, Math.max(0f, progress)));
+            float rock = (float) Math.sin(progress * Math.PI * 5.0) * 13f * stagger.dba$getStagger() * envelope;
+            poseStack.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(rock));
+            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(-6f * stagger.dba$getStagger() * envelope));
         }
     }
 }

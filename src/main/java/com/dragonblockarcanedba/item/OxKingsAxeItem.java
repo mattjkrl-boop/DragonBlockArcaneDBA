@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.KingsSlamEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.entity.OxChargeEntity;
 import com.dragonblockarcanedba.entity.OxShockwaveEntity;
 import com.dragonblockarcanedba.entity.OxStanceAuraEntity;
@@ -128,9 +129,7 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
             player.addEffect(new MobEffectInstance(DbaEffects.OX_BRACE_HOLDER, 10, 1, false, false));
         } else {
             // Completely stationary / 100% rooted
-            Vec3 vel = player.getDeltaMovement();
-            player.setDeltaMovement(0.0, vel.y < 0 ? vel.y : 0.0, 0.0);
-            player.hurtMarked = true;
+            MovementPhysics.rootInPlace(player);
             player.addEffect(new MobEffectInstance(DbaEffects.OX_BRACE_HOLDER, 10, 2, false, false));
         }
 
@@ -221,9 +220,7 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
 
             // 1. Knockback immunity & stationary lock
-            Vec3 vel = player.getDeltaMovement();
-            player.setDeltaMovement(0.0, vel.y < 0 ? vel.y : 0.0, 0.0);
-            player.hurtMarked = true;
+            MovementPhysics.rootInPlace(player);
 
             // Ox Brace (Mountain poise & damage reduction)
             player.addEffect(new MobEffectInstance(DbaEffects.OX_BRACE_HOLDER, 10, 1, false, false));

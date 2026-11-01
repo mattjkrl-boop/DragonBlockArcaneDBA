@@ -17,6 +17,8 @@ public interface DbaPlayerState {
     float dba$getYawVelocity();
     float dba$getBodyYawVelocity();
     float dba$getLocalVelocityX();
+    /** Unified flight bank in degrees, computed for every race and form from turn rate and lateral velocity. */
+    float dba$getFlightBank();
     float dba$getLocalVelocityZ();
     float dba$getLocalVelocityY();
     float dba$getHeadYawRel();

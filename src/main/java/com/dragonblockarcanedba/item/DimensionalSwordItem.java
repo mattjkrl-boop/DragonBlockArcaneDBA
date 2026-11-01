@@ -3,9 +3,11 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.DimensionalSlashEntity;
 import com.dragonblockarcanedba.entity.DimensionalWarpRiftEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -161,9 +163,10 @@ public class DimensionalSwordItem extends Item implements com.dragonblockarcaned
             serverLevel.playSound(null, targetX, targetY, targetZ,
                 com.dragonblockarcanedba.sound.DbaSounds.DARK_PULSE, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.8f);
             
-            // Phase 4: Teleport
-            player.teleportTo(targetX, targetY, targetZ);
-            player.resetFallDistance();
+            // Phase 4: Teleport (server side here, so the player is a ServerPlayer)
+            if (player instanceof ServerPlayer serverPlayer) {
+                MovementPhysics.teleport(serverPlayer, new Vec3(targetX, targetY, targetZ));
+            }
             
             // 5-second cooldown
             player.getCooldowns().addCooldown(stack, 100);

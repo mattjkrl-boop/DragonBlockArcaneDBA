@@ -7,6 +7,7 @@ import com.dragonblockarcanedba.entity.BraveCrossSlashEntity;
 import com.dragonblockarcanedba.entity.BraveRushTrailEntity;
 import com.dragonblockarcanedba.entity.BraveShockwaveEntity;
 import com.dragonblockarcanedba.entity.BraveSlashEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -144,7 +145,7 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 // Brave Finisher (Tweak C): Dash forward & unleash massive physical 3D cross-slash
                 Vec3 targetCenter = target.position().add(0, target.getBbHeight() * 0.5, 0);
                 Vec3 past = target.position().add(look.scale(2.0));
-                player.teleportTo(level, past.x, past.y, past.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+                MovementPhysics.teleport(player, past);
 
                 float finisherDmg = 900.0f + (strength * 4.0f);
                 target.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finisherDmg)));
@@ -298,7 +299,7 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
             }
 
             // Teleport player
-            player.teleportTo(serverLevel, end.x, end.y, end.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+            MovementPhysics.teleport(player, end);
 
             // Delayed heroic finishing slash: 600.0 + (chargeRatio * 1400.0) + (Strength * 4.0 * chargeRatio)
             float baseDamage = 600.0f + (chargeRatio * 1400.0f);

@@ -73,6 +73,9 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     private float dba$localVelocityX = 0.0F;
 
     @Unique
+    private float dba$flightBank = 0.0F;
+
+    @Unique
     private float dba$localVelocityZ = 0.0F;
 
     @Unique
@@ -152,6 +155,16 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
         this.dba$localVelocityX = (float) (-dx * cosB - dz * sinB);
         // Local Z (forward/backward): positive = forward, negative = backward
         this.dba$localVelocityZ = (float) (-dx * sinB + dz * cosB);
+
+        // Unified flight bank: one formula for every race and form, rolled from the
+        // turn rate plus lateral drift, capped so hard turns stay readable.
+        if (this.dba$isFlying) {
+            float turnBank = Mth.clamp(-this.dba$yawVelocity * 2.0F, -32.0F, 32.0F);
+            float driftBank = Mth.clamp(-this.dba$localVelocityX * 20.0F, -25.0F, 25.0F);
+            this.dba$flightBank = Mth.clamp(turnBank + driftBank, -40.0F, 40.0F);
+        } else {
+            this.dba$flightBank = 0.0F;
+        }
 
         this.dba$tailRingBufferIndex = (this.dba$tailRingBufferIndex + 1) % 64;
         this.dba$tailPositions[this.dba$tailRingBufferIndex][0] = bodyYaw;
@@ -241,6 +254,11 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     @Override
     public float dba$getLocalVelocityX() {
         return this.dba$localVelocityX;
+    }
+
+    @Override
+    public float dba$getFlightBank() {
+        return this.dba$flightBank;
     }
 
     @Override

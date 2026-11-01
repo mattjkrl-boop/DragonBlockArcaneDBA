@@ -46,6 +46,11 @@ public class OxFissureEntity extends Projectile {
 
         if (this.level() instanceof ServerLevel serverLevel) {
             Vec3 pos = this.position();
+
+            // Shared slam debris (SlamDebris): one ground burst on the first tick.
+            if (this.tickCount == 1) {
+                com.dragonblockarcanedba.fx.SlamDebris.burst(serverLevel, pos, 2.5, com.dragonblockarcanedba.fx.SlamDebris.Profile.OX_FISSURE);
+            }
             LivingEntity owner = this.getOwner() instanceof LivingEntity living ? living : null;
 
             // Ambient magma/flame embers

@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.DarknessBladeEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.entity.DarknessChargeEntity;
 import com.dragonblockarcanedba.entity.DarknessDomainEntity;
 import com.dragonblockarcanedba.entity.DarknessShatterEntity;
@@ -105,10 +106,8 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             accessor.dba$syncStats();
         }
 
-        // Slow player while charging
-        Vec3 vel = player.getDeltaMovement();
-        player.setDeltaMovement(vel.x * 0.4, vel.y, vel.z * 0.4);
-        player.hurtMarked = true;
+        // Slow player while charging (shared movement layer)
+        MovementPhysics.dampenHorizontal(player, 0.4);
 
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
 

@@ -8,6 +8,7 @@ import com.dragonblockarcanedba.entity.HollowChargeEntity;
 import com.dragonblockarcanedba.entity.HollowRushTrailEntity;
 import com.dragonblockarcanedba.entity.VoidRiftEntity;
 import com.dragonblockarcanedba.entity.VoidSlashEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -112,10 +113,8 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
             accessor.dba$syncStats();
         }
 
-        // Heavy movement slowdown while charging
-        Vec3 vel = player.getDeltaMovement();
-        player.setDeltaMovement(vel.x * 0.3, vel.y, vel.z * 0.3);
-        player.hurtMarked = true;
+        // Heavy movement slowdown while charging (shared movement layer)
+        MovementPhysics.dampenHorizontal(player, 0.3);
 
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
 
@@ -235,7 +234,7 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
         }
 
         // Perform Teleport
-        player.teleportTo(destination.x, destination.y, destination.z);
+        MovementPhysics.teleport(player, destination);
 
         // Grant Hollowed custom effect for 3s (60 ticks)
         player.addEffect(new MobEffectInstance(DbaEffects.HOLLOWED_HOLDER, 60, 0, false, false));
@@ -362,7 +361,7 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
 
                 if (dot > 0.85 && toRift.length() <= 40.0) {
                     // Teleport player directly into rift center!
-                    player.teleportTo(rift.getX(), rift.getY(), rift.getZ());
+                    MovementPhysics.teleport(player, rift.position());
                     // Grant Rifted custom status effect
                     player.addEffect(new MobEffectInstance(DbaEffects.RIFTED_HOLDER, 200, 0, false, true));
                     player.sendSystemMessage(Component.literal("§d✦ Teleported into Void Rift! [Rifted Active] ✦"), true);

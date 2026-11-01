@@ -6,6 +6,7 @@ import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.EvilSpearChargeEntity;
 import com.dragonblockarcanedba.entity.EvilSpearProjectileEntity;
 import com.dragonblockarcanedba.entity.HellHuntImpactEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -105,9 +106,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
             accessor.dba$syncStats();
         }
 
-        Vec3 vel = player.getDeltaMovement();
-        player.setDeltaMovement(vel.x * 0.5, vel.y, vel.z * 0.5);
-        player.hurtMarked = true;
+        MovementPhysics.dampenHorizontal(player, 0.5);
 
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
 
@@ -187,8 +186,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
             } else {
                 // If no direct target, perform forward high-speed lunge (scaled by CC / movement limits)
                 Vec3 look = serverPlayer.getLookAngle();
-                serverPlayer.setDeltaMovement(look.x * 2.0 * ccMult, 0.4 * ccMult, look.z * 2.0 * ccMult);
-                serverPlayer.hurtMarked = true;
+                MovementPhysics.setVelocity(serverPlayer, new Vec3(look.x * 2.0 * ccMult, 0.4 * ccMult, look.z * 2.0 * ccMult));
                 serverLevel.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
                     SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 0.5f);
                 serverLevel.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
@@ -265,7 +263,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
             float finalDmg = baseDmg * multiplier;
 
             // Teleport next to target
-            player.teleportTo(level, t.getX(), t.getY(), t.getZ(), java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+            MovementPhysics.teleport(player, t.position());
 
             // Drive into ground with Movement Curse root (100 ticks = 5s)
             t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER, 100, 0, false, true));

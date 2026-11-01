@@ -83,6 +83,12 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
                     player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) {
                     return 0.0f;
                 }
+                // Movement layer tuning: a deliberate fast fall slam and a Ki step trade
+                // part of their fall damage for the landing impact feedback. The scale
+                // lives in MovementPhysics, which owns the air-use state.
+                if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+                    amount *= com.dragonblockarcanedba.movement.MovementPhysics.fallDamageScale(serverPlayer);
+                }
             }
 
             // Whis Staff Auto-Dodge: 50% chance to negate ALL incoming damage while held

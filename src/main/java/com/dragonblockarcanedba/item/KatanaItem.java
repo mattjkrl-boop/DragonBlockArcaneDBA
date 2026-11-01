@@ -7,6 +7,7 @@ import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
 import com.dragonblockarcanedba.entity.KatanaAimGuideEntity;
 import com.dragonblockarcanedba.entity.KatanaChargeEntity;
 import com.dragonblockarcanedba.entity.SwiftCrescentEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -205,7 +206,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
 
                 // Teleport past target
                 Vec3 past = t.position().add(player.getLookAngle().scale(1.5));
-                player.teleportTo(level, past.x, past.y, past.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+                MovementPhysics.teleport(player, past);
 
                 // Apply Silent Mark
                 t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.SILENT_MARK_HOLDER, 20, 0, false, false));
@@ -243,7 +244,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
         } else {
             // Freeform straight flash dash forward (scaled by CC / movement limiter)
             Vec3 targetPos = startPos.add(look.scale(14.0 * ccMult));
-            player.teleportTo(level, targetPos.x, targetPos.y, targetPos.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+            MovementPhysics.teleport(player, targetPos);
         }
 
         // Blade sheathing ring sound
@@ -288,8 +289,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);
 
             // Stationary stillness focus
-            player.setDeltaMovement(0, player.getDeltaMovement().y > 0 ? 0 : player.getDeltaMovement().y * 0.5, 0);
-            player.hurtMarked = true;
+            MovementPhysics.setVelocity(player, new Vec3(0, player.getDeltaMovement().y > 0 ? 0 : player.getDeltaMovement().y * 0.5, 0));
 
             // Maintain sleek, physical 3D laser guide & geometric targeting beam up to 24 blocks
             KatanaAimGuideEntity aimGuide = ACTIVE_AIM_MAP.get(player.getUUID());
@@ -346,7 +346,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             );
 
             // Teleport player to destination
-            player.teleportTo(serverLevel, end.x, end.y, end.z, java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+            MovementPhysics.teleport(player, end);
 
             // Spawn cascading physical 3D Swift Crescent slashes all along the teleport path from start to end
             int slashCount = Math.max(7, (int) (dashDist / 2.2));

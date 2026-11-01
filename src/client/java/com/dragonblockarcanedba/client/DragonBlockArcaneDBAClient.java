@@ -441,6 +441,8 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         com.dragonblockarcanedba.client.fx.TumbleFx.register();
         ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.TumbleFx::tick);
         ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.DamageDirectionFx::tick);
+        com.dragonblockarcanedba.client.fx.StaggerFx.register();
+        ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.StaggerFx::tick);
         ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.ClashFx::tick);
         com.dragonblockarcanedba.client.fx.SwingTrailRenderer.register();
         com.dragonblockarcanedba.client.particle.DbaParticleProviders.register();

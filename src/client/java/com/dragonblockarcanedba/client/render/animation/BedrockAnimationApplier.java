@@ -119,6 +119,12 @@ public final class BedrockAnimationApplier {
             if (flyAnim != null) {
                 float time = flyAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, flyAnim, time, 1.0f);
+                // Unified flight banking: the bank angle is computed once in the shared
+                // player render state, so every race and form rolls into turns the same way.
+                // The head counter-rolls a third of it to keep the gaze steadier.
+                float bank = (float) Math.toRadians(dbaState.dba$getFlightBank());
+                model.body.zRot += bank;
+                model.head.zRot -= bank * 0.35f;
                 return true;
             }
         }

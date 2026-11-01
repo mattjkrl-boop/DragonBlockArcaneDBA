@@ -61,6 +61,10 @@ public class ZGravitySlamEntity extends Projectile {
         super.tick();
 
         if (this.level() instanceof ServerLevel serverLevel) {
+            // Shared slam debris (SlamDebris): one ground burst on the first tick.
+            if (this.tickCount == 1) {
+                com.dragonblockarcanedba.fx.SlamDebris.burst(serverLevel, this.position(), getRadius(), com.dragonblockarcanedba.fx.SlamDebris.Profile.Z_GRAVITY);
+            }
             if (this.tickCount >= getLifetime()) {
                 this.discard();
             }

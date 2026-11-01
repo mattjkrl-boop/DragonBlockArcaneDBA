@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.movement;
 
 import com.dragonblockarcanedba.item.geo.DbaGeoWeapon;
+import com.dragonblockarcanedba.network.BossStaggerPayload;
 import com.dragonblockarcanedba.network.DeathTumblePayload;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -60,8 +61,11 @@ public final class MobPhysics {
 
     private static final Map<UUID, Tracked> TRACKED = new HashMap<>();
     private static final Map<UUID, LastHit> LAST_HIT = new HashMap<>();
+    private static final Map<UUID, Long> STAGGER_READY_AT = new HashMap<>();
 
     private static final double MIN_LAUNCH_DAMAGE = 6.0;
+    private static final double STAGGER_MIN_DAMAGE = 18.0;
+    private static final long STAGGER_COOLDOWN_TICKS = 30;
 
     public static void register() {
         ServerLivingEntityEvents.AFTER_DAMAGE.register((entity, source, baseDamage, damageTaken, blocked) -> {
@@ -74,11 +78,13 @@ public final class MobPhysics {
             Entity attacker = source.getEntity();
             if (attacker == null || attacker == entity) return;
             launch(entity, attacker, damageTaken);
+            maybeStagger(entity, damageTaken);
         });
 
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
             LastHit hit = LAST_HIT.remove(entity.getUUID());
             TRACKED.remove(entity.getUUID());
+            STAGGER_READY_AT.remove(entity.getUUID());
             if (hit == null || !hit.dba()) return;
             if (entity.level().getGameTime() - hit.tick() > 60) return;
             float strength = Math.min(1.5f, 0.4f + hit.strength() / 22f);
@@ -109,6 +115,27 @@ public final class MobPhysics {
                 tickTracked(t);
             }
         });
+    }
+
+    /**
+     * Boss stagger: bosses barely launch by design, so a heavy DBA hit (18 plus)
+     * instead rocks them. Server side it is a brief slowness; the visible rock and
+     * dip are client side via BossStaggerPayload. Thirty tick cooldown per boss so
+     * a fast combo cannot lock a boss in the animation.
+     */
+    private static void maybeStagger(LivingEntity entity, float damageTaken) {
+        if (entity instanceof Player || damageTaken < STAGGER_MIN_DAMAGE) return;
+        if (weightOf(entity) != Weight.BOSS) return;
+        long now = entity.level().getGameTime();
+        Long readyAt = STAGGER_READY_AT.get(entity.getUUID());
+        if (readyAt != null && now < readyAt) return;
+        STAGGER_READY_AT.put(entity.getUUID(), now + STAGGER_COOLDOWN_TICKS);
+        float strength = Math.min(1.2f, 0.35f + damageTaken / 90f);
+        entity.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 10, 1));
+        BossStaggerPayload payload = new BossStaggerPayload(entity.getId(), strength, 16);
+        for (ServerPlayer viewer : PlayerLookup.tracking(entity)) {
+            ServerPlayNetworking.send(viewer, payload);
+        }
     }
 
     private static boolean isDbaSource(Entity e) {

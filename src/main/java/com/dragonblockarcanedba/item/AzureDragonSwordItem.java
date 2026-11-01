@@ -8,6 +8,7 @@ import com.dragonblockarcanedba.entity.AzureSonicQuakeEntity;
 import com.dragonblockarcanedba.entity.AzureStormEntity;
 import com.dragonblockarcanedba.entity.AzureTempestChannelEntity;
 import com.dragonblockarcanedba.entity.AzureTornadoEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -139,7 +140,7 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
         double movementMultiplier = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
         if (movementMultiplier <= 0.0) {
             stopDragonRush(player);
-            player.setDeltaMovement(Vec3.ZERO);
+            MovementPhysics.setVelocity(player, Vec3.ZERO);
             return;
         }
 
@@ -149,21 +150,10 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
         double targetFlightSpeed = baseSpeed * movementMultiplier;
         Vec3 targetVelocity = look.scale(targetFlightSpeed);
 
-        Vec3 currentVel = player.getDeltaMovement();
-
-        // Natural Aerodynamic Thrust & Momentum Blending:
-        // Smoothly accelerates towards target velocity while naturally preserving external forces (wind gusts, explosions, knockback).
-        Vec3 velocity;
-        if (currentVel.lengthSqr() < 0.01) {
-            velocity = targetVelocity.scale(0.5);
-        } else {
-            Vec3 thrust = targetVelocity.subtract(currentVel).scale(0.40);
-            velocity = currentVel.add(thrust);
-        }
-
-        player.setDeltaMovement(velocity);
+        // Shared flight model (MovementPhysics): spool from rest, then blend toward
+        // the target velocity, preserving momentum from wind, explosions, and knockback.
+        MovementPhysics.applyFlightVelocity(player, targetVelocity, 0.40);
         player.fallDistance = 0.0f;
-        player.hurtMarked = true;
 
         // Physical 3D aerodynamic dragon wind trail and Mach shock cone
         Vec3 trailPos = player.position().add(0, 0.4, 0);

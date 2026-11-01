@@ -3,6 +3,7 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.GrandCrescentWaveEntity;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.entity.ValorFieldEntity;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -121,8 +122,7 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
         double ccMult = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
         Vec3 look = player.getLookAngle();
         Vec3 drift = new Vec3(look.x, 0, look.z).normalize().scale(0.06 * ccMult);
-        player.setDeltaMovement(player.getDeltaMovement().add(drift.x, 0, drift.z));
-        player.hurtMarked = true;
+        MovementPhysics.addVelocity(player, new Vec3(drift.x, 0, drift.z));
 
         // Fire sharp blade shards every 3 ticks outward in the current rotated facing direction
         if (spinTicks % 3 == 0) {

@@ -104,6 +104,78 @@ public final class MovementPhysics {
         player.hurtMarked = true;
     }
 
+    // ==================== Shared execution API for abilities ====================
+    // Weapon rushes and other player movement call these instead of setting
+    // velocity or teleporting locally, so every ability moves through the one
+    // server-authoritative layer. Distances, speeds, costs, and cooldowns stay
+    // owned by the calling ability; this layer only executes the motion.
+
+    /** Sets a player's velocity and syncs it to their client. */
+    public static void setVelocity(ServerPlayer player, Vec3 velocity) {
+        apply(player, velocity);
+    }
+
+    /** Adds an impulse to a player's current velocity and syncs the result. */
+    public static void addVelocity(ServerPlayer player, Vec3 impulse) {
+        apply(player, player.getDeltaMovement().add(impulse));
+    }
+
+    /** Charge-stance braking: keeps the given fraction of horizontal velocity, vertical untouched. */
+    public static void dampenHorizontal(ServerPlayer player, double keep) {
+        Vec3 v = player.getDeltaMovement();
+        apply(player, new Vec3(v.x * keep, v.y, v.z * keep));
+    }
+
+    /** Full root: horizontal velocity zeroed, downward motion preserved so a rooted player still lands. */
+    public static void rootInPlace(ServerPlayer player) {
+        Vec3 v = player.getDeltaMovement();
+        apply(player, new Vec3(0.0, v.y < 0 ? v.y : 0.0, 0.0));
+    }
+
+    /**
+     * The one flight acceleration curve, shared by player flight rushes and the
+     * Flying Nimbus: from rest the mover enters at half its target velocity so
+     * flight spools up instead of snapping, then blends toward the target by the
+     * given fraction each tick, preserving momentum from outside forces.
+     */
+    public static Vec3 flightVelocity(Vec3 current, Vec3 target, double blend) {
+        if (current.lengthSqr() < 0.01) return target.scale(0.5);
+        return current.add(target.subtract(current).scale(blend));
+    }
+
+    /** Applies the shared flight curve to a player. */
+    public static void applyFlightVelocity(ServerPlayer player, Vec3 target, double blend) {
+        apply(player, flightVelocity(player.getDeltaMovement(), target, blend));
+    }
+
+    /**
+     * Teleports a player inside their current level, preserving their exact look
+     * rotation and clearing fall distance. This is the rush and blink execution
+     * path; destination math stays with the calling ability.
+     */
+    public static void teleport(ServerPlayer player, Vec3 destination) {
+        if (player.level() instanceof ServerLevel level) {
+            player.teleportTo(level, destination.x, destination.y, destination.z,
+                java.util.Collections.emptySet(), player.getYRot(), player.getXRot(), false);
+            player.resetFallDistance();
+        }
+    }
+
+    /**
+     * Fall damage tuning for the generic verbs, read by LivingEntityMixin while a
+     * fall is being resolved (before the landing tick clears the flags): a fast
+     * fall is a deliberate slam, so most of its fall damage is traded for the
+     * landing impact feedback; a Ki step earns partial credit for the height it
+     * granted. Azure rush keeps its own full immunity, checked before this.
+     */
+    public static float fallDamageScale(ServerPlayer player) {
+        State s = STATES.get(player.getUUID());
+        if (s == null) return 1.0f;
+        if (s.fastFalling) return 0.35f;
+        if (s.kiStepUsed) return 0.65f;
+        return 1.0f;
+    }
+
     private static void tickPlayer(ServerPlayer player) {
         State s = state(player);
         boolean grounded = player.onGround();
