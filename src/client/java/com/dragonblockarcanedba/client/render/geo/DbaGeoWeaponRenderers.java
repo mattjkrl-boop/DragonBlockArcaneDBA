@@ -26,7 +26,8 @@ import java.util.Set;
 public final class DbaGeoWeaponRenderers {
     private DbaGeoWeaponRenderers() {}
 
-    private static final Set<String> MIGRATED = Set.of("katana");
+    private static final Set<String> MIGRATED = Set.of(
+        "katana", "z_sword", "brave_sword", "grand_sword", "azure_dragon_sword");
 
     public static void init() {
         DbaGeoWeapon.Hooks.PROVIDER = DbaGeoWeaponRenderers::provider;
