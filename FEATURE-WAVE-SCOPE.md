@@ -36,10 +36,17 @@ Mobs (gap):
 See BUILD-VERIFY.md. Carter will not build it; verification is the before and after audit on every change. The build has still never passed, and that fact stays stated plainly in every phase report.
 
 ### Phase 1: Weapon visual overhaul (all 19 weapons)
-- One rendering path for every weapon: pick GeckoLib geo as the single standard (it already covers all 19 plus animations in dba_weapon.animation.json), retire or complete the procedural path so no weapon renders differently by family. Concept sheet per weapon first (front, side, in-hand, GUI), then model, texture, and glowmask rebuilt to it.
+- One rendering path for every weapon: pick GeckoLib geo as the single standard (it already covers all 19 plus animations in dba_weapon.animation.json), retire or complete the procedural path so no weapon renders differently by family. Concept sheet per weapon first (front, side, in-hand first person and third person, GUI), then model, texture, and glowmask rebuilt to it.
 - Per-weapon identity pass: silhouette, palette, glowmask, swing trail color and width, charge visuals, and sheath/idle animation state (the Geo renderer already distinguishes idle, swinging, and using).
 - Add missing trails (Blaster muzzle streak, Bansho wind arc, Whis Staff ring, Power Pole arc) and unify trail quality.
-- Deliverable: render sheet per weapon committed, like the race sheets.
+- Display context standard (Carter, Nov 1, 2026, full audit in audits/PHASE1-BEFORE.md addendum): advanced visuals in EVERY context and state, checked per weapon in its after audit:
+  1. Holding in first person: its own tuned framing and transform, never the third person framing reused. Today there is no working per-context tuning at all (geo base models have no display blocks; the hand transforms in a few flat models never apply in hand).
+  2. Holding in third person, self and other players: tuned grip, scale, and glow.
+  3. Using in first person: swing and charge animations that keep the weapon in frame the whole time, with charge and aura effects first-person scaled or offset so the player can still see the target and surroundings (generalize the AzureRushTrailRenderer FP scaling and the firstPersonTransparency precedent into a system rule).
+  4. Using in third person, self and other players: animation driven by the actual holder's synced state, per holder. Today this is broken: the STATE hook reads only the local player and the animation cache is per item, so remote players' weapons animate from your state. Fixing that hook and cache is Phase 1 work.
+  5. Everything else at the same quality: GUI, ground, fixed, head, offhand (including offhand use detection), and on_shelf.
+  6. Per-weapon animations on a multi-bone model replace the one shared idle/swing/charge file, so first person, third person, swing, and charge can genuinely differ.
+- Deliverable: render sheet per weapon committed, like the race sheets, including first person and third person in-hand shots, holding and using.
 
 ### Phase 2: True built-in shaders
 - Dynamic post chain: replace stepped duplicate JSON files with parameterized passes where 26.2 allows it, keeping the stepped fallback. Add: chromatic aberration on heavy hits, vignette pulse on low Ki/health, heat shimmer for auras and beams, speed lines on high-velocity movement.

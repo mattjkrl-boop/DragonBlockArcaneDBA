@@ -41,3 +41,30 @@ Trail colors are from SwingTrailRenderer.colorFor. Bansho Fan, Blaster Gun, Powe
 ## Phase 1 order (proposed)
 
 Start with katana (clean mid-size class, white trail, iconic), then z_sword, brave_sword, grand_sword, azure_dragon_sword, dabura_sword, cursed_blade, hollows_edge, saber last among blades; then evil_spear, devil_trident, power_pole, sickle_of_sorrow, ox_kings_ax; then dimensional_sword, spirit_sword, whis_staff, bansho_fan, blaster_gun. Concept sheet first for each, per the standing visual workflow.
+
+## Addendum: display contexts, other players, and first-person visibility (Nov 1, 2026)
+
+Carter's Phase 1 requirement (Nov 1, 2026): advanced looks and visuals when holding the item in first and third person, when using the item in first and third person, and everything, plus what other people see when you use it, plus making sure you can still see when you use the weapon. Audited against the code the same day:
+
+### How display contexts work today
+- Every weapon item JSON selects the flat 2D model for gui, fixed, and ground only. Every other context (firstperson_righthand, firstperson_lefthand, thirdperson_righthand, thirdperson_lefthand, head, on_shelf) falls through to the same GeckoLib model with no per-context split, tuning, or transforms.
+- All 19 geo base models are parent handheld with zero display blocks. The display transforms that exist sit in a few flat models (azure_dragon_sword, cursed_blade, saber share near identical copy-paste values at scale 2.5 or 1.5; the katana flat model has none and uses parent generated). Those hand-context transforms can never apply in hand, because in hand the geo fallback renders instead. Net: there is no working first person vs third person tuning for the 3D weapons today.
+- One shared animation file for all 19 weapons: idle (3s gentle sway), swing (0.35s loop), charge (0.4s shake loop), all on the single weapon bone. Same in both hands, all contexts, all players.
+
+### What other people see today (multiplayer gap, the big one)
+- DbaGeoWeaponRenderers.state reads only the local player (Minecraft.getInstance().player) and receives only the Item, never the holder. DbaGeoWeapon.Hooks.STATE is a per-item global, and the AnimatableInstanceCache is cached per Item, not per holder or stack.
+- Consequences: on your screen, another player's weapon animates from YOUR state, not theirs. If you charge, every rendered copy of that item charges. If they charge and you do not, you see their weapon idle. Weapon idle, swing, and charge animation is effectively broken for remote players.
+- What does work for remote players: swing trails (SwingTrailRenderer iterates level.players()), and ability visuals (beams, waves, charge orbs are server entities with SynchedEntityData, e.g. KatanaChargeEntity syncs charge ratio and caster id, rendered on every client).
+
+### Can you still see when you use it today
+- No system guarantees it. There is no first-person weapon visibility rule: no FP-specific scale, offset, or in-frame check for weapons while using or charging.
+- Partial precedents exist to generalize: DbaConfig.firstPersonTransparency plus EntityRenderDispatcherMixin handle the player's own body in first person, and some rush trail renderers scale down for the first-person owner (AzureRushTrailRenderer uses 0.45x in FP). Charge and aura effects anchored at the caster have no equivalent FP treatment, so a charge orb or aura can fill the first-person view, and the using pose plus the tiny shared shake loop is all the feedback the holder gets.
+
+### Phase 1 standard added by this requirement
+Every weapon must pass all of these, in the before/after audit for its change:
+1. Holding, first person: tuned transform and framing, weapon clearly visible and detailed, not the third person framing reused.
+2. Holding, third person (self and other players): tuned transform, correct grip, scale, and glow.
+3. Using, first person: swing and charge/use animation distinct from third person where it helps, weapon stays in frame for the whole use, charge and aura effects are FP-scaled or offset so the player can still see the target and surroundings.
+4. Using, third person (self and other players): swing and charge/use animation driven by the actual holder's synced state, per holder, not per item and not from the local player. Fixing the STATE hook and the per-item cache is part of Phase 1, not a later phase.
+5. Everything else: GUI, ground, fixed, head, offhand, and on_shelf contexts all get the same quality pass; offhand use is detected, not just main hand.
+6. Per-weapon animations replace the one shared idle/swing/charge file, on a multi-bone model (grip, blade, guard, glow bones minimum) so states can actually differ.
