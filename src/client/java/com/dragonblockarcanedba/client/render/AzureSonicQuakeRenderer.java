@@ -27,8 +27,13 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
         public float age = 0;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(AzureSonicQuakeEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(AzureSonicQuakeEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 

@@ -148,7 +148,7 @@ public class ZShockwaveEntity extends Projectile {
                 // Heavy knockback
                 Vec3 knockback = movement.normalize().scale(1.8 + (charge * 2.2));
                 target.setDeltaMovement(target.getDeltaMovement().add(knockback.x, 0.4 + (charge * 0.3), knockback.z));
-                target.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                 // Tweak C: Maximum charge roots enemies into the ground 2 blocks down and crushes them
                 if (this.rootOnHit && !subWave && charge >= 0.90f) {

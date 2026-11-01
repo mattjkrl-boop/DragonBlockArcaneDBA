@@ -49,8 +49,8 @@ public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.
         // Inner core beam
         float coreRadius = 0.15f * pulse;
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -coreRadius, -coreRadius, 0,
@@ -62,8 +62,8 @@ public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.
         // Outer glow
         float glowRadius = 0.3f * pulse;
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -glowRadius, -glowRadius, -0.1f,

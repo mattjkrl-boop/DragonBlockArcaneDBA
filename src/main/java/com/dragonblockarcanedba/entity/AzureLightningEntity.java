@@ -64,7 +64,7 @@ public class AzureLightningEntity extends Projectile {
                         : serverLevel.damageSources().lightningBolt();
                     victim.hurtServer(serverLevel, boltSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
                     victim.setDeltaMovement(victim.getDeltaMovement().add(0, 0.4, 0));
-                    victim.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(victim);
                 }
 
                 // Extinguish / water / electricity spark effect

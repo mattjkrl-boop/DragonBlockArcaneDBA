@@ -48,7 +48,7 @@ public class SpiritImpaleEffect extends MobEffect {
         Vec3 vel = entity.getDeltaMovement();
         double targetY = (entity.onGround() || vel.y < 0) ? 0.04 : 0.0;
         entity.setDeltaMovement(vel.x * 0.2, targetY, vel.z * 0.2);
-        entity.hurtMarked = true;
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(entity);
 
         // Radiant golden ki piercing beams
         if (entity.tickCount % 2 == 0) {

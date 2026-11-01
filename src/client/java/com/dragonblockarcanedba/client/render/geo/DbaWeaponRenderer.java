@@ -46,7 +46,7 @@ public class DbaWeaponRenderer<T extends Item & GeoAnimatable> extends GeoItemRe
         LivingEntity holder = owner != null ? owner.asLivingEntity() : null;
         if (holder != null && stack != null) {
             boolean inAHand = holder.getMainHandItem().is(stack.getItem()) || holder.getOffhandItem().is(stack.getItem());
-            swinging = holder.swinging && inAHand;
+            swinging = com.dragonblockarcanedba.util.DbaCompat.isSwinging(holder) && inAHand;
             if (holder.isUsingItem() && holder.getUseItem().is(stack.getItem())) {
                 int max = stack.getUseDuration(holder);
                 if (max > 0) {

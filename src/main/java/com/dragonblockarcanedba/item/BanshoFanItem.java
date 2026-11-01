@@ -92,7 +92,7 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
         // Gale Force: Launch target 10 blocks with strong upward velocity & MC 26.2 catapult physics
         Vec3 diff = target.position().subtract(attacker.position()).normalize().scale(5.0);
         target.setDeltaMovement(target.getDeltaMovement().add(diff.x, 1.2, diff.z));
-        target.hurtMarked = true; // Force velocity sync to client
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(target); // Force velocity sync to client
 
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
             target,
@@ -149,7 +149,7 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
                     // Knockback nearby targets too
                     Vec3 knockback = nearby.position().subtract(target.position()).normalize().scale(2.0);
                     nearby.setDeltaMovement(nearby.getDeltaMovement().add(knockback.x, 0.5, knockback.z));
-                    nearby.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(nearby);
 
                     // Apply Bleeding I to cyclone targets
                     nearby.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 200, 0, false, true), serverPlayer);

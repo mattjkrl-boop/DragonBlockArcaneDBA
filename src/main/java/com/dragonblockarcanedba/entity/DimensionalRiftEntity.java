@@ -100,7 +100,7 @@ public class DimensionalRiftEntity extends Projectile {
                     double pullStrength = Math.max(0.3, 1.4 * (1.0 - (distance / MAX_AOE_RADIUS)));
                     Vec3 pullVel = toCenter.normalize().scale(pullStrength);
                     target.setDeltaMovement(target.getDeltaMovement().add(pullVel.x, 0.15, pullVel.z));
-                    target.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
                 }
 
                 // 2. Distance-based Melting (Closer = Higher tier, up to Level 10 / amplifier 9)

@@ -1,20 +1,13 @@
 package com.dragonblockarcanedba.mixin;
 
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.framegraph.FrameGraphBuilder;
 import com.mojang.blaze3d.framegraph.FramePass;
-import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import net.minecraft.client.CloudStatus;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.CloudRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LevelTargetBundle;
-import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.client.renderer.state.level.LevelRenderState;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4fc;
-import org.joml.Vector4f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,34 +19,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Mixin to render actual Minecraft moving clouds in the Otherworld across multiple
  * celestial elevation tiers (Y=95, 135, 175, 215) with golden anime cloud coloring.
+ *
+ * 26.2 and below only: 26.3 removed LevelRenderer.addCloudsPass and rebuilt cloud
+ * rendering around CloudRenderer.prepare plus a render-pass draw, so there is no
+ * equivalent hook. DbaMixinPlugin skips this mixin on 26.3 and up, where the
+ * Otherworld keeps vanilla single-layer clouds (still golden tinted and raised by
+ * CloudColorMixin). See audits/MC-263-COMPAT-AUDIT.md item 15.
  */
 @Mixin(LevelRenderer.class)
 public class CloudTextureMixin {
     @Shadow @Final private CloudRenderer cloudRenderer;
-    @Shadow @Final private LevelRenderState levelRenderState;
     @Shadow @Final private LevelTargetBundle targets;
-
-    /**
-     * Ensures cloudColor is valid in Otherworld so LevelRenderer does not skip the cloud pass.
-     */
-    @Inject(method = "render", at = @At("HEAD"))
-    private void ensureOtherworldCloudColor(
-        GraphicsResourceAllocator allocator,
-        DeltaTracker deltaTracker,
-        boolean bl,
-        CameraRenderState cameraRenderState,
-        Matrix4fc matrix4fc,
-        GpuBufferSlice gpuBufferSlice,
-        Vector4f vector4f,
-        boolean bl2,
-        CallbackInfo ci
-    ) {
-        Minecraft client = Minecraft.getInstance();
-        if (client.level != null && client.level.dimension().toString().contains("otherworld")) {
-            this.levelRenderState.cloudColor = 0xE6FFE070;
-            this.levelRenderState.cloudHeight = 210.0f;
-        }
-    }
 
     @Unique private CloudRenderer otherworldLayer1;
     @Unique private CloudRenderer otherworldLayer2;

@@ -162,7 +162,7 @@ public class BanshoWindProjectileEntity extends Projectile {
             // Knockback target away from impact trajectory
             Vec3 move = this.getDeltaMovement().normalize().scale(1.4);
             target.setDeltaMovement(target.getDeltaMovement().add(move.x, 0.45, move.z));
-            target.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
         }
 
         // Spawn physical 3D impact shockwave entity (replacing particles)

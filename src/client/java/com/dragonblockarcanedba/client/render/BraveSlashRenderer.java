@@ -46,8 +46,8 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         float span = 3.2f;
         float chord = 1.1f;

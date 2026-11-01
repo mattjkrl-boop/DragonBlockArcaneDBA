@@ -119,7 +119,7 @@ public final class MovementLimiterHelper {
         }
 
         target.setDeltaMovement(newVel);
-        target.hurtMarked = true;
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
         // Apply wind stagger / Pole Stun
         target.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, 35, 0, false, false));

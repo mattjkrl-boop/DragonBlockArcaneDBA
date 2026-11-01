@@ -87,7 +87,7 @@ public class AzureTornadoEntity extends Projectile {
                 double vy = 0.35 + (giant ? 0.3 : 0.1);
 
                 target.setDeltaMovement(target.getDeltaMovement().add(vx * 0.5, vy, vz * 0.5));
-                target.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                 // Continuous wind damage
                 if (this.tickCount % 10 == 0) {

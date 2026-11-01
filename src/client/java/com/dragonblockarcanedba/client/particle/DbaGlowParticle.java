@@ -1,28 +1,17 @@
 package com.dragonblockarcanedba.client.particle;
 
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.pipeline.DepthStencilState;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.platform.CompareOp;
+import com.dragonblockarcanedba.client.compat.DbaPipelineCompat;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.SingleQuadParticle;
 import net.minecraft.client.particle.SpriteSet;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.client.renderer.texture.TextureAtlas;
-import net.minecraft.resources.Identifier;
 
 /**
  * Full bright particle with optional additive blending. Behaviour (gravity, drag, growth, fade, color)
  * comes from a {@link Style} so one class covers sparks, embers, void smoke and wind.
  */
 public class DbaGlowParticle extends SingleQuadParticle {
-    public static final RenderPipeline ADDITIVE_PIPELINE = RenderPipeline.builder(RenderPipelines.PARTICLE_SNIPPET)
-        .withLocation(Identifier.fromNamespaceAndPath("dragonblockarcanedba", "pipeline/additive_particle"))
-        .withColorTargetState(new ColorTargetState(BlendFunction.ADDITIVE))
-        .withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, false))
-        .build();
-    public static final Layer ADDITIVE = new Layer(true, TextureAtlas.LOCATION_PARTICLES, ADDITIVE_PIPELINE);
+    // Built through DbaPipelineCompat: the pipeline classes live in different packages on 26.2 and 26.3.
+    public static final Layer ADDITIVE = DbaPipelineCompat.buildAdditiveLayer();
 
     public record Style(float r, float g, float b, float r2, float g2, float b2, int minLife, int maxLife,
                        float size, float growth, float gravity, float drag, boolean additive) {}

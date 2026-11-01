@@ -19,7 +19,7 @@ public class DbaBlocks {
         Registries.BLOCK, DragonBlockArcaneDBA.id("yellow_cloud_block")
     );
     public static final Block YELLOW_CLOUD_BLOCK = new YellowCloudBlock(
-        BlockBehaviour.Properties.of()
+        com.dragonblockarcanedba.util.DbaCompat.notViewBlocking(BlockBehaviour.Properties.of()
             .setId(YELLOW_CLOUD_BLOCK_KEY)
             .mapColor(MapColor.COLOR_YELLOW)
             .noCollision()
@@ -27,7 +27,7 @@ public class DbaBlocks {
             .instabreak()
             .sound(SoundType.WOOL)
             .isSuffocating((state, level, pos) -> false)
-            .isViewBlocking((state, level, pos) -> false)
+        )
     );
 
     // --- Planet Namek ---

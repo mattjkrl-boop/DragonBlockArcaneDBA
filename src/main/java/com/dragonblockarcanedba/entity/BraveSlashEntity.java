@@ -85,7 +85,7 @@ public class BraveSlashEntity extends Projectile {
                 // Knockback
                 Vec3 knockback = movement.normalize().scale(1.4);
                 target.setDeltaMovement(target.getDeltaMovement().add(knockback.x, 0.25, knockback.z));
-                target.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                 // Golden critical sparks
                 serverLevel.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1.0, target.getZ(), 10, 0.3, 0.5, 0.3, 0.15);

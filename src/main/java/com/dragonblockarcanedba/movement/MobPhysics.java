@@ -164,7 +164,7 @@ public final class MobPhysics {
         Vec3 vel = target.getDeltaMovement();
         double vy = Math.max(vel.y, power * w.liftFactor);
         target.setDeltaMovement(vel.x * 0.3 + dir.x * power, vy, vel.z * 0.3 + dir.z * power);
-        target.hurtMarked = true;
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
         if (!(target instanceof Player) && target.level() instanceof ServerLevel) {
             Tracked t = new Tracked();
             t.entity = target;
@@ -189,7 +189,7 @@ public final class MobPhysics {
             t.bounced = true;
             double bounce = -t.lastVy * 0.42;
             e.setDeltaMovement(vel.x, bounce, vel.z);
-            e.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(e);
             float dmg = (float) Math.min(6.0, -t.lastVy * 2.2);
             e.hurt(e.level().damageSources().generic(), dmg);
             if (e.level() instanceof ServerLevel level) {

@@ -59,10 +59,10 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
 
         poseStack.pushPose();
         // Align with projectile trajectory
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         // Spin along flight axis
-        poseStack.mulPose(Axis.ZP.rotationDegrees(state.ageInTicks * 30.0f));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.ageInTicks * 30.0f)));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

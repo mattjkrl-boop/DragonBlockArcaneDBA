@@ -61,8 +61,8 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         float age = state.age;
         float pulse = 1.0f + 0.08f * (float) Math.sin(age * 2.5f);

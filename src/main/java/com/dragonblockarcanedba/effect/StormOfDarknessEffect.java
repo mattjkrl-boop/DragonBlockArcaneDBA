@@ -48,7 +48,7 @@ public class StormOfDarknessEffect extends MobEffect {
         Vec3 vel = entity.getDeltaMovement();
         float drag = Math.max(0.4f, 0.85f - (amplifier * 0.1f));
         entity.setDeltaMovement(vel.x * drag, vel.y > 0 ? vel.y * drag : vel.y, vel.z * drag);
-        entity.hurtMarked = true;
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(entity);
 
         // Visual storm particles
         if (entity.tickCount % 3 == 0) {

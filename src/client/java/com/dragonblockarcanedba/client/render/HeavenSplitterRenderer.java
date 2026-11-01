@@ -40,8 +40,13 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         public long seed = 0;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(HeavenSplitterEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(HeavenSplitterEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 
@@ -76,8 +81,8 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         float pitch = (float) -(Math.atan2(dir.y, horiz) * (180.0 / Math.PI));
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-yaw));
-        poseStack.mulPose(Axis.XP.rotationDegrees(pitch));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-yaw)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(pitch)));
 
         float len = state.dashLength;
         float halfLen = len * 0.5f;

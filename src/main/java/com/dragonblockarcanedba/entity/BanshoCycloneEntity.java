@@ -91,7 +91,7 @@ public class BanshoCycloneEntity extends Projectile {
                 }
 
                 target.setDeltaMovement(target.getDeltaMovement().add(vx * 0.45, vy, vz * 0.45));
-                target.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                 // Continuous cyclone wind damage (every 5 ticks)
                 if (this.tickCount % 5 == 0) {

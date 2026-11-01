@@ -12,13 +12,13 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
 public class GravityTrainingBlock extends BaseEntityBlock {
-    public static final com.mojang.serialization.MapCodec<GravityTrainingBlock> CODEC = simpleCodec(GravityTrainingBlock::new);
+    public static final com.mojang.serialization.MapCodec<GravityTrainingBlock> CODEC = com.dragonblockarcanedba.util.DbaCompat.blockCodec(GravityTrainingBlock::new);
 
     public GravityTrainingBlock(Properties properties) {
         super(properties);
     }
 
-    @Override
+    // No @Override: vanilla removed BlockBehaviour.codec() in 26.3; this still overrides on 26.2.
     protected com.mojang.serialization.MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
     }

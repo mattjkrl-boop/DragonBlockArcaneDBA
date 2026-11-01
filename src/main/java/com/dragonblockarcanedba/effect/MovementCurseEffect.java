@@ -45,14 +45,14 @@ public class MovementCurseEffect extends MobEffect {
         if (stacks >= 10) {
             // Full root: zero horizontal motion, gravity still pulls down if airborne
             entity.setDeltaMovement(0.0, velocity.y < 0 ? velocity.y : 0.0, 0.0);
-            entity.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(entity);
         } else {
             // Progressive movement and jump dampening
             double newX = velocity.x * movementRetained;
             double newZ = velocity.z * movementRetained;
             double newY = velocity.y > 0 ? velocity.y * movementRetained : velocity.y;
             entity.setDeltaMovement(newX, newY, newZ);
-            entity.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(entity);
         }
 
         // Visual spectral chain particles

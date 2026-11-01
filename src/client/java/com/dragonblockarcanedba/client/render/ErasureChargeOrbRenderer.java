@@ -37,8 +37,13 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         public boolean onRight = true;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(ErasureChargeOrbEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(ErasureChargeOrbEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 
@@ -82,8 +87,8 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         if (state.isFirstPersonOwner) {
             // Anchor orb realistically to the Blaster Gun muzzle: way lower and on the weapon hand side

@@ -54,6 +54,17 @@ public class AlphaModulatingVertexConsumer implements VertexConsumer {
         return this;
     }
 
+    // No @Override: VertexConsumer.setUv3 only exists on 26.3 and up, where this satisfies the
+    // interface. The delegate call is reflective because the method does not exist on 26.2.
+    public VertexConsumer setUv3(float u, float v) {
+        try {
+            java.lang.reflect.Method m = delegate.getClass().getMethod("setUv3", float.class, float.class);
+            m.invoke(delegate, u, v);
+        } catch (ReflectiveOperationException ignored) {
+        }
+        return this;
+    }
+
     @Override
     public VertexConsumer setNormal(float x, float y, float z) {
         delegate.setNormal(x, y, z);

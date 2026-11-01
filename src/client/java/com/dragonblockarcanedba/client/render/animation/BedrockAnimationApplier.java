@@ -206,11 +206,11 @@ public final class BedrockAnimationApplier {
         }
 
         // ==================== 12. ATTACK SWINGS / PUNCHES ====================
-        if (state.attackTime > 0.0f) {
+        if (com.dragonblockarcanedba.util.DbaCompat.swingProgress(state) > 0.0f) {
             String attackId = hasSword ? "attack" : "punch";
             BedrockAnimationRegistry.BedrockAnimation attackAnim = getAnim(attackId);
             if (attackAnim != null) {
-                float time = state.attackTime * attackAnim.length;
+                float time = com.dragonblockarcanedba.util.DbaCompat.swingProgress(state) * attackAnim.length;
                 applyTrackedBones(model, attackAnim, time, 1.0f);
                 return true;
             }

@@ -52,7 +52,7 @@ public abstract class DelayedDamageMixin {
                 // Make the entity flash red and play the hurt animation so it feels responsive!
                 self.level().broadcastEntityEvent(self, (byte) 2); // 2 is the standard hurt animation
                 
-                self.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(self);
 
                 // Cancel the actual damage application
                 cir.setReturnValue(true); // Return true so the caller thinks it succeeded

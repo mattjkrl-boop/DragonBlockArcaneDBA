@@ -66,7 +66,7 @@ public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExp
         // Layer 2 — rotated 45° on Y
         float s2 = halfSize * 0.92f;
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(45.0f));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(45.0f)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -s2, -s2, -s2, s2, s2, s2,
@@ -77,7 +77,7 @@ public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExp
         // Layer 3 — rotated 45° on X
         float s3 = halfSize * 0.85f;
         poseStack.pushPose();
-        poseStack.mulPose(Axis.XP.rotationDegrees(45.0f));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(45.0f)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -s3, -s3, -s3, s3, s3, s3,

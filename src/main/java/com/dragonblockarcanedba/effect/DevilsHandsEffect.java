@@ -49,7 +49,7 @@ public class DevilsHandsEffect extends MobEffect {
         if (level.getRandom().nextFloat() < chanceToTrigger) {
             Vec3 vel = entity.getDeltaMovement();
             entity.setDeltaMovement(vel.x * 0.1, vel.y < 0 ? vel.y : 0.0, vel.z * 0.1);
-            entity.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(entity);
         }
 
         // Apply Dark Red Fire Damage (more frequently, every ~10 ticks on average)

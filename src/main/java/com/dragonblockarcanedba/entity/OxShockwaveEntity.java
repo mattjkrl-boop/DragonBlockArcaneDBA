@@ -224,7 +224,7 @@ public class OxShockwaveEntity extends Projectile {
                         Math.max(currentVel.y, 0.2) + verticalPower,
                         currentVel.z + flatDir.z * horizontalPower
                     );
-                    target.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                     // Impact particles on target
                     serverLevel.sendParticles(

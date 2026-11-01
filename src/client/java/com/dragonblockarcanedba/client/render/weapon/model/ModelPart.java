@@ -48,9 +48,9 @@ public class ModelPart {
         poseStack.pushPose();
         
         poseStack.translate(this.x / 16.0f, this.y / 16.0f, this.z / 16.0f);
-        if (this.zRot != 0.0F) poseStack.mulPose(Axis.ZP.rotation(this.zRot));
-        if (this.yRot != 0.0F) poseStack.mulPose(Axis.YP.rotation(this.yRot));
-        if (this.xRot != 0.0F) poseStack.mulPose(Axis.XP.rotation(this.xRot));
+        if (this.zRot != 0.0F) poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotation(this.zRot)));
+        if (this.yRot != 0.0F) poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotation(this.yRot)));
+        if (this.xRot != 0.0F) poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotation(this.xRot)));
         poseStack.scale(this.xScale, this.yScale, this.zScale);
 
         poseStack.pushPose();

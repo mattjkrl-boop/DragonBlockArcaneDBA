@@ -31,8 +31,13 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
         public long seed = 0;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(OxChargeEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(OxChargeEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 

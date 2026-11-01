@@ -48,7 +48,7 @@ public class TemporalStasisEffect extends MobEffect {
         // Zero out horizontal velocity to ensure absolute freeze
         Vec3 vel = entity.getDeltaMovement();
         entity.setDeltaMovement(0.0, vel.y < 0 ? vel.y : 0.0, 0.0);
-        entity.hurtMarked = true;
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(entity);
 
         // Time-distortion blue clock particles
         if (entity.tickCount % 2 == 0) {

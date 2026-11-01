@@ -296,13 +296,13 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
             // Transform relative to humanoid torso
             stack.translate(bodyX / 16.0F, bodyY / 16.0F, bodyZ / 16.0F);
             if (bodyZRot != 0.0F) {
-                stack.mulPose(com.mojang.math.Axis.ZP.rotation(bodyZRot));
+                stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(bodyZRot)));
             }
             if (bodyYRot != 0.0F) {
-                stack.mulPose(com.mojang.math.Axis.YP.rotation(bodyYRot));
+                stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(bodyYRot)));
             }
             if (bodyXRot != 0.0F) {
-                stack.mulPose(com.mojang.math.Axis.XP.rotation(bodyXRot));
+                stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(bodyXRot)));
             }
 
             // Anchor tail accurately to the lower base of the spine/pelvis on the exterior back surface:
@@ -389,10 +389,10 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                 }
 
                 // Apply joint rotations
-                stack.mulPose(com.mojang.math.Axis.YP.rotation(yaw));
-                stack.mulPose(com.mojang.math.Axis.XP.rotation(pitch));
+                stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yaw)));
+                stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(pitch)));
                 if (roll != 0.0F) {
-                    stack.mulPose(com.mojang.math.Axis.ZP.rotation(roll));
+                    stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(roll)));
                 }
 
                 // Subtle shading / tip coloring per segment

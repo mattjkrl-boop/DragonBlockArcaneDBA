@@ -49,7 +49,7 @@ public class DelayedLaunchEntity extends Projectile {
                 if (target != null && target.isAlive()) {
                     Vec3 launchDir = target.position().subtract(this.centerPos).normalize().scale(1.2 + powerRatio * 1.8);
                     target.setDeltaMovement(target.getDeltaMovement().add(launchDir.x, 1.0 + powerRatio * 0.8, launchDir.z));
-                    target.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                     // MC 26.2 Physics: Extreme gravitational launch bounce and reduced air drag
                     com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(

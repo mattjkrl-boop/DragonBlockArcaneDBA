@@ -2,6 +2,7 @@
 	"required": true,
 	"package": "com.dragonblockarcanedba.client.mixin",
 	"compatibilityLevel": "JAVA_25",
+	"plugin": "com.dragonblockarcanedba.compat.DbaMixinPlugin",
 	"client": [
 		"PlayerEntityRendererMixin",
 		"LivingEntityRendererMixin",
@@ -16,7 +17,8 @@
 		"PauseScreenMixin",
 		"TitleScreenMixin",
 		"CameraShakeMixin",
-		"GameRendererPostMixin"
+		"GameRendererPostMixin",
+		"GameRendererPostMixin263"
 	],
 	"injectors": {
 		"defaultRequire": 1

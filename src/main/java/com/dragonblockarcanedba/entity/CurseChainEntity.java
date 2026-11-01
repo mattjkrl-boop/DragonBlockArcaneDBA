@@ -225,7 +225,7 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
                 if (newAmp >= 4) {
                     Vec3 pull = owner.position().subtract(target.position()).normalize().scale(0.7);
                     target.setDeltaMovement(target.getDeltaMovement().add(pull.x, 0.15, pull.z));
-                    target.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                     // Stamina / Ki Restoration (Soul Rend Refinement)
                     if (owner instanceof Player player) {

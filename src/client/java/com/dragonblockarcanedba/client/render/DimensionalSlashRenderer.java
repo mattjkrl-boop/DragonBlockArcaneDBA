@@ -36,8 +36,13 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         public boolean isFirstPersonOwner = false;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(DimensionalSlashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(DimensionalSlashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 
@@ -65,20 +70,20 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         if (state.tiltRight) {
-            poseStack.mulPose(Axis.ZP.rotationDegrees(35.0f));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(35.0f)));
         } else {
-            poseStack.mulPose(Axis.ZP.rotationDegrees(-35.0f));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(-35.0f)));
         }
 
         float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
         poseStack.scale(fpScale, fpScale, fpScale);
 
         // Forward spin along movement vector
-        poseStack.mulPose(Axis.YP.rotationDegrees((float) Math.sin(state.age * 0.4f) * 6.0f));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees((float) Math.sin(state.age * 0.4f) * 6.0f)));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

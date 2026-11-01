@@ -135,7 +135,7 @@ public class EvilSpearProjectileEntity extends Projectile {
                 // Tweak B: Inward vacuum pull toward the spear's impact path
                 Vec3 toSpear = this.position().subtract(target.position()).normalize().scale(0.8);
                 target.setDeltaMovement(target.getDeltaMovement().add(toSpear.x, 0.2, toSpear.z));
-                target.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                 // Impact crimson shockwave pushing nearby enemies
                 AABB shockBox = target.getBoundingBox().inflate(3.5);
@@ -145,7 +145,7 @@ public class EvilSpearProjectileEntity extends Projectile {
                 for (LivingEntity n : nearby) {
                     Vec3 push = n.position().subtract(target.position()).normalize().scale(1.2);
                     n.setDeltaMovement(n.getDeltaMovement().add(push.x, 0.2, push.z));
-                    n.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(n);
                 }
 
                 // Spawn physical 3D impact shatter & spikes

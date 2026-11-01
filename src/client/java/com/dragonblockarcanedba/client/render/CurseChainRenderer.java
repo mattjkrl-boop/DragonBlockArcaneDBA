@@ -63,9 +63,9 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
 
         // Rotation & rhythmic constricting motion
         float spinSpeed = attached ? 12.0f : 24.0f;
-        poseStack.mulPose(Axis.YP.rotationDegrees(age * spinSpeed + (orbit * 36.0f)));
-        poseStack.mulPose(Axis.XP.rotationDegrees((float) Math.sin(age * 0.2f + orbit) * 18.0f));
-        poseStack.mulPose(Axis.ZP.rotationDegrees(age * (attached ? 6.0f : 14.0f)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * spinSpeed + (orbit * 36.0f))));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees((float) Math.sin(age * 0.2f + orbit) * 18.0f)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(age * (attached ? 6.0f : 14.0f))));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

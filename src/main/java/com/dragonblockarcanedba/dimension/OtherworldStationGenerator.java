@@ -93,12 +93,12 @@ public class OtherworldStationGenerator {
                             level.setBlockAndUpdate(p, redCarpet.defaultBlockState());
                         } else if (Math.abs(dx) == 1) {
                             level.setBlockAndUpdate(p, yellowCarpet.defaultBlockState());
-                        } else if (level.getBlockState(p).blocksMotion()) {
+                        } else if (level.getBlockState(p).isSolid()) {
                             level.setBlockAndUpdate(p, Blocks.AIR.defaultBlockState());
                         }
                     } else {
                         // Open airspace above
-                        if (level.getBlockState(p).blocksMotion() || level.getBlockState(p).isSuffocating(level, p)) {
+                        if (level.getBlockState(p).isSolid() || level.getBlockState(p).isSuffocating(level, p)) {
                             level.setBlockAndUpdate(p, Blocks.AIR.defaultBlockState());
                         }
                     }

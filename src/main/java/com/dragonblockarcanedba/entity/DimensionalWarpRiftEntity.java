@@ -144,14 +144,14 @@ public class DimensionalWarpRiftEntity extends Projectile {
                         if (toCenter.length() > 0.3) {
                             Vec3 pull = toCenter.normalize().scale(0.35);
                             target.setDeltaMovement(target.getDeltaMovement().add(pull.x, 0.1, pull.z));
-                            target.hurtMarked = true;
+                            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
                         }
                     } else {
                         Vec3 fromCenter = target.position().subtract(center);
                         if (fromCenter.length() > 0.1) {
                             Vec3 push = fromCenter.normalize().scale(0.5);
                             target.setDeltaMovement(target.getDeltaMovement().add(push.x, 0.2, push.z));
-                            target.hurtMarked = true;
+                            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
                         }
                     }
                 }

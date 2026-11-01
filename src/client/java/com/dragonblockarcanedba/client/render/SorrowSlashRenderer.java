@@ -31,8 +31,13 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
         public float age = 0;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(SorrowSlashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(SorrowSlashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 
@@ -60,12 +65,12 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
         float fade = (1.0f - progress * progress);
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         // Diagonal / Scythe reap tilt
         float tiltAngle = state.tiltRight ? 42.0f : -42.0f;
-        poseStack.mulPose(Axis.ZP.rotationDegrees(tiltAngle));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(tiltAngle)));
 
         // Slight forward sweep animation
         float scale = state.isImpactBurst ? (1.0f + progress * 0.4f) : 1.0f;

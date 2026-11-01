@@ -55,7 +55,7 @@ public class JudgementLockEffect extends MobEffect {
     public boolean applyEffectTick(ServerLevel level, LivingEntity entity, int amplifier) {
         Vec3 vel = entity.getDeltaMovement();
         entity.setDeltaMovement(0.0, vel.y < 0 ? vel.y : 0.0, 0.0);
-        entity.hurtMarked = true;
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(entity);
 
         if (entity.tickCount % 2 == 0) {
             double px = entity.getX() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();

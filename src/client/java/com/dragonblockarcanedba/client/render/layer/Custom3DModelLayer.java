@@ -119,8 +119,8 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
                 stack.pushPose();
                 humanoidModel.head.translateAndRotate(stack);
                 stack.translate(0.0f, -0.25f, 0.0f);
-                stack.mulPose(com.mojang.math.Axis.XP.rotation(swayX));
-                stack.mulPose(com.mojang.math.Axis.ZP.rotation(swayZ));
+                stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(swayX)));
+                stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(swayZ)));
                 stack.translate(0.0f, 0.25f, 0.0f);
                 hairLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f);
                 stack.popPose();
@@ -182,7 +182,7 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
         if (limb != null && bone != null) {
             stack.pushPose();
             bone.translateAndRotate(stack);
-            if (extraZRot != 0.0f) stack.mulPose(com.mojang.math.Axis.ZP.rotation(extraZRot));
+            if (extraZRot != 0.0f) stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(extraZRot)));
             limb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, r, g, b, a);
             stack.popPose();
         }

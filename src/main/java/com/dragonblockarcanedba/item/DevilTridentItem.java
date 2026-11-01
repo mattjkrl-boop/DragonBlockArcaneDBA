@@ -200,7 +200,7 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
 
                     // Ground pull
                     t.setDeltaMovement(t.getDeltaMovement().add(0, -2.0, 0));
-                    t.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(t);
                 }
 
                 // Spawn 10 Shards

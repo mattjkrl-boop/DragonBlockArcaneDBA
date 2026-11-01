@@ -32,8 +32,13 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         public int maxLifetime = 18;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(BraveCrossSlashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(BraveCrossSlashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 
@@ -63,8 +68,8 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -75,13 +80,13 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
 
             // Render Blade 1: Tilted +45 degrees
             poseStack.pushPose();
-            poseStack.mulPose(Axis.ZP.rotationDegrees(45.0f));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(45.0f)));
             drawCrossBlade(pose.pose(), buffer, span, chord, segments, fade);
             poseStack.popPose();
 
             // Render Blade 2: Tilted -45 degrees
             poseStack.pushPose();
-            poseStack.mulPose(Axis.ZP.rotationDegrees(-45.0f));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(-45.0f)));
             drawCrossBlade(pose.pose(), buffer, span, chord, segments, fade);
             poseStack.popPose();
 

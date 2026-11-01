@@ -41,7 +41,7 @@ public class HollowedEffect extends MobEffect {
 
         // Suppress mob targeting if player is hollowed
         if (entity instanceof Player) {
-            entity.invulnerableTime = Math.max(entity.invulnerableTime, 5);
+            com.dragonblockarcanedba.util.DbaCompat.setInvulnerableTime(entity, Math.max(com.dragonblockarcanedba.util.DbaCompat.getInvulnerableTime(entity), 5));
         }
         return true;
     }

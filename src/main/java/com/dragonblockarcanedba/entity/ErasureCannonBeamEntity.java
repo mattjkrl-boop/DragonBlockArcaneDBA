@@ -151,7 +151,7 @@ public class ErasureCannonBeamEntity extends Projectile {
                     // Gravitational suction pulling enemies into centerline
                     Vec3 toCenter = start.add(look.scale(look.dot(t.position().subtract(start)))).subtract(t.position()).normalize().scale(0.8);
                     t.setDeltaMovement(t.getDeltaMovement().add(toCenter.x, 0.2, toCenter.z));
-                    t.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(t);
                 }
 
                 // Max charge endpoint explosion

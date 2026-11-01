@@ -206,7 +206,7 @@ public class ValorFieldEntity extends Projectile {
                     // Caster walked away / left circle: Resume projectile flight along original trajectory!
                     p.setNoGravity(data.origNoGravity);
                     p.setDeltaMovement(data.origVelocity);
-                    p.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
                     it.remove();
                     continue;
                 }
@@ -263,7 +263,7 @@ public class ValorFieldEntity extends Projectile {
             if (entity instanceof Projectile p && p.isAlive()) {
                 p.setNoGravity(entry.getValue().origNoGravity);
                 p.setDeltaMovement(entry.getValue().origVelocity);
-                p.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
             }
         }
         suspendedMap.clear();

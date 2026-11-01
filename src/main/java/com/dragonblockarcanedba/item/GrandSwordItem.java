@@ -167,7 +167,7 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
         for (Projectile p : projectiles) {
             p.setOwner(player); // Take ownership so deflected projectiles/ki damage enemies!
             p.setDeltaMovement(p.getDeltaMovement().scale(-1.4));
-            p.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
             com.dragonblockarcanedba.entity.GrandClashSparkEntity clash = new com.dragonblockarcanedba.entity.GrandClashSparkEntity(
                 level, player, p.position(), 1.0f
             );
@@ -216,7 +216,7 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
 
                     Vec3 knock = look.scale(1.4);
                     enemy.setDeltaMovement(enemy.getDeltaMovement().add(knock.x, 0.3, knock.z));
-                    enemy.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(enemy);
                 }
             }
         }

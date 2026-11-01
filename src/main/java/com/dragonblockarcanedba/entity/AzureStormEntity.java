@@ -106,7 +106,7 @@ public class AzureStormEntity extends Projectile {
                     double wx = (serverLevel.getRandom().nextDouble() - 0.5) * 1.6;
                     double wz = (serverLevel.getRandom().nextDouble() - 0.5) * 1.6;
                     enemy.setDeltaMovement(enemy.getDeltaMovement().add(wx, 0.25, wz));
-                    enemy.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(enemy);
                 }
             }
 

@@ -168,7 +168,7 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
             // Wind push
             Vec3 push = enemy.position().subtract(player.position()).normalize().scale(isDoubleRushing ? 2.5 : 1.5).add(0, 0.4, 0);
             enemy.setDeltaMovement(enemy.getDeltaMovement().add(push));
-            enemy.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(enemy);
 
             // Damage
             float damage = (isDoubleRushing ? 600.0f : 350.0f) + (float) (accessor.dba$getStrength() * 2.0);
@@ -231,7 +231,7 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
                 0.85,
                 net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
             );
-            target.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
         }
 
         // Physical 3D supersonic ground shockwave and kinetic shatter geometry

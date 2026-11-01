@@ -34,8 +34,13 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
         public float ageInTicks = 0;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(GrandBladeShardEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(GrandBladeShardEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 
@@ -61,7 +66,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
 
         if (state.isEmbedded) {
             // --- EMBEDDED GROUND STATE ---
-            poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
 
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
                 Matrix4f matrix = pose.pose();
@@ -90,7 +95,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                 PoseStack bladeStack = new PoseStack();
                 bladeStack.last().pose().set(pose.pose());
                 bladeStack.last().normal().set(pose.normal());
-                bladeStack.mulPose(Axis.XP.rotationDegrees(Math.max(35.0f, Math.abs(state.xRot))));
+                bladeStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(Math.max(35.0f, Math.abs(state.xRot)))));
                 bladeStack.scale(0.85f, 0.85f, 0.85f);
 
                 drawPhysicalBlade(bladeStack.last().pose(), buffer, state.ageInTicks, 1.0f);
@@ -98,9 +103,9 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
 
         } else {
             // --- FLYING AIRBORNE STATE ---
-            poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-            poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
-            poseStack.mulPose(Axis.ZP.rotationDegrees(state.ageInTicks * 35.0f)); // High-speed spin along flight axis
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.ageInTicks * 35.0f))); // High-speed spin along flight axis
             poseStack.scale(0.75f, 0.75f, 0.75f);
 
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {

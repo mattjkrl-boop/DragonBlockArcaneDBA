@@ -21,8 +21,12 @@ public class DinoMeatItem extends Item {
                 if (itemStack.isEmpty()) {
                     return bone;
                 }
-                if (!player.getInventory().add(bone)) {
-                    player.drop(bone, false);
+                if (!player.getInventory().add(bone) && !level.isClientSide()) {
+                    // Vanilla drop() gained a Prediction parameter in 26.3; spawn the drop directly so one source serves both.
+                    net.minecraft.world.entity.item.ItemEntity boneDrop = new net.minecraft.world.entity.item.ItemEntity(
+                        level, player.getX(), player.getEyeY() - 0.3, player.getZ(), bone);
+                    boneDrop.setDefaultPickUpDelay();
+                    level.addFreshEntity(boneDrop);
                 }
             }
         }

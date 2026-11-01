@@ -253,7 +253,7 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
                     if (pushDir.lengthSqr() > 0.001) {
                         pushDir = pushDir.normalize().scale(0.35);
                         enemy.setDeltaMovement(enemy.getDeltaMovement().add(pushDir.x, 0.05, pushDir.z));
-                        enemy.hurtMarked = true;
+                        com.dragonblockarcanedba.util.DbaCompat.markHurt(enemy);
                     }
                 }
             }
@@ -346,7 +346,7 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
 
                             Vec3 toTarget = target.position().subtract(player.position()).normalize().scale(2.5);
                             target.setDeltaMovement(target.getDeltaMovement().add(toTarget.x, 0.9, toTarget.z));
-                            target.hurtMarked = true;
+                            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
                         }
                     }
 
@@ -390,7 +390,7 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
 
                             Vec3 toTarget = target.position().subtract(player.position()).normalize().scale(1.5);
                             target.setDeltaMovement(target.getDeltaMovement().add(toTarget.x, 0.5, toTarget.z));
-                            target.hurtMarked = true;
+                            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
                         }
                     }
 

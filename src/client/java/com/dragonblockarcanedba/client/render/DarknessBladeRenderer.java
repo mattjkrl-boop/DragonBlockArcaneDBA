@@ -30,8 +30,13 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
         public float age = 0;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(DarknessBladeEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(DarknessBladeEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 
@@ -53,8 +58,8 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.XP.rotationDegrees(90.0f)); // Point downward toward earth
-        poseStack.mulPose(Axis.ZP.rotationDegrees(state.yRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f))); // Point downward toward earth
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.yRot)));
 
         float bladeLength = 7.5f;
         float bladeWidth = 1.0f;

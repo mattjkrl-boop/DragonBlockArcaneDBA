@@ -101,7 +101,7 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
                         10, 0.3, 0.5, 0.3, 0.1
                     );
                     // Give brief invulnerability frames (10 ticks = 0.5 seconds)
-                    player.invulnerableTime = Math.max(player.invulnerableTime, 10);
+                    com.dragonblockarcanedba.util.DbaCompat.setInvulnerableTime(player, Math.max(com.dragonblockarcanedba.util.DbaCompat.getInvulnerableTime(player), 10));
                     return 0.0f; // Negate all damage
                 }
             }
@@ -111,7 +111,7 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
                 if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
                     com.dragonblockarcanedba.item.SaberItem.triggerPerfectDodge(serverPlayer);
                 }
-                player.invulnerableTime = Math.max(player.invulnerableTime, 12);
+                com.dragonblockarcanedba.util.DbaCompat.setInvulnerableTime(player, Math.max(com.dragonblockarcanedba.util.DbaCompat.getInvulnerableTime(player), 12));
                 return 0.0f;
             }
 
@@ -335,7 +335,7 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
                 self.noPhysics = true;
                 self.setPos(pos.x, pos.y, pos.z);
                 self.setDeltaMovement(Vec3.ZERO);
-                self.hurtMarked = true; // Force position sync to clients
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(self); // Force position sync to clients
 
                 // Stop mob AI pathing during reversal
                 if (self instanceof Mob mob) {

@@ -248,7 +248,7 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             );
             for (Projectile p : projectiles) {
                 p.setDeltaMovement(p.getDeltaMovement().scale(0.05));
-                p.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
             }
 
             // Sound cue

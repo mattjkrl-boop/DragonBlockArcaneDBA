@@ -35,8 +35,13 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         public boolean isFirstPersonOwner = false;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(GrandCrescentWaveEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(GrandCrescentWaveEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 
@@ -67,8 +72,8 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         float fade = (1.0f - progress * progress);
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         float fpScale = (state.isFirstPersonOwner && state.ageInTicks < 6.0f) 
             ? (0.55f + (state.ageInTicks / 6.0f) * 0.45f) 

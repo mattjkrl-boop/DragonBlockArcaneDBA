@@ -29,8 +29,13 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
         public float age = 0;
     }
 
-    @Override
+    // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(VoidSlashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
+        return true;
+    }
+
+    // 26.3 signature: vanilla calls this overload on 26.3 and up.
+    public boolean shouldRender(VoidSlashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ, float partialTick) {
         return true;
     }
 
@@ -57,13 +62,13 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
         float fade = (1.0f - progress * progress);
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         if (state.tiltRight) {
-            poseStack.mulPose(Axis.ZP.rotationDegrees(42.0f));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(42.0f)));
         } else {
-            poseStack.mulPose(Axis.ZP.rotationDegrees(-42.0f));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(-42.0f)));
         }
 
         float span = 4.2f;

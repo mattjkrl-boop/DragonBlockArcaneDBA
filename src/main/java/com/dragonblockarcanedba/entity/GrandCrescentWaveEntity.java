@@ -113,7 +113,7 @@ public class GrandCrescentWaveEntity extends Projectile {
                 // Knockback in wave trajectory
                 Vec3 knockback = movement.normalize().scale(1.5);
                 target.setDeltaMovement(target.getDeltaMovement().add(knockback.x, 0.3, knockback.z));
-                target.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
             }
 
             // Check solid block collision

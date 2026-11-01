@@ -90,7 +90,7 @@ public class VoidRiftEntity extends Projectile {
                     double dist = toCenter.length();
                     if (dist > 0.3) {
                         e.setDeltaMovement(toCenter.normalize().scale(1.2));
-                        e.hurtMarked = true;
+                        com.dragonblockarcanedba.util.DbaCompat.markHurt(e);
                     }
                 }
 
@@ -108,7 +108,7 @@ public class VoidRiftEntity extends Projectile {
                         // Violent outward launch
                         Vec3 push = victim.position().subtract(center).normalize().scale(2.2).add(0, 0.8, 0);
                         victim.setDeltaMovement(victim.getDeltaMovement().add(push));
-                        victim.hurtMarked = true;
+                        com.dragonblockarcanedba.util.DbaCompat.markHurt(victim);
 
                         // Apply Dark Faded effect
                         victim.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 100, 1, false, true), owner);
@@ -138,7 +138,7 @@ public class VoidRiftEntity extends Projectile {
                         double pullPower = Math.max(0.1, 0.6 * (1.0 - dist / (radius * 1.8)));
                         Vec3 vel = toCenter.normalize().scale(pullPower);
                         e.setDeltaMovement(e.getDeltaMovement().add(vel.x, vel.y * 0.5, vel.z));
-                        e.hurtMarked = true;
+                        com.dragonblockarcanedba.util.DbaCompat.markHurt(e);
                     }
 
                     // Projectiles (arrows, ki blasts) get sucked in

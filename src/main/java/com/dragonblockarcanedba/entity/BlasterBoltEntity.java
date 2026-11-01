@@ -124,7 +124,7 @@ public class BlasterBoltEntity extends Projectile {
                 // Knockback
                 Vec3 knockback = movement.normalize().scale(overcharged ? 1.5 : 0.6);
                 target.setDeltaMovement(target.getDeltaMovement().add(knockback.x, 0.2, knockback.z));
-                target.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                 if (overcharged) {
                     // Overcharged explosive detonation

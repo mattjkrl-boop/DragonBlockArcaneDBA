@@ -103,8 +103,8 @@ public final class SwingTrailRenderer {
         for (Player player : mc.level.players()) {
             WeaponTrailProfiles.Profile profile = WeaponTrailProfiles.forItem(player.getMainHandItem().getItem());
             if (profile == null) continue;
-            float anim = player.getAttackAnim(1.0f);
-            float prevAnim = player.getAttackAnim(0.0f);
+            float anim = com.dragonblockarcanedba.util.DbaCompat.attackAnim(player, 1.0f);
+            float prevAnim = com.dragonblockarcanedba.util.DbaCompat.attackAnim(player, 0.0f);
             if (anim <= 0f && prevAnim <= 0f) continue;
             Trail trail = TRAILS.computeIfAbsent(player.getUUID(), id -> new Trail());
             trail.profile = profile;

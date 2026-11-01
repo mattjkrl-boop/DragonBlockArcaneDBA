@@ -62,7 +62,7 @@ public class RiftedEffect extends MobEffect {
         if (vel.y < -0.1) {
             entity.setDeltaMovement(vel.x, -0.1, vel.z);
             entity.fallDistance = 0.0f;
-            entity.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(entity);
         }
 
         // Purple rift sparks

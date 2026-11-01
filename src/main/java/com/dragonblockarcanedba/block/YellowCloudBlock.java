@@ -28,13 +28,13 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * - Ambient particles: Spawns drifting cloud puffs in the breeze.
  */
 public class YellowCloudBlock extends HalfTransparentBlock {
-    public static final MapCodec<YellowCloudBlock> CODEC = simpleCodec(YellowCloudBlock::new);
+    public static final MapCodec<YellowCloudBlock> CODEC = com.dragonblockarcanedba.util.DbaCompat.blockCodec(YellowCloudBlock::new);
 
     public YellowCloudBlock(BlockBehaviour.Properties properties) {
         super(properties);
     }
 
-    @Override
+    // No @Override: vanilla removed BlockBehaviour.codec() in 26.3; this still overrides on 26.2.
     protected MapCodec<? extends HalfTransparentBlock> codec() {
         return CODEC;
     }

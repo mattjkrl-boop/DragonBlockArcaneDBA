@@ -182,7 +182,7 @@ public class DimensionTravel {
         BlockState below = level.getBlockState(belowPos);
 
         // Floor must be solid and non-damaging
-        if (below.isAir() || !below.blocksMotion()) {
+        if (below.isAir() || !below.isSolid()) {
             return false;
         }
         if (below.is(Blocks.LAVA) || below.is(Blocks.FIRE) || below.is(Blocks.SOUL_FIRE)
@@ -194,10 +194,10 @@ public class DimensionTravel {
         BlockState feet = level.getBlockState(pos);
         BlockState head = level.getBlockState(pos.above());
 
-        if (feet.blocksMotion() || feet.isSuffocating(level, pos) || feet.is(Blocks.LAVA) || feet.is(Blocks.FIRE)) {
+        if (feet.isSolid() || feet.isSuffocating(level, pos) || feet.is(Blocks.LAVA) || feet.is(Blocks.FIRE)) {
             return false;
         }
-        if (head.blocksMotion() || head.isSuffocating(level, pos.above()) || head.is(Blocks.LAVA) || head.is(Blocks.FIRE)) {
+        if (head.isSolid() || head.isSuffocating(level, pos.above()) || head.is(Blocks.LAVA) || head.is(Blocks.FIRE)) {
             return false;
         }
 

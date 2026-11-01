@@ -166,7 +166,7 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
         // Player recoil: Launched backwards depending on charge
         Vec3 recoil = look.scale(-0.4 - (chargeRatio * 1.4));
         MovementPhysics.addVelocity(player, new Vec3(recoil.x, 0.15 + (chargeRatio * 0.2), recoil.z));
-        player.hurtMarked = true;
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(player);
 
         // Sounds & shockwave burst
         level.playSound(null, player.getX(), player.getY(), player.getZ(),

@@ -46,8 +46,8 @@ public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRender
         // Thin white-hot core
         float thinRadius = 0.04f;
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -thinRadius, -thinRadius, 0,
@@ -59,8 +59,8 @@ public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRender
         // Colored glow around it
         float glowRadius = 0.1f;
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -glowRadius, -glowRadius, -0.05f,

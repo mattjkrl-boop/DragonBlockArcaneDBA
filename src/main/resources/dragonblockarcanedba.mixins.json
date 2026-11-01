@@ -2,6 +2,7 @@
     "required": true,
     "package": "com.dragonblockarcanedba.mixin",
     "compatibilityLevel": "JAVA_25",
+    "plugin": "com.dragonblockarcanedba.compat.DbaMixinPlugin",
     "mixins": [
         "PlayerEntityMixin",
         "LivingEntityMixin",
@@ -15,6 +16,7 @@
         "PlayerRaceDimensionsMixin"
     ],
     "client": [
+        "CloudColorMixin",
         "CloudTextureMixin",
         "CloudRendererAccessor",
         "ClientLevelWeatherMixin",

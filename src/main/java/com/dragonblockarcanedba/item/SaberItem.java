@@ -830,7 +830,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     e.noPhysics = true;
                     e.teleportTo(current.x, current.y, current.z);
                     e.setDeltaMovement(0, 0, 0);
-                    e.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(e);
                 }
             }
             

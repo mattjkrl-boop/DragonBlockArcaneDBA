@@ -138,7 +138,7 @@ public class DarknessWaveEntity extends Projectile {
                 // Knockback
                 Vec3 knockback = movement.normalize().scale(1.2);
                 target.setDeltaMovement(target.getDeltaMovement().add(knockback.x, 0.25, knockback.z));
-                target.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                 // Impact feedback
                 serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),

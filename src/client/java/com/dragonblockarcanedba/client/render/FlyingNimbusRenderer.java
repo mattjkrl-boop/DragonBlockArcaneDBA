@@ -44,14 +44,14 @@ public class FlyingNimbusRenderer extends EntityRenderer<FlyingNimbusEntity, Fly
     public void submit(NimbusRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraRenderState) {
         // 1. Center block
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.translate(-0.5, -0.2, -0.5);
         collector.submitMovingBlock(poseStack, state.movingBlockRenderState, -1);
         poseStack.popPose();
         
         // 2. Right block
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.translate(0.5 - 0.5, -0.25, 0.0 - 0.5);
         poseStack.scale(0.8F, 0.8F, 0.8F);
         collector.submitMovingBlock(poseStack, state.movingBlockRenderState, -1);
@@ -59,7 +59,7 @@ public class FlyingNimbusRenderer extends EntityRenderer<FlyingNimbusEntity, Fly
 
         // 3. Left block
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.translate(-0.5 - 0.5, -0.25, 0.0 - 0.5);
         poseStack.scale(0.8F, 0.8F, 0.8F);
         collector.submitMovingBlock(poseStack, state.movingBlockRenderState, -1);
@@ -67,7 +67,7 @@ public class FlyingNimbusRenderer extends EntityRenderer<FlyingNimbusEntity, Fly
 
         // 4. Front block
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.translate(0.0 - 0.5, -0.25, 0.5 - 0.5);
         poseStack.scale(0.8F, 0.8F, 0.8F);
         collector.submitMovingBlock(poseStack, state.movingBlockRenderState, -1);
@@ -75,7 +75,7 @@ public class FlyingNimbusRenderer extends EntityRenderer<FlyingNimbusEntity, Fly
 
         // 5. Back block
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.translate(0.0 - 0.5, -0.25, -0.5 - 0.5);
         poseStack.scale(0.8F, 0.8F, 0.8F);
         collector.submitMovingBlock(poseStack, state.movingBlockRenderState, -1);

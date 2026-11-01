@@ -49,8 +49,8 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
         // Inner core beam
         float coreRadius = 0.12f * pulse;
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -coreRadius, -coreRadius, 0,
@@ -66,8 +66,8 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
         float spiralSpeed = age * 3.0f;
 
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             for (int i = 0; i < segments; i++) {
                 float z = (i / (float)segments) * beamLength;
@@ -95,8 +95,8 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
         // Outer glow
         float glowRadius = 0.25f * pulse;
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yRot));
-        poseStack.mulPose(Axis.XP.rotationDegrees(state.xRot));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -glowRadius, -glowRadius, -0.1f,

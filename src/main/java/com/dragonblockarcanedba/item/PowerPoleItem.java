@@ -132,7 +132,7 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                 if (pDist <= maxRange && (pDist <= 4.5 || lookDir.dot(toProj.normalize()) > 0.75)) {
                     p.setOwner(player);
                     p.setDeltaMovement(toProj.normalize().scale(2.2));
-                    p.hurtMarked = true;
+                    com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
                 }
             }
 

@@ -101,7 +101,7 @@ public final class MovementPhysics {
     private static void apply(ServerPlayer player, Vec3 velocity) {
         player.setDeltaMovement(velocity);
         // Server players only push velocity to their client when marked hurt.
-        player.hurtMarked = true;
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(player);
     }
 
     // ==================== Shared execution API for abilities ====================

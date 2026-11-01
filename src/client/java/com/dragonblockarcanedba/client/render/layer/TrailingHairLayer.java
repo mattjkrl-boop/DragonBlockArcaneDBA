@@ -315,8 +315,8 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
             float wave = Mth.sin(age * kiFreq - prog * 1.5F) * (kiAmp * (1.0F + prog));
             float yRot = (yawDrag + walkSway + wave * 0.7F) * (1.0F + prog * 0.8F);
             float xRot = -0.32F + (pitchDrag + vertInertia + walkBounce + speedDrag + auraFlutter) * (1.0F + prog * 0.6F);
-            stack.mulPose(com.mojang.math.Axis.YP.rotation(yRot));
-            stack.mulPose(com.mojang.math.Axis.XP.rotation(xRot));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(xRot)));
             this.saiyanCrownSpike[i].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
             stack.translate(0.0F, -0.18F, 0.02F);
         }
@@ -330,9 +330,9 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
             float wave = Mth.sin(age * kiFreq + 1.2F - prog * 1.5F) * kiAmp;
             float yRot = -0.32F + (yawDrag + wave) * (1.0F + prog * 0.7F);
             float xRot = -0.28F + (pitchDrag + vertInertia + speedDrag) * (1.0F + prog * 0.5F);
-            stack.mulPose(com.mojang.math.Axis.YP.rotation(yRot));
-            stack.mulPose(com.mojang.math.Axis.XP.rotation(xRot));
-            stack.mulPose(com.mojang.math.Axis.ZP.rotation(-0.25F));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(xRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(-0.25F)));
             this.saiyanLeftSpike[i].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
             stack.translate(0.0F, -0.16F, 0.02F);
         }
@@ -346,9 +346,9 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
             float wave = Mth.sin(age * kiFreq + 2.4F - prog * 1.5F) * kiAmp;
             float yRot = 0.32F + (yawDrag + wave) * (1.0F + prog * 0.7F);
             float xRot = -0.28F + (pitchDrag + vertInertia + speedDrag) * (1.0F + prog * 0.5F);
-            stack.mulPose(com.mojang.math.Axis.YP.rotation(yRot));
-            stack.mulPose(com.mojang.math.Axis.XP.rotation(xRot));
-            stack.mulPose(com.mojang.math.Axis.ZP.rotation(0.25F));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(xRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(0.25F)));
             this.saiyanRightSpike[i].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
             stack.translate(0.0F, -0.16F, 0.02F);
         }
@@ -357,7 +357,7 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
         // 4. Left Flare
         stack.pushPose();
         stack.translate(-0.25F, -0.36F, 0.0F);
-        stack.mulPose(com.mojang.math.Axis.ZP.rotation(-0.50F + (yawDrag * 0.8F)));
+        stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(-0.50F + (yawDrag * 0.8F))));
         this.saiyanLeftFlare[0].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         this.saiyanLeftFlare[1].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         stack.popPose();
@@ -365,7 +365,7 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
         // 5. Right Flare
         stack.pushPose();
         stack.translate(0.25F, -0.36F, 0.0F);
-        stack.mulPose(com.mojang.math.Axis.ZP.rotation(0.50F + (yawDrag * 0.8F)));
+        stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(0.50F + (yawDrag * 0.8F))));
         this.saiyanRightFlare[0].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         this.saiyanRightFlare[1].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         stack.popPose();
@@ -374,7 +374,7 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
         stack.pushPose();
         stack.translate(0.0F, -0.32F, 0.22F);
         float occPitch = 0.35F + (pitchDrag + speedDrag * 1.5F + vertInertia);
-        stack.mulPose(com.mojang.math.Axis.XP.rotation(occPitch));
+        stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(occPitch)));
         this.saiyanOccipital[0].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         stack.translate(0.0F, 0.0F, 0.16F);
         this.saiyanOccipital[1].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
@@ -383,13 +383,13 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
         // 7. Bangs
         stack.pushPose();
         stack.translate(-0.12F, -0.38F, -0.26F);
-        stack.mulPose(com.mojang.math.Axis.YP.rotation(0.12F + yawDrag * 1.2F));
+        stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(0.12F + yawDrag * 1.2F)));
         this.saiyanLeftBang.render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         stack.popPose();
 
         stack.pushPose();
         stack.translate(0.12F, -0.38F, -0.26F);
-        stack.mulPose(com.mojang.math.Axis.YP.rotation(-0.12F + yawDrag * 1.2F));
+        stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(-0.12F + yawDrag * 1.2F)));
         this.saiyanRightBang.render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         stack.popPose();
     }
@@ -408,9 +408,9 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
             float wave = Mth.sin(age * kiFreq - prog * 1.8F) * (kiAmp * (1.2F + prog * 1.2F));
             float yRot = (yawDrag * 1.5F + walkSway * 1.2F + wave) * (1.0F + prog * 1.0F);
             float xRot = (pitchDrag * 1.3F + vertInertia * 1.2F + walkBounce + speedDrag) * (1.0F + prog * 0.8F);
-            stack.mulPose(com.mojang.math.Axis.YP.rotation(yRot));
-            stack.mulPose(com.mojang.math.Axis.XP.rotation(xRot));
-            stack.mulPose(com.mojang.math.Axis.ZP.rotation(0.08F));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(xRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(0.08F)));
             this.halfSaiyanMainBang[i].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
             stack.translate(0.0F, 0.15F, -0.04F);
         }
@@ -424,8 +424,8 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
             float wave = Mth.sin(age * kiFreq + 1.5F - prog * 1.5F) * kiAmp;
             float yRot = (-0.10F + yawDrag * 1.2F + wave);
             float xRot = (pitchDrag + vertInertia + walkBounce);
-            stack.mulPose(com.mojang.math.Axis.YP.rotation(yRot));
-            stack.mulPose(com.mojang.math.Axis.XP.rotation(xRot));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(xRot)));
             this.halfSaiyanRightBang[i].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
             stack.translate(0.0F, 0.12F, -0.03F);
         }
@@ -439,8 +439,8 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
             float wave = Mth.sin(age * kiFreq + 0.8F - prog * 1.5F) * kiAmp;
             float yRot = (yawDrag + walkSway + wave);
             float xRot = -0.30F + (pitchDrag + vertInertia + speedDrag + auraFlutter);
-            stack.mulPose(com.mojang.math.Axis.YP.rotation(yRot));
-            stack.mulPose(com.mojang.math.Axis.XP.rotation(xRot));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(xRot)));
             this.halfSaiyanCrown[i].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
             stack.translate(0.0F, -0.18F, 0.02F);
         }
@@ -449,14 +449,14 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
         // 4. Left & Right Flares
         stack.pushPose();
         stack.translate(-0.24F, -0.36F, 0.0F);
-        stack.mulPose(com.mojang.math.Axis.ZP.rotation(-0.45F + yawDrag * 0.7F));
+        stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(-0.45F + yawDrag * 0.7F)));
         this.halfSaiyanLeftFlare[0].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         this.halfSaiyanLeftFlare[1].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         stack.popPose();
 
         stack.pushPose();
         stack.translate(0.24F, -0.36F, 0.0F);
-        stack.mulPose(com.mojang.math.Axis.ZP.rotation(0.45F + yawDrag * 0.7F));
+        stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(0.45F + yawDrag * 0.7F)));
         this.halfSaiyanRightFlare[0].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         this.halfSaiyanRightFlare[1].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         stack.popPose();
@@ -465,7 +465,7 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
         stack.pushPose();
         stack.translate(0.0F, -0.32F, 0.20F);
         float occPitch = 0.30F + (pitchDrag + speedDrag + vertInertia);
-        stack.mulPose(com.mojang.math.Axis.XP.rotation(occPitch));
+        stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(occPitch)));
         this.halfSaiyanBack[0].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
         stack.translate(0.0F, 0.0F, 0.14F);
         this.halfSaiyanBack[1].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
@@ -487,8 +487,8 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
             float yRot = (yawDrag * 1.4F + walkSway * 1.5F + wave) * (1.0F + prog * 0.8F);
             float basePitch = 0.18F + prog * 0.08F;
             float xRot = basePitch + (pitchDrag * 1.2F + vertInertia * 1.5F + speedDrag * 2.0F + walkBounce);
-            stack.mulPose(com.mojang.math.Axis.YP.rotation(yRot));
-            stack.mulPose(com.mojang.math.Axis.XP.rotation(xRot));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(xRot)));
             this.ssj3ManeCenter[i].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
             stack.translate(0.0F, 0.20F, 0.03F);
         }
@@ -502,8 +502,8 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
             float wave = Mth.sin(age * 0.10F + 0.5F - prog * 2.0F) * 0.04F;
             float yRot = -0.12F + (yawDrag * 1.3F + wave);
             float xRot = 0.16F + (pitchDrag + vertInertia + speedDrag * 1.8F);
-            stack.mulPose(com.mojang.math.Axis.YP.rotation(yRot));
-            stack.mulPose(com.mojang.math.Axis.XP.rotation(xRot));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(xRot)));
             this.ssj3ManeLeft[i].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
             stack.translate(0.0F, 0.18F, 0.02F);
         }
@@ -517,8 +517,8 @@ public class TrailingHairLayer extends RenderLayer<AvatarRenderState, EntityMode
             float wave = Mth.sin(age * 0.10F + 1.0F - prog * 2.0F) * 0.04F;
             float yRot = 0.12F + (yawDrag * 1.3F + wave);
             float xRot = 0.16F + (pitchDrag + vertInertia + speedDrag * 1.8F);
-            stack.mulPose(com.mojang.math.Axis.YP.rotation(yRot));
-            stack.mulPose(com.mojang.math.Axis.XP.rotation(xRot));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotation(yRot)));
+            stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(xRot)));
             this.ssj3ManeRight[i].render(stack, buffer, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, color);
             stack.translate(0.0F, 0.18F, 0.02F);
         }

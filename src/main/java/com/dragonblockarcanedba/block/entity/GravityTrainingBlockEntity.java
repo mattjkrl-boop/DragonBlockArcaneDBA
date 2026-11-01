@@ -88,7 +88,7 @@ public class GravityTrainingBlockEntity extends BlockEntity implements MenuProvi
                 // Dynamic Downward Pull based on Gravity (0 to 0.12 force)
                 double pull = (entity.gravity / 1000.0) * 0.12; 
                 player.setDeltaMovement(player.getDeltaMovement().add(0, -pull, 0));
-                player.hurtMarked = true; // Tell client to update motion
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(player); // Tell client to update motion
 
                 // Dynamic Gravity Weight: Ancient Weight effect
                 int weightAmp = Math.min(3, entity.gravity / 250);
@@ -106,7 +106,7 @@ public class GravityTrainingBlockEntity extends BlockEntity implements MenuProvi
                     if (!player.isCreative()) {
                         float damage = (entity.gravity / 1000.0f) * 20.0f;
                         if (damage > 0.1f) {
-                            player.invulnerableTime = 0;
+                            com.dragonblockarcanedba.util.DbaCompat.setInvulnerableTime(player, 0);
                             player.hurtServer((net.minecraft.server.level.ServerLevel) level, level.damageSources().generic(), damage);
                         }
                     }

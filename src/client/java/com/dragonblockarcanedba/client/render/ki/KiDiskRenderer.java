@@ -44,7 +44,7 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
 
         // Spinning inner disk
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(state.ageInTicks * 40.0f));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(state.ageInTicks * 40.0f)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -diskRadius, -diskHalfHeight, -diskRadius,
@@ -57,7 +57,7 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
         float edgeRadius = 0.85f;
         float edgeHalf = 0.015f;
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(state.ageInTicks * 40.0f));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(state.ageInTicks * 40.0f)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             KiRenderHelper.drawColoredBox(pose, buffer,
                     -edgeRadius, -edgeHalf, -edgeRadius,

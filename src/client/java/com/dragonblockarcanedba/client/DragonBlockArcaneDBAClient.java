@@ -500,7 +500,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
                             zSwordChargeTicks
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         zSwordChargeTicks = 0;
                     }
                 } else {
@@ -525,7 +525,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             hollowChargeTicks,
                             isHoldingS
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         hollowChargeTicks = 0;
                     } else if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
                         // Click dash during active sequence
@@ -572,7 +572,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
                             0
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         weaponUseTimer = 4; // every 4 ticks
                     }
                 }
@@ -587,7 +587,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
                             0
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         weaponUseTimer = 2; // 2 ticks = 10 attacks per second
                     }
                 }
@@ -600,7 +600,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
                             saberChargeTicks
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
 
                         // Client-side Phasing / Transparency targeting
                         if (client.level != null) {
@@ -685,7 +685,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
                             oxAxeChargeTicks
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         oxAxeChargeTicks = 0;
                     }
                 } else {
@@ -714,7 +714,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
                             grandSwordSpinTicks
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         grandSwordSpinTicks = 0;
                     }
                 } else {
@@ -736,7 +736,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
                             daburaChargeTicks
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         daburaChargeTicks = 0;
                     }
                 } else {
@@ -758,7 +758,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
                             evilSpearChargeTicks
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         evilSpearChargeTicks = 0;
                     }
                 } else {
@@ -780,7 +780,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_RELEASE,
                             katanaDrawTicks
                         ));
-                        client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                        com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         katanaDrawTicks = 0;
                     }
                 } else {
@@ -798,7 +798,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             blasterBarrageTicks
                         ));
                         if (blasterBarrageTicks % 3 == 0) {
-                            client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                            com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         }
                     } else if (blasterBarrageTicks > 0) {
                         blasterBarrageTicks = 0;
@@ -818,7 +818,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                             braveAssaultTicks
                         ));
                         if (braveAssaultTicks % 4 == 0) {
-                            client.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                            com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
                         }
                     } else if (braveAssaultTicks > 0) {
                         braveAssaultTicks = 0;
