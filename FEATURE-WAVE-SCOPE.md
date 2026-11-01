@@ -1,6 +1,6 @@
 # DBA Feature Wave Scope (Nov 1, 2026)
 
-Source: Carter's Nov 1, 2026 direction for this chat. This wave is DBA ONLY (not the Mega Mod). Order below is the proposed build order, grounded in the Nov 1 code audit at HEAD 80a2b98 (365 Java files). No code in this wave starts until the compile check in BUILD-VERIFY.md passes on Carter's Windows machine, so every change lands on a verified base.
+Source: Carter's Nov 1, 2026 direction for this chat. This wave is DBA ONLY (not the Mega Mod). Order below is the build order, grounded in the Nov 1 code audit at HEAD 80a2b98 (365 Java files). Carter declined the Windows compile check on Nov 1, 2026 ("just audit after and b4"), so Phase 0 is closed as waived: every phase is verified by the before and after audit method in BUILD-VERIFY.md instead of a build gate, and no audit is ever reported as a compile pass.
 
 Rules that bind the whole wave:
 - Version floor is Minecraft 26.2, target is 26.2 and up through the latest snapshot. Use only 26.2-native APIs (no mappings, ValueOutput/ValueInput patterns already in the code).
@@ -10,7 +10,7 @@ Rules that bind the whole wave:
 
 ## Audit: what already exists (do not rebuild from zero)
 
-Weapons (19 GeckoLib weapons + sickle):
+Weapons (19 GeckoLib weapons, including the Sickle of Sorrow):
 - Items: Azure Dragon Sword, Bansho Fan, Blaster Gun, Brave Sword, Cursed Blade, Dabura Sword (Darkness), Devil Trident, Dimensional Sword, Evil Spear, Grand Sword, Hollows Edge, Katana, Ox Kings Ax, Power Pole, Saber, Sickle of Sorrow, Spirit Sword, Whis Staff, Z Sword. Each has a full Left and Right ability implementation, a GeckoLib geo model (geckolib/models/item/*.geo.json), a flat GUI texture plus a glowmask texture, and dedicated ability entities and renderers (83 client renderers total).
 - Split personality problem: only 10 weapons also have a code-built procedural model in WeaponModelRegistry (dimensional, power pole, devil trident, sickle, spirit sword, bansho fan, hollows edge, whis staff, z sword, cursed blade), and only 4 of those are actually wired to the _3d swap in ItemModelResolverMixin (devil trident, power pole, dimensional sword, bansho fan). The other 9 weapons are GeckoLib only. In-hand look therefore differs by weapon family, which is exactly what a full overhaul should unify.
 - SwingTrailRenderer already gives 15 bladed weapons a colored swing ribbon. Blaster, Bansho Fan, Whis Staff, and Power Pole have no trail entry.
@@ -32,10 +32,10 @@ Mobs (gap):
 
 ## Proposed phases
 
-### Phase 0: Compile verification (open, Carter's machine)
-See BUILD-VERIFY.md. Exit: a passing build with date, HEAD, and jar size recorded.
+### Phase 0: Compile verification (closed, waived by Carter Nov 1, 2026)
+See BUILD-VERIFY.md. Carter will not build it; verification is the before and after audit on every change. The build has still never passed, and that fact stays stated plainly in every phase report.
 
-### Phase 1: Weapon visual overhaul (all 20 weapons)
+### Phase 1: Weapon visual overhaul (all 19 weapons)
 - One rendering path for every weapon: pick GeckoLib geo as the single standard (it already covers all 19 plus animations in dba_weapon.animation.json), retire or complete the procedural path so no weapon renders differently by family. Concept sheet per weapon first (front, side, in-hand, GUI), then model, texture, and glowmask rebuilt to it.
 - Per-weapon identity pass: silhouette, palette, glowmask, swing trail color and width, charge visuals, and sheath/idle animation state (the Geo renderer already distinguishes idle, swinging, and using).
 - Add missing trails (Blaster muzzle streak, Bansho wind arc, Whis Staff ring, Power Pole arc) and unify trail quality.
