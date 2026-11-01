@@ -140,13 +140,13 @@ def render_view(faces, tex, view, W, H, bounds, tail_recolor=None):
         inside = (w0 >= -0.001) & (w1 >= -0.001) & (w2 >= -0.001)
         if not inside.any(): continue
         d = w0 * dps[0] + w1 * dps[1] + w2 * dps[2]
-        u = (w0 * uvs[0][0] + w1 * uvs[1][0] + w2 * uvs[2][0]) * (TW - 1)
-        v = (w0 * uvs[0][1] + w1 * uvs[1][1] + w2 * uvs[2][1]) * (TH - 1)
+        u = (w0 * uvs[0][0] + w1 * uvs[1][0] + w2 * uvs[2][0]) * TW
+        v = (w0 * uvs[0][1] + w1 * uvs[1][1] + w2 * uvs[2][1]) * TH
         # clamp into this face's own UV rect (half-texel inset) so edge pixels
         # never bleed a neighboring packed face's texels
-        fu = [uv[0] * (TW - 1) for uv in uvs]; fv = [uv[1] * (TH - 1) for uv in uvs]
-        u = np.clip(u, min(fu) + 0.55, max(fu) - 0.55)
-        v = np.clip(v, min(fv) + 0.55, max(fv) - 0.55)
+        fu = [uv[0] * TW for uv in uvs]; fv = [uv[1] * TH for uv in uvs]
+        u = np.clip(u, min(fu) + 0.5, max(fu) - 0.5)
+        v = np.clip(v, min(fv) + 0.5, max(fv) - 0.5)
         sub_z = zbuf[y0:y1 + 1, x0:x1 + 1]
         upd = inside & (d > sub_z)
         if not upd.any(): continue
