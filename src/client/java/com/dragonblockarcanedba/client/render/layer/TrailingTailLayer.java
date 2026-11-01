@@ -228,12 +228,24 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         } else if (race.contains("bio_android") || race.contains("cell")) {
             baseTailColor = 0xFF2E7D32; // Cell emerald carapace
         } else {
-            // Saiyan & Half-Saiyan monkey tail: stays brown fur in every Super Saiyan form (only the hair changes);
+            // Saiyan & Half-Saiyan monkey tail: brown fur in base form; in a transformed form the fur
+            // takes the form's hair color (gold in Super Saiyan, blue in Blue, silver in Ultra Instinct);
             // SSJ4 keeps its canonical crimson body fur
             if (formStr.contains("ssj4") || formStr.contains("super_saiyan_4")) {
                 baseTailColor = 0xFFC41528;
             } else {
                 baseTailColor = 0xFF6B4226;
+                if (formId != null) {
+                    com.dragonblockarcanedba.registry.Form form =
+                            com.dragonblockarcanedba.registry.DbaRegistries.getForm(formId);
+                    if (form != null && form.getHairColorOverride() != null) {
+                        try {
+                            String hex = form.getHairColorOverride();
+                            if (hex.startsWith("#")) hex = hex.substring(1);
+                            baseTailColor = 0xFF000000 | Integer.parseInt(hex, 16);
+                        } catch (Exception ignored) {}
+                    }
+                }
             }
         }
 
