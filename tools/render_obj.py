@@ -142,6 +142,11 @@ def render_view(faces, tex, view, W, H, bounds, tail_recolor=None):
         d = w0 * dps[0] + w1 * dps[1] + w2 * dps[2]
         u = (w0 * uvs[0][0] + w1 * uvs[1][0] + w2 * uvs[2][0]) * (TW - 1)
         v = (w0 * uvs[0][1] + w1 * uvs[1][1] + w2 * uvs[2][1]) * (TH - 1)
+        # clamp into this face's own UV rect (half-texel inset) so edge pixels
+        # never bleed a neighboring packed face's texels
+        fu = [uv[0] * (TW - 1) for uv in uvs]; fv = [uv[1] * (TH - 1) for uv in uvs]
+        u = np.clip(u, min(fu) + 0.55, max(fu) - 0.55)
+        v = np.clip(v, min(fv) + 0.55, max(fv) - 0.55)
         sub_z = zbuf[y0:y1 + 1, x0:x1 + 1]
         upd = inside & (d > sub_z)
         if not upd.any(): continue
