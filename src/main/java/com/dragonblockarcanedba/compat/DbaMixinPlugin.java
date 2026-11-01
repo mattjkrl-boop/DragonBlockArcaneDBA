@@ -41,9 +41,12 @@ public class DbaMixinPlugin implements IMixinConfigPlugin {
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         boolean newer = isAtLeast263();
         switch (mixinClassName) {
-            // Multi-layer Otherworld clouds hook a method that only exists before 26.3.
+            // Multi-layer Otherworld clouds: addCloudsPass hook before 26.3,
+            // CloudRenderer prepare/render hooks from 26.3.
             case "com.dragonblockarcanedba.mixin.CloudTextureMixin":
                 return !newer;
+            case "com.dragonblockarcanedba.mixin.CloudTextureMixin263":
+                return newer;
             // Post effects hook: doEntityOutline before 26.3, blitEntityOutline from 26.3.
             case "com.dragonblockarcanedba.client.mixin.GameRendererPostMixin":
                 return !newer;

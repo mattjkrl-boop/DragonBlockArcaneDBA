@@ -21,10 +21,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * celestial elevation tiers (Y=95, 135, 175, 215) with golden anime cloud coloring.
  *
  * 26.2 and below only: 26.3 removed LevelRenderer.addCloudsPass and rebuilt cloud
- * rendering around CloudRenderer.prepare plus a render-pass draw, so there is no
- * equivalent hook. DbaMixinPlugin skips this mixin on 26.3 and up, where the
- * Otherworld keeps vanilla single-layer clouds (still golden tinted and raised by
- * CloudColorMixin). See audits/MC-263-COMPAT-AUDIT.md item 15.
+ * rendering around CloudRenderer.prepare plus a render-pass draw. DbaMixinPlugin
+ * skips this mixin on 26.3 and up, where CloudTextureMixin263 runs the same
+ * five-layer system on the new prepare and draw hooks instead. See
+ * audits/MC-263-COMPAT-AUDIT.md item 15.
  */
 @Mixin(LevelRenderer.class)
 public class CloudTextureMixin {
