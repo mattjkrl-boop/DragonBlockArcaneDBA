@@ -28,7 +28,8 @@ public final class DbaGeoWeaponRenderers {
 
     private static final Set<String> MIGRATED = Set.of(
         "katana", "z_sword", "brave_sword", "grand_sword", "azure_dragon_sword",
-        "dabura_sword", "cursed_blade", "hollows_edge", "saber");
+        "dabura_sword", "cursed_blade", "hollows_edge", "saber",
+        "evil_spear", "devil_trident", "power_pole", "sickle_of_sorrow", "ox_kings_ax");
 
     public static void init() {
         DbaGeoWeapon.Hooks.PROVIDER = DbaGeoWeaponRenderers::provider;
