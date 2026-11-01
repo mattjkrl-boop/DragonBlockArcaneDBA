@@ -56,7 +56,7 @@ public final class MobPhysics {
         double lastVy;
     }
 
-    private record LastHit(float strength, long tick, boolean dba) {}
+    private record LastHit(float strength, long tick, boolean dba, UUID attackerId) {}
 
     private static final Map<UUID, Tracked> TRACKED = new HashMap<>();
     private static final Map<UUID, LastHit> LAST_HIT = new HashMap<>();
@@ -68,7 +68,8 @@ public final class MobPhysics {
             if (blocked || damageTaken <= 0) return;
             boolean dba = isDbaSource(source.getEntity()) || isDbaSource(source.getDirectEntity());
             long now = entity.level().getGameTime();
-            LAST_HIT.put(entity.getUUID(), new LastHit((float) damageTaken, now, dba));
+            UUID attackerId = source.getEntity() instanceof Player p ? p.getUUID() : null;
+            LAST_HIT.put(entity.getUUID(), new LastHit((float) damageTaken, now, dba, attackerId));
             if (!dba || damageTaken < MIN_LAUNCH_DAMAGE) return;
             Entity attacker = source.getEntity();
             if (attacker == null || attacker == entity) return;
@@ -84,6 +85,15 @@ public final class MobPhysics {
             DeathTumblePayload payload = new DeathTumblePayload(entity.getId(), strength);
             for (ServerPlayer viewer : PlayerLookup.tracking(entity)) {
                 ServerPlayNetworking.send(viewer, payload);
+            }
+            // Finisher impact frame for the killer: a hitstop hold plus a shockwave-grade
+            // shake (the client routes intensity >= 1.2 to the shockwave post effect too).
+            if (hit.attackerId() != null && entity.level().getServer() != null) {
+                ServerPlayer killer = entity.level().getServer().getPlayerList().getPlayer(hit.attackerId());
+                if (killer != null && killer != entity) {
+                    float intensity = 1.25f + strength * 0.35f;
+                    ServerPlayNetworking.send(killer, new com.dragonblockarcanedba.network.ScreenShakePayload(intensity, 6, 3));
+                }
             }
         });
 

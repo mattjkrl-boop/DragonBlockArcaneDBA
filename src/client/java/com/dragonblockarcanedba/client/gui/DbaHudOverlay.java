@@ -174,7 +174,27 @@ public class DbaHudOverlay implements HudElement {
                 );
             }
         }
+        drawDamageDirection(guiGraphics);
     }
-    
+
+    /** Red arc around the crosshair pointing toward the latest damage source. */
+    private void drawDamageDirection(GuiGraphicsExtractor guiGraphics) {
+        if (!com.dragonblockarcanedba.client.fx.DamageDirectionFx.active()) return;
+        int w = guiGraphics.guiWidth();
+        int h = guiGraphics.guiHeight();
+        int cx = w / 2;
+        int cy = h / 2;
+        double radius = Math.min(cx, cy) * 0.52;
+        double base = com.dragonblockarcanedba.client.fx.DamageDirectionFx.angleRad();
+        int alpha = (int) (200 * com.dragonblockarcanedba.client.fx.DamageDirectionFx.fade());
+        int color = (alpha << 24) | 0xFF2A2A;
+        for (double off = -0.55; off <= 0.55; off += 0.11) {
+            double ang = base + off;
+            int px = cx + (int) (Math.sin(ang) * radius);
+            int py = cy - (int) (Math.cos(ang) * radius);
+            guiGraphics.fill(px - 8, py - 3, px + 8, py + 3, color);
+        }
+    }
+
     private record StyledBar(int y, float percent, int fillColor, int borderColor) {}
 }

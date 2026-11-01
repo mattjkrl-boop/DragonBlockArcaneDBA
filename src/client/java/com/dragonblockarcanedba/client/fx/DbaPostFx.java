@@ -25,6 +25,9 @@ public final class DbaPostFx {
     private static int surgeLevel;
     private static int dangerLevel;
     private static int useTicks;
+    private static String formChain;
+    private static String lastFormFamily;
+    private static int formBurstTicks;
     private static int shockFrame = -1;
     private static boolean wasStopped;
     private static boolean failed;
@@ -57,11 +60,34 @@ public final class DbaPostFx {
             dangerTarget = frac < 0.10f ? 3 : frac < 0.20f ? 2 : frac < 0.35f ? 1 : 0;
         }
         dangerLevel = dangerLevel < dangerTarget ? dangerLevel + 1 : Math.max(dangerTarget, dangerLevel - 1);
+        // Form grade: steady signature tint while transformed, stronger burst on transform.
+        String family = null;
+        if (mc.player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor) {
+            Identifier formId = accessor.dba$getActiveFormId();
+            if (formId != null) family = formFamily(formId.getPath());
+        }
+        if (family != null && !family.equals(lastFormFamily)) formBurstTicks = 12;
+        lastFormFamily = family;
+        if (formBurstTicks > 0) formBurstTicks--;
+        formChain = family == null ? null : "grade_" + family + (formBurstTicks > 0 ? "_burst" : "");
         if (shockFrame >= 0 && ++shockFrame >= SHOCK_FRAMES) shockFrame = -1;
     }
 
     private static int step(int level, boolean on) {
         return on ? Math.min(LEVELS, level + 1) : Math.max(0, level - 1);
+    }
+
+    /** Maps a form id (data/dragonblockarcanedba/forms/*.json) to its grade family. */
+    private static String formFamily(String formPath) {
+        if (formPath.contains("super_saiyan_blue")) return "blue";
+        if (formPath.contains("super_saiyan_god")) return "god";
+        if (formPath.contains("super_saiyan")) return "ssj";
+        if (formPath.contains("ultra_instinct")) return "ui";
+        if (formPath.contains("golden")) return "golden";
+        if (formPath.contains("kaioken")) return "kaioken";
+        if (formPath.contains("namekian")) return "namekian";
+        if (formPath.contains("arcosian")) return "arcosian";
+        return null;
     }
 
     /** Runs right after the world and vanilla post effect, before the GUI. */
@@ -71,6 +97,7 @@ public final class DbaPostFx {
         try {
             if (eclipseLevel > 0) apply(mc, target, pool, "eclipse_" + eclipseLevel);
             if (grayLevel > 0) apply(mc, target, pool, "time_stop_" + grayLevel);
+            if (formChain != null) apply(mc, target, pool, formChain);
             if (surgeLevel > 0) apply(mc, target, pool, "ki_surge_" + surgeLevel);
             if (dangerLevel > 0) apply(mc, target, pool, "danger_" + dangerLevel);
             if (shockFrame >= 0) apply(mc, target, pool, "shockwave_" + shockFrame);

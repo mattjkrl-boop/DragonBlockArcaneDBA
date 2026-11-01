@@ -1,0 +1,11 @@
+# Phase 7 After (Nov 1, 2026)
+
+Carter approved all five proposals ("Just get all done"), weapon attack visuals first (see audits/WEAPON-ATTACK-VISUALS-AFTER.md). All five built:
+
+1. Finisher impact frames: MobPhysics now records the attacker on every hit. When a DBA hit kills, the killer receives a ScreenShakePayload (intensity 1.25 to 1.78 by tumble strength, 6 ticks, 3 ticks of hitstop), which the client routes to both the hitstop hold and the shockwave post effect. Minecraft has no time dilation, so impact frames are done with hitstop, named honestly. The death tumble broadcast is unchanged.
+2. Transformation signature grades: new dba_formgrade post shader (signature tint grade with a tinted rim burn) plus 16 chains covering the 8 form families in data/forms (ssj gold, blue, god crimson, ultra instinct silver, golden, kaioken ember red, namekian orange, arcosian violet), each in a steady 0.5 amount and a 0.9 burst. DbaPostFx reads the local player's active form each tick: steady grade while transformed, 12 tick burst on every form change.
+3. Aura pulse: AuraRenderer rewritten. Transformed players now emit the mod's KI_MOTE particle on a per-player phase-shifted pulse wave (swell and settle, faster rise at the crest). While charging (holding use), the aura surges: more motes, tighter column, faster rise. Replaces flat vanilla glow motes; respects the effects density config.
+4. Damage direction indicator: client/fx/DamageDirectionFx watches the local player's health; on a drop it converts the last damage source's position into a camera-relative angle. DbaHudOverlay draws a fading red arc around the crosshair on that side for 22 ticks.
+5. Clash camera: client/fx/ClashFx watches for GrandClashSparkEntity (the Grand Sword clash) within 12 blocks of the local player and applies a weak repeating shake nudge (0.35 intensity, well below real hits, so it never overrides them) while the clash is live.
+
+Audit: every touched file compiles clean against the real jars on the full classpath; the only sweep errors are the documented pre-existing artifacts in untouched DbaItems and DbaMenus. This is an audit result, not a Gradle build; the build remains waived per BUILD-VERIFY.md.
