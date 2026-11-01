@@ -11,7 +11,8 @@ import net.minecraft.resources.Identifier;
 
 /**
  * Screen space post effects driven from client state: a grayscale freeze while the local player is in
- * Temporal Stasis, an eclipse grade while inside Storm of Darkness, and a radial shockwave on heavy impacts.
+ * Temporal Stasis, an eclipse grade while inside Storm of Darkness, a radial shockwave on heavy impacts,
+ * a ki surge grade that builds while the player charges (isUsingItem), and a danger vignette at low health.
  * Each effect uses stepped vanilla post chains (uniforms are static in post chain json), advanced per tick.
  */
 public final class DbaPostFx {
@@ -21,6 +22,9 @@ public final class DbaPostFx {
     private static final int SHOCK_FRAMES = 8;
     private static int grayLevel;
     private static int eclipseLevel;
+    private static int surgeLevel;
+    private static int dangerLevel;
+    private static int useTicks;
     private static int shockFrame = -1;
     private static boolean wasStopped;
     private static boolean failed;
@@ -42,6 +46,17 @@ public final class DbaPostFx {
         wasStopped = stopped;
         grayLevel = step(grayLevel, stopped);
         eclipseLevel = step(eclipseLevel, eclipse);
+        // Ki surge: builds while the player is using an item (charging), drains on release.
+        if (mc.player != null && mc.player.isUsingItem()) useTicks++;
+        else useTicks = 0;
+        surgeLevel = step(surgeLevel, useTicks > 8);
+        // Danger: steps in as health falls through 35, 20 and 10 percent.
+        int dangerTarget = 0;
+        if (mc.player != null && mc.player.isAlive()) {
+            float frac = mc.player.getHealth() / Math.max(1f, mc.player.getMaxHealth());
+            dangerTarget = frac < 0.10f ? 3 : frac < 0.20f ? 2 : frac < 0.35f ? 1 : 0;
+        }
+        dangerLevel = dangerLevel < dangerTarget ? dangerLevel + 1 : Math.max(dangerTarget, dangerLevel - 1);
         if (shockFrame >= 0 && ++shockFrame >= SHOCK_FRAMES) shockFrame = -1;
     }
 
@@ -56,6 +71,8 @@ public final class DbaPostFx {
         try {
             if (eclipseLevel > 0) apply(mc, target, pool, "eclipse_" + eclipseLevel);
             if (grayLevel > 0) apply(mc, target, pool, "time_stop_" + grayLevel);
+            if (surgeLevel > 0) apply(mc, target, pool, "ki_surge_" + surgeLevel);
+            if (dangerLevel > 0) apply(mc, target, pool, "danger_" + dangerLevel);
             if (shockFrame >= 0) apply(mc, target, pool, "shockwave_" + shockFrame);
         } catch (RuntimeException e) {
             failed = true;
