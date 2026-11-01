@@ -86,6 +86,7 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         DbaNetwork.registerCommon();
         DbaNetwork.registerServer();
         com.dragonblockarcanedba.movement.MovementPhysics.register();
+        com.dragonblockarcanedba.movement.MobPhysics.register();
 
         // Register JSON dynamic data loaders using non-deprecated ResourceLoader
         ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(

@@ -5,6 +5,7 @@
 	"client": [
 		"PlayerEntityRendererMixin",
 		"LivingEntityRendererMixin",
+		"LivingEntityRenderStateMixin",
 		"LivingEntityRendererInvoker",
 		"MeltingOverlayMixin",
 		"AvatarRenderStateMixin",

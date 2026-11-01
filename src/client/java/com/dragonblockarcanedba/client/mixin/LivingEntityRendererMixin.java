@@ -155,4 +155,20 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
         bar.append(net.minecraft.network.chat.Component.literal(numStr).withStyle(net.minecraft.ChatFormatting.DARK_AQUA));
         return bar;
     }
+
+    @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V", at = @At("TAIL"))
+    protected void dba$stampTumble(T entity, S state, float tickDelta, CallbackInfo ci) {
+        if (state instanceof com.dragonblockarcanedba.client.render.layer.DbaTumbleState tumble) {
+            tumble.dba$setTumble(com.dragonblockarcanedba.client.fx.TumbleFx.strengthFor(entity.getId()));
+        }
+    }
+
+    @Inject(method = "setupRotations", at = @At("TAIL"))
+    protected void dba$applyTumble(S state, com.mojang.blaze3d.vertex.PoseStack poseStack, float bodyRot, float scale, CallbackInfo ci) {
+        if (state instanceof com.dragonblockarcanedba.client.render.layer.DbaTumbleState tumble
+                && tumble.dba$getTumble() > 0f && state.deathTime > 0f) {
+            float spin = Math.min(1f, state.deathTime / 16f) * 260f * tumble.dba$getTumble();
+            poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(spin));
+        }
+    }
 }

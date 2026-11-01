@@ -438,6 +438,8 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             KeyMapping.Category.MISC
         ));
         ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.MovementInput::tick);
+        com.dragonblockarcanedba.client.fx.TumbleFx.register();
+        ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.TumbleFx::tick);
         com.dragonblockarcanedba.client.fx.SwingTrailRenderer.register();
         com.dragonblockarcanedba.client.particle.DbaParticleProviders.register();
         com.dragonblockarcanedba.client.fx.ScreenShakeHandler.scale = com.dragonblockarcanedba.config.DbaEffectsConfig.screenShake();
