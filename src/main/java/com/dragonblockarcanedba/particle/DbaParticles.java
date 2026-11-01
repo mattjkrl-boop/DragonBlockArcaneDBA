@@ -14,12 +14,14 @@ public final class DbaParticles {
     public static final SimpleParticleType EMBER = FabricParticleTypes.simple(true);
     public static final SimpleParticleType VOID_SMOKE = FabricParticleTypes.simple(true);
     public static final SimpleParticleType WIND = FabricParticleTypes.simple(true);
+    public static final SimpleParticleType KI_MOTE = FabricParticleTypes.simple(true);
 
     public static void register() {
         reg("spark", SPARK);
         reg("ember", EMBER);
         reg("void_smoke", VOID_SMOKE);
         reg("wind", WIND);
+        reg("ki_mote", KI_MOTE);
     }
 
     private static void reg(String name, SimpleParticleType type) {

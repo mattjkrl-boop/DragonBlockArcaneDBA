@@ -12,6 +12,7 @@ public final class DbaParticleProviders {
         reg(DbaParticles.EMBER, DbaGlowParticle.EMBER);
         reg(DbaParticles.VOID_SMOKE, DbaGlowParticle.VOID_SMOKE);
         reg(DbaParticles.WIND, DbaGlowParticle.WIND);
+        reg(DbaParticles.KI_MOTE, DbaGlowParticle.KI_MOTE);
     }
 
     private static void reg(SimpleParticleType type, DbaGlowParticle.Style style) {

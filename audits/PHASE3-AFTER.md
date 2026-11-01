@@ -1,0 +1,7 @@
+# Phase 3 After Audit (Nov 1, 2026): ki motes and charge effects
+
+Verified first, from the real GeckoLib 5.5.3 jar: AutoGlowingGeoLayer resolves its texture via RenderUtil.getEmissiveResource, which swaps ".png" for "_glowmask.png" on the model texture path. Phase 1's glowmask files match that convention exactly, so all 19 weapons' glow strips already render fullbright. The Phase 2 audit's "unconsumed glowmask" note was wrong and is corrected in PHASE3-BEFORE.md. A static layer cannot pulse, so the pulse lives in particles instead.
+
+Added: fifth particle type ki_mote (registration in DbaParticles, a soft gold-white additive Style in DbaGlowParticle, provider in DbaParticleProviders, particles/ki_mote.json, and four generated radial sprites). New client class ChargeFx, ticked alongside DbaPostFx: every player in the level who is using an item gets ki motes spiraling inward around them, the spiral tightening as the charge builds, and a charge of 10+ ticks ends in a ring burst of the existing spark particle. Rates scale with DbaEffectsConfig.effectDensity, 0 disables. No new networking; it reads synced entity state only.
+
+Audit: javac against the real 26.2, loader, API, and GeckoLib jars. ChargeFx and DbaParticles compile clean (one real error found and fixed during the audit: Level.random is protected, switched to player.getRandom()). Remaining errors in the sweep are the documented pre-existing raw-jar artifacts in untouched files. This is an audit result, not a Gradle build; the build remains waived per Carter's decision in BUILD-VERIFY.md.
