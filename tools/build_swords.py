@@ -119,16 +119,15 @@ def build_geo(spec):
         guard.append(cube([-gw / 2, 1.55, -1.15], [gw, 0.85, 2.3], "metal"))
         guard.append(cube([-gw / 2 - 0.3, 2.4, -1.3], [gw + 0.6, 0.85, 2.6], "metal"))
     elif spec["guard"] in ("wings", "dragon_wings"):
+        # Stepped voxel wings: unrotated boxes that overlap, so they always read as one
+        # connected wing. Rotated boxes left visible gaps at some angles (found in 3D).
         guard.append(cube([-1.5, 1.6, -1.5], [3.0, 0.9, 3.0], "metal"))
-        wing_metal = "metal" if spec["guard"] == "wings" else "metal"
-        guard.append(cube([-5.6, 2.1, -0.55], [4.6, 1.7, 1.1], wing_metal,
-                          rotation=[0, 0, 28], pivot=[-1.0, 2.0, 0]))
-        guard.append(cube([1.0, 2.1, -0.55], [4.6, 1.7, 1.1], wing_metal,
-                          rotation=[0, 0, -28], pivot=[1.0, 2.0, 0]))
-        guard.append(cube([-4.4, 3.6, -0.45], [3.0, 1.2, 0.9], wing_metal,
-                          rotation=[0, 0, 42], pivot=[-2.9, 2.6, 0]))
-        guard.append(cube([1.4, 3.6, -0.45], [3.0, 1.2, 0.9], wing_metal,
-                          rotation=[0, 0, -42], pivot=[2.9, 2.6, 0]))
+        guard.append(cube([-5.2, 1.9, -0.55], [4.4, 1.5, 1.1], "metal"))
+        guard.append(cube([0.8, 1.9, -0.55], [4.4, 1.5, 1.1], "metal"))
+        guard.append(cube([-6.3, 3.0, -0.45], [3.2, 1.15, 0.9], "metal"))
+        guard.append(cube([3.1, 3.0, -0.45], [3.2, 1.15, 0.9], "metal"))
+        guard.append(cube([-7.0, 3.95, -0.35], [2.1, 0.9, 0.7], "metal"))
+        guard.append(cube([4.9, 3.95, -0.35], [2.1, 0.9, 0.7], "metal"))
     elif spec["guard"] == "plate":
         guard.append(cube([-gw / 2, 1.3, -1.7], [gw, 2.2, 3.4], "metal"))
         guard.append(cube([-gw / 2 + 0.5, 2.1, -1.95], [1.1, 1.1, 0.4], "metal_dark"))
