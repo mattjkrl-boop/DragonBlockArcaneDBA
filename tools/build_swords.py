@@ -18,15 +18,16 @@ from PIL import Image, ImageDraw
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 ASSETS = os.path.join(ROOT, "src/main/resources/assets/dragonblockarcanedba")
 
+TEX = 256
 REGIONS = {
-    "blade_light": (0, 0, 32, 32),
-    "blade_dark": (32, 0, 32, 32),
-    "grip_main": (0, 32, 32, 32),
-    "grip_second": (32, 32, 32, 32),
-    "metal": (64, 0, 32, 32),
-    "glow": (64, 32, 32, 32),
-    "metal_dark": (96, 0, 32, 32),
-    "accent": (96, 32, 32, 32),
+    "blade_light": (0, 0, 64, 64),
+    "blade_dark": (64, 0, 64, 64),
+    "grip_main": (0, 64, 64, 64),
+    "grip_second": (64, 64, 64, 64),
+    "metal": (128, 0, 64, 64),
+    "glow": (128, 64, 64, 64),
+    "metal_dark": (192, 0, 64, 64),
+    "accent": (192, 64, 64, 64),
 }
 
 
@@ -48,6 +49,15 @@ def cube(origin, size, main, side=None, rotation=None, pivot=None):
 
 
 SPECS = {
+    "katana": {
+        "grip_len": 9.5, "blade_w": 2.1, "blade_len": 20.8, "thick": 0.5,
+        "curve": 0.17, "guard": "tsuba", "pommel": "ball",
+        "swing_len": 0.35, "charge_tilt": -7,
+        "pal": {"blade_light": (216, 228, 240), "blade_dark": (128, 142, 158),
+                "grip_main": (18, 16, 22), "grip_second": (233, 235, 239),
+                "metal": (188, 196, 206), "glow": (214, 242, 255),
+                "metal_dark": (106, 114, 126), "accent": (188, 196, 206)},
+    },
     "z_sword": {
         "grip_len": 11.0, "blade_w": 4.6, "blade_len": 20.0, "thick": 0.7,
         "curve": 0.0, "guard": "double_bar", "pommel": "ball",
@@ -131,29 +141,33 @@ def build_geo(spec):
     grip_top = 2.0
     grip_bot = grip_top - gl
 
-    grip = [cube([-0.95, grip_bot + 0.8, -0.95], [1.9, gl - 0.8, 1.9], "grip_second")]
-    y = grip_bot + 1.4
-    while y < grip_top - 0.6:
-        grip.append(cube([-1.08, y, -1.08], [2.16, 1.0, 2.16], "grip_main"))
-        y += 1.9
+    grip = [cube([-0.83, grip_bot + 0.8, -0.83], [1.66, gl - 0.8, 1.66], "grip_second")]
+    y = grip_bot + 1.3
+    while y < grip_top - 0.5:
+        grip.append(cube([-0.98, y, -0.98], [1.96, 0.8, 1.96], "grip_main"))
+        y += 1.62
     if spec["pommel"] == "ball":
-        grip.append(cube([-1.3, grip_bot - 0.6, -1.3], [2.6, 1.6, 2.6], "metal"))
+        grip.append(cube([-1.1, grip_bot - 0.5, -1.1], [2.2, 1.4, 2.2], "metal"))
     elif spec["pommel"] == "gem":
-        grip.append(cube([-1.15, grip_bot - 0.5, -1.15], [2.3, 1.3, 2.3], "metal"))
-        grip.append(cube([-0.7, grip_bot - 0.9, -0.7], [1.4, 0.7, 1.4], "accent"))
+        grip.append(cube([-1.0, grip_bot - 0.45, -1.0], [2.0, 1.15, 2.0], "metal"))
+        grip.append(cube([-0.6, grip_bot - 0.85, -0.6], [1.2, 0.65, 1.2], "accent"))
     elif spec["pommel"] == "spike":
-        grip.append(cube([-1.2, grip_bot - 0.4, -1.2], [2.4, 1.2, 2.4], "metal_dark"))
-        grip.append(cube([-0.55, grip_bot - 1.7, -0.55], [1.1, 1.5, 1.1], "metal_dark",
-                         rotation=[0, 0, 45], pivot=[0, grip_bot - 0.4, 0]))
+        grip.append(cube([-1.05, grip_bot - 0.35, -1.05], [2.1, 1.05, 2.1], "metal_dark"))
+        grip.append(cube([-0.5, grip_bot - 1.55, -0.5], [1.0, 1.35, 1.0], "metal_dark",
+                         rotation=[0, 0, 45], pivot=[0, grip_bot - 0.35, 0]))
     elif spec["pommel"] == "orb":
-        grip.append(cube([-1.0, grip_bot - 0.5, -1.0], [2.0, 1.2, 2.0], "metal_dark"))
-        grip.append(cube([-0.8, grip_bot - 1.6, -0.8], [1.6, 1.3, 1.6], "accent"))
+        grip.append(cube([-0.9, grip_bot - 0.45, -0.9], [1.8, 1.05, 1.8], "metal_dark"))
+        grip.append(cube([-0.68, grip_bot - 1.45, -0.68], [1.36, 1.15, 1.36], "accent"))
 
     guard = []
     gw = bw + 3.4
-    if spec["guard"] == "double_bar":
-        guard.append(cube([-gw / 2, 1.55, -1.15], [gw, 0.85, 2.3], "metal"))
-        guard.append(cube([-gw / 2 - 0.3, 2.4, -1.3], [gw + 0.6, 0.85, 2.6], "metal"))
+    if spec["guard"] == "tsuba":
+        guard.append(cube([-3.1, 1.75, -2.2], [6.2, 0.5, 4.4], "metal"))
+        guard.append(cube([-2.2, 1.75, -3.1], [4.4, 0.5, 6.2], "metal"))
+        guard.append(cube([-1.1, 2.25, -1.1], [2.2, 1.35, 2.2], "metal"))
+    elif spec["guard"] == "double_bar":
+        guard.append(cube([-gw / 2, 1.6, -1.05], [gw, 0.62, 2.1], "metal"))
+        guard.append(cube([-gw / 2 - 0.3, 2.22, -1.2], [gw + 0.6, 0.62, 2.4], "metal"))
     elif spec["guard"] in ("wings", "dragon_wings"):
         # Stepped voxel wings: unrotated boxes that overlap, so they always read as one
         # connected wing. Rotated boxes left visible gaps at some angles (found in 3D).
@@ -177,26 +191,41 @@ def build_geo(spec):
         guard.append(cube([-gw / 2, 1.3, -1.7], [gw, 2.2, 3.4], "metal"))
         guard.append(cube([-gw / 2 + 0.5, 2.1, -1.95], [1.1, 1.1, 0.4], "metal_dark"))
         guard.append(cube([gw / 2 - 1.6, 2.1, -1.95], [1.1, 1.1, 0.4], "metal_dark"))
-    guard.append(cube([-bw / 2 - 0.25, 3.3, -0.75], [bw + 0.5, 0.8, 1.5], "metal_dark"))
+    if spec["guard"] != "tsuba":
+        guard.append(cube([-bw / 2 - 0.22, 3.32, -0.68], [bw + 0.44, 0.65, 1.36], "metal_dark"))
 
     blade = []
     glow = []
-    segs = 4
+    segs = 7
     seg_h = bl / segs
     for i in range(segs):
         y0 = 4.1 + i * seg_h
-        w = bw * (1.0 - 0.14 * i)
-        xoff = spec["curve"] * (i * i) * 0.22
+        if i < segs - 2:
+            w = bw * (1.0 - 0.055 * i)
+        elif i == segs - 2:
+            w = bw * 0.74
+        else:
+            w = bw * 0.56
+        xoff = spec["curve"] * (i / (segs - 1)) ** 2 * 2.2
         tip = i == segs - 1
-        hh = seg_h * (0.72 if tip else 1.0)
+        hh = seg_h * (0.7 if tip else 1.0)
         rot = [0, 0, -16] if tip else None
+        piv = [xoff, y0, 0] if tip else None
         blade.append(cube([xoff - w / 2, y0, -th / 2], [w, hh, th], "blade_light", "blade_dark",
-                          rotation=rot, pivot=[xoff, y0, 0] if tip else None))
-        glow.append(cube([xoff - w / 2 - 0.26, y0, -th / 2 - 0.03], [0.5, hh, th + 0.06], "glow",
-                         rotation=rot, pivot=[xoff, y0, 0] if tip else None))
+                          rotation=rot, pivot=piv))
+        # edge bevel facets on both faces: thin angled boxes hugging the faces near
+        # the cutting edge, so the blade reads faceted like real steel, not a slab
+        bx = xoff - w / 2 + w * 0.15
+        zc = th / 2 - 0.13
+        blade.append(cube([bx - w * 0.17, y0, zc - 0.06], [w * 0.34, hh, 0.12], "blade_dark",
+                          rotation=[0, 14, 0], pivot=[bx, y0, zc]))
+        blade.append(cube([bx - w * 0.17, y0, -zc - 0.06], [w * 0.34, hh, 0.12], "blade_dark",
+                          rotation=[0, -14, 0], pivot=[bx, y0, -zc]))
+        glow.append(cube([xoff - w / 2 - 0.1, y0, -th / 2 - 0.02], [0.34, hh, th + 0.04], "glow",
+                         rotation=rot, pivot=piv))
         if spec.get("dual_edge"):
-            glow.append(cube([xoff + w / 2 - 0.24, y0, -th / 2 - 0.03], [0.5, hh, th + 0.06], "glow",
-                             rotation=rot, pivot=[xoff, y0, 0] if tip else None))
+            glow.append(cube([xoff + w / 2 - 0.24, y0, -th / 2 - 0.02], [0.34, hh, th + 0.04], "glow",
+                             rotation=rot, pivot=piv))
     if spec.get("ember"):
         # ember crack cubes sitting proud of the blade faces
         for (ex, ey) in ((-1.6, 8.0), (0.4, 12.5), (-0.8, 17.0), (1.2, 20.0)):
@@ -211,16 +240,24 @@ def build_geo(spec):
         {"name": "blade_glow", "parent": "weapon", "pivot": [0, 2, 0], "cubes": glow},
     ]
     return {"format_version": "1.12.0", "minecraft:geometry": [{
-        "description": {"identifier": "geometry." + "SPEC_ID", "texture_width": 128,
-                        "texture_height": 128, "visible_bounds_width": 5,
+        "description": {"identifier": "geometry." + "SPEC_ID", "texture_width": TEX,
+                        "texture_height": TEX, "visible_bounds_width": 5,
                         "visible_bounds_height": 5, "visible_bounds_offset": [0, 1.5, 0]},
         "bones": bones}]}
 
 
+def _shade(base, f):
+    return tuple(max(0, min(255, int(v * f))) for v in base) + (255,)
+
+
 def paint(spec, glowmask=False):
+    """256px atlas with painted realism: blade fuller and edge highlights, brushed
+    metal, crosshatched wrap. Deterministic pseudo-noise so renders are stable."""
+    import random
     pal = spec["pal"]
-    img = Image.new("RGBA", (128, 128), (0, 0, 0, 0 if glowmask else 255))
+    img = Image.new("RGBA", (TEX, TEX), (0, 0, 0, 0 if glowmask else 255))
     d = ImageDraw.Draw(img)
+    rng = random.Random(hash(spec["pal"]["glow"]) & 0xFFFF)
     for name, (x, y, w, h) in REGIONS.items():
         base = pal[name]
         if glowmask:
@@ -229,18 +266,49 @@ def paint(spec, glowmask=False):
             elif name == "accent" and spec["pommel"] in ("gem", "orb"):
                 d.rectangle([x, y, x + w - 1, y + h - 1], fill=base + (255,))
             continue
-        # vertical gradient per region
+        grad = 0.09 if name.startswith("blade") else 0.2
         for i in range(h):
             t = i / h
-            c = tuple(max(0, min(255, int(v * (1.08 - 0.22 * t)))) for v in base) + (255,)
-            d.line([(x, y + i), (x + w - 1, y + i)], fill=c)
-        if name == "grip_main" and spec.get("scale_grip"):
-            for i in range(0, w, 7):
-                for j in range(0, h, 7):
-                    d.rectangle([x + i, y + j, x + i + 3, y + j + 3],
-                                outline=tuple(max(0, v - 40) for v in base) + (255,))
+            d.line([(x, y + i), (x + w - 1, y + i)], fill=_shade(base, 1.0 + grad / 2 - grad * t))
+        # subtle speckle everywhere
+        for _ in range(90):
+            px, py = x + rng.randrange(w), y + rng.randrange(h)
+            f = rng.choice((0.9, 1.1))
+            d.point((px, py), fill=_shade(base, f))
         if name == "blade_light":
-            d.line([(x + 5, y), (x + 5, y + h - 1)], fill=(255, 255, 255, 160))
+            # edge highlights on both long edges of the face
+            d.rectangle([x, y, x + 3, y + h - 1], fill=_shade(base, 1.35))
+            d.rectangle([x + w - 4, y, x + w - 1, y + h - 1], fill=_shade(base, 1.28))
+            # fuller: bright ridge then dark groove, slightly off center
+            cx = x + int(w * 0.46)
+            d.line([(cx, y), (cx, y + h - 1)], fill=_shade(base, 1.3))
+            d.line([(cx + 2, y), (cx + 2, y + h - 1)], fill=_shade(base, 0.62))
+            d.line([(cx + 3, y), (cx + 3, y + h - 1)], fill=_shade(base, 0.78))
+            # a few fine scratches
+            for _ in range(7):
+                sx = x + rng.randrange(6, w - 6)
+                sy = y + rng.randrange(4, h - 14)
+                d.line([(sx, sy), (sx + 1, sy + rng.randrange(5, 12))], fill=_shade(base, 1.22))
+        if name == "blade_dark":
+            d.line([(x + int(w * 0.5), y), (x + int(w * 0.5), y + h - 1)], fill=_shade(base, 0.7))
+        if name == "grip_main":
+            # diagonal crosshatch, reads as wrapped cord or leather diamonds
+            step = 8
+            for i in range(-h, w, step):
+                d.line([(x + i, y), (x + i + h, y + h - 1)], fill=_shade(base, 0.72))
+                d.line([(x + i, y + h - 1), (x + i + h, y)], fill=_shade(base, 1.18))
+            if spec.get("scale_grip"):
+                for i in range(0, w, 9):
+                    for j in range(0, h, 9):
+                        d.rectangle([x + i, y + j, x + i + 4, y + j + 4], outline=_shade(base, 0.6))
+        if name in ("metal", "metal_dark"):
+            for _ in range(26):
+                sy = y + rng.randrange(h)
+                d.line([(x, sy), (x + w - 1, sy)], fill=_shade(base, rng.choice((0.92, 1.08))))
+            d.rectangle([x, y, x + w - 1, y + 3], fill=_shade(base, 1.15))
+        if name == "glow":
+            d.rectangle([x, y, x + 5, y + h - 1], fill=(255, 255, 255, 255))
+            d.rectangle([x + 6, y, x + 10, y + h - 1], fill=_shade(base, 1.3))
     return img
 
 

@@ -185,7 +185,8 @@ def render(faces, tex, cam, img_size=760):
     up = np.cross(right, fwd)
     focal = W * 1.15
 
-    texarr = np.array(tex)
+    texarr = np.array(tex).astype(np.float64)
+    th_, tw_ = texarr.shape[:2]
 
     def project(pt):
         v = pt - eye
@@ -194,39 +195,66 @@ def render(faces, tex, cam, img_size=760):
             return None
         x = (v @ right) / z * focal + W / 2
         y = -(v @ up) / z * focal + H / 2
-        return x, y, z
+        return np.array([x, y]), z
 
-    rendered = []
+    canvas = np.zeros((H, W, 3), dtype=np.float64)
+    canvas[:] = (40, 43, 54)
+    zbuf = np.full((H, W), -1e18)
+
     for corners, uv, shade, normal in faces:
+        u0, v0 = uv["uv"]
+        uw, vh = uv["uv_size"]
+        # quad corners in FACES order are (bottom-left, bottom-right, top-right, top-left)
+        # in face space; texture v grows downward, so top maps to v0.
+        uvq = np.array([
+            [u0, v0 + vh], [u0 + uw, v0 + vh], [u0 + uw, v0], [u0, v0]
+        ], dtype=np.float64)
         proj = [project(pt) for pt in corners]
         if any(p is None for p in proj):
             continue
-        depth = sum(p[2] for p in proj) / 4
-        rendered.append((depth, proj, uv, shade, corners))
-    rendered.sort(key=lambda r: -r[0])
+        pts = np.array([p[0] for p in proj])
+        zs = np.array([p[1] for p in proj])
+        for tri in ((0, 1, 2), (0, 2, 3)):
+            p = pts[list(tri)]
+            z = zs[list(tri)]
+            uvv = uvq[list(tri)]
+            # backface culling: geo faces wind CCW from outside
+            area = (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0])
+            if area >= 0:
+                continue
+            minx = max(0, int(np.floor(p[:, 0].min())))
+            maxx = min(W - 1, int(np.ceil(p[:, 0].max())))
+            miny = max(0, int(np.floor(p[:, 1].min())))
+            maxy = min(H - 1, int(np.ceil(p[:, 1].max())))
+            if maxx < minx or maxy < miny:
+                continue
+            ys, xs = np.mgrid[miny:maxy + 1, minx:maxx + 1]
+            xs = xs.astype(np.float64) + 0.5
+            ys = ys.astype(np.float64) + 0.5
+            d = (p[1][1] - p[2][1]) * (p[0][0] - p[2][0]) + (p[2][0] - p[1][0]) * (p[0][1] - p[2][1])
+            if abs(d) < 1e-12:
+                continue
+            w0 = ((p[1][1] - p[2][1]) * (xs - p[2][0]) + (p[2][0] - p[1][0]) * (ys - p[2][1])) / d
+            w1 = ((p[2][1] - p[0][1]) * (xs - p[2][0]) + (p[0][0] - p[2][0]) * (ys - p[2][1])) / d
+            w2 = 1 - w0 - w1
+            inside = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+            if not inside.any():
+                continue
+            invz = w0 / z[0] + w1 / z[1] + w2 / z[2]
+            pu = (w0 * uvv[0][0] / z[0] + w1 * uvv[1][0] / z[1] + w2 * uvv[2][0] / z[2]) / invz
+            pv = (w0 * uvv[0][1] / z[0] + w1 * uvv[1][1] / z[1] + w2 * uvv[2][1] / z[2]) / invz
+            tx = np.clip(pu.astype(int), 0, tw_ - 1)
+            ty = np.clip(pv.astype(int), 0, th_ - 1)
+            region = (slice(miny, maxy + 1), slice(minx, maxx + 1))
+            better = inside & (invz > zbuf[region])
+            if not better.any():
+                continue
+            sampled = texarr[ty, tx][:, :, :3] * shade
+            canvas[region][better] = sampled[better]
+            zbuf[region][better] = invz[better]
 
-    # per-face flat texture: draw polygon with the region's average color darkened by
-    # shade, then overlay a few texture sample stripes for surface feel.
-    for depth, proj, uv, shade, corners in rendered:
-        u0, v0 = uv["uv"]
-        uw, vh = uv["uv_size"]
-        # sample a grid of points in the region and tint
-        samples = []
-        for gy in range(4):
-            for gx in range(4):
-                tx = int(u0 + (gx + 0.5) * uw / 4)
-                ty = int(v0 + (gy + 0.5) * vh / 4)
-                samples.append(texarr[ty, tx][:3])
-        avg = np.mean(samples, axis=0) * shade
-        color = tuple(int(max(0, min(255, c))) for c in avg) + (255,)
-        poly = [(p[0], p[1]) for p in proj]
-        draw.polygon(poly, fill=color)
-        draw.line(poly + [poly[0]], fill=(10, 10, 14, 160), width=1)
-        # texture detail: draw the region's center stripe brightness variation
-        mid = texarr[int(v0 + vh / 2), int(u0 + uw / 2)][:3] * shade
-        midc = tuple(int(max(0, min(255, c))) for c in mid) + (110,)
-        draw.line([poly[0], poly[2]], fill=midc, width=1)
-    return img
+    out = Image.fromarray(np.clip(canvas, 0, 255).astype(np.uint8), "RGB").convert("RGBA")
+    return out
 
 
 VIEWS = {
