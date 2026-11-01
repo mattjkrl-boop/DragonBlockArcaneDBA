@@ -70,7 +70,7 @@ public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntit
 
         poseStack.pushPose();
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+        SubmitNodeCollector.CustomGeometryRenderer geometry = (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
 
@@ -128,7 +128,16 @@ public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntit
             // 4. Blinding Radiant White-Gold Core Flash (Flashing diamond polyhedron)
             float coreSize = (0.75f * (1.0f - progress * 0.6f)) * scale;
             drawDiamondSpark(matrix, buffer, 0, 0, 0, coreSize, 1.0f, 1.0f, 0.95f, fade);
-        });
+        };
+
+        // The burst is built in one plane and nearly vanishes edge-on, so the
+        // same geometry is submitted a second time rotated 90 degrees, giving
+        // the clash volume from any viewing angle.
+        collector.submitCustomGeometry(poseStack, renderType, geometry);
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotationY((float) Math.PI / 2.0f));
+        collector.submitCustomGeometry(poseStack, renderType, geometry);
+        poseStack.popPose();
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);

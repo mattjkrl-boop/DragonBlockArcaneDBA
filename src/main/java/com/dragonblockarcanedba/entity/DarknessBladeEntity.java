@@ -49,6 +49,15 @@ public class DarknessBladeEntity extends Projectile {
         this.setPos(this.getX() + movement.x, this.getY() + movement.y, this.getZ() + movement.z);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Falling trail: the blade used to emit nothing at all on the way
+            // down. Void smoke streams off it every 2 ticks.
+            if (this.tickCount % 2 == 0) {
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                    this.getX(), this.getY() + 2.0, this.getZ(), 3, 0.4, 1.2, 0.4, 0.02);
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    this.getX(), this.getY() + 0.5, this.getZ(), 1, 0.3, 0.5, 0.3, 0.05);
+            }
+
             // Impact check: ground or 40 ticks life
             if (this.onGround() || !this.level().getBlockState(this.blockPosition()).isAir() || this.tickCount > 40) {
                 // Impact detonation!

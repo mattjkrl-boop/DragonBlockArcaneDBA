@@ -61,7 +61,9 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         float age = state.age;
 
         float baseRadius = 1.2f + (charge * 2.2f);
-        float baseAlpha = 0.70f + (charge * 0.30f);
+        // Spawn fade-in over the first 4 ticks so the charge construct does not
+        // pop in at full brightness.
+        float baseAlpha = (0.70f + (charge * 0.30f)) * Math.min(1.0f, age / 4.0f);
         float tremble = (float) Math.sin(age * 3.5f) * (0.02f + charge * 0.08f);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {

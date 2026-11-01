@@ -65,7 +65,9 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
         float charge = state.chargeRatio;
         float age = state.age;
         float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.4f);
-        float alpha = 0.65f + (charge * 0.35f);
+        // Spawn fade-in over the first 4 ticks so the charge construct does not
+        // pop in at full brightness.
+        float alpha = (0.65f + (charge * 0.35f)) * Math.min(1.0f, age / 4.0f);
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));

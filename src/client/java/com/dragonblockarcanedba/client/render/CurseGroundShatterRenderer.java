@@ -61,7 +61,10 @@ public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatte
 
         float radius = state.radius;
         float age = state.age;
-        float fade = Math.max(0.0f, 1.0f - (age / (float) (state.lifetime + age)));
+        // state.lifetime is the fixed 35 tick total (it only decrements server
+        // side), so the old age / (lifetime + age) formula stranded the fade at
+        // about 0.5 when the entity vanished. Progress over the total reaches 0.
+        float fade = Math.max(0.0f, 1.0f - age / (float) state.lifetime);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {

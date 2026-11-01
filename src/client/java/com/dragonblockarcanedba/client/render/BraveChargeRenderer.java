@@ -57,7 +57,9 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
         float age = state.age;
 
         float baseRadius = 1.3f + (charge * 1.5f);
-        float baseAlpha = 0.65f + (charge * 0.35f);
+        // Spawn fade-in over the first 4 ticks so the charge construct does not
+        // pop in at full brightness.
+        float baseAlpha = (0.65f + (charge * 0.35f)) * Math.min(1.0f, age / 4.0f);
         float pulse = 0.90f + 0.10f * (float) Math.sin(age * 0.5f);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {

@@ -67,7 +67,9 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
 
     @Override
     public void submit(AfterimageRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float maxLife = 80.0f;
+        // The entity lives 100 ticks; this used to stop at 80, leaving the last
+        // second invisible while the afterimage still applied its debuff.
+        float maxLife = 100.0f;
         float progress = Math.min(1.0f, state.age / maxLife);
         if (progress >= 1.0f) return;
 
@@ -85,8 +87,25 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
             // 1. Outer Ethereal Phantom Halo (Pulsing Cyan-Violet Spatial Aura)
             renderGhostBody(pose, buffer, 0.06f, 0.10f, 0.85f, 1.0f, alpha * 0.35f * pulse);
 
-            // 2. Main Spectral Void Body (Deep Indigo / Violet Core)
-            renderGhostBody(pose, buffer, 0.0f, 0.15f, 0.05f, 0.35f, alpha * 0.85f);
+            // 2. Main Spectral Void Body, tinted by the caster's synced skin
+            // color (extracted all along but never used, so every afterimage
+            // wore the same fixed colors regardless of the player).
+            float skinR = KiRenderHelper.red(state.skinColor);
+            float skinG = KiRenderHelper.green(state.skinColor);
+            float skinB = KiRenderHelper.blue(state.skinColor);
+            renderGhostBody(pose, buffer, 0.0f,
+                0.10f + skinR * 0.45f, 0.04f + skinG * 0.30f, 0.22f + skinB * 0.45f, alpha * 0.85f);
+
+            // 2b. Hair cap in the caster's synced hair color, over the top of
+            // the head box drawn by renderGhostBody (head spans y 1.4 to 1.82).
+            float hairR = KiRenderHelper.red(state.hairColor);
+            float hairG = KiRenderHelper.green(state.hairColor);
+            float hairB = KiRenderHelper.blue(state.hairColor);
+            KiRenderHelper.drawColoredBox(pose, buffer,
+                -0.21f, 1.64f, -0.29f,
+                0.21f, 1.84f, 0.13f,
+                hairR, hairG, hairB, alpha * 0.9f
+            );
 
             // 3. Central Spatial Eye Slit & Core Luminescence (White-Cyan)
             KiRenderHelper.drawColoredBox(pose, buffer,

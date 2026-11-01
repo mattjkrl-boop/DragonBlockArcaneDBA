@@ -18,6 +18,7 @@ public class BanshoShockwaveEntity extends Projectile {
     private static final EntityDataAccessor<Float> PITCH = SynchedEntityData.defineId(BanshoShockwaveEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> MAX_RADIUS = SynchedEntityData.defineId(BanshoShockwaveEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> IS_CONE = SynchedEntityData.defineId(BanshoShockwaveEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Boolean> ORIENT_TO_IMPACT = SynchedEntityData.defineId(BanshoShockwaveEntity.class, EntityDataSerializers.BOOLEAN);
 
     private int maxLifetime = 14;
 
@@ -44,6 +45,7 @@ public class BanshoShockwaveEntity extends Projectile {
         builder.define(PITCH, 0.0f);
         builder.define(MAX_RADIUS, 3.0f);
         builder.define(IS_CONE, false);
+        builder.define(ORIENT_TO_IMPACT, false);
     }
 
     public float getEntityYaw() {
@@ -76,6 +78,14 @@ public class BanshoShockwaveEntity extends Projectile {
 
     public void setIsCone(boolean isCone) {
         this.entityData.set(IS_CONE, isCone);
+    }
+
+    public boolean isOrientToImpact() {
+        return this.entityData.get(ORIENT_TO_IMPACT);
+    }
+
+    public void setOrientToImpact(boolean orient) {
+        this.entityData.set(ORIENT_TO_IMPACT, orient);
     }
 
     @Override

@@ -26,6 +26,7 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         public float radius = 2.5f;
         public boolean isImploding = false;
         public float age = 0;
+        public int implodeStartTick = -1;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -48,6 +49,7 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         super.extractRenderState(entity, state, partialTicks);
         state.radius = entity.getRadius();
         state.isImploding = entity.isImploding();
+        state.implodeStartTick = entity.getImplodeStartTick();
         state.age = entity.tickCount + partialTicks;
     }
 
@@ -60,7 +62,11 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         float rot = state.age * (imploding ? 40.0f : 12.0f);
         float pulseSpeed = imploding ? 0.9f : 0.28f;
         float pulse = 0.88f + 0.12f * (float) Math.sin(state.age * pulseSpeed);
-        float collapseScale = imploding ? Math.max(0.2f, 1.0f - (state.age % 10.0f) * 0.08f) : 1.0f;
+        // Implosion phase runs from the synced trigger tick, not total age
+        // modulo 10, so the collapse always starts at full scale on release.
+        float implodeAge = (imploding && state.implodeStartTick >= 0)
+            ? Math.min(10.0f, Math.max(0.0f, state.age - state.implodeStartTick)) : 0.0f;
+        float collapseScale = imploding ? Math.max(0.2f, 1.0f - implodeAge * 0.08f) : 1.0f;
 
         poseStack.pushPose();
 
@@ -131,8 +137,8 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
 
             // 6. Dynamic Implosion Detonation Shockwave Rings (Expanding outward when collapsing)
             if (imploding) {
-                float burstR = radius * (1.2f + (state.age % 10.0f) * 0.35f);
-                float burstAlpha = Math.max(0.0f, 1.0f - (state.age % 10.0f) * 0.10f);
+                float burstR = radius * (1.2f + implodeAge * 0.35f);
+                float burstAlpha = Math.max(0.0f, 1.0f - implodeAge * 0.10f);
                 drawFlatRing(matrix, buffer, rot * 3.0f, burstR, burstR * 0.85f, 28, 0.95f, 0.20f, 1.0f, burstAlpha * 0.95f);
                 drawFlatRing(matrix, buffer, -rot * 2.5f, burstR * 0.70f, burstR * 0.55f, 24, 0.15f, 0.95f, 1.0f, burstAlpha * 0.85f);
             }

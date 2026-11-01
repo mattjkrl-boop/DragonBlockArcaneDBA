@@ -67,7 +67,9 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
     public void submit(GrandCrescentWaveRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         RenderType renderType = KiRenderHelper.kiRenderType();
 
-        float maxLife = 50.0f;
+        // The entity flies and pierces for up to 80 ticks; the fade used to end
+        // at 50, leaving up to 30 ticks of invisible damage.
+        float maxLife = 80.0f;
         float progress = Math.min(1.0f, state.ageInTicks / maxLife);
         float fade = (1.0f - progress * progress);
 

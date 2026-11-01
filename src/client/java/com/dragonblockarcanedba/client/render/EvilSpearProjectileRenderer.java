@@ -71,26 +71,30 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
         poseStack.scale(fpScale, fpScale, fpScale);
 
+        // End of flight fade: the spear body used to hold full alpha until the
+        // 40 tick cap and pop out. It dissolves over the final 5 ticks.
+        float bodyFade = age <= 35.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - 35.0f) / 5.0f);
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Demonic Multi-Faceted Spear Shaft (8-sided outer dark obsidian & inner glowing core)
-            drawCylinder(matrix, buffer, 0.10f, -2.0f, 1.4f, 8, 0.22f, 0.02f, 0.08f, 0.95f);
-            drawCylinder(matrix, buffer, 0.05f, -1.9f, 1.35f, 6, 1.0f, 0.15f, 0.30f, 1.0f);
+            drawCylinder(matrix, buffer, 0.10f, -2.0f, 1.4f, 8, 0.22f, 0.02f, 0.08f, 0.95f * bodyFade);
+            drawCylinder(matrix, buffer, 0.05f, -1.9f, 1.35f, 6, 1.0f, 0.15f, 0.30f, 1.0f * bodyFade);
 
             // 2. Multi-Beveled Diamond Blood Spearhead & Inner Burning Core
-            drawSpearHead(matrix, buffer, 0.42f, 1.2f, 2.85f, 0.95f, 0.05f, 0.20f, 0.95f);
-            drawSpearHead(matrix, buffer, 0.20f, 1.35f, 2.95f, 1.0f, 0.85f, 0.90f, 1.0f);
+            drawSpearHead(matrix, buffer, 0.42f, 1.2f, 2.85f, 0.95f, 0.05f, 0.20f, 0.95f * bodyFade);
+            drawSpearHead(matrix, buffer, 0.20f, 1.35f, 2.95f, 1.0f, 0.85f, 0.90f, 1.0f * bodyFade);
 
             // 3. Barbed Crossguards & 4 Flared Demonic Aerodynamic Fins
-            drawFin(matrix, buffer, 0.55f, 0, -2.0f, -0.9f, 0.85f, 0.0f, 0.15f, 0.90f);
-            drawFin(matrix, buffer, -0.55f, 0, -2.0f, -0.9f, 0.85f, 0.0f, 0.15f, 0.90f);
-            drawFin(matrix, buffer, 0, 0.55f, -2.0f, -0.9f, 0.85f, 0.0f, 0.15f, 0.90f);
-            drawFin(matrix, buffer, 0, -0.55f, -2.0f, -0.9f, 0.85f, 0.0f, 0.15f, 0.90f);
+            drawFin(matrix, buffer, 0.55f, 0, -2.0f, -0.9f, 0.85f, 0.0f, 0.15f, 0.90f * bodyFade);
+            drawFin(matrix, buffer, -0.55f, 0, -2.0f, -0.9f, 0.85f, 0.0f, 0.15f, 0.90f * bodyFade);
+            drawFin(matrix, buffer, 0, 0.55f, -2.0f, -0.9f, 0.85f, 0.0f, 0.15f, 0.90f * bodyFade);
+            drawFin(matrix, buffer, 0, -0.55f, -2.0f, -0.9f, 0.85f, 0.0f, 0.15f, 0.90f * bodyFade);
 
             // Barbed rear flukes at base of spearhead
-            drawFin(matrix, buffer, 0.35f, 0, 1.2f, 0.7f, 1.0f, 0.1f, 0.25f, 0.95f);
-            drawFin(matrix, buffer, -0.35f, 0, 1.2f, 0.7f, 1.0f, 0.1f, 0.25f, 0.95f);
+            drawFin(matrix, buffer, 0.35f, 0, 1.2f, 0.7f, 1.0f, 0.1f, 0.25f, 0.95f * bodyFade);
+            drawFin(matrix, buffer, -0.35f, 0, 1.2f, 0.7f, 1.0f, 0.1f, 0.25f, 0.95f * bodyFade);
 
             // 4. Supersonic Demonic 3D Mach Shock Cone
             int coneSegments = 16;
@@ -108,7 +112,7 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
                 float x2 = (float) Math.cos(a2) * coneBaseRadius;
                 float y2 = (float) Math.sin(a2) * coneBaseRadius;
 
-                drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, 1.0f, 0.08f, 0.22f, 0.50f);
+                drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, 1.0f, 0.08f, 0.22f, 0.50f * bodyFade);
             }
 
             // 5. Dynamic Physical 3D Trail: Twin Helical Blood Vortex Ribbons trailing behind spear
@@ -160,7 +164,7 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
             }
 
             // 7. Kinetic Plasma Thrust Core Beam
-            drawBeam(matrix, buffer, 0, 0, trailStart + 0.2f, 0, 0, trailStart - trailLength * 0.75f, 0.08f, 1.0f, 0.80f, 0.85f, 0.95f);
+            drawBeam(matrix, buffer, 0, 0, trailStart + 0.2f, 0, 0, trailStart - trailLength * 0.75f, 0.08f, 1.0f, 0.80f, 0.85f, 0.95f * bodyFade);
         });
 
         poseStack.popPose();

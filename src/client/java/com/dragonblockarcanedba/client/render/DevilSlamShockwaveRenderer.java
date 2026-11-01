@@ -62,7 +62,10 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
 
         float radius = state.radius;
         float age = state.age;
-        float fade = Math.max(0.0f, 1.0f - (age / (float) (state.lifetime + age)));
+        // state.lifetime is the fixed 35 tick total (it only decrements server
+        // side), so the old age / (lifetime + age) formula stranded the fade
+        // near 0.5 at discard and the slam rings popped out at half alpha.
+        float fade = Math.max(0.0f, 1.0f - age / (float) state.lifetime);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {

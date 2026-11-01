@@ -26,6 +26,7 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
     public static class OxFissureRenderState extends EntityRenderState {
         public float ageInTicks = 0;
         public long seed = 0;
+        public float yRot = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -48,6 +49,7 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
         super.extractRenderState(entity, state, partialTicks);
         state.ageInTicks = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.yRot = entity.getYRot();
     }
 
     @Override
@@ -56,6 +58,11 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
 
         float pulse = 0.75f + 0.25f * (float) Math.sin(state.ageInTicks * 0.25f);
         float fade = Math.max(0.0f, 1.0f - (state.ageInTicks / (float) OxFissureEntity.MAX_LIFETIME));
+
+        // Align the trench with the yaw the spawner set (radially outward from
+        // the slam). Every fissure used to render pointing the same way.
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotationDegrees(-state.yRot)));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -101,8 +108,26 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
                     );
                 }
             }
+
+            // Two jittered branch cracks splitting off the main line, so the
+            // fissure reads as a radial fracture instead of one straight decal.
+            for (int b = 0; b < 2; b++) {
+                int fromSeg = b == 0 ? 3 : 5;
+                float bx = fx[fromSeg], bz = fz[fromSeg];
+                double branchAngle = (b == 0 ? -1.0 : 1.0) * (0.55 + rng.nextDouble() * 0.35);
+                double dirX = Math.sin(branchAngle), dirZ = Math.cos(branchAngle);
+                for (int s = 0; s < 2; s++) {
+                    float segLen = 0.55f - s * 0.15f;
+                    float nx2 = bx + (float) dirX * segLen + (rng.nextFloat() - 0.5f) * 0.2f;
+                    float nz2 = bz + (float) dirZ * segLen;
+                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.30f, 1.0f, 0.25f * pulse, 0.0f, 0.85f * fade);
+                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.12f, 1.0f, 0.90f * pulse, 0.2f, 0.95f * fade);
+                    bx = nx2; bz = nz2;
+                }
+            }
         });
 
+        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 

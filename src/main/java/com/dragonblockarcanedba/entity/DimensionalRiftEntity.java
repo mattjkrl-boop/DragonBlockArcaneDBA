@@ -84,6 +84,17 @@ public class DimensionalRiftEntity extends Projectile {
                 this.entityData.set(IS_COLLAPSING, true);
             }
 
+            // Ambient core sparks: the rift used to emit particles only on a
+            // burst hit, so its singularity core sat particle silent for 3 s.
+            if (this.tickCount % 8 == 0) {
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    center.x, center.y + 1.2, center.z, 4,
+                    currentRadius * 0.25, 0.8, currentRadius * 0.25, 0.04);
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                    center.x, center.y + 0.6, center.z, 2,
+                    currentRadius * 0.4, 0.5, currentRadius * 0.4, 0.02);
+            }
+
             // Scan living entities in expanding radius
             AABB aoeBox = this.getBoundingBox().inflate(currentRadius, 6.0, currentRadius);
             List<LivingEntity> targets = serverLevel.getEntitiesOfClass(

@@ -83,6 +83,9 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
 
         float age = state.age;
         float pulse = 1.0f + 0.06f * (float) Math.sin(age * 1.5f);
+        // Spawn fade-in over the first 3 ticks: the beam used to appear at
+        // full alpha the tick the channel started.
+        float fadeIn = Math.min(1.0f, age / 3.0f);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -104,15 +107,15 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
             // 1. Multi-Layered Prismatic Core Beam (scaled down in first person)
             // Layer A: Superdense White-Cyan Inner Core (8 sides)
             float innerRadius = 0.13f * pulse * fpScale;
-            drawPrismBeam(matrix, buffer, innerRadius, zStart, beamLength, 8, age * 5.0f, 1.0f, 1.0f, 1.0f, 0.95f);
+            drawPrismBeam(matrix, buffer, innerRadius, zStart, beamLength, 8, age * 5.0f, 1.0f, 1.0f, 1.0f, 0.95f * fadeIn);
 
             // Layer B: Fluted Radiant Cyan Shroud (8 sides)
             float midRadius = 0.26f * pulse * fpScale;
-            drawPrismBeam(matrix, buffer, midRadius, zStart, beamLength, 8, -age * 8.0f, 0.0f, 0.92f, 1.0f, 0.65f);
+            drawPrismBeam(matrix, buffer, midRadius, zStart, beamLength, 8, -age * 8.0f, 0.0f, 0.92f, 1.0f, 0.65f * fadeIn);
 
             // Layer C: Hexagonal Outer Energy Sheath with Traveling Wave (6 sides)
             float outerRadius = 0.42f * pulse * fpScale;
-            drawPrismBeam(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 3.0f, 0.05f, 0.70f, 1.0f, 0.30f);
+            drawPrismBeam(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 3.0f, 0.05f, 0.70f, 1.0f, 0.30f * fadeIn);
 
             // 2. Quad Helical Energy Drill Ribbons
             int segments = Math.min((int) (beamLength * 3.0f), 96);
@@ -126,7 +129,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
                 float rCol = isGold ? 1.0f : 0.0f;
                 float gCol = isGold ? 0.85f : 0.95f;
                 float bCol = isGold ? 0.20f : 1.0f;
-                float aCol = isGold ? 0.85f : 0.75f;
+                float aCol = (isGold ? 0.85f : 0.75f) * fadeIn;
 
                 for (int i = 0; i < segments; i++) {
                     float z1 = (i / (float) segments) * (beamLength - zStart) + zStart;
@@ -163,7 +166,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
                 float ringR = (0.55f + ringPhase * 0.12f) * pulse * fpScale;
 
                 drawPlaneRing(matrix, buffer, 0, 0, z, ringR, ringR * 0.82f, 16, age * (15.0f + k * 4.0f),
-                    0.0f, 0.95f, 1.0f, 0.70f);
+                    0.0f, 0.95f, 1.0f, 0.70f * fadeIn);
             }
 
             // 4. Muzzle Celestial Emitter Array (at Blade Tip Origin)

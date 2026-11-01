@@ -59,37 +59,41 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f))); // Point downward toward earth
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.yRot)));
+        // The renderer used to be completely frozen: fixed yaw, no age term at
+        // all. The blades now roll around their fall axis as they drop (the ZP
+        // rotation is the blade's own long axis) and fade in over 3 ticks.
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.yRot + state.age * 18.0f)));
 
         float bladeLength = 7.5f;
         float bladeWidth = 1.0f;
         float age = state.age;
+        float fade = Math.min(1.0f, age / 3.0f);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Demonic Blood-Purple Outer Aura Halo
-            draw3DGreatsword(matrix, buffer, bladeWidth + 0.35f, bladeLength + 0.4f, 0.30f, 0.65f, 0.05f, 0.95f, 0.80f);
+            draw3DGreatsword(matrix, buffer, bladeWidth + 0.35f, bladeLength + 0.4f, 0.30f, 0.65f, 0.05f, 0.95f, 0.80f * fade);
 
             // 2. Abyssal Obsidian Core Body
-            draw3DGreatsword(matrix, buffer, bladeWidth, bladeLength, 0.16f, 0.06f, 0.0f, 0.12f, 0.98f);
+            draw3DGreatsword(matrix, buffer, bladeWidth, bladeLength, 0.16f, 0.06f, 0.0f, 0.12f, 0.98f * fade);
 
             // 3. Central Glowing Crimson Blood Fuller / Rune
-            draw3DGreatsword(matrix, buffer, bladeWidth * 0.32f, bladeLength * 0.85f, 0.18f, 1.0f, 0.05f, 0.25f, 1.0f);
+            draw3DGreatsword(matrix, buffer, bladeWidth * 0.32f, bladeLength * 0.85f, 0.18f, 1.0f, 0.05f, 0.25f, 1.0f * fade);
 
             // 4. 3D Horned Crossguard
-            drawCrossguard(matrix, buffer, bladeWidth * 2.2f, 0.4f, 0.22f, 0.10f, 0.0f, 0.20f, 1.0f);
-            drawCrossguard(matrix, buffer, bladeWidth * 2.0f, 0.3f, 0.25f, 0.85f, 0.05f, 0.35f, 0.95f);
+            drawCrossguard(matrix, buffer, bladeWidth * 2.2f, 0.4f, 0.22f, 0.10f, 0.0f, 0.20f, 1.0f * fade);
+            drawCrossguard(matrix, buffer, bladeWidth * 2.0f, 0.3f, 0.25f, 0.85f, 0.05f, 0.35f, 0.95f * fade);
 
             // 5. 3D Hilt Grip & Pommel
-            drawHilt(matrix, buffer, bladeLength, 0.16f, 1.8f, 0.12f, 0.02f, 0.18f, 1.0f);
+            drawHilt(matrix, buffer, bladeLength, 0.16f, 1.8f, 0.12f, 0.02f, 0.18f, 1.0f * fade);
 
             // 6. Supersonic Downward Plunge Wake Cones
             for (int i = 0; i < 3; i++) {
                 float coneLen = 2.5f + i * 1.5f;
                 float coneWidth = (bladeWidth + 0.4f) * (1.0f + i * 0.5f);
                 float coneZ = -bladeLength * 0.5f - (i * 1.8f);
-                float alpha = 0.55f - (i * 0.15f);
+                float alpha = (0.55f - (i * 0.15f)) * fade;
 
                 drawPlungeCone(matrix, buffer, coneWidth, coneLen, coneZ, 0.55f, 0.05f, 0.90f, alpha);
             }

@@ -121,6 +121,15 @@ public class AzureTornadoEntity extends Projectile {
                     SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.5f, 0.8f);
             }
 
+            // Wind particles streaming around the funnel (the entity used to
+            // emit none; its particle imports sat unused).
+            if (this.tickCount % 3 == 0) {
+                double h = serverLevel.getRandom().nextDouble() * (giant ? 14.0 : 6.0);
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                    center.x, center.y + h, center.z, giant ? 6 : 3,
+                    radius * 0.55, 0.6, radius * 0.55, 0.06);
+            }
+
             if (this.tickCount >= this.maxLifetime) {
                 this.discard();
             }

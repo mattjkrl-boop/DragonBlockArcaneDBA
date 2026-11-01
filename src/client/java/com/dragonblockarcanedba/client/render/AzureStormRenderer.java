@@ -66,6 +66,13 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
         float age = state.age;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
+        // Lifetime fade envelope: the storm lives 220 ticks and used to have no
+        // lifetime term at all, so a 30 block domain popped in and out at full
+        // presence. In over the first 20 ticks, out over the last 40.
+        float fadeIn = Math.min(1.0f, age / 20.0f);
+        float fadeOut = age <= 180.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - 180.0f) / 40.0f);
+        float fade = fadeIn * fadeOut;
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
@@ -75,7 +82,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                 float rOuter = radius * (0.30f + band * 0.23f);
                 float rInner = rOuter * 0.84f;
                 float rotSpeed = (band % 2 == 0 ? 1.0f : -1.35f) * (14.0f + band * 7.0f);
-                float bandAlpha = 0.58f - (band * 0.09f);
+                float bandAlpha = (0.58f - (band * 0.09f)) * fade;
 
                 float red = band == 0 ? 0.4f : 0.0f;
                 float green = 0.75f + (band * 0.08f);
@@ -100,7 +107,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                 float r1 = radius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
                 float r2 = radius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
 
-                float domeAlpha = 0.38f + (latProgress1 * 0.30f);
+                float domeAlpha = (0.38f + (latProgress1 * 0.30f)) * fade;
                 float red = 0.02f;
                 float green = 0.22f + (latProgress1 * 0.55f);
                 float blue = 0.55f + (latProgress1 * 0.45f);
@@ -140,7 +147,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                 float ir1 = innerRadius * (float) Math.cos(p1 * (Math.PI / 2.0));
                 float ir2 = innerRadius * (float) Math.cos(p2 * (Math.PI / 2.0));
 
-                float alpha = 0.28f + (p1 * 0.20f);
+                float alpha = (0.28f + (p1 * 0.20f)) * fade;
 
                 for (int lon = 0; lon < innerLons; lon++) {
                     double angleOffset = (-age * (8.0f + lat * 3.0f)) * (Math.PI / 180.0);
@@ -179,7 +186,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                 float streakTop = Math.max(botY, topY - animOffset * 3.0f);
                 float streakBot = Math.max(botY, streakTop - 3.5f);
 
-                renderBeam(matrix, buffer, sx, streakTop, sz, sx + 0.2f, streakBot, sz + 0.2f, 0.08f, 0.5f, 0.9f, 1.0f, 0.60f);
+                renderBeam(matrix, buffer, sx, streakTop, sz, sx + 0.2f, streakBot, sz + 0.2f, 0.08f, 0.5f, 0.9f, 1.0f, 0.60f * fade);
             }
 
             // 4. Central Tempest Eye Updraft Column (Intense central cyclone core)
@@ -206,7 +213,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                     float x4 = (float) Math.cos(a1) * er2;
                     float z4 = (float) Math.sin(a1) * er2;
 
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.8f, 1.0f, 1.0f, 0.45f);
+                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.8f, 1.0f, 1.0f, 0.45f * fade);
                 }
             }
 
@@ -227,8 +234,8 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                     float nxtY = curY - (1.1f + rng.nextFloat() * 1.8f);
                     float nxtZ = curZ + (rng.nextFloat() - 0.5f) * 3.5f;
 
-                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.20f, 0.0f, 0.95f, 1.0f, 0.90f);
-                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.07f, 0.95f, 1.0f, 1.0f, 1.0f);
+                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.20f, 0.0f, 0.95f, 1.0f, 0.90f * fade);
+                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.07f, 0.95f, 1.0f, 1.0f, 1.0f * fade);
 
                     curX = nxtX; curY = nxtY; curZ = nxtZ;
                 }

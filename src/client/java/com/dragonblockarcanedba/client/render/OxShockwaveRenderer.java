@@ -68,7 +68,15 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
 
         float waveScale = subWave ? 0.75f : 1.0f;
         float cragMaxHeight = (1.2f + charge * 2.8f) * waveScale;
-        float alpha = Math.max(0.2f, Math.min(1.0f, 1.2f - (age * 0.02f)));
+        // The alpha used to floor at 0.2, so the wave popped out at discard.
+        // Recompute the entity's real lifetime from the synced charge (maxTicks
+        // = max(10, maxRadius x 1.3), maxRadius = 4 + charge x 20, x 0.75 for
+        // sub waves) and fade fully to 0 across the final 30 percent.
+        float maxRadius = (4.0f + Math.max(0.05f, Math.min(1.0f, charge)) * 20.0f) * waveScale;
+        float maxTicks = Math.max(10.0f, maxRadius * 1.3f);
+        float lifeProgress = Math.min(1.0f, age / maxTicks);
+        float endFade = lifeProgress <= 0.7f ? 1.0f : Math.max(0.0f, 1.0f - (lifeProgress - 0.7f) / 0.3f);
+        float alpha = Math.min(1.0f, 1.2f - (age * 0.02f)) * endFade;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

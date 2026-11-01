@@ -29,6 +29,7 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
         public float pitch = 0;
         public float maxRadius = 3.0f;
         public boolean isCone = false;
+        public boolean orientToImpact = false;
         public float age = 0;
     }
 
@@ -54,6 +55,7 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
         state.pitch = entity.getEntityPitch();
         state.maxRadius = entity.getMaxRadius();
         state.isCone = entity.isCone();
+        state.orientToImpact = entity.isOrientToImpact();
         state.age = entity.tickCount + partialTicks;
     }
 
@@ -138,6 +140,14 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
             });
         } else {
             // Radial Planar / Impact Shockwave (Gale Force / Wind Projectile Hit)
+            // Projectile impacts orient the burst to the impact direction (the
+            // cone mode rotation path) so hits on flying targets do not get a
+            // flat ground ring floating in mid-air. Ground melee bursts keep
+            // the flat orientation.
+            if (state.orientToImpact) {
+                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yaw)));
+                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.pitch)));
+            }
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
                 Matrix4f matrix = pose.pose();
 

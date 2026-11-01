@@ -61,6 +61,14 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
         float totalHeight = scale * (giant ? 16.0f : 6.5f);
         float age = state.age;
 
+        // Lifetime fade envelope: the tornado lives 60 ticks (mini) or 200
+        // (giant) and used to sit at constant alpha the whole time, popping in
+        // and out. In over the first 10 ticks, out over the last 20.
+        float maxLife = giant ? 200.0f : 60.0f;
+        float fadeIn = Math.min(1.0f, age / 10.0f);
+        float fadeOut = age <= maxLife - 20.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - (maxLife - 20.0f)) / 20.0f);
+        float fade = fadeIn * fadeOut;
+
         poseStack.pushPose();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
@@ -69,8 +77,8 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
             // 1. Ground Whirlpool Suction Discs (Base vortex)
             int groundSegments = 24;
             float gRadius = baseRadius * 0.9f;
-            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, gRadius, gRadius * 0.6f, groundSegments, age * 35.0f, 0.0f, 0.9f, 1.0f, giant ? 0.70f : 0.50f);
-            drawRotatingRing(matrix, buffer, 0, 0.10f, 0, gRadius * 0.75f, gRadius * 0.3f, groundSegments, -age * 45.0f, 0.2f, 1.0f, 0.9f, giant ? 0.60f : 0.40f);
+            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, gRadius, gRadius * 0.6f, groundSegments, age * 35.0f, 0.0f, 0.9f, 1.0f, (giant ? 0.70f : 0.50f) * fade);
+            drawRotatingRing(matrix, buffer, 0, 0.10f, 0, gRadius * 0.75f, gRadius * 0.3f, groundSegments, -age * 45.0f, 0.2f, 1.0f, 0.9f, (giant ? 0.60f : 0.40f) * fade);
 
             // 2. High-Speed Inner Core Funnel (Dense inverted vortex cone)
             int coreLevels = 8;
@@ -87,7 +95,7 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
                 float r1 = (baseRadius * 0.35f) * (0.25f + 0.75f * p1);
                 float r2 = (baseRadius * 0.35f) * (0.25f + 0.75f * p2);
 
-                float alpha = (giant ? 0.75f : 0.55f) * (1.0f - p1 * 0.2f);
+                float alpha = (giant ? 0.75f : 0.55f) * (1.0f - p1 * 0.2f) * fade;
 
                 for (int i = 0; i < coreSegments; i++) {
                     double a1 = ((i / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.2);
@@ -147,7 +155,7 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
                         x1 + tx1, y1, z1 + tz1,
                         x2 + tx2, y2, z2 + tz2,
                         x2 - tx2, y2, z2 - tz2,
-                        0.0f, 0.90f, 1.0f, giant ? 0.70f : 0.50f
+                        0.0f, 0.90f, 1.0f, (giant ? 0.70f : 0.50f) * fade
                     );
                 }
             }
@@ -183,14 +191,14 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
                     tailX - nx, shardY, tailZ - nz,
                     tailX + nx, shardY, tailZ + nz,
                     tipX, shardY + 0.1f * scale, tipZ,
-                    0.4f, 1.0f, 0.95f, giant ? 0.85f : 0.65f
+                    0.4f, 1.0f, 0.95f, (giant ? 0.85f : 0.65f) * fade
                 );
             }
 
             // 5. Crown Outflow Ring (Flared upper storm rim)
             float crownY = totalHeight;
             float crownR = baseRadius * 1.15f;
-            drawRotatingRing(matrix, buffer, 0, crownY, 0, crownR, crownR * 0.75f, 20, -age * 22.0f, 0.0f, 0.8f, 1.0f, giant ? 0.60f : 0.40f);
+            drawRotatingRing(matrix, buffer, 0, crownY, 0, crownR, crownR * 0.75f, 20, -age * 22.0f, 0.0f, 0.8f, 1.0f, (giant ? 0.60f : 0.40f) * fade);
         });
 
         poseStack.popPose();

@@ -67,7 +67,9 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
 
         float tunnelRadius = (state.isFirstPersonOwner ? 2.4f : 1.6f) + (charge * 2.2f);
         float tunnelHeight = 3.2f + (charge * 2.4f);
-        float baseAlpha = (state.isFirstPersonOwner ? 0.35f : 0.55f) + (charge * 0.35f);
+        // Spawn fade-in over the first 5 ticks so the channel column does not
+        // pop in at partial alpha the tick the channel starts.
+        float baseAlpha = ((state.isFirstPersonOwner ? 0.35f : 0.55f) + (charge * 0.35f)) * Math.min(1.0f, age / 5.0f);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

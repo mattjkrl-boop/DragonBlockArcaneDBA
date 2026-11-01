@@ -131,6 +131,19 @@ public class AzureStormEntity extends Projectile {
                 }
             }
 
+            // Ambient storm particles: wind sheets across the radius plus
+            // sparks near the eye (the entity used to emit none at all).
+            if (this.tickCount % 4 == 0) {
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                    center.x, center.y + 2.0 + serverLevel.getRandom().nextDouble() * 6.0, center.z, 8,
+                    radius * 0.7, 1.5, radius * 0.7, 0.08);
+            }
+            if (this.tickCount % 7 == 0) {
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    center.x, center.y + 3.0, center.z, 3,
+                    radius * 0.15, 2.0, radius * 0.15, 0.05);
+            }
+
             // Periodic Azure Lightning strikes on enemies inside storm
             if (!enemies.isEmpty() && this.tickCount % 25 == 0) {
                 LivingEntity lightningTarget = enemies.get(serverLevel.getRandom().nextInt(enemies.size()));

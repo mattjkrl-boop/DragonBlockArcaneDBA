@@ -78,6 +78,13 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         boolean sub = state.isSubWave;
         float age = state.age;
 
+        // Lifetime fade: the wave lives up to 80 ticks and used to vanish at full
+        // opacity on discard. Fade in over the first 3 ticks, hold, then ease out
+        // over the final 25 ticks.
+        float fadeIn = Math.min(1.0f, age / 3.0f);
+        float fadeOut = age <= 55.0f ? 1.0f : 1.0f - ((age - 55.0f) / 25.0f) * ((age - 55.0f) / 25.0f);
+        float fade = fadeIn * Math.max(0.0f, fadeOut);
+
         float fpScale = (state.isFirstPersonOwner && state.age < 6.0f) ? (0.55f + (state.age / 6.0f) * 0.45f) : 1.0f;
         float span = (sub ? (3.2f + charge * 3.2f) : (4.8f + charge * 6.2f)) * fpScale;
         float chord = (sub ? (1.0f + charge * 0.6f) : (1.6f + charge * 1.4f)) * fpScale;
@@ -91,15 +98,15 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
 
             // 1. Radiant Outer Golden-Amber Volumetric Sheath (Expansive Aura)
             drawVolumetricCrescent(matrix, buffer, span + 0.6f, chord + 0.5f, height + 0.4f, thickness + 0.20f,
-                1.4f, segments, 1.0f, 0.70f, 0.08f, 0.75f, 0.0f);
+                1.4f, segments, 1.0f, 0.70f, 0.08f, 0.75f * fade, 0.0f);
 
             // 2. Main Towering 3D Divine Golden Blade Body (Solid Physical Presence)
             drawVolumetricCrescent(matrix, buffer, span, chord, height, thickness,
-                1.0f, segments, 1.0f, 0.88f, 0.20f, 0.95f, 0.85f);
+                1.0f, segments, 1.0f, 0.88f, 0.20f, 0.95f * fade, 0.85f * fade);
 
             // 3. High-Pressure Incandescent White-Gold Leading Cutting Spine
             drawVolumetricCrescent(matrix, buffer, span * 0.92f, chord * 0.96f, height * 0.65f, thickness * 0.45f,
-                0.5f, segments, 1.0f, 1.0f, 0.92f, 1.0f, 1.0f);
+                0.5f, segments, 1.0f, 1.0f, 0.92f, 1.0f * fade, 1.0f * fade);
 
             // 4. Transverse Geometric Kinetic Shock Ribs (Hypersonic shockwave struts)
             int ribCount = sub ? 8 : (12 + (int) (charge * 6));
@@ -113,14 +120,14 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
                 float rTrail = (1.2f + charge * 0.8f) * (1.0f - Math.abs(t) * 0.6f);
 
                 drawShockRib(matrix, buffer, rx, rz, rH, rTrail, 0.14f,
-                    1.0f, 0.95f, 0.50f, 0.90f);
+                    1.0f, 0.95f, 0.50f, 0.90f * fade);
             }
 
             // 5. Swept-Back 3D Kinetic Wake Flow Ribbons (Layered atmospheric displacement)
             int ribbonLayers = sub ? 2 : 4;
             for (int l = 0; l < ribbonLayers; l++) {
                 float layerOffset = (l + 1) * 0.55f;
-                float lAlpha = (1.0f - (l / (float) ribbonLayers)) * 0.60f;
+                float lAlpha = (1.0f - (l / (float) ribbonLayers)) * 0.60f * fade;
                 drawWakeRibbon(matrix, buffer, span * 0.95f, chord, height * 0.8f, layerOffset, segments,
                     1.0f, 0.80f, 0.15f, lAlpha);
             }
@@ -128,13 +135,13 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
             // 6. Central Solar Apex Core & Leading Kinetic Compression Rings
             float coreZ = chord + 0.15f;
             drawApexSolarCore(matrix, buffer, 0, 0, coreZ, 0.45f + charge * 0.35f,
-                1.0f, 1.0f, 0.95f, 1.0f);
+                1.0f, 1.0f, 0.95f, 1.0f * fade);
 
             // Rotating front compression rings
             drawFrontCompressionRing(matrix, buffer, 0, 0, coreZ + 0.25f, 0.65f + charge * 0.45f, 0.08f, 20, age * 24.0f,
-                1.0f, 0.90f, 0.30f, 0.90f);
+                1.0f, 0.90f, 0.30f, 0.90f * fade);
             drawFrontCompressionRing(matrix, buffer, 0, 0, coreZ + 0.50f, 0.45f + charge * 0.35f, 0.06f, 16, age * -32.0f,
-                1.0f, 1.0f, 0.85f, 0.95f);
+                1.0f, 1.0f, 0.85f, 0.95f * fade);
         });
 
         poseStack.popPose();

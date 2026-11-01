@@ -26,6 +26,7 @@ import java.util.List;
 public class VoidRiftEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(VoidRiftEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> IS_IMPLODING = SynchedEntityData.defineId(VoidRiftEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> IMPLODE_START_TICK = SynchedEntityData.defineId(VoidRiftEntity.class, EntityDataSerializers.INT);
 
     private float damage = 500.0f;
     private int implosionTimer = -1;
@@ -52,6 +53,7 @@ public class VoidRiftEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(RADIUS, 2.5f);
         builder.define(IS_IMPLODING, false);
+        builder.define(IMPLODE_START_TICK, -1);
     }
 
     public float getRadius() {
@@ -68,7 +70,14 @@ public class VoidRiftEntity extends Projectile {
 
     public void triggerImplosion() {
         this.entityData.set(IS_IMPLODING, true);
+        // Synced so the client can phase the collapse animation from the real
+        // trigger moment instead of total age modulo 10.
+        this.entityData.set(IMPLODE_START_TICK, this.tickCount);
         this.implosionTimer = 10; // 0.5s dramatic suction before explosion
+    }
+
+    public int getImplodeStartTick() {
+        return this.entityData.get(IMPLODE_START_TICK);
     }
 
     @Override

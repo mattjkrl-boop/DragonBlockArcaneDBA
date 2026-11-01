@@ -80,9 +80,8 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+        SubmitNodeCollector.CustomGeometryRenderer geometryPlanar = (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
 
             // 1. Concentric Expanding Dual Shockwave Disks
             float shockProgress = Math.min(1.0f, age / 8.0f);
@@ -97,6 +96,29 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
             float crimsonR = outerR * 0.55f;
             drawShockRing(matrix, buffer, 0.05f, crimsonR * 0.6f, crimsonR, 20,
                 0.90f, 0.08f, 0.12f, fade * 0.75f);
+
+            // 4. Detonation Starburst Spikes
+            float starR = scale * (0.8f * (1.0f - shockProgress * 0.4f));
+            int points = 8;
+            for (int p = 0; p < points; p++) {
+                double ang = (p / (double) points) * Math.PI * 2.0 + (age * 0.1);
+                float px = (float) Math.cos(ang) * starR;
+                float py = (float) Math.sin(ang) * starR;
+
+                drawQuad(matrix, buffer,
+                    -px * 0.1f, -py * 0.1f, 0.02f,
+                    px * 0.1f, py * 0.1f, 0.02f,
+                    px, py, 0.08f,
+                    0, 0, 0.15f,
+                    1.0f, 0.90f, 0.30f, fade * 0.85f
+                );
+            }
+        };
+
+        SubmitNodeCollector.CustomGeometryRenderer geometryVolume = (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            Random rng = new Random(state.seed);
+            float shockProgress = Math.min(1.0f, age / 8.0f);
 
             // 2. Kinetic Compression Shockwave Dome
             float domeR = scale * (0.4f + shockProgress * 1.1f);
@@ -161,24 +183,18 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
                 // 3D Diamond Shard Geometry
                 drawDiamondShard(matrix, buffer, sx, sy, sz, shardSize, rCol, gCol, bCol, fade * 0.90f);
             }
+        };
 
-            // 4. Detonation Starburst Spikes
-            float starR = scale * (0.8f * (1.0f - shockProgress * 0.4f));
-            int points = 8;
-            for (int p = 0; p < points; p++) {
-                double ang = (p / (double) points) * Math.PI * 2.0 + (age * 0.1);
-                float px = (float) Math.cos(ang) * starR;
-                float py = (float) Math.sin(ang) * starR;
-
-                drawQuad(matrix, buffer,
-                    -px * 0.1f, -py * 0.1f, 0.02f,
-                    px * 0.1f, py * 0.1f, 0.02f,
-                    px, py, 0.08f,
-                    0, 0, 0.15f,
-                    1.0f, 0.90f, 0.30f, fade * 0.85f
-                );
-            }
-        });
+        collector.submitCustomGeometry(poseStack, renderType, geometryVolume);
+        collector.submitCustomGeometry(poseStack, renderType, geometryPlanar);
+        // Crossed plane: the rings and starburst used to live on the single
+        // plane facing the poker, so the burst read thin from behind or the
+        // side. The planar set is submitted again rotated 90 degrees around
+        // the burst's up axis for volume from any viewpoint.
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotationY((float) Math.PI / 2.0f));
+        collector.submitCustomGeometry(poseStack, renderType, geometryPlanar);
+        poseStack.popPose();
 
         poseStack.popPose();
     }

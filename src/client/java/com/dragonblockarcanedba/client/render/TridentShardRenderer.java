@@ -57,7 +57,15 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         // High-speed axial roll
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.ageInTicks * 22.0f)));
-        poseStack.scale(0.85f, 0.85f, 0.85f);
+        // Whole blade pulse and spawn scale-in: the pulse used to touch only
+        // the fuller alpha and core radius, so the blade body sat at a fixed
+        // 0.85 scale for a swarm life that can last minutes and popped in at
+        // full size on deploy. It now breathes as one piece and grows in over
+        // the first 5 ticks.
+        float bodyPulse = 0.93f + 0.07f * Mth.sin(state.ageInTicks * 0.35f);
+        float spawnScale = 0.5f + 0.5f * Math.min(1.0f, state.ageInTicks / 5.0f);
+        float shardScale = 0.85f * bodyPulse * spawnScale;
+        poseStack.scale(shardScale, shardScale, shardScale);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

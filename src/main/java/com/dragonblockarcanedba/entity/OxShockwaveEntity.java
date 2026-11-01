@@ -120,6 +120,10 @@ public class OxShockwaveEntity extends Projectile {
                         double fx = center.x + Math.cos(fAngle) * fDist;
                         double fz = center.z + Math.sin(fAngle) * fDist;
                         OxFissureEntity fissure = new OxFissureEntity(serverLevel, owner instanceof LivingEntity ? (LivingEntity) owner : null, new Vec3(fx, center.y, fz), 50.0f);
+                        // Point the crack radially away from the slam center; the
+                        // renderer aligns its trench to this yaw. Without it all
+                        // six fissures rendered in the same fixed direction.
+                        fissure.setYRot((float) Math.toDegrees(Math.atan2(-Math.cos(fAngle), Math.sin(fAngle))));
                         serverLevel.addFreshEntity(fissure);
                     }
                 }

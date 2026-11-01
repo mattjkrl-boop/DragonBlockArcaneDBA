@@ -49,21 +49,29 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
-        float span = 3.2f;
-        float chord = 1.1f;
+        // Lifetime animation: the extracted age used to be ignored, so the slash
+        // flew at full opacity for up to 40 ticks and popped out. It now grows
+        // slightly and fades quadratically over its 40 tick maximum flight,
+        // matching the sibling slash renderers.
+        float progress = Math.min(1.0f, state.age / 40.0f);
+        float fade = 1.0f - progress * progress;
+        float growth = 0.85f + progress * 0.3f;
+
+        float span = 3.2f * growth;
+        float chord = 1.1f * growth;
         int segments = 16;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Radiant Gold Outer Glow Crescent
-            drawCrescentArc(matrix, buffer, span + 0.35f, chord + 0.35f, 0.25f, segments, 1.0f, 0.84f, 0.0f, 0.85f);
+            drawCrescentArc(matrix, buffer, span + 0.35f, chord + 0.35f, 0.25f, segments, 1.0f, 0.84f, 0.0f, 0.85f * fade);
 
             // 2. Brilliant Heroic Cyan Inner Core
-            drawCrescentArc(matrix, buffer, span, chord, 0.12f, segments, 0.0f, 0.95f, 1.0f, 0.95f);
+            drawCrescentArc(matrix, buffer, span, chord, 0.12f, segments, 0.0f, 0.95f, 1.0f, 0.95f * fade);
 
             // 3. Blinding White Cutting Edge
-            drawCrescentArc(matrix, buffer, span * 0.7f, chord * 0.7f, 0.05f, segments, 1.0f, 1.0f, 1.0f, 1.0f);
+            drawCrescentArc(matrix, buffer, span * 0.7f, chord * 0.7f, 0.05f, segments, 1.0f, 1.0f, 1.0f, 1.0f * fade);
         });
 
         poseStack.popPose();

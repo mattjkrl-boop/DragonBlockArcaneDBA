@@ -136,6 +136,12 @@ public class BanshoWindProjectileEntity extends Projectile {
             }
 
             if (this.tickCount >= 50) { // 2.5s maximum range
+                // Timeout puff so the drill does not just vanish mid-flight
+                // (hits already get a shockwave; timeouts got nothing).
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                    this.getX(), this.getY(), this.getZ(), 10, 0.4, 0.4, 0.4, 0.08);
+                serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
+                    SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 0.6f, 1.4f);
                 this.discard();
                 return;
             }
@@ -175,6 +181,9 @@ public class BanshoWindProjectileEntity extends Projectile {
             target != null ? 2.6f : 2.0f,
             false // Radial impact burst
         );
+        // Projectile hits can land mid-air on flying targets; the radial burst
+        // should orient to the impact direction instead of lying flat.
+        shockwave.setOrientToImpact(true);
         serverLevel.addFreshEntity(shockwave);
 
         // Tempest impact sound

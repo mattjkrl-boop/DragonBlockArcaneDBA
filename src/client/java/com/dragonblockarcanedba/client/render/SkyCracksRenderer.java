@@ -63,6 +63,12 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
 
         float pulse = 0.85f + 0.15f * (float) Math.sin(state.age * 0.18f);
 
+        // Lifetime envelope over the 100 tick life: the giant sky quad used to
+        // snap on and off at near full alpha. In over 10 ticks, out over 20.
+        float envIn = Math.min(1.0f, state.age / 10.0f);
+        float envOut = state.age <= 80.0f ? 1.0f : Math.max(0.0f, 1.0f - (state.age - 80.0f) / 20.0f);
+        pulse *= envIn * envOut;
+
         // 1. Base Emissive Celestial Texture Quad
         collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucentEmissive(TEXTURE), (pose, buffer) -> {
             Matrix4f matrix4f = pose.pose();

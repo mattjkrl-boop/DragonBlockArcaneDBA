@@ -70,6 +70,14 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
 
         poseStack.pushPose();
 
+        // The dial and spokes are drawn flat in the local XY plane and the
+        // entity syncs no yaw, so they used to face one fixed world direction
+        // and nearly vanish edge-on. That layer is now billboarded to the
+        // camera with the conjugated camera orientation; the 3D shards and
+        // core below stay in world space.
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(new org.joml.Quaternionf(cameraState.orientation).conjugate()));
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
@@ -95,6 +103,13 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
                     0.95f, 0.98f, 1.0f, fade * 0.9f,
                     0.50f, 0.85f, 1.0f, fade * 0.7f);
             }
+        });
+
+        poseStack.popPose();
+
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            Random rng = new Random(state.seed);
 
             // 3. 16 Physical 3D Prismatic Glass & Chrono-Mirror Shards
             int shardCount = 16;

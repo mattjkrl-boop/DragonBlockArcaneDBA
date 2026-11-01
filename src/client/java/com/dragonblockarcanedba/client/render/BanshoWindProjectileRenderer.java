@@ -70,6 +70,12 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
         float age = state.ageInTicks;
         float fpScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
 
+        // Age envelope: every part used to sit at a constant alpha, so the
+        // drill popped in at spawn and vanished at the 50 tick range cap. In
+        // over the first 2 ticks, out over the last 5.
+        float envelope = Math.min(1.0f, age / 2.0f)
+            * (age <= 45.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - 45.0f) / 5.0f));
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
@@ -93,7 +99,7 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                     x1, y1, -drillLength * 0.5f,
                     x2, y2, -drillLength * 0.5f,
                     0, 0, drillLength * 0.5f,
-                    0.0f, 1.0f, 0.60f, 0.85f
+                    0.0f, 1.0f, 0.60f, 0.85f * envelope
                 );
 
                 // Inner luminous jade spindle
@@ -106,7 +112,7 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                     inX1, inY1, -drillLength * 0.4f,
                     inX2, inY2, -drillLength * 0.4f,
                     0, 0, drillLength * 0.52f,
-                    0.7f, 1.0f, 0.90f, 0.95f
+                    0.7f, 1.0f, 0.90f, 0.95f * envelope
                 );
             }
 
@@ -141,13 +147,13 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                     tailX - nx, tailY - ny, -0.2f,
                     tailX + nx, tailY + ny, -0.2f,
                     tipX, tipY, 0.25f,
-                    0.3f, 1.0f, 0.85f, 0.90f
+                    0.3f, 1.0f, 0.85f, 0.90f * envelope
                 );
                 drawTriangle(matrix, buffer,
                     tailX - nx, tailY - ny, -0.2f,
                     tipX, tipY, 0.25f,
                     tailX + nx, tailY + ny, -0.2f,
-                    0.0f, 0.95f, 0.55f, 0.90f
+                    0.0f, 0.95f, 0.55f, 0.90f * envelope
                 );
             }
 
@@ -157,7 +163,7 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                 float ringProgress = (r + 1) / (float) (ringCount + 1);
                 float ringZ = -drillLength * 0.4f - (ringProgress * 0.75f);
                 float ringR = drillRadius * (0.8f + ringProgress * 0.9f);
-                float ringAlpha = (1.0f - ringProgress) * 0.70f;
+                float ringAlpha = (1.0f - ringProgress) * 0.70f * envelope;
 
                 drawRingZ(matrix, buffer, ringZ, ringR, ringR * 0.75f, 16, 0.15f, 1.0f, 0.75f, ringAlpha);
             }
@@ -179,7 +185,7 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                     x1, y1, tipZ,
                     x2, y2, tipZ,
                     0, 0, tipZ + tipLen,
-                    1.0f, 1.0f, 1.0f, 0.98f
+                    1.0f, 1.0f, 1.0f, 0.98f * envelope
                 );
             }
         });

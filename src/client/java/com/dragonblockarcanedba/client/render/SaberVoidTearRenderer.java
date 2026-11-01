@@ -159,11 +159,13 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
     }
 
     private static void drawRiftSlit(Matrix4f matrix, VertexConsumer consumer, float w, float h, float fade) {
-        // Outer dark violet void halo
-        consumer.addVertex(matrix, -w * 2.5f, 0, 0).setColor(0.1f, 0.0f, 0.25f, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, 0, h * 1.5f, 0).setColor(0.2f, 0.0f, 0.4f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, w * 2.5f, 0, 0).setColor(0.1f, 0.0f, 0.25f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, 0, -h * 1.5f, 0).setColor(0.2f, 0.0f, 0.4f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        // Outer dark violet void halo. This used to pass alpha 0.0 on all four
+        // vertices, so the halo was dead geometry and the bright slit had no
+        // dark rim to sit in. It now fades with the rift.
+        consumer.addVertex(matrix, -w * 2.5f, 0, 0).setColor(0.1f, 0.0f, 0.25f, fade * 0.55f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, 0, h * 1.5f, 0).setColor(0.2f, 0.0f, 0.4f, fade * 0.55f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, w * 2.5f, 0, 0).setColor(0.1f, 0.0f, 0.25f, fade * 0.55f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, 0, -h * 1.5f, 0).setColor(0.2f, 0.0f, 0.4f, fade * 0.55f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
 
         // Inner glowing cyan-white rift core
         consumer.addVertex(matrix, -w, 0, 0.02f).setColor(0.0f, 0.95f, 1.0f, fade * 0.95f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);

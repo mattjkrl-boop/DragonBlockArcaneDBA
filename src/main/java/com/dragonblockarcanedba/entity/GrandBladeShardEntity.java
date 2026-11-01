@@ -129,6 +129,12 @@ public class GrandBladeShardEntity extends Projectile {
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
                         SoundEvents.ARMOR_STAND_HIT, SoundSource.PLAYERS, 1.2f, 1.2f);
 
+                    // Golden shatter burst the class header always promised.
+                    serverLevel.sendParticles(ParticleTypes.CRIT,
+                        this.getX(), this.getY() + 0.4, this.getZ(), 14, 0.35, 0.35, 0.35, 0.25);
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        this.getX(), this.getY() + 0.4, this.getZ(), 8, 0.3, 0.3, 0.3, 0.15);
+
                     this.discard();
                     return;
                 }
@@ -173,6 +179,8 @@ public class GrandBladeShardEntity extends Projectile {
 
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 1.4f);
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.0f, 1.4f);
+                    serverLevel.sendParticles(ParticleTypes.CRIT,
+                        this.getX(), this.getY() + 0.4, this.getZ(), 12, 0.3, 0.3, 0.3, 0.25);
                     this.discard();
                     return;
                 }

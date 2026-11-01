@@ -93,31 +93,38 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
             int segments = 20;
             float pulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f);
 
+            // Fade envelope: every alpha in this renderer used to be constant,
+            // so the slash popped in at spawn and out on timeout after up to
+            // 100 ticks. In over 4 ticks, out from tick 70 to the 100 cap.
+            float fadeIn = Math.min(1.0f, state.age / 4.0f);
+            float fadeOut = state.age <= 70.0f ? 1.0f : Math.max(0.0f, 1.0f - (state.age - 70.0f) / 30.0f);
+            float fade = fadeIn * fadeOut;
+
             // 1. Outer Abyssal Violet & Crimson Dimensional Rift Layer
             drawVolumetricCrescent(matrix, buffer, span + 0.35f, chord + 0.35f, 0.26f * pulse, 0.60f, segments,
-                0.65f, 0.05f, 0.95f, 0.85f);
+                0.65f, 0.05f, 0.95f, 0.85f * fade);
 
             // 2. Inner Neon Blood-Magenta Razor Core
             drawVolumetricCrescent(matrix, buffer, span, chord, 0.14f * pulse, 0.38f, segments,
-                1.0f, 0.10f, 0.35f, 0.95f);
+                1.0f, 0.10f, 0.35f, 0.95f * fade);
 
             // 3. Pure White-Hot Reality Severance Seam
             drawVolumetricCrescent(matrix, buffer, span * 0.72f, chord * 0.72f, 0.06f, 0.14f, segments,
-                1.0f, 0.95f, 1.0f, 1.0f);
+                1.0f, 0.95f, 1.0f, 1.0f * fade);
 
             // 4. Transverse 3D Reality Tear Fin Spurs (Stabbing out from tips and apex)
-            drawTipSpurs(matrix, buffer, span, chord, 0.32f);
+            drawTipSpurs(matrix, buffer, span, chord, 0.32f, fade);
 
             // 5. Central Spinning Singularity Octahedron Core & Accretion Micro-Rings
             drawSingularityOctahedron(matrix, buffer, 0, 0, chord * 0.3f, 0.35f * pulse, state.age * 30.0f,
-                0.02f, 0.0f, 0.05f, 0.99f,
-                1.0f, 0.15f, 0.85f, 0.95f,
-                1.0f, 1.0f, 1.0f, 1.0f);
+                0.02f, 0.0f, 0.05f, 0.99f * fade,
+                1.0f, 0.15f, 0.85f, 0.95f * fade,
+                1.0f, 1.0f, 1.0f, 1.0f * fade);
 
             drawConcentricRing(matrix, buffer, 0, 0, chord * 0.3f, 0.75f * pulse, 0.55f * pulse, 16, state.age * 22.0f,
-                0.60f, 0.05f, 0.95f, 0.85f);
+                0.60f, 0.05f, 0.95f, 0.85f * fade);
             drawConcentricRing(matrix, buffer, 0, 0, chord * 0.3f, 0.50f * pulse, 0.38f * pulse, 12, -state.age * 30.0f,
-                1.0f, 0.15f, 0.35f, 0.95f);
+                1.0f, 0.15f, 0.35f, 0.95f * fade);
 
             // 6. Trailing High-Velocity Spatial Wake Ribbons
             float ribbonLen = 2.4f;
@@ -127,7 +134,7 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
                 float rx = t * span * 0.75f;
                 float rz = (1.0f - t * t) * chord * 0.6f;
                 drawTaperedRibbon(matrix, buffer, rx, 0, rz, rx, 0, rz - ribbonLen * (1.0f - Math.abs(t) * 0.4f), ribbonWidth,
-                    0.75f, 0.05f, 0.90f, 0.80f,
+                    0.75f, 0.05f, 0.90f, 0.80f * fade,
                     1.0f, 0.15f, 0.45f, 0.0f);
             }
         });
@@ -172,18 +179,18 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         }
     }
 
-    private static void drawTipSpurs(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float spurSize) {
+    private static void drawTipSpurs(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float spurSize, float fade) {
         // Left Tip Spur
-        consumer.addVertex(matrix, -span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, -span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, -span - spurSize * 1.6f, 0, -spurSize * 2.2f).setColor(0.65f, 0.05f, 0.95f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, -span + spurSize * 0.4f, 0, -spurSize).setColor(1.0f, 0.15f, 0.45f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, -span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
 
         // Right Tip Spur
-        consumer.addVertex(matrix, span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, span + spurSize * 1.6f, 0, -spurSize * 2.2f).setColor(0.65f, 0.05f, 0.95f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, span - spurSize * 0.4f, 0, -spurSize).setColor(1.0f, 0.15f, 0.45f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawConcentricRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {

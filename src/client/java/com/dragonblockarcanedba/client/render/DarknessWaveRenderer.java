@@ -76,20 +76,24 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         int segments = 24;
         float age = state.age;
 
+        // Fade out over the last 10 ticks of the 40 tick flight: the wave used
+        // to hold constant alpha and pop out mid flight at its discard.
+        float fade = age <= 30.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - 30.0f) / 10.0f);
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Abyssal Obsidian Outer Boundary Envelope
-            draw3DVolumetricCrescent(matrix, buffer, span + 0.5f, chord + 0.4f, height * 1.25f, 0.38f, segments, 0.08f, 0.0f, 0.16f, 0.95f);
+            draw3DVolumetricCrescent(matrix, buffer, span + 0.5f, chord + 0.4f, height * 1.25f, 0.38f, segments, 0.08f, 0.0f, 0.16f, 0.95f * fade);
 
             // 2. Corrupted Void Violet Core Blade Body
-            draw3DVolumetricCrescent(matrix, buffer, span, chord, height, 0.24f, segments, 0.58f, 0.05f, 0.90f, 0.96f);
+            draw3DVolumetricCrescent(matrix, buffer, span, chord, height, 0.24f, segments, 0.58f, 0.05f, 0.90f, 0.96f * fade);
 
             // 3. Demonic Crimson Razor Leading Edge & Runes
-            draw3DVolumetricCrescent(matrix, buffer, span * 0.78f, chord * 0.78f, height * 0.75f, 0.12f, segments, 0.95f, 0.08f, 0.35f, 1.0f);
+            draw3DVolumetricCrescent(matrix, buffer, span * 0.78f, chord * 0.78f, height * 0.75f, 0.12f, segments, 0.95f, 0.08f, 0.35f, 1.0f * fade);
 
             // 4. Blinding Pure White-Purple Void Core Spine
-            draw3DVolumetricCrescent(matrix, buffer, span * 0.45f, chord * 0.45f, height * 0.45f, 0.06f, segments, 1.0f, 0.85f, 1.0f, 1.0f);
+            draw3DVolumetricCrescent(matrix, buffer, span * 0.45f, chord * 0.45f, height * 0.45f, 0.06f, segments, 1.0f, 0.85f, 1.0f, 1.0f * fade);
 
             // 5. Orbiting Trailing 3D Shadow Crescents / Void Shards
             int trailingShards = 6;
@@ -103,7 +107,7 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
                 float shardSpan = 0.6f + (progress * 0.3f);
                 float shardChord = 0.25f;
 
-                drawMiniShardCrescent(matrix, buffer, sx, sy, sz, shardSpan, shardChord, side, 0.65f, 0.05f, 0.95f, 0.90f);
+                drawMiniShardCrescent(matrix, buffer, sx, sy, sz, shardSpan, shardChord, side, 0.65f, 0.05f, 0.95f, 0.90f * fade);
             }
         });
 

@@ -63,17 +63,28 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
         float maxLife = state.isImpactBurst ? 16.0f : 30.0f;
         float progress = Math.min(1.0f, state.age / maxLife);
         float fade = (1.0f - progress * progress);
+        // The flying wave used to pop in at full alpha; it now fades in over
+        // its first 3 ticks (the impact burst keeps its instant hit read).
+        if (!state.isImpactBurst) {
+            fade *= Math.min(1.0f, state.age / 3.0f);
+        }
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
-        // Diagonal / Scythe reap tilt
+        // Diagonal / Scythe reap tilt. The flying wave also rolls slowly in
+        // its tilt direction while it travels instead of flying as a frozen
+        // stamp.
         float tiltAngle = state.tiltRight ? 42.0f : -42.0f;
+        if (!state.isImpactBurst) {
+            tiltAngle += (state.tiltRight ? 1.0f : -1.0f) * state.age * 3.0f;
+        }
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(tiltAngle)));
 
-        // Slight forward sweep animation
-        float scale = state.isImpactBurst ? (1.0f + progress * 0.4f) : 1.0f;
+        // Slight forward sweep animation. The wave grows from 0.7 to 1.3 over
+        // its flight; the burst keeps its own 1.0 to 1.4 expansion.
+        float scale = state.isImpactBurst ? (1.0f + progress * 0.4f) : (0.7f + progress * 0.6f);
         poseStack.scale(scale, scale, scale);
 
         float span = 4.2f;

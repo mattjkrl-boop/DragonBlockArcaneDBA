@@ -82,7 +82,10 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
 
         // Scaled down smaller in first person
         float orbRadius = (0.22f + charge * 0.95f) * pulse * (state.isFirstPersonOwner ? 0.45f : 1.0f);
-        float alpha = 0.75f + charge * 0.25f;
+        // The orb used to pop into existence at 0.75 alpha on the first charge
+        // tick. Base alpha now tracks the charge itself, so it materializes
+        // from a faint seed as it grows to full.
+        float alpha = 0.10f + charge * 0.90f;
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
@@ -101,7 +104,7 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
 
             // 1. Inner Energy Singularity (Hyper-dense white-cyan rotating octahedron core)
             float coreRadius = orbRadius * 0.42f;
-            drawRotatingOctahedron(matrix, buffer, coreRadius, age * 45.0f, age * 30.0f, 1.0f, 1.0f, 1.0f, 0.98f);
+            drawRotatingOctahedron(matrix, buffer, coreRadius, age * 45.0f, age * 30.0f, 1.0f, 1.0f, 1.0f, 0.98f * (0.25f + charge * 0.75f));
 
             // 2. Middle Radiant Cyan Plasma Geodesic Sphere
             drawGeodesicSphere(matrix, buffer, orbRadius * 0.75f, age * -25.0f, 12, 0.0f, 0.95f, 1.0f, alpha * 0.85f);
