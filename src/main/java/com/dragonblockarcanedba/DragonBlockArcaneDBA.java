@@ -35,6 +35,7 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         com.dragonblockarcanedba.block.DbaBlocks.register();
         com.dragonblockarcanedba.block.entity.DbaBlockEntities.register();
         DbaItems.register();
+        com.dragonblockarcanedba.item.geo.WeaponAnimatableIds.register();
         com.dragonblockarcanedba.inventory.DbaMenus.register();
         DbaEffects.register();
 
