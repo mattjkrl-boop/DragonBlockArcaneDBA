@@ -91,9 +91,8 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (attacker instanceof Player player && !player.level().isClientSide()) {
-            WeaponDrainHelper.drainKiDiscrete(player, 30.0, 7);
-        }
+        // Flashdraw and Heaven Splitter already pay. A vanilla connect used to
+        // spend ki again and add no cut of its own.
     }
 
     // --- LEFT CLICK: Flashdraw (Multi-target Instant Dash Execution) ---
@@ -370,31 +369,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             // Teleport player to destination
             MovementPhysics.teleport(player, end);
 
-            // Spawn cascading physical 3D Swift Crescent slashes all along the teleport path from start to end
-            int slashCount = Math.max(7, (int) (dashDist / 2.2));
-            float slashScale = 1.35f + chargeRatio * 0.55f;
-            float[] tiltAngles = { 45.0f, -40.0f, 75.0f, -65.0f, 20.0f, -80.0f, 60.0f, -30.0f, 90.0f, -50.0f };
-            Vec3 rightVec = look.cross(new Vec3(0, 1, 0)).normalize();
-
-            for (int i = 0; i <= slashCount; i++) {
-                float fraction = i / (float) slashCount;
-                Vec3 slashPos = start.add(look.scale(dashDist * fraction)).add(0, player.getBbHeight() * 0.5, 0);
-
-                // Add subtle lateral zig-zag offset for anime-style dimensional iaido slashes
-                float lateralOffset = ((i % 3) - 1) * 0.35f;
-                slashPos = slashPos.add(rightVec.scale(lateralOffset));
-
-                float tilt = tiltAngles[i % tiltAngles.length];
-                int variant = i % 2;
-                int lifetime = 14 + (i % 4);
-
-                SwiftCrescentEntity crescent = new SwiftCrescentEntity(
-                    serverLevel, player, slashPos,
-                    player.getYRot(), player.getXRot(),
-                    tilt, slashScale * (0.95f + (i % 3) * 0.15f), variant, lifetime
-                );
-                serverLevel.addFreshEntity(crescent);
-            }
+            // Heaven Splitter is the vertical cut. The white crescent stays on Flashdraw.
 
             // Delayed massive vertical energy cut (0.5s / 10 ticks)
             float baseDamage = 1000.0f + (chargeRatio * 1000.0f);
@@ -409,21 +384,6 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             for (LivingEntity t : targets) {
                 t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
                 t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalDamage)));
-
-                // Cross-cleave physical crescent slashes centered on the target
-                Vec3 targetPos = t.position().add(0, t.getBbHeight() * 0.5, 0);
-                SwiftCrescentEntity targetCrescent1 = new SwiftCrescentEntity(
-                    serverLevel, player, targetPos,
-                    player.getYRot(), player.getXRot(),
-                    40.0f, slashScale * 1.25f, 0, 14
-                );
-                SwiftCrescentEntity targetCrescent2 = new SwiftCrescentEntity(
-                    serverLevel, player, targetPos,
-                    player.getYRot(), player.getXRot(),
-                    -40.0f, slashScale * 1.25f, 1, 14
-                );
-                serverLevel.addFreshEntity(targetCrescent1);
-                serverLevel.addFreshEntity(targetCrescent2);
 
                 // Tweak C: If target dies, reset Flashdraw cooldown
                 if (!t.isAlive()) {

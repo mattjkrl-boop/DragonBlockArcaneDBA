@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
@@ -12,42 +13,68 @@ import java.util.List;
 import java.util.Locale;
 
 public class DbaMenuScreen extends Screen {
+    private static final String[] TAB_LABELS = {"Stats", "Forms", "Skills", "Craft", "Emotes"};
+    private static int lastActiveTab = 0;
+
+    private final Screen parent;
     private final List<MenuTab> tabs = new ArrayList<>();
-    private final String[] tabNames = {"✦ STATS", "⚡ FORMS", "🌌 SKILLS", "🔮 CRAFT", "🎭 EMOTES"};
-    private static int lastActiveTab = 2; // Default to Skill Tree
     private int activeTab = lastActiveTab;
 
     private int x;
     private int y;
-    private int bgWidth = 540;
-    private int bgHeight = 330;
+    private int bgWidth = 560;
+    private int bgHeight = 360;
 
     public DbaMenuScreen() {
-        super(Component.literal("Dragon Block Arcane Menu"));
+        this(null);
+    }
+
+    public DbaMenuScreen(Screen parent) {
+        super(Component.literal("Character"));
+        this.parent = parent;
         tabs.add(new StatsTab());
         tabs.add(new FormsTab());
         tabs.add(new TechniquesTab());
         tabs.add(new KiCustomizerTab());
         tabs.add(new EmotesTab());
+        if (activeTab < 0 || activeTab >= tabs.size()) {
+            activeTab = 0;
+        }
     }
 
     @Override
     protected void init() {
-        // Responsive sizing: generous, but clamps to available screen resolution
-        this.bgWidth = Math.min(560, Math.max(340, this.width - 20));
-        this.bgHeight = Math.min(340, Math.max(220, this.height - 20));
+        int margin = 12;
+        this.bgWidth = Math.min(620, Math.max(360, this.width - margin * 2));
+        this.bgHeight = Math.min(400, Math.max(250, this.height - margin * 2));
+        if (this.bgWidth > this.width - 8) {
+            this.bgWidth = Math.max(200, this.width - 8);
+        }
+        if (this.bgHeight > this.height - 8) {
+            this.bgHeight = Math.max(180, this.height - 8);
+        }
         this.x = (this.width - bgWidth) / 2;
         this.y = (this.height - bgHeight) / 2;
-
         this.clearWidgets();
         tabs.get(activeTab).init(this);
     }
 
     public void selectTab(int index) {
-        if (index >= 0 && index < tabs.size()) {
+        if (index >= 0 && index < tabs.size() && index != activeTab) {
             this.activeTab = index;
             lastActiveTab = index;
-            init();
+            this.clearWidgets();
+            tabs.get(activeTab).init(this);
+        }
+    }
+
+    public void openCraft(int slot) {
+        this.activeTab = 3;
+        lastActiveTab = 3;
+        this.clearWidgets();
+        tabs.get(3).init(this);
+        if (tabs.get(3) instanceof KiCustomizerTab craft) {
+            craft.focusSlot(slot);
         }
     }
 
@@ -55,12 +82,14 @@ public class DbaMenuScreen extends Screen {
     public int getY() { return y; }
     public int getBgWidth() { return bgWidth; }
     public int getBgHeight() { return bgHeight; }
-    public int getContentX() { return x + 6; }
-    public int getContentY() { return y + 34; }
-    public int getContentWidth() { return bgWidth - 12; }
-    public int getContentHeight() { return bgHeight - 40; }
+    public int getContentX() { return x + DbaUi.PAD; }
+    public int getContentY() { return y + DbaUi.HEADER + DbaUi.TAB + DbaUi.STATUS; }
+    public int getContentWidth() { return bgWidth - DbaUi.PAD * 2; }
+    public int getContentHeight() { return bgHeight - DbaUi.HEADER - DbaUi.TAB - DbaUi.STATUS - DbaUi.PAD; }
 
-    public <T extends net.minecraft.client.gui.components.events.GuiEventListener & net.minecraft.client.gui.components.Renderable & net.minecraft.client.gui.narration.NarratableEntry> T addTabWidget(T widget) {
+    public <T extends net.minecraft.client.gui.components.events.GuiEventListener
+            & net.minecraft.client.gui.components.Renderable
+            & net.minecraft.client.gui.narration.NarratableEntry> T addTabWidget(T widget) {
         return this.addRenderableWidget(widget);
     }
 
@@ -79,164 +108,103 @@ public class DbaMenuScreen extends Screen {
         return String.format(Locale.US, "%,d", num);
     }
 
-    @Override
-    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
-        super.extractRenderState(context, mouseX, mouseY, delta);
-
-        Minecraft client = Minecraft.getInstance();
-
-        // 1. Outer Dark Obsidian Glass Frame
-        context.fill(x - 2, y - 2, x + bgWidth + 2, y + bgHeight + 2, 0x88000000);
-        context.fill(x, y, x + bgWidth, y + bgHeight, 0xF20A0E17); // Cosmic slate
-
-        // Glowing outer border
-        int borderColor = 0xAA00E5FF;
-        context.fill(x, y, x + bgWidth, y + 1, borderColor);
-        context.fill(x, y + bgHeight - 1, x + bgWidth, y + bgHeight, borderColor);
-        context.fill(x, y, x + 1, y + bgHeight, borderColor);
-        context.fill(x + bgWidth - 1, y, x + bgWidth, y + bgHeight, borderColor);
-
-        // 2. Top Header Navigation Bar
-        int headerH = 30;
-        context.fill(x + 1, y + 1, x + bgWidth - 1, y + headerH, 0xDD0D131F);
-        context.fill(x + 1, y + headerH - 1, x + bgWidth - 1, y + headerH, 0x3300E5FF);
-
-        // Right side buttons: Close [✕] and Settings [⚙]
-        int closeW = 16;
-        int closeH = 16;
-        int closeX = x + bgWidth - closeW - 6;
-        int closeY = y + 7;
-        boolean hoverClose = mouseX >= closeX && mouseX <= closeX + closeW && mouseY >= closeY && mouseY <= closeY + closeH;
-        context.fill(closeX, closeY, closeX + closeW, closeY + closeH, hoverClose ? 0xAAFF4444 : 0x33442222);
-        context.centeredText(client.font, Component.literal("✕"), closeX + closeW / 2, closeY + 4, hoverClose ? 0xFFFFFFFF : 0xFFAAAAAA);
-
-        int gearW = 16;
-        int gearH = 16;
-        int gearX = closeX - gearW - 4;
-        int gearY = closeY;
-        boolean hoverGear = mouseX >= gearX && mouseX <= gearX + gearW && mouseY >= gearY && mouseY <= gearY + gearH;
-        context.fill(gearX, gearY, gearX + gearW, gearY + gearH, hoverGear ? 0xAA00C853 : 0x33112818);
-        context.centeredText(client.font, Component.literal("⚙"), gearX + gearW / 2, gearY + 4, hoverGear ? 0xFFFFFFFF : 0xFF55FF88);
-
-        // Calculate available space for tabs vs status pill
-        int rightMargin = gearX - 6;
-
-        // Draw Left Navigation Tabs (Compact & Responsive)
-        int tabX = x + 6;
-        for (int i = 0; i < tabs.size(); i++) {
-            String name = tabNames[i];
-            int textW = client.font.width(name);
-            int tabW = textW + 10;
-            int tabY = y + 4;
-            int tabH = headerH - 8;
-
-            boolean isActive = (i == activeTab);
-            boolean isHovered = mouseX >= tabX && mouseX <= tabX + tabW && mouseY >= tabY && mouseY <= tabY + tabH;
-
-            if (isActive) {
-                context.fill(tabX, tabY, tabX + tabW, tabY + tabH, 0x3355FF88);
-                context.fill(tabX, tabY + tabH - 2, tabX + tabW, tabY + tabH, 0xFF55FF88);
-            } else if (isHovered) {
-                context.fill(tabX, tabY, tabX + tabW, tabY + tabH, 0x22FFFFFF);
-            }
-
-            int textCol = isActive ? 0xFF55FF88 : (isHovered ? 0xFFFFFFFF : 0xFF8899A6);
-            context.centeredText(client.font, Component.literal(name), tabX + tabW / 2, tabY + 4, textCol);
-            tabX += tabW + 3;
-        }
-
-        // Consolidated Single Status Pill (Never overlaps!)
-        if (client.player instanceof PlayerStatsAccessor accessor) {
-            String race = accessor.dba$getRaceId() != null ? accessor.dba$getRaceId().getPath().replace("_", " ").toUpperCase() : "MORTAL";
-            long lvl = accessor.dba$getLevel();
-            long ap = accessor.dba$getStatPoints();
-
-            int availableW = rightMargin - tabX - 8;
-            if (availableW > 50) {
-                // Try full status string: RACE • LV. X • ✦ X AP
-                String fullStatus = race + " • LV." + formatCompactNumber(lvl) + " • ✦ " + formatCompactNumber(ap) + " AP";
-                String displayStatus = fullStatus;
-
-                if (client.font.width(displayStatus) > availableW) {
-                    displayStatus = "LV." + formatCompactNumber(lvl) + " • ✦ " + formatCompactNumber(ap) + " AP";
-                }
-                if (client.font.width(displayStatus) > availableW) {
-                    displayStatus = "✦ " + formatCompactNumber(ap) + " AP";
-                }
-
-                int pillW = client.font.width(displayStatus) + 12;
-                int pillX = rightMargin - pillW;
-                int pillY = y + 6;
-                int pillH = 18;
-
-                context.fill(pillX, pillY, pillX + pillW, pillY + pillH, 0x66162233);
-                context.fill(pillX, pillY, pillX + pillW, pillY + 1, 0x5500E5FF);
-                context.fill(pillX, pillY + pillH - 1, pillX + pillW, pillY + pillH, 0x5500E5FF);
-                context.fill(pillX, pillY, pillX + 1, pillY + pillH, 0x5500E5FF);
-                context.fill(pillX + pillW - 1, pillY, pillX + pillW, pillY + pillH, 0x5500E5FF);
-
-                context.centeredText(client.font, Component.literal(displayStatus), pillX + pillW / 2, pillY + 5, 0xFFFFAA00);
-            }
-        }
-
-        // 3. Render Active Tab Content
-        tabs.get(activeTab).render(context, mouseX, mouseY, delta);
+    public static void playClickSound() {
+        DbaUi.playClick();
     }
 
-    public static void playClickSound() {
-        Minecraft client = Minecraft.getInstance();
-        if (client != null && client.getSoundManager() != null) {
-            client.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK, 1.0f));
+    private int tabWidth() {
+        int count = TAB_LABELS.length;
+        int inner = bgWidth - DbaUi.PAD * 2;
+        int gaps = DbaUi.GAP * (count - 1);
+        return Math.max(28, (inner - gaps) / count);
+    }
+
+    private int tabLeft() {
+        return x + DbaUi.PAD;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        tabs.get(activeTab).tick();
+    }
+
+    @Override
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        DbaUi.dim(context, this.width, this.height);
+        DbaUi.frame(context, x, y, bgWidth, bgHeight);
+
+        int settingsW = 72;
+        int settingsX = DbaUi.closeX(x, bgWidth) - settingsW - 4;
+        int settingsY = DbaUi.closeY(y);
+        DbaUi.title(context, this.font, x, y, settingsX - x - 8, "Character");
+        DbaUi.button(context, this.font, settingsX, settingsY, settingsW, DbaUi.BUTTON_H, "Settings",
+                DbaUi.hit(mouseX, mouseY, settingsX, settingsY, settingsW, DbaUi.BUTTON_H), DbaUi.Kind.SECONDARY);
+        DbaUi.closeControl(context, this.font, x, y, bgWidth, mouseX, mouseY);
+
+        int tabY = y + DbaUi.HEADER;
+        int tabW = tabWidth();
+        int tabX = tabLeft();
+        for (int i = 0; i < TAB_LABELS.length; i++) {
+            boolean hover = DbaUi.hit(mouseX, mouseY, tabX, tabY, tabW, DbaUi.TAB);
+            DbaUi.tab(context, this.font, tabX, tabY, tabW, DbaUi.TAB, TAB_LABELS[i], i == activeTab, hover);
+            tabX += tabW + DbaUi.GAP;
         }
+
+        int statusY = y + DbaUi.HEADER + DbaUi.TAB;
+        DbaUi.hairline(context, x, statusY + DbaUi.STATUS - 1, bgWidth);
+        Minecraft client = Minecraft.getInstance();
+        String status = "Not in a world";
+        if (client.player instanceof PlayerStatsAccessor accessor) {
+            String race = accessor.dba$getRaceId() != null
+                    ? accessor.dba$getRaceId().getPath().replace('_', ' ')
+                    : "Unchosen";
+            race = race.substring(0, 1).toUpperCase(Locale.ROOT) + race.substring(1);
+            status = race
+                    + "    Level " + formatCompactNumber(accessor.dba$getLevel())
+                    + "    " + formatCompactNumber(accessor.dba$getStatPoints()) + " AP";
+        }
+        context.text(this.font, Component.literal(DbaUi.clip(this.font, status, bgWidth - 24)), x + 12, statusY + 4, DbaUi.MUTED);
+
+        tabs.get(activeTab).render(context, mouseX, mouseY, delta);
+        super.extractRenderState(context, mouseX, mouseY, delta);
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean isRepeat) {
-        double mouseX = event.x();
-        double mouseY = event.y();
-        Minecraft client = Minecraft.getInstance();
-
-        // Close button click
-        int closeW = 16;
-        int closeH = 16;
-        int closeX = x + bgWidth - closeW - 6;
-        int closeY = y + 7;
-        if (mouseX >= closeX && mouseX <= closeX + closeW && mouseY >= closeY && mouseY <= closeY + closeH) {
-            playClickSound();
+        double mx = event.x();
+        double my = event.y();
+        if (event.button() != 0) {
+            return super.mouseClicked(event, isRepeat);
+        }
+        if (DbaUi.closeHit(x, y, bgWidth, mx, my)) {
+            DbaUi.playClick();
             this.onClose();
             return true;
         }
-
-        // Settings gear button click
-        int gearW = 16;
-        int gearH = 16;
-        int gearX = closeX - gearW - 4;
-        int gearY = closeY;
-        if (mouseX >= gearX && mouseX <= gearX + gearW && mouseY >= gearY && mouseY <= gearY + gearH) {
-            playClickSound();
-            client.setScreenAndShow(new DbaSettingsScreen(this));
+        int settingsW = 72;
+        int settingsX = DbaUi.closeX(x, bgWidth) - settingsW - 4;
+        int settingsY = DbaUi.closeY(y);
+        if (DbaUi.hit(mx, my, settingsX, settingsY, settingsW, DbaUi.BUTTON_H)) {
+            DbaUi.playClick();
+            if (this.minecraft != null) {
+                this.minecraft.setScreenAndShow(new DbaSettingsScreen(this));
+            }
             return true;
         }
-
-        // Tab clicks
-        int tabX = x + 6;
-        int headerH = 30;
-        for (int i = 0; i < tabs.size(); i++) {
-            String name = tabNames[i];
-            int textW = client.font.width(name);
-            int tabW = textW + 10;
-            int tabY = y + 4;
-            int tabH = headerH - 8;
-
-            if (mouseX >= tabX && mouseX <= tabX + tabW && mouseY >= tabY && mouseY <= tabY + tabH) {
-                playClickSound();
-                selectTab(i);
+        int tabY = y + DbaUi.HEADER;
+        int tabW = tabWidth();
+        int tabX = tabLeft();
+        for (int i = 0; i < TAB_LABELS.length; i++) {
+            if (DbaUi.hit(mx, my, tabX, tabY, tabW, DbaUi.TAB)) {
+                if (i != activeTab) {
+                    DbaUi.playClick();
+                    selectTab(i);
+                }
                 return true;
             }
-            tabX += tabW + 3;
+            tabX += tabW + DbaUi.GAP;
         }
-
-        // Delegate to active tab
         if (tabs.get(activeTab).mouseClicked(event, isRepeat)) {
             return true;
         }
@@ -268,16 +236,36 @@ public class DbaMenuScreen extends Screen {
     }
 
     @Override
-    public boolean isPauseScreen() {
-        return false;
-    }
-
-    @Override
-    public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
-        if (com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient.openMenuKey.matches(event)) {
+    public boolean keyPressed(KeyEvent event) {
+        if (DbaUi.escape(event)) {
+            this.onClose();
+            return true;
+        }
+        if (com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient.openMenuKey != null
+                && com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient.openMenuKey.matches(event)) {
+            while (com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient.openMenuKey.consumeClick()) {
+                // The press is handled here so the client tick does not open the menu again.
+            }
             this.onClose();
             return true;
         }
         return super.keyPressed(event);
+    }
+
+    @Override
+    public void onClose() {
+        if (this.minecraft == null) {
+            return;
+        }
+        if (this.parent != null) {
+            this.minecraft.setScreenAndShow(this.parent);
+        } else {
+            super.onClose();
+        }
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false;
     }
 }

@@ -17,14 +17,22 @@ def bar(d,p0,p1,w,c,hi=1.35,lo=0.6):
         d.line([(p0[0]+nx*o,p0[1]+ny*o),(p1[0]+nx*o,p1[1]+ny*o)],fill=shade(c,hi),width=max(1,w//3))
 def new(): im=Image.new('RGBA',(S,S),(0,0,0,0)); return im,ImageDraw.Draw(im)
 def blaster():
-    im,d=new(); g=(92,98,110,255); dark=(48,52,62,255)
-    d.rounded_rectangle([10,18,50,32],4,fill=g,outline=dark)          # body
-    d.rectangle([50,21,60,28],fill=(70,74,86,255),outline=dark)        # barrel
-    d.rectangle([58,22,62,27],fill=(40,200,255,255))                   # emitter
-    d.polygon([(18,32),(30,32),(26,52),(14,52)],fill=(60,64,74,255),outline=dark) # grip
-    d.rectangle([22,33,30,40],outline=dark)                            # trigger guard
-    for x in (36,40,44): d.rectangle([x,20,x+1,24],fill=(255,120,40,255))  # heat vents
-    d.line([(12,20),(48,20)],fill=(150,156,170,255)); d.rectangle([14,23,34,27],fill=(30,180,240,255))  # energy cell
+    # Frieza Force ray gun: chunky two-tone body, short heavy barrel, black grip.
+    im,d=new()
+    light=(214,218,226,255); dark=(72,78,90,255); mid=(124,132,144,255)
+    black=(28,30,36,255); bore=(32,34,40,255); ember=(255,150,50,255)
+    d.rectangle([16,18,40,36],fill=light,outline=dark)
+    d.rectangle([16,28,40,36],fill=dark)
+    d.rectangle([18,22,34,26],fill=mid)
+    d.rectangle([14,16,30,19],fill=mid,outline=dark)
+    d.rectangle([14,13,19,17],fill=dark)
+    d.rectangle([40,21,52,33],fill=dark)
+    d.rectangle([50,19,57,35],fill=mid,outline=dark)
+    d.rectangle([55,23,59,31],fill=bore)
+    d.rectangle([57,26,60,28],fill=ember)
+    d.polygon([(22,36),(34,36),(30,54),(16,54)],fill=black,outline=(12,12,16,255))
+    d.rectangle([34,36,37,44],fill=dark)
+    d.rectangle([34,42,42,45],fill=dark)
     return im
 def piccolo(part):
     im,d=new(); purple=(98,52,150,255); white=(236,236,240,255); bl=(110,70,40,255)

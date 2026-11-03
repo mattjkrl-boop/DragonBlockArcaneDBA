@@ -138,9 +138,8 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (attacker instanceof Player player && !player.level().isClientSide()) {
-            WeaponDrainHelper.drainStaminaDiscrete(player, 100.0, 5);
-        }
+        // The blitz and the lunge already pay their own stamina. A vanilla connect
+        // used to spend another chunk and show nothing of its own.
     }
 
     // --- LEFT CLICK: Blitz Flurry ---
@@ -176,15 +175,6 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
         if (seq.waitingForRelease) {
             return; // Must release click before chaining to next!
-        }
-
-        // Drain Stamina smoothly: 100% per minute while blitzing
-        if (!WeaponDrainHelper.drainStaminaPerTick(player, 100.0)) {
-            executeBestFitLineFinisher(player, level, seq, stack);
-            clearEscalatingSpeedBuff(player);
-            ACTIVE_BLITZ_MAP.remove(playerUuid);
-            player.sendSystemMessage(Component.literal("§c✦ Out of Stamina! Blitz Ended. ✦"), true);
-            return;
         }
 
         boolean resumedFromWindow = false;
@@ -246,6 +236,58 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.6f);
             }
+        }
+
+        // No lock: a plain fencing lunge. Holding the button with nobody in front
+        // used to drain stamina every tick and draw nothing.
+        if (currentTarget == null && !seq.inContinuationWindow) {
+            if (chargeTicks % 6 == 0) {
+                if (!WeaponDrainHelper.drainStaminaDiscrete(player, 100.0, 6)) {
+                    return;
+                }
+                com.dragonblockarcanedba.attribute.PlayerStatsAccessor lungeStats =
+                    (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
+                float lungeDamage = 280.0f + (float) (lungeStats.dba$getStrength() * 1.8);
+                Vec3 eye = player.getEyePosition();
+                Vec3 look = player.getLookAngle();
+                AABB reach = player.getBoundingBox().expandTowards(look.scale(5.5)).inflate(0.9);
+                LivingEntity struck = null;
+                double best = 5.5;
+                for (LivingEntity candidate : level.getEntitiesOfClass(LivingEntity.class, reach, e -> e != player && e.isAlive())) {
+                    Vec3 to = candidate.getBoundingBox().getCenter().subtract(eye);
+                    double dist = to.length();
+                    if (dist > 5.5 || dist < 0.2 || to.lengthSqr() < 1.0E-4) {
+                        continue;
+                    }
+                    if (look.dot(to.normalize()) < 0.82) {
+                        continue;
+                    }
+                    if (dist < best) {
+                        best = dist;
+                        struck = candidate;
+                    }
+                }
+                if (struck != null) {
+                    struck.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(lungeDamage));
+                }
+                SaberSlashEntity lunge = new SaberSlashEntity(
+                    level, player, eye.add(look.scale(0.6)), player.getYRot(), player.getXRot(), 0.0f, 1.15f, false, 8
+                );
+                lunge.setDeltaMovement(look.scale(1.35));
+                level.addFreshEntity(lunge);
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 0.9f, 1.6f);
+            }
+            return;
+        }
+
+        // Drain Stamina smoothly: 100% per minute while a blitz is actually running.
+        if (!WeaponDrainHelper.drainStaminaPerTick(player, 100.0)) {
+            executeBestFitLineFinisher(player, level, seq, stack);
+            clearEscalatingSpeedBuff(player);
+            ACTIVE_BLITZ_MAP.remove(playerUuid);
+            player.sendSystemMessage(Component.literal("§c✦ Out of Stamina! Blitz Ended. ✦"), true);
+            return;
         }
 
         // If we have an active target

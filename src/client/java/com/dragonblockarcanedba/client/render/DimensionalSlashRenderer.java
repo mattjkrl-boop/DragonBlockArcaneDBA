@@ -85,127 +85,137 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         // Forward spin along movement vector
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees((float) Math.sin(state.age * 0.4f) * 6.0f)));
 
+        float span = 3.4f;
+        float chord = 1.12f;
+        int segments = 32;
+        float pulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f);
+        float fadeIn = ease(Math.min(1.0f, state.age / 5.0f));
+        float fadeOut = state.age <= 70.0f ? 1.0f : ease(Math.max(0.0f, 1.0f - (state.age - 70.0f) / 30.0f));
+        float fade = fadeIn * fadeOut;
+        float body = 0.45f + 0.55f * fade;
+        float belly = span * 0.22f;
+        float coreZ = chord * 0.38f;
+        float age = state.age;
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            float span = 3.4f;
-            float chord = 1.05f;
-            int segments = 28;
-            float pulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f);
+            drawVolumetricCrescent(matrix, buffer, span + 0.28f, chord + 0.22f, 0.22f * pulse * body, 0.78f, segments,
+                0.65f, 0.05f, 0.95f, 0.82f * fade);
+            drawVolumetricCrescent(matrix, buffer, span, chord, 0.11f * pulse * body, 0.42f, segments,
+                1.0f, 0.10f, 0.35f, 0.96f * fade);
+            drawVolumetricCrescent(matrix, buffer, span * 0.70f, chord * 0.90f, 0.032f * body, 0.10f, segments,
+                1.0f, 0.96f, 1.0f, fade);
 
-            // Fade envelope: every alpha in this renderer used to be constant,
-            // so the slash popped in at spawn and out on timeout after up to
-            // 100 ticks. In over 4 ticks, out from tick 70 to the 100 cap.
-            float fadeIn = Math.min(1.0f, state.age / 4.0f);
-            float fadeOut = state.age <= 70.0f ? 1.0f : Math.max(0.0f, 1.0f - (state.age - 70.0f) / 30.0f);
-            float fade = fadeIn * fadeOut;
+            drawTipSpurs(matrix, buffer, span, 0.34f, fade);
 
-            // 1. Outer Abyssal Violet & Crimson Dimensional Rift Layer
-            drawVolumetricCrescent(matrix, buffer, span + 0.35f, chord + 0.35f, 0.26f * pulse, 0.60f, segments,
-                0.65f, 0.05f, 0.95f, 0.85f * fade);
-
-            // 2. Inner Neon Blood-Magenta Razor Core
-            drawVolumetricCrescent(matrix, buffer, span, chord, 0.14f * pulse, 0.38f, segments,
-                1.0f, 0.10f, 0.35f, 0.95f * fade);
-
-            // 3. Pure White-Hot Reality Severance Seam
-            drawVolumetricCrescent(matrix, buffer, span * 0.72f, chord * 0.72f, 0.06f, 0.14f, segments,
-                1.0f, 0.95f, 1.0f, 1.0f * fade);
-
-            // 4. Transverse 3D Reality Tear Fin Spurs (Stabbing out from tips and apex)
-            drawTipSpurs(matrix, buffer, span, chord, 0.32f, fade);
-
-            // 5. Central Spinning Singularity Octahedron Core & Accretion Micro-Rings
-            drawSingularityOctahedron(matrix, buffer, 0, 0, chord * 0.3f, 0.35f * pulse, state.age * 30.0f,
+            drawSingularityOctahedron(matrix, buffer, 0, belly * 0.70f, coreZ, 0.32f * pulse, age * 30.0f,
                 0.02f, 0.0f, 0.05f, 0.99f * fade,
                 1.0f, 0.15f, 0.85f, 0.95f * fade,
-                1.0f, 1.0f, 1.0f, 1.0f * fade);
+                1.0f, 1.0f, 1.0f, fade);
+            drawConcentricRing(matrix, buffer, 0, belly * 0.70f, coreZ, 0.72f * pulse, 0.54f * pulse, 24, age * 22.0f,
+                0.60f, 0.05f, 0.95f, 0.80f * fade);
+            drawConcentricRing(matrix, buffer, 0, belly * 0.70f, coreZ, 0.46f * pulse, 0.34f * pulse, 16, -age * 30.0f,
+                1.0f, 0.15f, 0.35f, 0.92f * fade);
 
-            drawConcentricRing(matrix, buffer, 0, 0, chord * 0.3f, 0.75f * pulse, 0.55f * pulse, 24, state.age * 22.0f,
-                0.60f, 0.05f, 0.95f, 0.85f * fade);
-            drawConcentricRing(matrix, buffer, 0, 0, chord * 0.3f, 0.50f * pulse, 0.38f * pulse, 16, -state.age * 30.0f,
-                1.0f, 0.15f, 0.35f, 0.95f * fade);
-
-            // 6. Trailing High-Velocity Spatial Wake Ribbons
-            float ribbonLen = 2.4f;
-            float ribbonWidth = 0.14f;
-            for (int i = 0; i < 4; i++) {
-                float t = (i / 3.0f) * 2.0f - 1.0f; // -1 to 1
-                float rx = t * span * 0.75f;
-                float rz = (1.0f - t * t) * chord * 0.6f;
-                drawTaperedRibbon(matrix, buffer, rx, 0, rz, rx, 0, rz - ribbonLen * (1.0f - Math.abs(t) * 0.4f), ribbonWidth,
-                    0.75f, 0.05f, 0.90f, 0.80f * fade,
+            float ribbonLen = 2.5f * (0.30f + 0.70f * fade);
+            float ribbonWidth = 0.11f * body;
+            for (int i = 0; i < 5; i++) {
+                float t = (i / 4.0f) * 2.0f - 1.0f;
+                float arc = 1.0f - t * t;
+                float rx = t * span * 0.72f;
+                float ry = belly * arc * 0.70f;
+                float rz = arc * chord * 0.55f;
+                float tail = ribbonLen * (0.40f + 0.60f * arc);
+                drawTaperedRibbon(matrix, buffer, rx, ry, rz, rx * 0.78f, ry * 0.30f, rz - tail,
+                    ribbonWidth * (0.35f + 0.65f * arc),
+                    0.75f, 0.05f, 0.90f, 0.75f * fade,
                     1.0f, 0.15f, 0.45f, 0.0f);
             }
         });
 
-        // T1: additive halo pass tracing the magenta razor core slightly
-        // larger, sharing the fade envelope from the previous pass, so the
-        // slash blooms around its violet rift shell.
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-
-            float haloPulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f);
-            float haloFadeIn = Math.min(1.0f, state.age / 4.0f);
-            float haloFadeOut = state.age <= 70.0f ? 1.0f : Math.max(0.0f, 1.0f - (state.age - 70.0f) / 30.0f);
-            float haloFade = haloFadeIn * haloFadeOut;
-
-            drawVolumetricCrescent(matrix, buffer, 3.4f + 0.22f, 1.05f + 0.22f, 0.20f * haloPulse, 0.42f, 28,
-                0.55f, 0.05f, 0.30f, 0.30f * haloFade);
+            drawVolumetricCrescent(matrix, buffer, span + 0.16f, chord + 0.12f, 0.16f * pulse * body, 0.36f, segments,
+                0.55f, 0.05f, 0.30f, 0.28f * fade);
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
+    private static float ease(float t) {
+        float c = Math.max(0.0f, Math.min(1.0f, t));
+        return c * c * (3.0f - 2.0f * c);
+    }
+
+    /**
+     * A swung air slash. Span runs across the cut, the chord bows the blade forward,
+     * and a vertical arc lifts the belly so the silhouette is a curve, not a card.
+     * Thickness pinches to a point at each tip. The wake slips backward and fades.
+     */
     private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {
+        float bow = span * 0.22f;
         for (int i = 0; i < segments; i++) {
             float t1 = (i / (float) segments) * 2.0f - 1.0f;
             float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
 
+            float arc1 = 1.0f - t1 * t1;
+            float arc2 = 1.0f - t2 * t2;
             float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord;
+            float z1 = arc1 * chord;
             float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord;
+            float z2 = arc2 * chord;
+            float y1 = bow * arc1;
+            float y2 = bow * arc2;
 
-            float th1 = thickness * (1.0f - Math.abs(t1) * 0.75f);
-            float th2 = thickness * (1.0f - Math.abs(t2) * 0.75f);
+            float pinch1 = 0.06f + 0.94f * arc1;
+            float pinch2 = 0.06f + 0.94f * arc2;
+            float th1 = thickness * pinch1;
+            float th2 = thickness * pinch2;
 
-            float z1Trail = z1 - trailLength * (1.0f - Math.abs(t1));
-            float z2Trail = z2 - trailLength * (1.0f - Math.abs(t2));
+            float z1Trail = z1 - trailLength * pinch1;
+            float z2Trail = z2 - trailLength * pinch2;
 
-            // Top Surface Bevel
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2 * 0.25f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, th1 * 0.25f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, y1 + th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, y2 + th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, y2 + th2 * 0.18f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, y1 + th1 * 0.18f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
 
-            // Bottom Surface Bevel
-            consumer.addVertex(matrix, x1, -th1 * 0.25f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2 * 0.25f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x1, y1 - th1 * 0.18f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x2, y2 - th2 * 0.18f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x2, y2 - th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x1, y1 - th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
 
-            // Front Leading Knife Edge
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x1, y1 - th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x2, y2 - th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x2, y2 + th2, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x1, y1 + th1, z1).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
         }
     }
 
-    private static void drawTipSpurs(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float spurSize, float fade) {
-        // Left Tip Spur
-        consumer.addVertex(matrix, -span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span - spurSize * 1.6f, 0, -spurSize * 2.2f).setColor(0.65f, 0.05f, 0.95f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span + spurSize * 0.4f, 0, -spurSize).setColor(1.0f, 0.15f, 0.45f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+    /** Reality-tear fins at the pinched tips, one rising and one falling, so the ends are not flat cards. */
+    private static void drawTipSpurs(Matrix4f matrix, VertexConsumer consumer, float span, float spurSize, float fade) {
+        drawTearSpur(matrix, consumer, -1.0f, span, spurSize, fade);
+        drawTearSpur(matrix, consumer, 1.0f, span, spurSize, fade);
+    }
 
-        // Right Tip Spur
-        consumer.addVertex(matrix, span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span + spurSize * 1.6f, 0, -spurSize * 2.2f).setColor(0.65f, 0.05f, 0.95f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span - spurSize * 0.4f, 0, -spurSize).setColor(1.0f, 0.15f, 0.45f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span, 0, 0).setColor(1.0f, 0.15f, 0.45f, 0.95f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+    private static void drawTearSpur(Matrix4f matrix, VertexConsumer consumer, float sign, float span, float spurSize, float fade) {
+        float x = sign * span;
+        float out = sign * spurSize * 1.55f;
+        float in = -sign * spurSize * 0.32f;
+        float back = spurSize * 2.15f;
+        float hot = 0.95f * fade;
+
+        consumer.addVertex(matrix, x, 0.02f, 0.02f).setColor(1.0f, 0.15f, 0.45f, hot).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x + out, spurSize * 0.62f, -back).setColor(0.65f, 0.05f, 0.95f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x + in, spurSize * 0.14f, -spurSize * 0.8f).setColor(1.0f, 0.15f, 0.45f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x, 0.02f, 0.02f).setColor(1.0f, 0.15f, 0.45f, hot).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+        consumer.addVertex(matrix, x, -0.02f, 0.02f).setColor(1.0f, 0.15f, 0.45f, hot).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x + in, -spurSize * 0.14f, -spurSize * 0.8f).setColor(1.0f, 0.15f, 0.45f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x + out, -spurSize * 0.62f, -back).setColor(0.65f, 0.05f, 0.95f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x, -0.02f, 0.02f).setColor(1.0f, 0.15f, 0.45f, hot).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 
     private static void drawConcentricRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {

@@ -59,13 +59,10 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         float totalHeight = scale * 6.5f;
         float age = state.age;
 
-        // Fade in rapidly during first 3 ticks and fade out during last 5 ticks of 25-tick lifetime
-        float alphaMult = 1.0f;
-        if (age < 3.0f) {
-            alphaMult = age / 3.0f;
-        } else if (age > 20.0f) {
-            alphaMult = Math.max(0.0f, (25.0f - age) / 5.0f);
-        }
+        float inT = Math.min(1.0f, age / 4.0f);
+        float inEase = 1.0f - (1.0f - inT) * (1.0f - inT) * (1.0f - inT);
+        float outT = age <= 17.0f ? 0.0f : Math.min(1.0f, (age - 17.0f) / 8.0f);
+        float alphaMult = inEase * (1.0f - outT * outT * (3.0f - 2.0f * outT));
 
         final float finalAlphaMult = alphaMult;
 
@@ -74,13 +71,13 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // 1. Dual Ground Whirlpool Suction Discs (Base Vortex)
+            // One suction ring at the foot, and a pale eye that is the core of that ring.
             int groundSegments = 36;
             float gRadius = baseRadius * 0.95f;
-            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, gRadius, gRadius * 0.55f, groundSegments, age * 38.0f,
-                0.0f, 1.0f, 0.55f, 0.65f * finalAlphaMult);
-            drawRotatingRing(matrix, buffer, 0, 0.10f, 0, gRadius * 0.70f, gRadius * 0.25f, groundSegments, -age * 48.0f,
-                0.3f, 1.0f, 0.85f, 0.55f * finalAlphaMult);
+            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, gRadius, gRadius * 0.78f, groundSegments, age * 28.0f,
+                0.0f, 0.72f, 0.38f, 0.70f * finalAlphaMult);
+            drawRotatingRing(matrix, buffer, 0, 0.08f, 0, gRadius * 0.22f, 0.04f, 20, -age * 18.0f,
+                0.85f, 1.0f, 0.92f, 0.80f * finalAlphaMult);
 
             // 2. High-Speed 3D Inverted Tornado Funnel (10-tiered twisting cone)
             int coreLevels = 10;
@@ -195,28 +192,20 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
                 float tz = (float) Math.cos(bladeAngle);
 
                 float sLen = 0.75f * scale;
-                float sWidth = 0.22f * scale;
-
                 float tipX = sx + tx * (sLen * 0.65f);
                 float tipZ = sz + tz * (sLen * 0.65f);
                 float tailX = sx - tx * (sLen * 0.35f);
                 float tailZ = sz - tz * (sLen * 0.35f);
-
-                float nx = -tz * sWidth;
-                float nz = tx * sWidth;
-
-                // 3D Diamond Wind Blade
-                drawTriangle(matrix, buffer,
-                    tailX - nx, bladeY, tailZ - nz,
-                    tailX + nx, bladeY, tailZ + nz,
-                    tipX, bladeY + 0.12f * scale, tipZ,
-                    0.6f, 1.0f, 0.90f, 0.85f * finalAlphaMult
-                );
-                drawTriangle(matrix, buffer,
-                    tailX - nx, bladeY, tailZ - nz,
-                    tipX, bladeY + 0.12f * scale, tipZ,
-                    tailX + nx, bladeY, tailZ + nz,
-                    0.2f, 1.0f, 0.70f, 0.85f * finalAlphaMult
+                float radX = (float) Math.cos(bladeAngle);
+                float radZ = (float) Math.sin(bladeAngle);
+                drawLash(matrix, buffer,
+                    tailX, bladeY, tailZ,
+                    sx + radX * 0.28f * scale, bladeY + 0.22f * scale, sz + radZ * 0.28f * scale,
+                    tipX, bladeY + 0.04f * scale, tipZ,
+                    0.10f * scale, 6,
+                    0.15f, 0.78f, 0.48f,
+                    0.88f, 1.0f, 0.95f,
+                    0.90f * finalAlphaMult
                 );
             }
 
@@ -225,24 +214,38 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
             for (int s = 0; s < spineLevels; s++) {
                 float y1 = (s / (float) spineLevels) * totalHeight;
                 float y2 = ((s + 1) / (float) spineLevels) * totalHeight;
-                float rSpine = 0.22f * scale;
+                float climb = s / (float) spineLevels;
+                float climb2 = (s + 1) / (float) spineLevels;
+                float rSpine = 0.20f * scale * (1.0f - climb * 0.62f);
+                float rSpine2 = 0.20f * scale * (1.0f - climb2 * 0.62f);
                 float rotSpine = age * 50.0f * (float) (Math.PI / 180.0) + s * 0.5f;
 
-                for (int i = 0; i < 4; i++) {
-                    double a1 = (i / 4.0) * Math.PI * 2.0 + rotSpine;
-                    double a2 = ((i + 1) / 4.0) * Math.PI * 2.0 + rotSpine;
+                for (int i = 0; i < 8; i++) {
+                    double a1 = (i / 8.0) * Math.PI * 2.0 + rotSpine;
+                    double a2 = ((i + 1) / 8.0) * Math.PI * 2.0 + rotSpine;
 
                     float x1 = (float) Math.cos(a1) * rSpine;
                     float z1 = (float) Math.sin(a1) * rSpine;
                     float x2 = (float) Math.cos(a2) * rSpine;
                     float z2 = (float) Math.sin(a2) * rSpine;
+                    float x3 = (float) Math.cos(a2) * rSpine2;
+                    float z3 = (float) Math.sin(a2) * rSpine2;
+                    float x4 = (float) Math.cos(a1) * rSpine2;
+                    float z4 = (float) Math.sin(a1) * rSpine2;
 
                     drawQuad(matrix, buffer,
                         x1, y1, z1,
                         x2, y1, z2,
-                        x2, y2, z2,
-                        x1, y2, z1,
-                        0.95f, 1.0f, 0.98f, 0.80f * finalAlphaMult
+                        x3, y2, z3,
+                        x4, y2, z4,
+                        0.55f, 1.0f, 0.78f, 0.55f * finalAlphaMult
+                    );
+                    drawQuad(matrix, buffer,
+                        x1 * 0.38f, y1, z1 * 0.38f,
+                        x2 * 0.38f, y1, z2 * 0.38f,
+                        x3 * 0.38f, y2, z3 * 0.38f,
+                        x4 * 0.38f, y2, z4 * 0.38f,
+                        0.95f, 1.0f, 0.98f, 0.90f * finalAlphaMult
                     );
                 }
             }
@@ -254,47 +257,73 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
                 0.05f, 0.95f, 0.65f, 0.50f * finalAlphaMult);
         });
 
-        // Additive glow pass (T1 + T6): a wide faint funnel silhouette blooms
-        // around the matte funnel, and a ground glow wash anchors the vortex
-        // to the floor it is tearing up.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float coreRot = age * 30.0f * (float) (Math.PI / 180.0);
-
-            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.10f, baseRadius * 0.30f, 36, age * 38.0f,
-                0.0f, 1.0f, 0.60f, 0.15f * finalAlphaMult);
-
-            int haloLevels = 8;
-            int haloSegments = 28;
-            for (int lvl = 0; lvl < haloLevels; lvl++) {
-                float p1 = lvl / (float) haloLevels;
-                float p2 = (lvl + 1) / (float) haloLevels;
-
-                float y1 = p1 * totalHeight;
-                float y2 = p2 * totalHeight;
-                float r1 = (baseRadius * 0.38f) * (0.28f + 0.72f * p1) * 1.20f;
-                float r2 = (baseRadius * 0.38f) * (0.28f + 0.72f * p2) * 1.20f;
-                float haloAlpha = 0.10f * (1.0f - p1 * 0.4f) * finalAlphaMult;
-
-                for (int i = 0; i < haloSegments; i++) {
-                    double a1 = ((i / (double) haloSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.4);
-                    double a2 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.4);
-                    double a3 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + coreRot + (p2 * 1.4);
-                    double a4 = ((i / (double) haloSegments) * Math.PI * 2.0) + coreRot + (p2 * 1.4);
-
-                    drawQuad(matrix, buffer,
-                        (float) Math.cos(a1) * r1, y1, (float) Math.sin(a1) * r1,
-                        (float) Math.cos(a2) * r1, y1, (float) Math.sin(a2) * r1,
-                        (float) Math.cos(a3) * r2, y2, (float) Math.sin(a3) * r2,
-                        (float) Math.cos(a4) * r2, y2, (float) Math.sin(a4) * r2,
-                        0.2f, 1.0f, 0.7f, haloAlpha
-                    );
-                }
-            }
-        });
-
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void drawLash(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float xc, float yc, float zc,
+                                 float x1, float y1, float z1,
+                                 float width, int steps,
+                                 float er, float eg, float eb,
+                                 float cr, float cg, float cb,
+                                 float alpha) {
+        int n = Math.max(4, steps);
+        float px = x0;
+        float py = y0;
+        float pz = z0;
+        for (int i = 1; i <= n; i++) {
+            float t = i / (float) n;
+            float u = 1.0f - t;
+            float x = u * u * x0 + 2.0f * u * t * xc + t * t * x1;
+            float y = u * u * y0 + 2.0f * u * t * yc + t * t * y1;
+            float z = u * u * z0 + 2.0f * u * t * zc + t * t * z1;
+            float w = width * (1.0f - t * 0.9f);
+            float a = alpha * (1.0f - t * t);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w, er, eg, eb, a);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.32f, cr, cg, cb, Math.min(1.0f, a * 1.2f));
+            px = x;
+            py = y;
+            pz = z;
+        }
+    }
+
+    private static void lashSpan(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float x1, float y1, float z1,
+                                 float width,
+                                 float r, float g, float b, float a) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float ax = 0.0f;
+        float ay = 1.0f;
+        float az = 0.0f;
+        if (dx * dx + dz * dz < dy * dy) {
+            ax = 1.0f;
+            ay = 0.0f;
+            az = 0.0f;
+        }
+        float px = dy * az - dz * ay;
+        float py = dz * ax - dx * az;
+        float pz = dx * ay - dy * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        if (plen < 0.0001f) {
+            return;
+        }
+        float s = width / plen;
+        px *= s;
+        py *= s;
+        pz *= s;
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
     }
 
     private static void drawRotatingRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {

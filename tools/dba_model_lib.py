@@ -9,10 +9,12 @@ A race spec builds cubes with cube()/mirror()/spike(), supplies paint_texel(),
 then calls finish() which:
   - packs face UVs into a 512x512 atlas (2 texels per model px)
   - paints <race>_base.png and <race>_mask.png (R = skin tint, G = hair tint, B = eye tint)
+  - paints <race>_blink.png / <race>_blink_mask.png, the same atlas with only the
+    face's own eye texels replaced by that race's closed eyelid
   - exports models/3d/<race>.obj with the render groups the client knows
   - writes assets/blockbench/races/<race>.bbmodel (Bedrock project, dba_exporter tagged)
 """
-import json, zlib, math, pathlib, base64, io, uuid
+import json, zlib, math, pathlib, base64, io, uuid, time
 from PIL import Image
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -24,6 +26,19 @@ D = 2          # texels per model pixel (crisp pixel-art look)
 MASKC = {'R': (255, 0, 0, 255), 'G': (0, 255, 0, 255), 'B': (0, 0, 255, 255), None: (0, 0, 0, 0)}
 
 def clamp(v): return max(0, min(255, int(round(v))))
+
+def save_png(img, path, tries=8):
+    """The live client briefly locks textures it has open. Retry the replace."""
+    path = pathlib.Path(path)
+    last = None
+    for i in range(tries):
+        try:
+            img.save(path)
+            return
+        except OSError as e:
+            last = e
+            time.sleep(0.2 * (i + 1))
+    raise last
 def mul(c, k): return tuple(clamp(x * k) for x in c)
 def h01(*a):
     n = 0
@@ -51,6 +66,15 @@ def face_corners(c):
     }
 def dist(a, b): return math.sqrt(sum((a[i] - b[i]) ** 2 for i in range(3)))
 
+def eye_tint(lum):
+    """Grayscale eye texel. Mask B, so the player's eye color tints it. No baked hue."""
+    v = clamp(lum)
+    return (v, v, v), 'B'
+
+def skin_lid(k, scale=0.72):
+    """Eyelid fold in the face's own skin tint."""
+    return (k * scale,) * 3, 'R'
+
 GROUP = {'right_arm': 'rightarm', 'body': 'body', 'left_arm': 'leftarm',
          'right_leg': 'rightleg', 'head': 'head', 'left_leg': 'leftleg',
          'hair': 'hair', 'hair_ssj3': 'hair_ssj3', 'hair_ssj2': 'hair_ssj2'}
@@ -72,6 +96,7 @@ class RaceModel:
         self.pivots = dict(STD_PIV)
         if pivots: self.pivots.update(pivots)
         self.ns = ns
+        self.blink = False
 
     # ---------------------------------------------------------- authoring
     def cube(self, name, bone, mat, f, t, o=None, r=(0, 0, 0), export=True):
@@ -137,21 +162,28 @@ class RaceModel:
                 w = max(1, round(dist(q[0], q[1]) * D)); h = max(1, round(dist(q[0], q[3]) * D))
                 u, v = pk.take(w, h)
                 c['uv'][fn] = (u, v, u + w, v + h)
-        # painting
-        base = Image.new('RGBA', (TEX, TEX), (0, 0, 0, 0)); mask = Image.new('RGBA', (TEX, TEX), (0, 0, 0, 0))
-        BP, MP = base.load(), mask.load()
-        for c in cubes:
-            for fn, q in face_corners(c).items():
-                u0, v0, u1, v1 = c['uv'][fn]; W, H = u1 - u0, v1 - v0
-                for j in range(H):
-                    for i in range(W):
-                        s, t = (i + 0.5) / W, (j + 0.5) / H
-                        top = [q[0][k] + (q[1][k] - q[0][k]) * s for k in range(3)]
-                        bot = [q[3][k] + (q[2][k] - q[3][k]) * s for k in range(3)]
-                        P = [top[k] + (bot[k] - top[k]) * t for k in range(3)]
-                        rgb, ch = self.paint_texel(self, c, fn, s, t, W, H, i, j, P)
-                        BP[u0 + i, v0 + j] = (clamp(rgb[0]), clamp(rgb[1]), clamp(rgb[2]), 255)
-                        MP[u0 + i, v0 + j] = MASKC[ch]
+        def paint_atlas(blink):
+            # Closed pass differs only where paint_face swaps the eye texels for the eyelid.
+            self.blink = blink
+            img = Image.new('RGBA', (TEX, TEX), (0, 0, 0, 0))
+            msk = Image.new('RGBA', (TEX, TEX), (0, 0, 0, 0))
+            ip, mp = img.load(), msk.load()
+            for c in cubes:
+                for fn, q in face_corners(c).items():
+                    u0, v0, u1, v1 = c['uv'][fn]; W, H = u1 - u0, v1 - v0
+                    for j in range(H):
+                        for i in range(W):
+                            s, t = (i + 0.5) / W, (j + 0.5) / H
+                            top = [q[0][k] + (q[1][k] - q[0][k]) * s for k in range(3)]
+                            bot = [q[3][k] + (q[2][k] - q[3][k]) * s for k in range(3)]
+                            P = [top[k] + (bot[k] - top[k]) * t for k in range(3)]
+                            rgb, ch = self.paint_texel(self, c, fn, s, t, W, H, i, j, P)
+                            ip[u0 + i, v0 + j] = (clamp(rgb[0]), clamp(rgb[1]), clamp(rgb[2]), 255)
+                            mp[u0 + i, v0 + j] = MASKC[ch]
+            self.blink = False
+            return img, msk
+        base, mask = paint_atlas(False)
+        blink, blink_mask = paint_atlas(True)
         # OBJ export
         order_groups = [g for g in GROUP_ORDER if g in set(self.group_map[b] for b in {c['bone'] for c in cubes} if b in self.group_map)]
         for g in self.group_map.values():
@@ -175,6 +207,10 @@ class RaceModel:
                         idx.append('%d/%d/%d' % (vi, vi, vi)); vi += 1
                     L.append('f ' + ' '.join(idx))
         (RES / ('models/3d/%s.obj' % self.race)).write_text('\n'.join(L) + '\n')
+        save_png(base, RES / ('textures/entity/player/%s_base.png' % self.race))
+        save_png(mask, RES / ('textures/entity/player/%s_mask.png' % self.race))
+        save_png(blink, RES / ('textures/entity/player/%s_blink.png' % self.race))
+        save_png(blink_mask, RES / ('textures/entity/player/%s_blink_mask.png' % self.race))
         # Blockbench project (Bedrock format)
         buf = io.BytesIO(); base.save(buf, 'PNG')
         def uid(s): return str(uuid.uuid5(uuid.NAMESPACE_URL, '%s-%s-%s' % (self.ns, self.race, s)))
@@ -209,7 +245,5 @@ class RaceModel:
                             'source': 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()}]}
         BBDIR.mkdir(parents=True, exist_ok=True)
         (BBDIR / ('%s.bbmodel' % self.race)).write_text(json.dumps(bb, indent=1))
-        base.save(RES / ('textures/entity/player/%s_base.png' % self.race))
-        mask.save(RES / ('textures/entity/player/%s_mask.png' % self.race))
         print(self.race, 'cubes', len(cubes), 'exported', sum(c['export'] for c in cubes), 'atlas rows used to', pk.y + pk.row)
         return base, mask

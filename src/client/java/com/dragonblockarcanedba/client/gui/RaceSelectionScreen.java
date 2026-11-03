@@ -7,718 +7,507 @@ import com.dragonblockarcanedba.registry.Race;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.AbstractSliderButton;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.IntConsumer;
 
 public class RaceSelectionScreen extends Screen {
-    private enum State {
-        RACE_SELECT,
-        CUSTOMIZATION
-    }
+    private enum Page { RACE, COLORS }
 
-    private State currentState = State.RACE_SELECT;
+    private static final String[] CHANNELS = {"Skin", "Hair", "Eyes"};
+    private static final Preset[] SKIN = {
+            new Preset("Light", 255, 204, 153),
+            new Preset("Tan", 210, 180, 140),
+            new Preset("Dark", 141, 85, 36),
+            new Preset("Namek", 85, 255, 120),
+            new Preset("Majin", 255, 140, 200),
+            new Preset("Arcosian", 230, 230, 250)
+    };
+    private static final Preset[] HAIR = {
+            new Preset("Black", 15, 15, 15),
+            new Preset("Gold", 255, 215, 0),
+            new Preset("Brown", 80, 45, 20),
+            new Preset("Red", 200, 30, 30),
+            new Preset("Blue", 30, 180, 255),
+            new Preset("White", 240, 240, 240)
+    };
 
+    private Page page = Page.RACE;
     private String selectedRace = "";
-    private String customizationTab = "Skin";
-
-    private int skinR = 255;
-    private int skinG = 204;
-    private int skinB = 153;
-
-    private int hairR = 15;
-    private int hairG = 15;
-    private int hairB = 15;
-
-    private int eyeR = 255;
-    private int eyeG = 255;
-    private int eyeB = 255;
-
-    private RgbSliderWidget skinRedSlider;
-    private RgbSliderWidget skinGreenSlider;
-    private RgbSliderWidget skinBlueSlider;
-
-    private RgbSliderWidget hairRedSlider;
-    private RgbSliderWidget hairGreenSlider;
-    private RgbSliderWidget hairBlueSlider;
-
-    private RgbSliderWidget eyeRedSlider;
-    private RgbSliderWidget eyeGreenSlider;
-    private RgbSliderWidget eyeBlueSlider;
-
-    private float spinAngle;
+    private int channel;
+    private int skinR = 255, skinG = 204, skinB = 153;
+    private int hairR = 15, hairG = 15, hairB = 15;
+    private int eyeR = 255, eyeG = 255, eyeB = 255;
+    private int scroll;
+    private int draggingChannel = -1;
     private float previewRotation = 35.0F;
-    private int scrollOffset;
+
+    private int frameX, frameY, frameW, frameH;
+    private int previewW, midW;
 
     public RaceSelectionScreen() {
-        super(Component.literal("Character Creation"));
+        super(Component.literal("Race"));
     }
 
-    @Override
-    public boolean shouldCloseOnEsc() {
-        return false;
-    }
-
-    @Override
-    public boolean isPauseScreen() {
-        return true;
-    }
-
-    private List<Race> getSelectableRaces() {
-        List<Race> races = new ArrayList<>(
-                DbaRegistries.getRaces().values()
-        );
-
-        races.removeIf(race -> {
+    private List<Race> races() {
+        List<Race> list = new ArrayList<>(DbaRegistries.getRaces().values());
+        list.removeIf(race -> {
             String path = race.getId().getPath();
             return "neo_tuffle".equals(path) || "android".equals(path);
         });
-
-        return races;
+        return list;
     }
 
     @Override
     protected void init() {
-        this.clearWidgets();
-
-        this.skinRedSlider = null;
-        this.skinGreenSlider = null;
-        this.skinBlueSlider = null;
-
-        this.hairRedSlider = null;
-        this.hairGreenSlider = null;
-        this.hairBlueSlider = null;
-
-        this.eyeRedSlider = null;
-        this.eyeGreenSlider = null;
-        this.eyeBlueSlider = null;
-
-        int leftColWidth = Math.max(100, this.width / 3);
-        int midColWidth = Math.min(120, this.width / 4);
-        int midStartX = leftColWidth;
-        int rightStartX = leftColWidth + midColWidth;
-        int rightColWidth = Math.max(140, this.width - rightStartX);
-
-        int btnWidth = Math.min(100, midColWidth - 10);
-        int btnHeight = 20;
-
-        if (selectedRace == null || selectedRace.isEmpty()) {
-            List<Race> selectable = getSelectableRaces();
-            if (!selectable.isEmpty()) {
-                selectedRace = selectable.get(0).getId().toString();
-                String path = selectable.get(0).getId().getPath().toLowerCase();
-                com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(path);
+        place();
+        if (selectedRace.isEmpty()) {
+            List<Race> list = races();
+            if (!list.isEmpty()) {
+                Race initial = list.get(0);
+                boolean keepColors = false;
+                if (Minecraft.getInstance().player instanceof PlayerStatsAccessor accessor
+                        && accessor.dba$getRaceId() != null) {
+                    String saved = accessor.dba$getRaceId().toString();
+                    for (Race race : list) {
+                        if (race.getId().toString().equals(saved)) {
+                            initial = race;
+                            int[] skin = parseRgb(accessor.dba$getSkinColor(), skinR, skinG, skinB);
+                            skinR = skin[0];
+                            skinG = skin[1];
+                            skinB = skin[2];
+                            int[] hair = parseRgb(accessor.dba$getHairColor(), hairR, hairG, hairB);
+                            hairR = hair[0];
+                            hairG = hair[1];
+                            hairB = hair[2];
+                            int[] eye = parseRgb(accessor.dba$getEyeColor(), eyeR, eyeG, eyeB);
+                            eyeR = eye[0];
+                            eyeG = eye[1];
+                            eyeB = eye[2];
+                            keepColors = true;
+                            break;
+                        }
+                    }
+                }
+                applyRace(initial, !keepColors);
             }
         }
+        this.clearWidgets();
+    }
+
+    private void place() {
+        this.frameW = Math.min(760, Math.max(480, this.width - 16));
+        this.frameH = Math.min(440, Math.max(260, this.height - 16));
+        if (this.frameW > this.width - 8) this.frameW = Math.max(320, this.width - 8);
+        if (this.frameH > this.height - 8) this.frameH = Math.max(220, this.height - 8);
+        this.frameX = (this.width - frameW) / 2;
+        this.frameY = (this.height - frameH) / 2;
+        this.previewW = Math.max(120, Math.min(220, frameW / 3));
+        this.midW = Math.max(120, Math.min(190, (frameW - previewW) / 3));
+    }
+
+    private int detailX() { return frameX + previewW + midW; }
+    private int detailW() { return frameW - previewW - midW; }
+
+    private void applyRace(Race race, boolean recolor) {
+        selectedRace = race.getId().toString();
+        if (recolor) {
+            String path = race.getId().getPath().toLowerCase();
+            if (path.contains("yardrat")) {
+                skinR = 250; skinG = 180; skinB = 175;
+                hairR = 255; hairG = 240; hairB = 140;
+            } else if (path.contains("namek")) {
+                skinR = 90; skinG = 210; skinB = 110;
+                hairR = 230; hairG = 140; hairB = 160;
+            } else if (path.contains("majin")) {
+                skinR = 255; skinG = 145; skinB = 195;
+                hairR = 255; hairG = 145; hairB = 195;
+            } else if (path.contains("arcosian")) {
+                skinR = 240; skinG = 240; skinB = 252;
+                hairR = 130; hairG = 40; hairB = 190;
+            } else if (path.contains("bio_android")) {
+                skinR = 60; skinG = 180; skinB = 85;
+                hairR = 240; hairG = 190; hairB = 30;
+            } else {
+                skinR = 255; skinG = 204; skinB = 153;
+                hairR = 25; hairG = 25; hairB = 25;
+            }
+            eyeR = 255; eyeG = 255; eyeB = 255;
+        }
         applyLiveRecolor();
-
-        if (currentState == State.RACE_SELECT) {
-            initRaceSelection(
-                    midStartX,
-                    midColWidth,
-                    rightStartX,
-                    rightColWidth,
-                    btnWidth,
-                    btnHeight
-            );
-        } else {
-            initCustomization(
-                    midStartX,
-                    midColWidth,
-                    rightStartX,
-                    rightColWidth,
-                    btnWidth,
-                    btnHeight
-            );
-        }
-    }
-
-    private void initRaceSelection(
-            int midStartX,
-            int midColWidth,
-            int rightStartX,
-            int rightColWidth,
-            int btnWidth,
-            int btnHeight
-    ) {
-        List<Race> races = getSelectableRaces();
-        int totalRaces = races.size();
-
-        int availableH = this.height - 40;
-        int dynamicBtnHeight = Math.max(12, Math.min(15, (availableH - (totalRaces - 1) * 2) / totalRaces));
-        int spacingY = dynamicBtnHeight + 2;
-        int startY = 24 + (availableH - (totalRaces * spacingY)) / 2;
-
-        int buttonX = midStartX + (midColWidth - btnWidth) / 2;
-
-        for (int i = 0; i < totalRaces; i++) {
-            Race race = races.get(i);
-            boolean selected = race.getId().toString().equals(selectedRace);
-            Component label = Component.literal(
-                    selected ? "> " + race.getDisplayName() + " <" : race.getDisplayName()
-            );
-
-            addRenderableWidget(
-                    Button.builder(
-                            label,
-                            button -> {
-                                selectedRace = race.getId().toString();
-                                String path = race.getId().getPath().toLowerCase();
-                                if (path.contains("yardrat")) {
-                                    skinR = 250; skinG = 180; skinB = 175;
-                                    hairR = 255; hairG = 240; hairB = 140;
-                                } else if (path.contains("namek")) {
-                                    skinR = 90; skinG = 210; skinB = 110;
-                                    hairR = 230; hairG = 140; hairB = 160;
-                                } else if (path.contains("majin")) {
-                                    skinR = 255; skinG = 145; skinB = 195;
-                                    hairR = 255; hairG = 145; hairB = 195;
-                                } else if (path.contains("arcosian")) {
-                                    skinR = 240; skinG = 240; skinB = 252;
-                                    hairR = 130; hairG = 40; hairB = 190;
-                                } else if (path.contains("bio_android")) {
-                                    skinR = 60; skinG = 180; skinB = 85;
-                                    hairR = 240; hairG = 190; hairB = 30;
-                                } else {
-                                    skinR = 255; skinG = 204; skinB = 153;
-                                    hairR = 25; hairG = 25; hairB = 25;
-                                }
-                                applyLiveRecolor();
-                                com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(path);
-                                init();
-                            }
-                    ).bounds(
-                            buttonX,
-                            startY + i * spacingY,
-                            btnWidth,
-                            dynamicBtnHeight
-                    ).build()
-            );
-        }
-
-        if (!selectedRace.isEmpty()) {
-            int confirmBtnW = Math.min(100, rightColWidth - 20);
-            addRenderableWidget(
-                    Button.builder(
-                            Component.literal("CUSTOMIZE"),
-                            button -> {
-                                currentState = State.CUSTOMIZATION;
-                                customizationTab = "Skin";
-                                init();
-                            }
-                    ).bounds(
-                            rightStartX + rightColWidth - confirmBtnW - 10,
-                            this.height - 28,
-                            confirmBtnW,
-                            btnHeight
-                    ).build()
-            );
-        }
-    }
-
-    private void initCustomization(
-            int midStartX,
-            int midColWidth,
-            int rightStartX,
-            int rightColWidth,
-            int btnWidth,
-            int btnHeight
-    ) {
-        int tabWidth = Math.min(90, midColWidth - 10);
-        int tabX = midStartX + (midColWidth - tabWidth) / 2;
-
-        addRenderableWidget(
-                Button.builder(
-                        Component.literal(
-                                "Skin".equals(customizationTab)
-                                        ? "[ SKIN ]"
-                                        : "Skin"
-                        ),
-                        button -> {
-                            customizationTab = "Skin";
-                            init();
-                        }
-                ).bounds(
-                        tabX,
-                        this.height / 2 - 28,
-                        tabWidth,
-                        btnHeight
-                ).build()
-        );
-
-        addRenderableWidget(
-                Button.builder(
-                        Component.literal(
-                                "Hair".equals(customizationTab)
-                                        ? "[ HAIR ]"
-                                        : "Hair"
-                        ),
-                        button -> {
-                            customizationTab = "Hair";
-                            init();
-                        }
-                        ).bounds(
-                        tabX,
-                        this.height / 2,
-                        tabWidth,
-                        btnHeight
-                ).build()
-        );
-
-        addRenderableWidget(
-                Button.builder(
-                        Component.literal(
-                                "Eyes".equals(customizationTab)
-                                        ? "[ EYES ]"
-                                        : "Eyes"
-                        ),
-                        button -> {
-                            customizationTab = "Eyes";
-                            init();
-                        }
-                ).bounds(
-                        tabX,
-                        this.height / 2 + 28,
-                        tabWidth,
-                        btnHeight
-                ).build()
-        );
-
-        int panelX = rightStartX + 5;
-        int panelW = rightColWidth - 10;
-
-        int sliderX = panelX + 8;
-        int sliderW = panelW - 16;
-
-        int sliderY = 40;
-
-        if ("Skin".equals(customizationTab)) {
-            skinRedSlider = new RgbSliderWidget(
-                    sliderX,
-                    sliderY,
-                    sliderW,
-                    18,
-                    "Red",
-                    skinR,
-                    value -> { skinR = value; applyLiveRecolor(); }
-            );
-
-            skinGreenSlider = new RgbSliderWidget(
-                    sliderX,
-                    sliderY + 22,
-                    sliderW,
-                    18,
-                    "Green",
-                    skinG,
-                    value -> { skinG = value; applyLiveRecolor(); }
-            );
-
-            skinBlueSlider = new RgbSliderWidget(
-                    sliderX,
-                    sliderY + 44,
-                    sliderW,
-                    18,
-                    "Blue",
-                    skinB,
-                    value -> { skinB = value; applyLiveRecolor(); }
-            );
-
-            addRenderableWidget(skinRedSlider);
-            addRenderableWidget(skinGreenSlider);
-            addRenderableWidget(skinBlueSlider);
-
-            addSkinPresetButtons(
-                    sliderX,
-                    sliderY + 70,
-                    sliderW
-            );
-        } else if ("Hair".equals(customizationTab)) {
-            hairRedSlider = new RgbSliderWidget(
-                    sliderX,
-                    sliderY,
-                    sliderW,
-                    18,
-                    "Red",
-                    hairR,
-                    value -> { hairR = value; applyLiveRecolor(); }
-            );
-
-            hairGreenSlider = new RgbSliderWidget(
-                    sliderX,
-                    sliderY + 22,
-                    sliderW,
-                    18,
-                    "Green",
-                    hairG,
-                    value -> { hairG = value; applyLiveRecolor(); }
-            );
-
-            hairBlueSlider = new RgbSliderWidget(
-                    sliderX,
-                    sliderY + 44,
-                    sliderW,
-                    18,
-                    "Blue",
-                    hairB,
-                    value -> { hairB = value; applyLiveRecolor(); }
-            );
-
-            addRenderableWidget(hairRedSlider);
-            addRenderableWidget(hairGreenSlider);
-            addRenderableWidget(hairBlueSlider);
-
-            addHairPresetButtons(
-                    sliderX,
-                    sliderY + 70,
-                    sliderW
-            );
-        } else if ("Eyes".equals(customizationTab)) {
-            eyeRedSlider = new RgbSliderWidget(
-                    sliderX,
-                    sliderY,
-                    sliderW,
-                    18,
-                    "Red",
-                    eyeR,
-                    value -> { eyeR = value; applyLiveRecolor(); }
-            );
-
-            eyeGreenSlider = new RgbSliderWidget(
-                    sliderX,
-                    sliderY + 22,
-                    sliderW,
-                    18,
-                    "Green",
-                    eyeG,
-                    value -> { eyeG = value; applyLiveRecolor(); }
-            );
-
-            eyeBlueSlider = new RgbSliderWidget(
-                    sliderX,
-                    sliderY + 44,
-                    sliderW,
-                    18,
-                    "Blue",
-                    eyeB,
-                    value -> { eyeB = value; applyLiveRecolor(); }
-            );
-
-            addRenderableWidget(eyeRedSlider);
-            addRenderableWidget(eyeGreenSlider);
-            addRenderableWidget(eyeBlueSlider);
-        }
-
-        int bottomY = this.height - 24;
-        int actionBtnW = Math.min(75, (panelW - 16) / 2);
-
-        addRenderableWidget(
-                Button.builder(
-                        Component.literal("BACK"),
-                        button -> {
-                            currentState = State.RACE_SELECT;
-                            init();
-                        }
-                ).bounds(
-                        panelX + 4,
-                        bottomY,
-                        actionBtnW,
-                        18
-                ).build()
-        );
-
-        addRenderableWidget(
-                Button.builder(
-                        Component.literal("CONFIRM"),
-                        button -> confirmCharacter()
-                ).bounds(
-                        panelX + panelW - actionBtnW - 4,
-                        bottomY,
-                        actionBtnW,
-                        18
-                ).build()
-        );
-    }
-
-    private void addSkinPresetButtons(
-            int x,
-            int y,
-            int width
-    ) {
-        PresetColor[] presets = {
-                new PresetColor("Light", 255, 204, 153),
-                new PresetColor("Tan", 210, 180, 140),
-                new PresetColor("Dark", 141, 85, 36),
-                new PresetColor("Namek", 85, 255, 120),
-                new PresetColor("Majin", 255, 140, 200),
-                new PresetColor("Arcosian", 230, 230, 250)
-        };
-
-        addPresetGrid(
-                presets,
-                x,
-                y,
-                width,
-                (preset) -> {
-                    skinR = preset.r;
-                    skinG = preset.g;
-                    skinB = preset.b;
-
-                    if (skinRedSlider != null) skinRedSlider.setIntValue(skinR);
-                    if (skinGreenSlider != null) skinGreenSlider.setIntValue(skinG);
-                    if (skinBlueSlider != null) skinBlueSlider.setIntValue(skinB);
-                    applyLiveRecolor();
-                }
-        );
-    }
-
-    private void addHairPresetButtons(
-            int x,
-            int y,
-            int width
-    ) {
-        PresetColor[] presets = {
-                new PresetColor("Black", 15, 15, 15),
-                new PresetColor("Gold", 255, 215, 0),
-                new PresetColor("Brown", 80, 45, 20),
-                new PresetColor("Red", 200, 30, 30),
-                new PresetColor("Blue", 30, 180, 255),
-                new PresetColor("White", 240, 240, 240)
-        };
-
-        addPresetGrid(
-                presets,
-                x,
-                y,
-                width,
-                (preset) -> {
-                    hairR = preset.r;
-                    hairG = preset.g;
-                    hairB = preset.b;
-
-                    if (hairRedSlider != null) hairRedSlider.setIntValue(hairR);
-                    if (hairGreenSlider != null) hairGreenSlider.setIntValue(hairG);
-                    if (hairBlueSlider != null) hairBlueSlider.setIntValue(hairB);
-                    applyLiveRecolor();
-                }
-        );
+        com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(race.getId().getPath().toLowerCase());
     }
 
     private void applyLiveRecolor() {
-        int s = ((skinR & 0xFF) << 16) | ((skinG & 0xFF) << 8) | (skinB & 0xFF);
-        int h = ((hairR & 0xFF) << 16) | ((hairG & 0xFF) << 8) | (hairB & 0xFF);
-        int e = ((eyeR & 0xFF) << 16) | ((eyeG & 0xFF) << 8) | (eyeB & 0xFF);
-        
-        Identifier rId = Identifier.tryParse(selectedRace);
-        String racePath = (rId != null) ? rId.getPath() : "universal_humanoid";
-        com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(racePath, s, h, e);
-        
-        if (Minecraft.getInstance().player instanceof PlayerStatsAccessor acc) {
-            acc.dba$setSkinColor(rgbToHex(skinR, skinG, skinB));
-            acc.dba$setHairColor(rgbToHex(hairR, hairG, hairB));
-            acc.dba$setEyeColor(rgbToHex(eyeR, eyeG, eyeB));
+        int skin = ((skinR & 0xFF) << 16) | ((skinG & 0xFF) << 8) | (skinB & 0xFF);
+        int hair = ((hairR & 0xFF) << 16) | ((hairG & 0xFF) << 8) | (hairB & 0xFF);
+        int eye = ((eyeR & 0xFF) << 16) | ((eyeG & 0xFF) << 8) | (eyeB & 0xFF);
+        Identifier id = Identifier.tryParse(selectedRace);
+        String path = id != null ? id.getPath() : "universal_humanoid";
+        com.dragonblockarcanedba.client.render.DynamicSkinManager.getOrGenerateSkin(path, skin, hair, eye);
+        if (Minecraft.getInstance().player instanceof PlayerStatsAccessor accessor) {
+            accessor.dba$setSkinColor(hex(skinR, skinG, skinB));
+            accessor.dba$setHairColor(hex(hairR, hairG, hairB));
+            accessor.dba$setEyeColor(hex(eyeR, eyeG, eyeB));
         }
     }
 
-    private void addPresetGrid(
-            PresetColor[] presets,
-            int x,
-            int y,
-            int width,
-            java.util.function.Consumer<PresetColor> consumer
-    ) {
-        int columns = 3;
-        int gap = 3;
-        int buttonWidth = (width - gap * (columns - 1)) / columns;
-        int buttonHeight = 16;
+    private static String hex(int r, int g, int b) {
+        return String.format("#%02X%02X%02X", r, g, b);
+    }
 
-        for (int i = 0; i < presets.length; i++) {
-            PresetColor preset = presets[i];
-            int row = i / columns;
-            int column = i % columns;
-            int bx = x + column * (buttonWidth + gap);
-            int by = y + row * (buttonHeight + gap);
-
-            addRenderableWidget(
-                    Button.builder(
-                            Component.literal(preset.name),
-                            button -> consumer.accept(preset)
-                    ).bounds(
-                            bx,
-                            by,
-                            buttonWidth,
-                            buttonHeight
-                    ).build()
-            );
+    /** Race-select hex, with or without a leading #. Falls back when the save has no color yet. */
+    private static int[] parseRgb(String hex, int r, int g, int b) {
+        if (hex == null || hex.isEmpty()) {
+            return new int[] {r, g, b};
+        }
+        String value = hex.startsWith("#") ? hex.substring(1) : hex;
+        try {
+            int rgb = Integer.parseInt(value, 16);
+            return new int[] {(rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF};
+        } catch (RuntimeException ignored) {
+            return new int[] {r, g, b};
         }
     }
 
-    private void confirmCharacter() {
+    private int[] channelColor() {
+        return switch (channel) {
+            case 1 -> new int[] {hairR, hairG, hairB};
+            case 2 -> new int[] {eyeR, eyeG, eyeB};
+            default -> new int[] {skinR, skinG, skinB};
+        };
+    }
+
+    private void setChannel(int index, int value) {
+        int clamped = Math.max(0, Math.min(255, value));
+        switch (channel) {
+            case 1 -> {
+                if (index == 0) hairR = clamped;
+                else if (index == 1) hairG = clamped;
+                else hairB = clamped;
+            }
+            case 2 -> {
+                if (index == 0) eyeR = clamped;
+                else if (index == 1) eyeG = clamped;
+                else eyeB = clamped;
+            }
+            default -> {
+                if (index == 0) skinR = clamped;
+                else if (index == 1) skinG = clamped;
+                else skinB = clamped;
+            }
+        }
+        applyLiveRecolor();
+    }
+
+    private int listTop() { return frameY + DbaUi.HEADER + 8; }
+    private int listBottom() { return frameY + frameH - 8; }
+    private int rowH() { return 22; }
+
+    private void confirm() {
         if (selectedRace.isEmpty()) {
             return;
         }
-
-        String skinHex = rgbToHex(skinR, skinG, skinB);
-        String hairHex = rgbToHex(hairR, hairG, hairB);
-        String eyeHex = rgbToHex(eyeR, eyeG, eyeB);
-
         CompoundTag data = new CompoundTag();
         data.putString("action", "select_race");
         data.putString("race", selectedRace);
-        data.putString("skin_color", skinHex);
-        data.putString("hair_color", hairHex);
-        data.putString("eye_color", eyeHex);
-
+        data.putString("skin_color", hex(skinR, skinG, skinB));
+        data.putString("hair_color", hex(hairR, hairG, hairB));
+        data.putString("eye_color", hex(eyeR, eyeG, eyeB));
         ClientPlayNetworking.send(new ActionPayload(data));
         applyLiveRecolor();
-        Identifier rId = Identifier.tryParse(selectedRace);
-        String racePath = (rId != null) ? rId.getPath() : "universal_humanoid";
-        com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(racePath);
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor) {
+        Identifier id = Identifier.tryParse(selectedRace);
+        String path = id != null ? id.getPath() : "universal_humanoid";
+        com.dragonblockarcanedba.client.compat.BpmCompatClient.enforceModel(path);
+        if (Minecraft.getInstance().player instanceof PlayerStatsAccessor accessor) {
             accessor.dba$setHasSelectedRace(true);
             accessor.dba$setTailSevered(false);
         }
         this.onClose();
     }
 
-    private static String rgbToHex(int r, int g, int b) {
-        return String.format("#%02X%02X%02X", r, g, b);
-    }
-
     @Override
-    public boolean mouseScrolled(
-            double mouseX,
-            double mouseY,
-            double horizontalAmount,
-            double verticalAmount
-    ) {
-        if (currentState != State.RACE_SELECT) {
-            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        place();
+        DbaUi.dim(context, this.width, this.height);
+        DbaUi.frame(context, frameX, frameY, frameW, frameH);
+        String heading = page == Page.RACE ? "Race" : "Colors";
+        DbaUi.title(context, this.font, frameX, frameY, DbaUi.closeX(frameX, frameW) - frameX - 8, heading);
+        DbaUi.closeControl(context, this.font, frameX, frameY, frameW, mouseX, mouseY);
+
+        int previewX = frameX + previewW / 2;
+        int previewTop = frameY + DbaUi.HEADER + 8;
+        int previewBottom = frameY + frameH - 28;
+        DbaUi.panel(context, frameX + 8, previewTop, previewW - 16, previewBottom - previewTop);
+        drawPreview(context, previewX, (previewTop + previewBottom) / 2, previewTop, previewBottom);
+        context.centeredText(this.font, Component.literal("Drag to turn"), previewX, previewBottom + 6, DbaUi.MUTED);
+
+        if (page == Page.RACE) {
+            drawRaceList(context, mouseX, mouseY);
+        } else {
+            drawChannels(context, mouseX, mouseY);
+            drawColors(context, mouseX, mouseY);
         }
-
-        List<Race> races = getSelectableRaces();
-        int maxVisible = Math.max(1, (this.height - 80) / 22);
-        int maxScroll = Math.max(0, races.size() - maxVisible);
-
-        if (verticalAmount > 0) {
-            scrollOffset--;
-        } else if (verticalAmount < 0) {
-            scrollOffset++;
-        }
-
-        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
-        init();
-        return true;
-    }
-
-    @Override
-    public void tick() {
-        super.tick();
-        spinAngle += 2.0F;
-        if (spinAngle >= 360.0F) {
-            spinAngle -= 360.0F;
-        }
-    }
-
-    @Override
-    public void extractRenderState(
-            GuiGraphicsExtractor context,
-            int mouseX,
-            int mouseY,
-            float delta
-    ) {
-        context.fill(0, 0, this.width, this.height, 0xF0101216);
-
-        int leftColWidth = Math.max(100, this.width / 3);
-        int midColWidth = Math.min(120, this.width / 4);
-        int rightStartX = leftColWidth + midColWidth;
-        int rightColWidth = Math.max(140, this.width - rightStartX);
-
-        int borderColor = 0xFF00FFCC;
-
-        context.fill(0, 0, this.width, 20, 0xFF0A0C0E);
-        context.fill(0, 20, this.width, 22, borderColor);
-
-        String title = currentState == State.RACE_SELECT ? "RACE SELECTION" : "CHARACTER CUSTOMIZATION";
-        context.centeredText(this.font, Component.literal(title), this.width / 2, 6, 0xFFFFFFFF);
-
-        int panelMargin = 5;
-        int panelX = rightStartX + panelMargin;
-        int panelY = 26;
-        int panelW = rightColWidth - panelMargin * 2;
-        int panelH = this.height - 58;
-
-        context.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xF0181B22);
-        context.fill(panelX, panelY, panelX + panelW, panelY + 2, borderColor);
-        context.fill(panelX, panelY + panelH - 2, panelX + panelW, panelY + panelH, borderColor);
-        context.fill(panelX, panelY, panelX + 2, panelY + panelH, borderColor);
-        context.fill(panelX + panelW - 2, panelY, panelX + panelW, panelY + panelH, borderColor);
-
-        if (currentState == State.CUSTOMIZATION) {
-            context.centeredText(this.font, Component.literal(customizationTab.toUpperCase() + " TINT"), panelX + panelW / 2, panelY + 4, 0xFF00FFCC);
-        }
-
         super.extractRenderState(context, mouseX, mouseY, delta);
+    }
 
-        int previewX = leftColWidth / 2;
-        int previewY = this.height / 2;
-
+    private void drawPreview(GuiGraphicsExtractor context, int previewX, int previewY, int top, int bottom) {
         var localPlayer = Minecraft.getInstance().player;
-        if (localPlayer != null) {
-            float savedYRot = localPlayer.getYRot();
-            float savedYBodyRot = localPlayer.yBodyRot;
-            float savedYHeadRot = localPlayer.yHeadRot;
-            float savedXRot = localPlayer.getXRot();
-
-            if (localPlayer instanceof PlayerStatsAccessor acc) {
-                if (selectedRace != null && !selectedRace.isEmpty()) {
-                    acc.dba$setRaceId(Identifier.parse(selectedRace));
-                }
-                String skinHex = rgbToHex(skinR, skinG, skinB);
-                String hairHex = rgbToHex(hairR, hairG, hairB);
-                String eyeHex = rgbToHex(eyeR, eyeG, eyeB);
-                acc.dba$setSkinColor(skinHex);
-                acc.dba$setHairColor(hairHex);
-                acc.dba$setEyeColor(eyeHex);
-                acc.dba$setTailSevered(false);
+        if (localPlayer == null) {
+            return;
+        }
+        float savedYRot = localPlayer.getYRot();
+        float savedYBodyRot = localPlayer.yBodyRot;
+        float savedYHeadRot = localPlayer.yHeadRot;
+        float savedXRot = localPlayer.getXRot();
+        if (localPlayer instanceof PlayerStatsAccessor accessor && !selectedRace.isEmpty()) {
+            Identifier id = Identifier.tryParse(selectedRace);
+            if (id != null) {
+                accessor.dba$setRaceId(id);
             }
+            accessor.dba$setSkinColor(hex(skinR, skinG, skinB));
+            accessor.dba$setHairColor(hex(hairR, hairG, hairB));
+            accessor.dba$setEyeColor(hex(eyeR, eyeG, eyeB));
+            accessor.dba$setTailSevered(false);
+        }
+        int scale = Math.min(42, Math.max(24, (bottom - top) / 5));
+        float rad = (float) Math.toRadians(previewRotation);
+        float simMouseX = previewX - (float) Math.sin(rad) * 150.0F;
+        net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(
+                context, previewX - 40, top + 8, previewX + 40, bottom - 8, scale, 0.0625F, simMouseX, previewY, localPlayer);
+        localPlayer.setYRot(savedYRot);
+        localPlayer.yBodyRot = savedYBodyRot;
+        localPlayer.yHeadRot = savedYHeadRot;
+        localPlayer.setXRot(savedXRot);
+    }
 
-            int x0 = previewX - 45;
-            int y0 = previewY - 70;
-            int x1 = previewX + 45;
-            int y1 = previewY + 75;
-            int scale = Math.min(45, this.height / 4);
+    private void drawRaceList(GuiGraphicsExtractor context, int mouseX, int mouseY) {
+        List<Race> list = races();
+        int lx = frameX + previewW + 6;
+        int lw = midW - 12;
+        if (list.isEmpty()) {
+            DbaUi.empty(context, this.font, lx, listTop(), lw + detailW(), frameH - DbaUi.HEADER - 16, "No races are available.");
+            return;
+        }
+        int view = listBottom() - listTop();
+        int stride = rowH() + 3;
+        int max = Math.max(0, list.size() * stride - view);
+        if (scroll < 0) scroll = 0;
+        if (scroll > max) scroll = max;
+        context.enableScissor(lx, listTop(), lx + lw, listBottom());
+        for (int i = 0; i < list.size(); i++) {
+            Race race = list.get(i);
+            int ry = listTop() + i * stride - scroll;
+            if (ry + rowH() < listTop() || ry > listBottom()) {
+                continue;
+            }
+            boolean on = race.getId().toString().equals(selectedRace);
+            boolean hover = DbaUi.hit(mouseX, mouseY, lx, ry, lw, rowH());
+            DbaUi.row(context, lx, ry, lw, rowH(), hover, on);
+            context.text(this.font, Component.literal(DbaUi.clip(this.font, race.getDisplayName(), lw - 12)), lx + 8, ry + 7, on ? DbaUi.GOLD : DbaUi.TEXT);
+        }
+        context.disableScissor();
 
-            float rad = (float) Math.toRadians(previewRotation);
-            float simMouseX = previewX - (float) Math.sin(rad) * 150.0F;
-            float simMouseY = previewY;
-            net.minecraft.client.gui.screens.inventory.InventoryScreen.extractEntityInInventoryFollowsMouse(
-                context, x0, y0, x1, y1, scale, 0.0625F, simMouseX, simMouseY, localPlayer
-            );
-            context.centeredText(this.font, Component.literal("§7[ Drag to Rotate 360° ]"), previewX, y1 + 4, 0xFFA0B4C8);
+        int dx = detailX() + 8;
+        int dw = detailW() - 16;
+        context.text(this.font, Component.literal("Selected"), dx, frameY + DbaUi.HEADER + 10, DbaUi.MUTED);
+        String name = "None";
+        for (Race race : list) {
+            if (race.getId().toString().equals(selectedRace)) {
+                name = race.getDisplayName();
+                break;
+            }
+        }
+        context.text(this.font, Component.literal(DbaUi.clip(this.font, name, dw)), dx, frameY + DbaUi.HEADER + 24, DbaUi.TEXT);
+        context.text(this.font, Component.literal(DbaUi.clip(this.font, "Next you set skin, hair, and eyes.", dw)),
+                dx, frameY + DbaUi.HEADER + 40, DbaUi.MUTED);
+        int by = frameY + frameH - DbaUi.BUTTON_H - 12;
+        boolean hover = DbaUi.hit(mouseX, mouseY, dx, by, dw, DbaUi.BUTTON_H);
+        DbaUi.button(context, this.font, dx, by, dw, DbaUi.BUTTON_H, "Continue", hover, DbaUi.Kind.PRIMARY);
+    }
 
-            localPlayer.setYRot(savedYRot);
-            localPlayer.yBodyRot = savedYBodyRot;
-            localPlayer.yHeadRot = savedYHeadRot;
-            localPlayer.setXRot(savedXRot);
+    private void drawChannels(GuiGraphicsExtractor context, int mouseX, int mouseY) {
+        int lx = frameX + previewW + 6;
+        int lw = midW - 12;
+        for (int i = 0; i < CHANNELS.length; i++) {
+            int ry = listTop() + i * 28;
+            boolean on = i == channel;
+            boolean hover = DbaUi.hit(mouseX, mouseY, lx, ry, lw, 22);
+            DbaUi.button(context, this.font, lx, ry, lw, 22, CHANNELS[i], hover || on, on ? DbaUi.Kind.PRIMARY : DbaUi.Kind.SECONDARY);
         }
     }
 
+    private void drawColors(GuiGraphicsExtractor context, int mouseX, int mouseY) {
+        int dx = detailX() + 8;
+        int dw = detailW() - 16;
+        int[] rgb = channelColor();
+        String[] names = {"Red", "Green", "Blue"};
+        for (int i = 0; i < 3; i++) {
+            int sy = frameY + DbaUi.HEADER + 12 + i * 32;
+            DbaUi.slider(context, this.font, dx, sy, dw, names[i], Integer.toString(rgb[i]), rgb[i] / 255.0f);
+        }
+        Preset[] presets = channel == 1 ? HAIR : (channel == 0 ? SKIN : null);
+        int py = frameY + DbaUi.HEADER + 112;
+        if (presets == null) {
+            context.text(this.font, Component.literal("Eyes use the sliders."), dx, py, DbaUi.MUTED);
+        } else {
+            int cols = 3;
+            int gap = 4;
+            int bw = Math.max(28, (dw - gap * (cols - 1)) / cols);
+            for (int i = 0; i < presets.length; i++) {
+                int col = i % cols;
+                int row = i / cols;
+                int bx = dx + col * (bw + gap);
+                int by = py + row * 22;
+                if (by + 18 > frameY + frameH - 36) {
+                    break;
+                }
+                boolean hover = DbaUi.hit(mouseX, mouseY, bx, by, bw, 18);
+                DbaUi.button(context, this.font, bx, by, bw, 18, presets[i].name, hover, DbaUi.Kind.SECONDARY);
+            }
+        }
+        int by = frameY + frameH - DbaUi.BUTTON_H - 12;
+        int half = (dw - DbaUi.GAP) / 2;
+        boolean back = DbaUi.hit(mouseX, mouseY, dx, by, half, DbaUi.BUTTON_H);
+        boolean ok = DbaUi.hit(mouseX, mouseY, dx + half + DbaUi.GAP, by, half, DbaUi.BUTTON_H);
+        DbaUi.button(context, this.font, dx, by, half, DbaUi.BUTTON_H, "Back", back, DbaUi.Kind.SECONDARY);
+        DbaUi.button(context, this.font, dx + half + DbaUi.GAP, by, half, DbaUi.BUTTON_H, "Confirm", ok, DbaUi.Kind.PRIMARY);
+    }
+
+    private int sliderRowY(int index) {
+        return frameY + DbaUi.HEADER + 12 + index * 32;
+    }
+
     @Override
-    public boolean mouseDragged(
-            net.minecraft.client.input.MouseButtonEvent event,
-            double dragX,
-            double dragY
-    ) {
-        int leftColWidth = Math.max(100, this.width / 3);
-        if (event.x() < leftColWidth + 30) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean isRepeat) {
+        if (event.button() != 0) {
+            return super.mouseClicked(event, isRepeat);
+        }
+        place();
+        double mx = event.x();
+        double my = event.y();
+        if (DbaUi.closeHit(frameX, frameY, frameW, mx, my)) {
+            DbaUi.playClick();
+            this.onClose();
+            return true;
+        }
+        if (page == Page.RACE) {
+            return clickRace(mx, my);
+        }
+        int lx = frameX + previewW + 6;
+        int lw = midW - 12;
+        for (int i = 0; i < CHANNELS.length; i++) {
+            int ry = listTop() + i * 28;
+            if (DbaUi.hit(mx, my, lx, ry, lw, 22)) {
+                DbaUi.playClick();
+                channel = i;
+                return true;
+            }
+        }
+        int dx = detailX() + 8;
+        int dw = detailW() - 16;
+        for (int i = 0; i < 3; i++) {
+            if (DbaUi.sliderHit(dx, sliderRowY(i), dw, mx, my)) {
+                draggingChannel = i;
+                setChannel(i, sliderValue(mx, dx, dw));
+                return true;
+            }
+        }
+        Preset[] presets = channel == 1 ? HAIR : (channel == 0 ? SKIN : null);
+        if (presets != null) {
+            int py = frameY + DbaUi.HEADER + 112;
+            int cols = 3;
+            int gap = 4;
+            int bw = Math.max(28, (dw - gap * (cols - 1)) / cols);
+            for (int i = 0; i < presets.length; i++) {
+                int col = i % cols;
+                int row = i / cols;
+                int bx = dx + col * (bw + gap);
+                int by = py + row * 22;
+                if (by + 18 > frameY + frameH - 36) {
+                    break;
+                }
+                if (DbaUi.hit(mx, my, bx, by, bw, 18)) {
+                    DbaUi.playClick();
+                    setChannel(0, presets[i].r);
+                    setChannel(1, presets[i].g);
+                    setChannel(2, presets[i].b);
+                    return true;
+                }
+            }
+        }
+        int by = frameY + frameH - DbaUi.BUTTON_H - 12;
+        int half = (dw - DbaUi.GAP) / 2;
+        if (DbaUi.hit(mx, my, dx, by, half, DbaUi.BUTTON_H)) {
+            DbaUi.playClick();
+            page = Page.RACE;
+            return true;
+        }
+        if (DbaUi.hit(mx, my, dx + half + DbaUi.GAP, by, half, DbaUi.BUTTON_H)) {
+            DbaUi.playClick();
+            confirm();
+            return true;
+        }
+        return super.mouseClicked(event, isRepeat);
+    }
+
+    private boolean clickRace(double mx, double my) {
+        List<Race> list = races();
+        if (list.isEmpty()) {
+            return false;
+        }
+        int lx = frameX + previewW + 6;
+        int lw = midW - 12;
+        int stride = rowH() + 3;
+        int view = listBottom() - listTop();
+        int max = Math.max(0, list.size() * stride - view);
+        if (scroll > max) scroll = max;
+        if (my >= listTop() && my < listBottom()) {
+            for (int i = 0; i < list.size(); i++) {
+                int ry = listTop() + i * stride - scroll;
+                if (ry + rowH() < listTop() || ry > listBottom()) {
+                    continue;
+                }
+                if (DbaUi.hit(mx, my, lx, ry, lw, rowH())) {
+                    DbaUi.playClick();
+                    applyRace(list.get(i), true);
+                    return true;
+                }
+            }
+        }
+        int dx = detailX() + 8;
+        int dw = detailW() - 16;
+        int by = frameY + frameH - DbaUi.BUTTON_H - 12;
+        if (DbaUi.hit(mx, my, dx, by, dw, DbaUi.BUTTON_H)) {
+            DbaUi.playClick();
+            page = Page.COLORS;
+            channel = 0;
+            return true;
+        }
+        return false;
+    }
+
+    private int sliderValue(double mouseX, int x, int width) {
+        float frac = (float) (mouseX - x) / (float) Math.max(1, width);
+        return Math.max(0, Math.min(255, Math.round(frac * 255.0f)));
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        place();
+        if (draggingChannel >= 0 && page == Page.COLORS) {
+            int dx = detailX() + 8;
+            int dw = detailW() - 16;
+            setChannel(draggingChannel, sliderValue(event.x(), dx, dw));
+            return true;
+        }
+        if (event.x() >= frameX && event.x() < frameX + previewW) {
             previewRotation += (float) dragX * 1.8F;
             if (previewRotation > 360.0F) previewRotation -= 360.0F;
             if (previewRotation < 0.0F) previewRotation += 360.0F;
@@ -727,54 +516,43 @@ public class RaceSelectionScreen extends Screen {
         return super.mouseDragged(event, dragX, dragY);
     }
 
-    private record PresetColor(String name, int r, int g, int b) {}
-
-    public static class RgbSliderWidget extends AbstractSliderButton {
-        private final String prefix;
-        private final IntConsumer onChanged;
-
-        public RgbSliderWidget(
-                int x,
-                int y,
-                int width,
-                int height,
-                String prefix,
-                int initialVal,
-                IntConsumer onChanged
-        ) {
-            super(
-                    x,
-                    y,
-                    width,
-                    height,
-                    Component.literal(prefix + ": " + initialVal),
-                    initialVal / 255.0
-            );
-            this.prefix = prefix;
-            this.onChanged = onChanged;
-            updateMessage();
-        }
-
-        public int getIntValue() {
-            return (int) Math.round(this.value * 255.0);
-        }
-
-        public void setIntValue(int val) {
-            this.value = Math.max(0, Math.min(255, val)) / 255.0;
-            updateMessage();
-        }
-
-        @Override
-        protected void updateMessage() {
-            this.setMessage(Component.literal(prefix + ": " + getIntValue()));
-        }
-
-        @Override
-        protected void applyValue() {
-            updateMessage();
-            if (onChanged != null) {
-                onChanged.accept(getIntValue());
-            }
-        }
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        draggingChannel = -1;
+        return super.mouseReleased(event);
     }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (page != Page.RACE) {
+            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        }
+        int lx = frameX + previewW;
+        if (mouseX >= lx && mouseX < lx + midW && mouseY >= listTop() && mouseY < listBottom()) {
+            scroll -= (int) Math.signum(verticalAmount) * (rowH() + 3);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (DbaUi.escape(event)) {
+            this.onClose();
+            return true;
+        }
+        return super.keyPressed(event);
+    }
+
+    @Override
+    public boolean shouldCloseOnEsc() {
+        return true;
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return true;
+    }
+
+    private record Preset(String name, int r, int g, int b) {}
 }

@@ -58,6 +58,9 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     private boolean dba$isFlying = false;
 
     @Unique
+    private boolean dba$isOnGround = true;
+
+    @Unique
     private boolean dba$isOnLadder = false;
 
     @Unique
@@ -123,6 +126,7 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
         this.dba$isCrouching = player.isCrouching();
         this.dba$isSwimming = player.isSwimming() || player.isInWater();
         this.dba$isFlying = player.getAbilities().flying || player.isFallFlying();
+        this.dba$isOnGround = player.onGround();
         this.dba$isOnLadder = player.onClimbable();
 
         var delta = player.getDeltaMovement();
@@ -229,6 +233,11 @@ public class AvatarRenderStateMixin implements DbaPlayerState {
     @Override
     public boolean dba$isFlying() {
         return this.dba$isFlying;
+    }
+
+    @Override
+    public boolean dba$isOnGround() {
+        return this.dba$isOnGround;
     }
 
     @Override

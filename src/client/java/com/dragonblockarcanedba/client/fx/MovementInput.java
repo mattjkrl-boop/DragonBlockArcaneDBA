@@ -24,7 +24,7 @@ public final class MovementInput {
 
     public static void tick(Minecraft mc) {
         LocalPlayer player = mc.player;
-        if (player == null || mc.screen != null) {
+        if (player == null || mc.gui.screen() != null) {
             jumpWasDown = sneakWasDown = false;
             return;
         }

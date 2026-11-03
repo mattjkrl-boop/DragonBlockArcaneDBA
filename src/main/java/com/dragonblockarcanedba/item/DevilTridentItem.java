@@ -144,32 +144,11 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 0.9f);
 
-            Vec3 look = player.getLookAngle();
-            Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
-            if (right.lengthSqr() < 0.001) right = new Vec3(1, 0, 0);
-            Vec3 up = right.cross(look).normalize();
-
-            boolean isRightHanded = (player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
-            boolean isOffhand = (player.getOffhandItem().getItem() instanceof DevilTridentItem && 
-                !(player.getMainHandItem().getItem() instanceof DevilTridentItem));
-            boolean onRight = isRightHanded ? !isOffhand : isOffhand;
-            float sideSign = onRight ? 1.0f : -1.0f;
-
-            Vec3 handOrigin = player.getEyePosition().add(look.scale(0.8)).add(right.scale(sideSign * 0.35)).add(up.scale(-0.25));
-
-            for (int i = -1; i <= 1; i++) {
-                com.dragonblockarcanedba.entity.KiBlastEntity laser = new com.dragonblockarcanedba.entity.KiBlastEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_BLAST, player.level());
-                laser.setOwner(player);
-                laser.setDamage(250.0f); // 3 * 250 = 750
-                laser.setColor(0xFF0000);
-                
-                Vec3 offset = right.scale(i * 0.25);
-                Vec3 start = handOrigin.add(offset);
-                
-                laser.setPos(start.x, start.y, start.z);
-                laser.shoot(look.x, look.y, look.z, 2.5f, 0.0f);
-                player.level().addFreshEntity(laser);
-            }
+            // One trident shot: three barbed prongs in formation, 750 together.
+            // The old shot was three copies of the shared ki bolt painted red.
+            com.dragonblockarcanedba.entity.TridentProngEntity shot =
+                new com.dragonblockarcanedba.entity.TridentProngEntity(player.level(), player, 750.0f);
+            player.level().addFreshEntity(shot);
         }
     }
 
@@ -300,13 +279,12 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
             // Ki Drain logic: 20% per minute (all shards die when Ki is exhausted)
             if (tag.getBoolean("isDeployed").orElse(false)) {
                 if (!WeaponDrainHelper.drainKiPerTick(player, 20.0)) {
-                    // Out of Ki! All shards die immediately and swarm is recalled
+                    // Out of Ki. Every shard flies home. The same 3-minute cooldown
+                    // starts in onSwarmArrivedHome, once the last one is in the trident.
                     for (TridentShardEntity shard : activeShards) {
-                        shard.discard();
+                        shard.returnHome();
                     }
-                    SwarmHelper.recallSwarm(trident);
-                    player.getCooldowns().addCooldown(trident, 3600); // 3-minute cooldown (3600 ticks)
-                    return; // Stop processing swarm
+                    return;
                 }
             }
 
@@ -357,5 +335,33 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
         for (TridentShardEntity idle : activeShards) {
             idle.setTarget(null);
         }
+    }
+
+    /**
+     * The last shard has reached the trident. This is the same 3-minute wipe
+     * cooldown that used to fire the moment the swarm was deleted.
+     * Manual recall does not come through here; that one still costs 600 ticks.
+     */
+    public static void onSwarmArrivedHome(Player player) {
+        ItemStack trident = ItemStack.EMPTY;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (!(stack.getItem() instanceof DevilTridentItem)) {
+                continue;
+            }
+            boolean deployed = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY)
+                .copyTag()
+                .getBoolean("isDeployed")
+                .orElse(false);
+            if (deployed) {
+                trident = stack;
+                break;
+            }
+        }
+        if (!(trident.getItem() instanceof DevilTridentItem)) {
+            return;
+        }
+        SwarmHelper.recallSwarm(trident);
+        player.getCooldowns().addCooldown(trident, 3600);
     }
 }

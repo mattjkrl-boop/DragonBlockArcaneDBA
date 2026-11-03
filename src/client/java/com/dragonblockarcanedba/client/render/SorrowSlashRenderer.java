@@ -62,12 +62,14 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
 
         float maxLife = state.isImpactBurst ? 16.0f : 30.0f;
         float progress = Math.min(1.0f, state.age / maxLife);
-        float fade = (1.0f - progress * progress);
-        // The flying wave used to pop in at full alpha; it now fades in over
-        // its first 3 ticks (the impact burst keeps its instant hit read).
+        float ease = progress * progress * (3.0f - 2.0f * progress);
+        float fade = 1.0f - ease;
+        // The flying wave eases in. The impact burst opens hot and eases shut.
         if (!state.isImpactBurst) {
-            fade *= Math.min(1.0f, state.age / 3.0f);
+            float intro = Math.min(1.0f, state.age / 4.0f);
+            fade *= intro * intro * (3.0f - 2.0f * intro);
         }
+        final float slashFade = fade;
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
@@ -78,49 +80,50 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
         // stamp.
         float tiltAngle = state.tiltRight ? 42.0f : -42.0f;
         if (!state.isImpactBurst) {
-            tiltAngle += (state.tiltRight ? 1.0f : -1.0f) * state.age * 3.0f;
+            // Tips into the reap and settles, instead of spinning off the sickle.
+            float settle = 1.0f - (float) Math.exp(-state.age * 0.22);
+            tiltAngle += (state.tiltRight ? 14.0f : -14.0f) * settle;
         }
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(tiltAngle)));
 
-        // Slight forward sweep animation. The wave grows from 0.7 to 1.3 over
-        // its flight; the burst keeps its own 1.0 to 1.4 expansion.
-        float scale = state.isImpactBurst ? (1.0f + progress * 0.4f) : (0.7f + progress * 0.6f);
+        // Opens with an ease, then the fade above closes it.
+        float scale = state.isImpactBurst ? (0.85f + ease * 0.45f) : (0.72f + ease * 0.48f);
         poseStack.scale(scale, scale, scale);
 
         float span = 4.2f;
         float chord = 1.35f;
-        int segments = 28;
+        int segments = 40;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
+            // Soft wake of the same crescent, wider and dimmer, so the reap has a trail.
+            drawCrescentArc(matrix, buffer, span + 0.95f, chord + 0.72f, 0.10f, segments,
+                0.42f, 0.0f, 0.55f, 0.32f * slashFade);
+
             // 1. Abyssal Dark Void Outer Silhouette
             drawCrescentArc(matrix, buffer, span + 0.45f, chord + 0.4f, 0.26f, segments,
-                0.08f, 0.0f, 0.15f, 0.90f * fade);
+                0.08f, 0.0f, 0.15f, 0.90f * slashFade);
 
             // 2. Weeping Sorrow Radiant Magenta / Violet Blade Crest
             drawCrescentArc(matrix, buffer, span, chord, 0.14f, segments,
-                0.80f, 0.05f, 0.85f, 0.95f * fade);
+                0.80f, 0.05f, 0.85f, 0.95f * slashFade);
 
-            // 3. Piercing Razor-Sharp Cyan / White Dimensional Edge
+            // 3. Piercing Razor-Sharp Cyan / White Dimensional Edge.
+            // On a hit the edge burns and then eases out with the crescent.
+            float edge = state.isImpactBurst ? (0.45f + 0.55f * (1.0f - ease)) : 1.0f;
             drawCrescentArc(matrix, buffer, span * 0.72f, chord * 0.72f, 0.06f, segments,
-                0.90f, 0.98f, 1.0f, 1.0f * fade);
+                0.90f, 0.98f, 1.0f, slashFade * edge);
 
-            // 4. Secondary Cross-Cleave Accent if Impact Burst
+            // Hot core along the crest. Thin, so the edge stays a line.
+            drawCrescentArc(matrix, buffer, span * 0.58f, chord * 0.58f, 0.028f, segments,
+                1.0f, 0.94f, 1.0f, slashFade * edge);
+
+            // The hit keeps its second crescent, crossing the first.
             if (state.isImpactBurst) {
                 drawCrescentArc(matrix, buffer, span * 0.55f, -chord * 0.55f, 0.08f, segments,
-                    0.65f, 0.0f, 0.90f, 0.75f * fade);
+                    0.65f, 0.0f, 0.90f, 0.75f * slashFade);
             }
-        });
-
-        // Additive glow halo (redesign T1): the magenta crest and cyan edge
-        // bloom over the void silhouette so the crescent cuts as light.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawCrescentArc(matrix, buffer, span, chord, 0.14f, segments,
-                0.80f, 0.05f, 0.85f, 0.30f * fade);
-            drawCrescentArc(matrix, buffer, span * 0.72f, chord * 0.72f, 0.06f, segments,
-                0.90f, 0.98f, 1.0f, 0.22f * fade);
         });
 
         poseStack.popPose();
@@ -132,6 +135,7 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
             float t1 = (i / (float) segments) * 2.0f - 1.0f;
             float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
 
+            // Parabolic scythe bow. The pose tilt makes it a sickle; the bow itself stays deep.
             float x1 = t1 * span;
             float z1 = (1.0f - t1 * t1) * chord;
             float x2 = t2 * span;
@@ -140,8 +144,8 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
             float th1 = thickness * (1.0f - Math.abs(t1) * 0.75f);
             float th2 = thickness * (1.0f - Math.abs(t2) * 0.75f);
 
-            float z1Trail = z1 - 0.5f * (1.0f - Math.abs(t1));
-            float z2Trail = z2 - 0.5f * (1.0f - Math.abs(t2));
+            float z1Trail = z1 - 0.9f * (1.0f - Math.abs(t1));
+            float z2Trail = z2 - 0.9f * (1.0f - Math.abs(t2));
 
             // Three-stop shading (redesign T2): the arc burns hottest at its
             // center and deepens toward the horn tips.

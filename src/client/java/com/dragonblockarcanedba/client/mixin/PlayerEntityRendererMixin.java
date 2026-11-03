@@ -17,7 +17,11 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
+import org.joml.Matrix4f;
 import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -37,7 +41,6 @@ public abstract class PlayerEntityRendererMixin {
         ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.TrailingTailLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));
         ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.TrailingHairLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));
         ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.RaceFeatureLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));
-        ((LivingEntityRendererInvoker) this).dba$addLayer(new com.dragonblockarcanedba.client.render.layer.BlinkingEyesLayer((net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this));
     }
 
     @Inject(method = "extractRenderState", at = @At("RETURN"))
@@ -159,6 +162,39 @@ public abstract class PlayerEntityRendererMixin {
         });
 
         ci.cancel();
+    }
+
+    /**
+     * Rush flight faces the look direction and leans forward around the chest.
+     * Vanilla lays the body flat around the feet, then adds flyingYRot. That
+     * yaw is computed from look versus velocity, which the rush keeps almost
+     * parallel, so the prone body spins through the third-person camera.
+     */
+    @Inject(
+            method = "setupRotations(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;FF)V",
+            at = @At("HEAD"),
+            cancellable = true
+    )
+    private void dba$orientAzureRush(AvatarRenderState state, PoseStack poseStack, float bodyRot, float scale, CallbackInfo ci) {
+        if (!state.isFallFlying || !dba$holdsAzureSword(state)) {
+            return;
+        }
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(180.0F - state.yRot)));
+        float glide = Mth.clamp(state.fallFlyingScale(), 0.72F, 1.0F);
+        float lean = Mth.clamp(-62.0F - state.xRot * 0.40F, -80.0F, -50.0F) * glide;
+        float chest = 1.05F;
+        poseStack.translate(0.0F, chest, 0.0F);
+        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(lean)));
+        poseStack.translate(0.0F, -chest, 0.0F);
+        ci.cancel();
+    }
+
+    @Unique
+    private static boolean dba$holdsAzureSword(AvatarRenderState state) {
+        ItemStack right = state.rightHandItemStack;
+        ItemStack left = state.leftHandItemStack;
+        return (right != null && right.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem)
+                || (left != null && left.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem);
     }
 
     @Unique

@@ -83,9 +83,8 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
 
         float age = state.age;
         float pulse = 1.0f + 0.06f * (float) Math.sin(age * 1.5f);
-        // Spawn fade-in over the first 3 ticks: the beam used to appear at
-        // full alpha the tick the channel started.
-        float fadeIn = Math.min(1.0f, age / 3.0f);
+        float fadeRaw = Math.min(1.0f, age / 5.0f);
+        float fadeIn = fadeRaw * fadeRaw * (3.0f - 2.0f * fadeRaw);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -119,71 +118,53 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
             float outerRadius = 0.42f * pulse * fpScale;
             drawPrismBeamFlow(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 3.0f, age, 0.05f, 0.70f, 1.0f, 0.30f * fadeIn);
 
-            // 2. Quad Helical Energy Drill Ribbons
-            int segments = Math.min((int) (beamLength * 3.0f), 96);
+            int ribbonSegments = Math.min((int) (beamLength * 3.0f), 72);
             float spiralRadius = 0.48f * pulse * fpScale;
-            float ribbonSize = 0.065f * fpScale;
+            float ribbonSize = 0.045f * fpScale;
             float spiralSpeed = age * 0.35f;
-
-            for (int h = 0; h < 4; h++) {
-                float phase = h * ((float) Math.PI * 0.5f);
-                boolean isGold = (h % 2 == 1);
-                float rCol = isGold ? 1.0f : 0.0f;
-                float gCol = isGold ? 0.85f : 0.95f;
-                float bCol = isGold ? 0.20f : 1.0f;
-                float aCol = (isGold ? 0.85f : 0.75f) * fadeIn;
-
-                for (int i = 0; i < segments; i++) {
-                    float z1 = (i / (float) segments) * (beamLength - zStart) + zStart;
-                    float z2 = ((i + 1) / (float) segments) * (beamLength - zStart) + zStart;
-
-                    float p1 = z1 / beamLength;
-                    float p2 = z2 / beamLength;
-
-                    double a1 = (p1 * Math.PI * 8.0) + (spiralSpeed * (isGold ? -1.0f : 1.0f)) + phase;
-                    double a2 = (p2 * Math.PI * 8.0) + (spiralSpeed * (isGold ? -1.0f : 1.0f)) + phase;
-
-                    float x1 = (float) Math.cos(a1) * spiralRadius;
-                    float y1 = (float) Math.sin(a1) * spiralRadius;
-                    float x2 = (float) Math.cos(a2) * spiralRadius;
-                    float y2 = (float) Math.sin(a2) * spiralRadius;
-
-                    drawQuad(matrix, buffer,
-                        x1 - ribbonSize, y1 - ribbonSize, z1,
-                        x1 + ribbonSize, y1 + ribbonSize, z1,
-                        x2 + ribbonSize, y2 + ribbonSize, z2,
-                        x2 - ribbonSize, y2 - ribbonSize, z2,
-                        rCol, gCol, bCol, aCol
-                    );
+            if (ribbonSegments > 1) {
+                for (int h = 0; h < 4; h++) {
+                    float phase = h * ((float) Math.PI * 0.5f);
+                    boolean isGold = (h % 2 == 1);
+                    float rCol = isGold ? 1.0f : 0.0f;
+                    float gCol = isGold ? 0.85f : 0.95f;
+                    float bCol = isGold ? 0.20f : 1.0f;
+                    float aCol = (isGold ? 0.85f : 0.75f) * fadeIn;
+                    float dir = isGold ? -1.0f : 1.0f;
+                    for (int i = 0; i < ribbonSegments; i++) {
+                        float z1 = (i / (float) ribbonSegments) * (beamLength - zStart) + zStart;
+                        float z2 = ((i + 1) / (float) ribbonSegments) * (beamLength - zStart) + zStart;
+                        float p1 = z1 / beamLength;
+                        float p2 = z2 / beamLength;
+                        double a1 = (p1 * Math.PI * 8.0) + (spiralSpeed * dir) + phase;
+                        double a2 = (p2 * Math.PI * 8.0) + (spiralSpeed * dir) + phase;
+                        float x1 = (float) Math.cos(a1) * spiralRadius;
+                        float y1 = (float) Math.sin(a1) * spiralRadius;
+                        float x2 = (float) Math.cos(a2) * spiralRadius;
+                        float y2 = (float) Math.sin(a2) * spiralRadius;
+                        float w1 = ribbonSize * (0.35f + 0.65f * (float) Math.sin(p1 * Math.PI));
+                        float w2 = ribbonSize * (0.35f + 0.65f * (float) Math.sin(p2 * Math.PI));
+                        drawQuad(matrix, buffer, x1 - w1, y1, z1, x1 + w1, y1, z1, x2 + w2, y2, z2, x2 - w2, y2, z2, rCol, gCol, bCol, aCol);
+                        float c1 = w1 * 0.32f;
+                        float c2 = w2 * 0.32f;
+                        drawQuad(matrix, buffer, x1 - c1, y1, z1, x1 + c1, y1, z1, x2 + c2, y2, z2, x2 - c2, y2, z2, 1.0f, 1.0f, 1.0f, aCol);
+                        float ix1 = x1 * 0.7f;
+                        float iy1 = y1 * 0.7f;
+                        float ix2 = x2 * 0.7f;
+                        float iy2 = y2 * 0.7f;
+                        buffer.addVertex(matrix, x1, y1, z1).setColor(rCol, gCol, bCol, aCol * 0.55f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                        buffer.addVertex(matrix, x1 + (ix1 - x1) * 0.15f, y1 + (iy1 - y1) * 0.15f, z1).setColor(rCol, gCol, bCol, aCol * 0.55f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                        buffer.addVertex(matrix, ix2, iy2, z2).setColor(rCol, gCol, bCol, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                        buffer.addVertex(matrix, ix1, iy1, z1).setColor(rCol, gCol, bCol, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                    }
                 }
             }
 
-            // 3. Orbital Ki Ring Nodes (Planar Pulsing Reticles along Beam Length)
-            int ringCount = Math.max(3, (int) (beamLength / 4.0f));
-            float minRingZ = state.isFirstPersonOwner ? 1.6f : 0.5f;
-            for (int k = 1; k <= ringCount; k++) {
-                float z = (k / (float) (ringCount + 1)) * beamLength;
-                if (z < minRingZ) continue;
-                float ringPhase = (float) Math.sin(age * 0.4f + k * 1.2f);
-                float ringR = (0.55f + ringPhase * 0.12f) * pulse * fpScale;
-
-                drawPlaneRing(matrix, buffer, 0, 0, z, ringR, ringR * 0.82f, 24, age * (15.0f + k * 4.0f),
-                    0.0f, 0.95f, 1.0f, 0.70f * fadeIn);
-            }
-
-            // 4. Muzzle Celestial Emitter Array (at Blade Tip Origin)
+            // Muzzle at the blade tip, then the impact where the beam ends.
             drawMuzzleEmitter(matrix, buffer, age, pulse);
 
             // 5. Terminus Impact Geometry (at Hit Point Z=beamLength)
             drawTerminusImpact(matrix, buffer, beamLength, age, pulse);
-        });
-
-        // Additive glow halo (redesign T1): a wider soft sheath around the
-        // beam so the cannon blooms instead of reading as flat prisms.
-        float haloRadius = 0.42f * pulse * fpScale * 1.45f;
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawPrismBeam(matrix, buffer, haloRadius, zStart, beamLength, 8, age * 3.0f, 0.05f, 0.70f, 1.0f, 0.16f * fadeIn);
         });
 
         poseStack.popPose();
@@ -249,21 +230,13 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
     private static void drawMuzzleEmitter(Matrix4f matrix, VertexConsumer consumer, float age, float pulse) {
         // 2 Concentric Rotating Celestial Muzzle Seals
         drawPlaneRing(matrix, consumer, 0, 0, 0.15f, 0.70f * pulse, 0.52f * pulse, 24, age * 30.0f, 0.0f, 0.90f, 1.0f, 0.85f);
-        drawPlaneRing(matrix, consumer, 0, 0, 0.20f, 0.48f * pulse, 0.32f * pulse, 16, -age * 45.0f, 1.0f, 0.85f, 0.20f, 0.90f);
+        drawPlaneRing(matrix, consumer, 0, 0, 0.20f, 0.48f * pulse, 0.32f * pulse, 16, -age * 45.0f, 0.0f, 0.95f, 1.0f, 0.90f);
 
-        // 4 Inward Convergence Spikes
         for (int s = 0; s < 4; s++) {
             double sAngle = (s / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 20.0f);
             float sx = (float) Math.cos(sAngle) * 0.85f * pulse;
             float sy = (float) Math.sin(sAngle) * 0.85f * pulse;
-
-            drawQuad(matrix, consumer,
-                sx - 0.06f, sy - 0.06f, 0.05f,
-                sx + 0.06f, sy + 0.06f, 0.05f,
-                0, 0, 0.45f,
-                0, 0, 0.45f,
-                1.0f, 1.0f, 1.0f, 0.95f
-            );
+            drawCurvedNeedle(matrix, consumer, sx, sy, 0.06f, 0.0f, 0.0f, 0.48f, 1.0f, 1.0f, 1.0f, 0.95f);
         }
     }
 
@@ -300,20 +273,54 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
             );
         }
 
-        // 4 Radiating Impact Splash Fins
         for (int f = 0; f < 4; f++) {
             double fAngle = (f / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 25.0f);
             float fx = (float) Math.cos(fAngle) * 1.1f * pulse;
             float fy = (float) Math.sin(fAngle) * 1.1f * pulse;
-
-            drawQuad(matrix, consumer,
-                0, 0, beamLength,
-                fx * 0.4f, fy * 0.4f, beamLength - 0.2f,
-                fx, fy, beamLength + 0.1f,
-                0, 0, beamLength,
-                1.0f, 0.90f, 0.30f, 0.85f
-            );
+            drawCurvedNeedle(matrix, consumer, 0.0f, 0.0f, beamLength, fx, fy, beamLength + 0.15f, 1.0f, 0.90f, 0.30f, 0.85f);
         }
+    }
+
+    /** A tapered curve with a bright core and a tail that fades, used where a spike used to sit. */
+    private static void drawCurvedNeedle(Matrix4f matrix, VertexConsumer consumer,
+                                         float x1, float y1, float z1, float x2, float y2, float z2,
+                                         float r, float g, float b, float a) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001f) {
+            return;
+        }
+        float px = -dy / len;
+        float py = dx / len;
+        float bow = len * 0.28f;
+        float mx = (x1 + x2) * 0.5f + px * bow;
+        float my = (y1 + y2) * 0.5f + py * bow;
+        float mz = (z1 + z2) * 0.5f + dz / len * bow * 0.15f;
+        float w = Math.min(0.07f, len * 0.12f);
+        needleHalf(matrix, consumer, x1, y1, z1, mx, my, mz, w, w * 0.45f, r, g, b, a, a * 0.7f);
+        needleHalf(matrix, consumer, mx, my, mz, x2, y2, z2, w * 0.45f, 0.008f, r, g, b, a * 0.7f, 0.0f);
+        needleHalf(matrix, consumer, x1, y1, z1, mx, my, mz, w * 0.28f, w * 0.12f, 1.0f, 1.0f, 1.0f, a, a * 0.8f);
+        needleHalf(matrix, consumer, mx, my, mz, mx - px * bow, my - py * bow, mz, w * 0.35f, 0.006f, r, g, b, a * 0.4f, 0.0f);
+    }
+
+    private static void needleHalf(Matrix4f matrix, VertexConsumer consumer,
+                                   float x1, float y1, float z1, float x2, float y2, float z2,
+                                   float w1, float w2, float r, float g, float b, float a1, float a2) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + 0.0001f);
+        float nx = -dy / len;
+        float ny = dx / len;
+        consumer.addVertex(matrix, x1 - nx * w1, y1 - ny * w1, z1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, x1 + nx * w1, y1 + ny * w1, z1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, x2 + nx * w2, y2 + ny * w2, z2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, x2 - nx * w2, y2 - ny * w2, z2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, x1, y1, z1 - w1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1, y1, z1 + w1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2, y2, z2 + w2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2, y2, z2 - w2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,

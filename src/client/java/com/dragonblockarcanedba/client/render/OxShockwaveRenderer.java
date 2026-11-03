@@ -75,8 +75,12 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
         float maxRadius = (4.0f + Math.max(0.05f, Math.min(1.0f, charge)) * 20.0f) * waveScale;
         float maxTicks = Math.max(10.0f, maxRadius * 1.3f);
         float lifeProgress = Math.min(1.0f, age / maxTicks);
-        float endFade = lifeProgress <= 0.7f ? 1.0f : Math.max(0.0f, 1.0f - (lifeProgress - 0.7f) / 0.3f);
-        float alpha = Math.min(1.0f, 1.2f - (age * 0.02f)) * endFade;
+        float riseT = Math.min(1.0f, lifeProgress / 0.22f);
+        float rise = 1.0f - (1.0f - riseT) * (1.0f - riseT) * (1.0f - riseT);
+        float exitT = lifeProgress <= 0.70f ? 0.0f : Math.min(1.0f, (lifeProgress - 0.70f) / 0.30f);
+        float endFade = 1.0f - exitT * exitT * (3.0f - 2.0f * exitT);
+        float crest = rise * (1.0f - exitT * 0.62f);
+        float alpha = endFade;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -97,7 +101,7 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
 
                 // Height variations
                 float hVar = 0.75f + rng.nextFloat() * 0.5f;
-                float cragHeight = cragMaxHeight * hVar;
+                float cragHeight = cragMaxHeight * hVar * crest;
                 float cragWidth = (0.45f + rng.nextFloat() * 0.35f) * waveScale;
 
                 // Outward radial tilt (crags lean violently forward/outward as earth fractures)
@@ -123,57 +127,63 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
                     1.0f, subWave ? 0.6f : 0.25f, 0.02f, alpha * 0.95f, // Molten base
                     0.28f, 0.22f, 0.18f, alpha                        // Basalt peak
                 );
+                float vein = cragWidth * 0.22f;
+                float vx = -(float) Math.sin(angle) * vein * 0.5f;
+                float vz = (float) Math.cos(angle) * vein * 0.5f;
+                drawFacetedCrag(matrix, buffer,
+                    cx - vx, 0.08f, cz - vz,
+                    cx + vx, 0.08f, cz + vz,
+                    cx, 0.08f, cz,
+                    tipX, tipY * 0.88f, tipZ,
+                    1.0f, 0.92f, 0.28f, alpha * 0.90f,
+                    1.0f, 0.98f, 0.72f, alpha * 0.40f
+                );
             }
 
-            // 2. Multi-Layered 3D Magma Shockwave Crests & Ground Displacement Ridge
-            int segments = 48;
-            float ringWidth = (0.9f + charge * 0.7f) * waveScale;
+            // Broken molten teeth along the leading edge. Narrow and uneven,
+            // so the crest stays jagged earth instead of a flat wall.
+            int teeth = 26;
+            for (int i = 0; i < teeth; i++) {
+                double a = (i / (double) teeth) * Math.PI * 2.0 + rng.nextDouble() * 0.08;
+                float jag = 0.28f + rng.nextFloat() * 1.25f;
+                float h = cragMaxHeight * 0.32f * jag * crest * (0.90f + 0.10f * (float) Math.sin(age * 0.9f + i));
+                float dist = Math.max(0.4f, radius * (0.97f + (rng.nextFloat() - 0.5f) * 0.10f));
+                float sx = (float) Math.cos(a) * dist;
+                float sz = (float) Math.sin(a) * dist;
+                float w = (0.06f + rng.nextFloat() * 0.07f) * waveScale;
+                float tx = -(float) Math.sin(a) * w;
+                float tz = (float) Math.cos(a) * w;
+                float lean = 0.32f;
+                drawFacetedCrag(matrix, buffer,
+                    sx - tx, 0.05f, sz - tz,
+                    sx + tx, 0.05f, sz + tz,
+                    sx, 0.05f, sz,
+                    sx + (float) Math.cos(a) * h * lean, h, sz + (float) Math.sin(a) * h * lean,
+                    1.0f, 0.78f, 0.12f, alpha * 0.95f,
+                    1.0f, 0.98f, 0.70f, alpha * 0.35f
+                );
+            }
 
-            // Outer Ground Displacement Wall (Molten orange-red)
-            drawContinuousShockwaveRing(matrix, buffer, 0, 0.05f, 0, radius, Math.max(0.1f, radius - ringWidth), cragMaxHeight * 0.45f, segments,
-                1.0f, subWave ? 0.65f : 0.30f, 0.02f, alpha * 0.85f,
-                0.85f, 0.15f, 0.0f, 0.0f, 0.0f);
-
-            // Inner Blazing White-Gold Pressure Ridge. Its crest carries a
-            // traveling brightness band (redesign T7) so the pressure wave
-            // visibly surges around the ring instead of glowing uniformly.
-            drawContinuousShockwaveRing(matrix, buffer, 0, 0.08f, 0, radius - ringWidth * 0.2f, Math.max(0.1f, radius - ringWidth * 0.75f), cragMaxHeight * 0.75f, segments,
-                1.0f, 0.90f, 0.25f, alpha * 0.95f,
-                1.0f, 0.45f, 0.05f, alpha * 0.80f, age * 1.2f);
-
-            // 3. Erupted Stone Spikes & Debris Shards along leading edge
             int shardCount = 14;
             for (int s = 0; s < shardCount; s++) {
-                double sAngle = (s / (double) shardCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.3);
-                float sDist = radius * (0.85f + rng.nextFloat() * 0.25f);
+                double sAngle = (s / (double) shardCount) * Math.PI * 2.0 + rng.nextDouble() * 0.3;
+                float sDist = radius * (0.86f + rng.nextFloat() * 0.22f);
                 float sx = (float) Math.cos(sAngle) * sDist;
                 float sz = (float) Math.sin(sAngle) * sDist;
-
-                float shardH = (0.6f + rng.nextFloat() * 0.8f) * waveScale;
-                float shardW = 0.18f + rng.nextFloat() * 0.15f;
-
-                float tiltX = (float) Math.cos(sAngle) * 0.2f;
-                float tiltZ = (float) Math.sin(sAngle) * 0.2f;
-
+                float shardH = (0.55f + rng.nextFloat() * 1.05f) * waveScale * crest;
+                float shardW = 0.12f + rng.nextFloat() * 0.10f;
+                float tx = -(float) Math.sin(sAngle) * shardW;
+                float tz = (float) Math.cos(sAngle) * shardW;
+                float lean = 0.34f;
                 drawFacetedCrag(matrix, buffer,
-                    sx - shardW, 0.05f, sz,
-                    sx + shardW, 0.05f, sz,
-                    sx, 0.05f, sz - shardW,
-                    sx + tiltX, shardH, sz + tiltZ,
-                    1.0f, 0.50f, 0.10f, alpha * 0.90f,
+                    sx - tx, 0.05f, sz - tz,
+                    sx + tx, 0.05f, sz + tz,
+                    sx - (float) Math.cos(sAngle) * shardW * 0.55f, 0.05f, sz - (float) Math.sin(sAngle) * shardW * 0.55f,
+                    sx + (float) Math.cos(sAngle) * shardH * lean, shardH, sz + (float) Math.sin(sAngle) * shardH * lean,
+                    1.0f, 0.48f, 0.08f, alpha * 0.90f,
                     0.20f, 0.16f, 0.14f, alpha
                 );
             }
-        });
-
-        // Additive glow halo (redesign T1): the white-gold pressure ridge
-        // blooms over the crag line so the wave front reads as a wall of heat.
-        float haloRingWidth = (0.9f + charge * 0.7f) * waveScale;
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawContinuousShockwaveRing(matrix, buffer, 0, 0.08f, 0, radius - haloRingWidth * 0.2f, Math.max(0.1f, radius - haloRingWidth * 0.75f), cragMaxHeight * 0.75f, 48,
-                1.0f, 0.90f, 0.25f, alpha * 0.28f,
-                1.0f, 0.45f, 0.05f, 0.0f, age * 1.2f);
         });
 
         super.submit(state, poseStack, collector, cameraState);
@@ -205,46 +215,4 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
         consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
-    private static void drawContinuousShockwaveRing(Matrix4f matrix, VertexConsumer consumer,
-                                                    float cx, float cy, float cz,
-                                                    float rOuter, float rInner, float height,
-                                                    int segments,
-                                                    float rTop, float gTop, float bTop, float aTop,
-                                                    float rBot, float gBot, float bBot, float aBot,
-                                                    float flowPhase) {
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-
-            // Traveling brightness band (redesign T7): with a nonzero phase,
-            // the crest alpha surges in a wave running around the ring.
-            float segTop = aTop;
-            if (flowPhase != 0.0f) {
-                float band = 0.75f + 0.45f * (0.5f + 0.5f * (float) Math.sin(a1 * 6.0 - flowPhase));
-                segTop = aTop * band;
-            }
-
-            float x1Out = cx + (float) Math.cos(a1) * rOuter;
-            float z1Out = cz + (float) Math.sin(a1) * rOuter;
-            float x2Out = cx + (float) Math.cos(a2) * rOuter;
-            float z2Out = cz + (float) Math.sin(a2) * rOuter;
-
-            float x1In = cx + (float) Math.cos(a1) * rInner;
-            float z1In = cz + (float) Math.sin(a1) * rInner;
-            float x2In = cx + (float) Math.cos(a2) * rInner;
-            float z2In = cz + (float) Math.sin(a2) * rInner;
-
-            // Outer rising wall
-            consumer.addVertex(matrix, x1Out, cy, z1Out).setColor(rBot, gBot, bBot, aBot).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2Out, cy, z2Out).setColor(rBot, gBot, bBot, aBot).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, segTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, segTop).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Top ridge connecting outer to inner
-            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, segTop).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, segTop).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2In, cy, z2In).setColor(rBot, gBot, bBot, aBot).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1In, cy, z1In).setColor(rBot, gBot, bBot, aBot).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
 }

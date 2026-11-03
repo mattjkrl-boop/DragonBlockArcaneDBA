@@ -85,9 +85,8 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (attacker instanceof Player player && !player.level().isClientSide()) {
-            WeaponDrainHelper.drainKiDiscrete(player, 90.0, 10);
-        }
+        // The spin and the flying blade already pay. A vanilla connect used to
+        // spend ki again and add no swing of its own.
     }
 
     // --- LEFT CLICK: Grand Cyclone Spin, Blade Shards & Finisher Slash ---

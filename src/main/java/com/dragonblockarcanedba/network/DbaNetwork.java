@@ -532,11 +532,11 @@ public class DbaNetwork {
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem) {
                     com.dragonblockarcanedba.item.SickleOfSorrowItem.performSorrowSlash(player, stack);
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem) {
-                    com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiDiscrete(player, 55.0, 7);
+                    com.dragonblockarcanedba.item.SpiritSwordItem.performSpiritSwing(player, stack);
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem) {
-                    com.dragonblockarcanedba.util.WeaponDrainHelper.drainStaminaDiscrete(player, 45.0, 10);
+                    com.dragonblockarcanedba.item.BanshoFanItem.performGaleSwing(player, stack);
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
-                    com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiDiscrete(player, 100.0, 13);
+                    com.dragonblockarcanedba.item.WhisStaffItem.performTemporalStrike(player, stack);
                 }
 
             });

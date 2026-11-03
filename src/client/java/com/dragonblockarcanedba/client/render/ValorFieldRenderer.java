@@ -89,8 +89,9 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
         float age = state.ageInTicks;
         // Spawn fade-in over the first 6 ticks: the 9 block dome used to appear
         // at full strength in a single tick when cast.
-        float spawnIn = Math.min(1.0f, age / 6.0f);
-        float pulse = (0.88f + 0.12f * (float) Math.sin(age * 0.18f)) * spawnIn;
+        float spawnIn = Math.min(1.0f, age / 10.0f);
+        float rise = smooth(spawnIn);
+        float pulse = (0.88f + 0.12f * (float) Math.sin(age * 0.18f)) * rise;
 
         poseStack.pushPose();
 
@@ -100,7 +101,7 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
             // 1. Volumetric 3D Translucent Golden Dome Shell (Multi-Latitude Mesh)
             int domeLatitudes = 14;
             int domeLongitudes = 36;
-            float domeHeight = radius * 1.05f;
+            float domeHeight = radius * 1.05f * (0.22f + 0.78f * rise);
 
             for (int lat = 0; lat < domeLatitudes; lat++) {
                 float latProgress1 = lat / (float) domeLatitudes;
@@ -149,41 +150,23 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
                 }
             }
 
-            // 2. Ground Sanctum Mandala (Multi-Tier Golden Valor Seals)
-            int groundSegments = 48;
-
-            // Outer Perimeter Runic Ring
-            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius, radius * 0.88f, groundSegments, age * 8.0f,
+            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius, radius * 0.90f, 48, age * 6.0f,
                 1.0f, 0.85f, 0.20f, 0.75f * pulse);
-
-            // Inner Sacred Glyph Ring (Counter-Rotating)
-            drawRotatingRing(matrix, buffer, 0, 0.08f, 0, radius * 0.65f, radius * 0.52f, groundSegments, -age * 12.0f,
-                1.0f, 0.95f, 0.35f, 0.80f * pulse);
-
-            // Central Sanctum Core Starburst Seal
-            drawRotatingRing(matrix, buffer, 0, 0.10f, 0, radius * 0.30f, 0.0f, 16, age * 15.0f,
-                1.0f, 1.0f, 0.65f, 0.85f * pulse);
-
-            // 8 Cardinal Ray Steles Connecting Sanctum
+            drawRotatingRing(matrix, buffer, 0, 0.08f, 0, radius * 0.62f, radius * 0.50f, 40, -age * 12.0f,
+                1.0f, 0.95f, 0.40f, 0.82f * pulse);
+            drawTiltedOrbitalRing(matrix, buffer, radius * 0.96f, 35.0f, age * 18.0f,
+                1.0f, 0.90f, 0.30f, 0.68f * pulse);
+            drawTiltedOrbitalRing(matrix, buffer, radius * 0.96f, -35.0f, -age * 18.0f,
+                1.0f, 0.95f, 0.40f, 0.68f * pulse);
             for (int ray = 0; ray < 8; ray++) {
                 double rayAngle = (ray / 8.0) * Math.PI * 2.0 + Math.toRadians(age * 8.0f);
                 float rx = (float) Math.cos(rayAngle) * radius;
                 float rz = (float) Math.sin(rayAngle) * radius;
-                drawTrenchSegment(matrix, buffer, 0, 0, rx, rz, 0.12f, 1.0f, 0.90f, 0.30f, 0.70f * pulse);
+                drawTrenchSegment(matrix, buffer, 0, 0, rx, rz, 0.07f, 1.0f, 0.90f, 0.30f, 0.62f * pulse);
             }
-
-            // 3. Equatorial & Dual Tilted Orbital Runic Rings
-            // Equator Ring at Y = 1.0
-            drawRing3D(matrix, buffer, 0, 1.0f, 0, radius * 0.98f, radius * 0.92f, 32,
-                1.0f, 0.85f, 0.20f, 0.80f * pulse);
-
-            // Orbital Ring A: Tilted +35 degrees
-            drawTiltedOrbitalRing(matrix, buffer, radius * 0.96f, 35.0f, age * 18.0f,
-                1.0f, 0.90f, 0.30f, 0.75f * pulse);
-
-            // Orbital Ring B: Tilted -35 degrees
-            drawTiltedOrbitalRing(matrix, buffer, radius * 0.96f, -35.0f, -age * 18.0f,
-                1.0f, 0.95f, 0.40f, 0.75f * pulse);
+            float lipY = 0.1f + domeHeight * 0.45f;
+            drawRing3D(matrix, buffer, 0, lipY, 0, radius * 0.90f, radius * 0.84f, 32,
+                1.0f, 0.96f, 0.62f, 0.8f * pulse);
 
             // 4. 8 Dynamic Vertical Meridian Energy Ribs
             for (int rib = 0; rib < 8; rib++) {
@@ -202,54 +185,13 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
             }
         });
 
-        // Additive halo pass: a slightly larger, very faint dome shell plus
-        // the equator and ground rings, so the whole field blooms and anchors
-        // to the ground instead of reading as a flat matte shell.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float haloRadius = radius * 1.03f;
-            float haloHeight = haloRadius * 1.05f;
-            int haloLatitudes = 8;
-            int haloLongitudes = 24;
-
-            for (int lat = 0; lat < haloLatitudes; lat++) {
-                float latProgress1 = lat / (float) haloLatitudes;
-                float latProgress2 = (lat + 1) / (float) haloLatitudes;
-
-                float y1 = 0.1f + (float) Math.sin(latProgress1 * (Math.PI / 2.0)) * haloHeight;
-                float y2 = 0.1f + (float) Math.sin(latProgress2 * (Math.PI / 2.0)) * haloHeight;
-
-                float r1 = haloRadius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
-                float r2 = haloRadius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
-
-                for (int lon = 0; lon < haloLongitudes; lon++) {
-                    double angleOffset = (age * (1.2f + lat * 0.3f)) * (Math.PI / 180.0);
-                    double a1 = ((lon / (double) haloLongitudes) * Math.PI * 2.0) + angleOffset;
-                    double a2 = (((lon + 1) / (double) haloLongitudes) * Math.PI * 2.0) + angleOffset;
-
-                    float x1 = (float) Math.cos(a1) * r1;
-                    float z1 = (float) Math.sin(a1) * r1;
-                    float x2 = (float) Math.cos(a2) * r1;
-                    float z2 = (float) Math.sin(a2) * r1;
-
-                    float x3 = (float) Math.cos(a2) * r2;
-                    float z3 = (float) Math.sin(a2) * r2;
-                    float x4 = (float) Math.cos(a1) * r2;
-                    float z4 = (float) Math.sin(a1) * r2;
-
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
-                        1.0f, 0.95f, 0.60f, 0.05f * pulse);
-                }
-            }
-
-            drawRing3D(matrix, buffer, 0, 1.0f, 0, radius * 1.01f, radius * 0.94f, 36,
-                1.0f, 0.85f, 0.20f, 0.16f * pulse);
-            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius * 1.06f, radius * 0.90f, 48, age * 8.0f,
-                1.0f, 0.85f, 0.20f, 0.13f * pulse);
-        });
-
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
     }
 
     private static void drawQuad(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float x3, float y3, float z3, float x4, float y4, float z4, float r, float g, float b, float a) {
@@ -389,10 +331,14 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
 
         float nx = -dz / len * width * 0.5f;
         float nz = dx / len * width * 0.5f;
-
+        float tip = 0.3f;
         consumer.addVertex(matrix, x1 - nx, 0.07f, z1 - nz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x1 + nx, 0.07f, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, 0.07f, z2 + nz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, 0.07f, z2 - nz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * tip, 0.07f, z2 + nz * tip).setColor(r, g, b, a * 0.12f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * tip, 0.07f, z2 - nz * tip).setColor(r, g, b, a * 0.12f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 - nx * 0.24f, 0.085f, z1 - nz * 0.24f).setColor(1.0f, 0.96f, 0.75f, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 + nx * 0.24f, 0.085f, z1 + nz * 0.24f).setColor(1.0f, 0.96f, 0.75f, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * 0.06f, 0.085f, z2 + nz * 0.06f).setColor(1.0f, 0.96f, 0.75f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * 0.06f, 0.085f, z2 - nz * 0.06f).setColor(1.0f, 0.96f, 0.75f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 }

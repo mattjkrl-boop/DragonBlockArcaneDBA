@@ -134,6 +134,8 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
             // Ring 3 (Tight horizontal white-gold compression ring)
             drawRotatingRing(matrix, buffer, 0, coreY, 0, baseRadius * 0.40f, baseRadius * 0.32f, ringSegments, age * 30.0f,
                 1.0f, 1.0f, 0.90f, baseAlpha);
+            drawRotatingRing(matrix, buffer, 0, coreY, 0, baseRadius * 0.16f, baseRadius * 0.07f, ringSegments, -age * 42.0f,
+                1.0f, 1.0f, 1.0f, baseAlpha);
 
             // 4. Levitating & Vibrating 3D Sacred Golden Crystal Prisms (Octahedrons)
             int prismCount = 8 + (int) (charge * 6); // 8 to 14 prisms
@@ -193,11 +195,15 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
 
         float nx = -dz / len * width;
         float nz = dx / len * width;
-
+        float tip = 0.22f;
         consumer.addVertex(matrix, x1 - nx, 0.04f, z1 - nz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x1 + nx, 0.04f, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, 0.04f, z2 + nz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, 0.04f, z2 - nz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * tip, 0.04f, z2 + nz * tip).setColor(r, g, b, a * 0.12f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * tip, 0.04f, z2 - nz * tip).setColor(r, g, b, a * 0.12f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 - nx * 0.28f, 0.05f, z1 - nz * 0.28f).setColor(1.0f, 0.95f, 0.72f, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 + nx * 0.28f, 0.05f, z1 + nz * 0.28f).setColor(1.0f, 0.95f, 0.72f, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * 0.06f, 0.05f, z2 + nz * 0.06f).setColor(1.0f, 0.95f, 0.72f, a * 0.1f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * 0.06f, 0.05f, z2 - nz * 0.06f).setColor(1.0f, 0.95f, 0.72f, a * 0.1f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawRotatingRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {

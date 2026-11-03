@@ -65,7 +65,8 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
 
         // Smooth deployment expansion in first 6 ticks, smooth collapse in last 10 ticks
         float entrance = Math.min(1.0f, age / 6.0f);
-        float exit = Math.min(1.0f, (maxLife - age) / 10.0f);
+        float exitLinear = Math.min(1.0f, (maxLife - age) / 10.0f);
+        float exit = exitLinear * exitLinear * (3.0f - 2.0f * exitLinear);
         float scaleMultiplier = (float) Math.sin(entrance * (Math.PI / 2.0)) * Math.max(0.0f, exit);
         if (scaleMultiplier <= 0.001f) return;
 
@@ -123,16 +124,42 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
                 }
             }
 
+            // Brighter inner shell of the same dome, so the clock has a hot core under the glass.
+            int coreLats = 8;
+            int coreLons = 28;
+            float coreRadius = radius * 0.72f;
+            float coreHeight = coreRadius * 1.05f;
+            for (int lat = 0; lat < coreLats; lat++) {
+                float latProgress1 = lat / (float) coreLats;
+                float latProgress2 = (lat + 1) / (float) coreLats;
+                float y1 = 0.12f + (float) Math.sin(latProgress1 * (Math.PI / 2.0)) * coreHeight;
+                float y2 = 0.12f + (float) Math.sin(latProgress2 * (Math.PI / 2.0)) * coreHeight;
+                float r1 = coreRadius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
+                float r2 = coreRadius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
+                float coreAlpha = (0.05f + latProgress1 * 0.16f) * pulse * fade;
+                for (int lon = 0; lon < coreLons; lon++) {
+                    double angleOffset = (-age * 0.6f) * (Math.PI / 180.0);
+                    double a1 = ((lon / (double) coreLons) * Math.PI * 2.0) + angleOffset;
+                    double a2 = (((lon + 1) / (double) coreLons) * Math.PI * 2.0) + angleOffset;
+                    float x1 = (float) Math.cos(a1) * r1;
+                    float z1 = (float) Math.sin(a1) * r1;
+                    float x2 = (float) Math.cos(a2) * r1;
+                    float z2 = (float) Math.sin(a2) * r1;
+                    float x3 = (float) Math.cos(a2) * r2;
+                    float z3 = (float) Math.sin(a2) * r2;
+                    float x4 = (float) Math.cos(a1) * r2;
+                    float z4 = (float) Math.sin(a1) * r2;
+                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
+                        0.85f, 0.96f, 1.0f, coreAlpha);
+                }
+            }
+
             // 2. Physical 3D Rotating Clock Decal & Ground Chronometer Mandala
             int groundSegments = 48;
 
             // Outer Chrono Rim
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius, radius * 0.91f, groundSegments, age * 6.0f,
                 0.70f, 0.92f, 1.0f, 0.80f * pulse * fade);
-
-            // Minute Track Ring
-            drawRotatingRing(matrix, buffer, 0, 0.07f, 0, radius * 0.88f, radius * 0.82f, groundSegments, -age * 8.0f,
-                0.90f, 0.96f, 1.0f, 0.70f * pulse * fade);
 
             // 12 Physical 3D Hour Marker Steles (Placed every 30 degrees)
             for (int h = 0; h < 12; h++) {
@@ -147,24 +174,16 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
                 boolean isCardinal = (h % 3 == 0);
                 float markerWidth = isCardinal ? 0.28f : 0.16f;
 
-                drawTrenchSegment(matrix, buffer,
-                    hx * rStart, hz * rStart,
-                    hx * rEnd, hz * rEnd,
-                    markerWidth,
-                    isCardinal ? 1.0f : 0.75f, isCardinal ? 1.0f : 0.92f, 1.0f, 0.90f * pulse * fade);
+                float lift = isCardinal ? 0.16f : 0.09f;
+                drawLash(matrix, buffer,
+                    hx * rStart, 0.06f, hz * rStart,
+                    hx * (rStart + rEnd) * 0.5f, lift, hz * (rStart + rEnd) * 0.5f,
+                    hx * rEnd, 0.05f, hz * rEnd,
+                    markerWidth * 0.45f, 5,
+                    isCardinal ? 0.75f : 0.45f, isCardinal ? 0.92f : 0.78f, 1.0f,
+                    1.0f, 1.0f, 1.0f,
+                    0.92f * pulse * fade);
             }
-
-            // Outer Rotating Runic Astrolabe Ring
-            drawRotatingRing(matrix, buffer, 0, 0.09f, 0, radius * 0.62f, radius * 0.50f, groundSegments, age * 12.0f,
-                0.60f, 0.88f, 1.0f, 0.75f * pulse * fade);
-
-            // Inner Counter-Rotating Glyph Ring
-            drawRotatingRing(matrix, buffer, 0, 0.11f, 0, radius * 0.40f, radius * 0.28f, groundSegments, -age * 16.0f,
-                0.85f, 0.75f, 1.0f, 0.80f * pulse * fade);
-
-            // Central 12-Point Starburst Chronometer Seal
-            drawRotatingRing(matrix, buffer, 0, 0.13f, 0, radius * 0.22f, 0.0f, 12, age * 20.0f,
-                0.98f, 0.98f, 1.0f, 0.85f * pulse * fade);
 
             // 3. Physical 3D Clock Hands (Reversing in Real-Time)
             // Hour Hand: sweeping backwards at -age * 15 deg
@@ -200,57 +219,6 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             // 6. Zenith Stasis Apex Jewel
             drawOctahedralJewel(matrix, buffer, 0, domeHeight + 0.1f, 0, 0.85f * scaleMultiplier, age * 30.0f,
                 0.95f, 0.98f, 1.0f, 0.95f * fade);
-        });
-
-        // Additive glow pass (T1 + T6): a faint oversized dome shell blooms
-        // around the matte dome, and a soft ground glow disc anchors the rift
-        // to the floor so it sits in the scene instead of floating over it.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            int haloLatitudes = 10;
-            int haloLongitudes = 32;
-            float haloRadius = radius * 1.03f;
-            float haloHeight = haloRadius * 1.05f;
-
-            for (int lat = 0; lat < haloLatitudes; lat++) {
-                float latProgress1 = lat / (float) haloLatitudes;
-                float latProgress2 = (lat + 1) / (float) haloLatitudes;
-
-                float y1 = 0.1f + (float) Math.sin(latProgress1 * (Math.PI / 2.0)) * haloHeight;
-                float y2 = 0.1f + (float) Math.sin(latProgress2 * (Math.PI / 2.0)) * haloHeight;
-
-                float r1 = haloRadius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
-                float r2 = haloRadius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
-
-                float haloAlpha = (0.05f + latProgress1 * 0.05f) * pulse * fade;
-
-                for (int lon = 0; lon < haloLongitudes; lon++) {
-                    double angleOffset = (age * (1.0f + lat * 0.25f)) * (Math.PI / 180.0);
-                    double a1 = ((lon / (double) haloLongitudes) * Math.PI * 2.0) + angleOffset;
-                    double a2 = (((lon + 1) / (double) haloLongitudes) * Math.PI * 2.0) + angleOffset;
-
-                    float x1 = (float) Math.cos(a1) * r1;
-                    float z1 = (float) Math.sin(a1) * r1;
-                    float x2 = (float) Math.cos(a2) * r1;
-                    float z2 = (float) Math.sin(a2) * r1;
-
-                    float x3 = (float) Math.cos(a2) * r2;
-                    float z3 = (float) Math.sin(a2) * r2;
-                    float x4 = (float) Math.cos(a1) * r2;
-                    float z4 = (float) Math.sin(a1) * r2;
-
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
-                        0.50f, 0.85f, 1.0f, haloAlpha);
-                }
-            }
-
-            // Ground anchor glow: wide faint wash under the astrolabe plus a
-            // brighter heart disc at the center.
-            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, radius * 1.02f, radius * 0.50f, 48, age * 6.0f,
-                0.45f, 0.85f, 1.0f, 0.13f * pulse * fade);
-            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, radius * 0.45f, 0.0f, 24, -age * 10.0f,
-                0.70f, 0.95f, 1.0f, 0.10f * pulse * fade);
         });
 
         poseStack.popPose();
@@ -293,24 +261,84 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
         }
     }
 
+    private static void drawLash(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float xc, float yc, float zc,
+                                 float x1, float y1, float z1,
+                                 float width, int steps,
+                                 float er, float eg, float eb,
+                                 float cr, float cg, float cb,
+                                 float alpha) {
+        int n = Math.max(4, steps);
+        float px = x0;
+        float py = y0;
+        float pz = z0;
+        for (int i = 1; i <= n; i++) {
+            float t = i / (float) n;
+            float u = 1.0f - t;
+            float x = u * u * x0 + 2.0f * u * t * xc + t * t * x1;
+            float y = u * u * y0 + 2.0f * u * t * yc + t * t * y1;
+            float z = u * u * z0 + 2.0f * u * t * zc + t * t * z1;
+            float w = width * (1.0f - t * 0.9f);
+            float a = alpha * (1.0f - t * t);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w, er, eg, eb, a);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.32f, cr, cg, cb, Math.min(1.0f, a * 1.2f));
+            px = x;
+            py = y;
+            pz = z;
+        }
+    }
+
+    private static void lashSpan(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float x1, float y1, float z1,
+                                 float width,
+                                 float r, float g, float b, float a) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float ax = 0.0f;
+        float ay = 1.0f;
+        float az = 0.0f;
+        if (dx * dx + dz * dz < dy * dy) {
+            ax = 1.0f;
+            ay = 0.0f;
+            az = 0.0f;
+        }
+        float px = dy * az - dz * ay;
+        float py = dz * ax - dx * az;
+        float pz = dx * ay - dy * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        if (plen < 0.0001f) {
+            return;
+        }
+        float s = width / plen;
+        px *= s;
+        py *= s;
+        pz *= s;
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+    }
+
     private static void drawClockHand(Matrix4f matrix, VertexConsumer consumer, float angleRad, float length, float baseWidth, float yLevel, float r, float g, float b, float a) {
         float cosA = (float) Math.cos(angleRad);
         float sinA = (float) Math.sin(angleRad);
-
-        float tipX = cosA * length;
-        float tipZ = sinA * length;
-
-        float normX = -sinA * baseWidth * 0.5f;
-        float normZ = cosA * baseWidth * 0.5f;
-
-        // Tail opposite side
-        float tailX = -cosA * (baseWidth * 1.2f);
-        float tailZ = -sinA * (baseWidth * 1.2f);
-
-        consumer.addVertex(matrix, tailX - normX, yLevel, tailZ - normZ).setColor(r, g, b, a * 0.8f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tailX + normX, yLevel, tailZ + normZ).setColor(r, g, b, a * 0.8f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, yLevel, tipZ).setColor(1.0f, 1.0f, 1.0f, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, yLevel, tipZ).setColor(1.0f, 1.0f, 1.0f, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        float tail = baseWidth * 1.15f;
+        drawLash(matrix, consumer,
+            -cosA * tail, yLevel, -sinA * tail,
+            cosA * length * 0.42f - sinA * baseWidth * 1.4f, yLevel + 0.08f, sinA * length * 0.42f + cosA * baseWidth * 1.4f,
+            cosA * length, yLevel + 0.02f, sinA * length,
+            baseWidth * 0.55f, 6,
+            r * 0.65f, g * 0.75f, b,
+            1.0f, 1.0f, 1.0f,
+            a
+        );
     }
 
     private static void drawTiltedOrbitalRing(Matrix4f matrix, VertexConsumer consumer, float radius, float tiltDeg, float rotDeg, float r, float g, float b, float a) {
@@ -344,12 +372,10 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
     }
 
     private static void drawMeridianStream(Matrix4f matrix, VertexConsumer consumer, double angle, float radius, float height, int steps, float r, float g, float b, float a) {
-        float ribWidth = 0.14f;
         float sinA = (float) Math.sin(angle);
         float cosA = (float) Math.cos(angle);
-
-        float normX = -sinA * ribWidth * 0.5f;
-        float normZ = cosA * ribWidth * 0.5f;
+        float sideX = -sinA;
+        float sideZ = cosA;
 
         for (int i = 0; i < steps; i++) {
             float p1 = i / (float) steps;
@@ -366,10 +392,22 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             float x2 = cosA * r2;
             float z2 = sinA * r2;
 
-            consumer.addVertex(matrix, x1 - normX, y1, z1 - normZ).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1 + normX, y1, z1 + normZ).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2 + normX, y2, z2 + normZ).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2 - normX, y2, z2 - normZ).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            float w1 = 0.07f * (1.0f - p1 * 0.75f);
+            float w2 = 0.07f * (1.0f - p2 * 0.75f);
+            float a1 = a * (1.0f - p1 * 0.45f);
+            float a2 = a * (1.0f - p2 * 0.45f);
+
+            consumer.addVertex(matrix, x1 - sideX * w1, y1, z1 - sideZ * w1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
+            consumer.addVertex(matrix, x1 + sideX * w1, y1, z1 + sideZ * w1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
+            consumer.addVertex(matrix, x2 + sideX * w2, y2, z2 + sideZ * w2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
+            consumer.addVertex(matrix, x2 - sideX * w2, y2, z2 - sideZ * w2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
+
+            float c1 = w1 * 0.32f;
+            float c2 = w2 * 0.32f;
+            consumer.addVertex(matrix, x1 - sideX * c1, y1 + 0.02f, z1 - sideZ * c1).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, a1 * 1.15f)).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
+            consumer.addVertex(matrix, x1 + sideX * c1, y1 + 0.02f, z1 + sideZ * c1).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, a1 * 1.15f)).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
+            consumer.addVertex(matrix, x2 + sideX * c2, y2 + 0.02f, z2 + sideZ * c2).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, a2 * 1.15f)).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
+            consumer.addVertex(matrix, x2 - sideX * c2, y2 + 0.02f, z2 - sideZ * c2).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, a2 * 1.15f)).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
         }
     }
 

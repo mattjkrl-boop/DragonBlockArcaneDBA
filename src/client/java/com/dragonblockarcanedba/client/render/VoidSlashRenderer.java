@@ -57,111 +57,70 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
     public void submit(SlashRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         RenderType renderType = KiRenderHelper.kiRenderType();
 
-        float maxLife = 40.0f;
-        float progress = Math.min(1.0f, state.age / maxLife);
-        float fade = (1.0f - progress * progress);
+        float progress = Math.min(1.0f, state.age / 40.0f);
+        float open = ease(Math.min(1.0f, state.age / 6.0f));
+        float close = ease(Math.max(0.0f, (progress - 0.70f) / 0.30f));
+        float fade = (1.0f - close) * open;
+        if (fade <= 0.01f) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
+
+        float radius = (1.45f + 0.40f * open) * (1.0f - 0.62f * close);
+        float band = 0.30f * (1.0f - 0.35f * close);
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
-        if (state.tiltRight) {
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(42.0f)));
-        } else {
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(-42.0f)));
-        }
-
-        // T4: a gentle in-flight roll oscillation around the signature tilt,
-        // so the crescent feels alive while it travels instead of frozen.
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees((float) Math.sin(state.age * 0.25f) * 4.0f)));
-
-        float span = 4.2f;
-        float chord = 1.35f;
-        int segments = 28;
-
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-
-            // 1. Outer Deep Abyssal Void Aura (Expanding dark spatial distortion)
-            drawVolumetricCrescent(matrix, buffer, span + 0.45f, chord + 0.40f, 0.28f, 0.60f, segments,
-                0.08f, 0.0f, 0.16f, 0.90f * fade);
-
-            // 2. Radiant Violet Void Blade Crest
-            drawVolumetricCrescent(matrix, buffer, span, chord, 0.16f, 0.45f, segments,
-                0.60f, 0.05f, 0.95f, 0.95f * fade);
-
-            // 3. Cyan Plasma Ethereal Core
-            drawVolumetricCrescent(matrix, buffer, span * 0.85f, chord * 0.85f, 0.10f, 0.30f, segments,
-                0.15f, 0.92f, 1.0f, 0.98f * fade);
-
-            // 4. Pure White Hyper-Velocity Cutting Edge
-            drawVolumetricCrescent(matrix, buffer, span * 0.65f, chord * 0.65f, 0.05f, 0.12f, segments,
-                1.0f, 1.0f, 1.0f, 1.0f * fade);
-
-            // 5. Transversal Tip Winglet Flares (3D sharp tip spurs)
-            drawTipSpurs(matrix, buffer, span, chord, 0.18f, fade);
-        });
-
-        // T1: additive halo pass tracing the violet blade crescent slightly
-        // larger, so the slash blooms around its dark outer aura.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            drawVolumetricCrescent(matrix, buffer, span + 0.30f, chord + 0.28f, 0.34f, 0.55f, segments,
-                0.34f, 0.03f, 0.54f, 0.26f * fade);
+            drawVoidRing(matrix, buffer, radius * 1.16f, band * 1.25f, 0.55f, 0.08f, 0.0f, 0.16f, 0.80f * fade);
+            drawVoidRing(matrix, buffer, radius, band, 0.28f, 0.60f, 0.05f, 0.95f, 0.95f * fade);
+            drawVoidRing(matrix, buffer, radius, band * 0.45f, 0.12f, 0.15f, 0.92f, 1.0f, fade);
+            drawVoidRing(matrix, buffer, radius, band * 0.14f, 0.0f, 1.0f, 1.0f, 1.0f, fade);
+            float edgeLeft = 1.0f - close;
+            drawVoidRing(matrix, buffer, radius * 1.22f, band * 0.18f * edgeLeft, 0.75f * edgeLeft, 0.20f, 0.95f, 1.0f, fade * edgeLeft);
+            drawVoidRing(matrix, buffer, radius, band * 0.05f * (0.35f + 0.65f * edgeLeft), 0.08f * edgeLeft, 1.0f, 1.0f, 1.0f, fade);
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-
-            float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord;
-            float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord;
-
-            float th1 = thickness * (1.0f - Math.abs(t1) * 0.75f);
-            float th2 = thickness * (1.0f - Math.abs(t2) * 0.75f);
-
-            float z1Trail = z1 - trailLength * (1.0f - Math.abs(t1));
-            float z2Trail = z2 - trailLength * (1.0f - Math.abs(t2));
-
-            // Top Surface (Leading edge to trailing wake)
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2 * 0.3f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, th1 * 0.3f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Bottom Surface
-            consumer.addVertex(matrix, x1, -th1 * 0.3f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2 * 0.3f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-            // Front Leading Bevel Face (Volumetric front edge)
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
+    private static float ease(float t) {
+        float c = Math.max(0.0f, Math.min(1.0f, t));
+        return c * c * (3.0f - 2.0f * c);
     }
 
-    private static void drawTipSpurs(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float spurSize, float fade) {
-        // Left Tip Spur
-        consumer.addVertex(matrix, -span, 0, 0).setColor(0.15f, 0.95f, 1.0f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span - spurSize * 1.5f, 0, -spurSize * 2.0f).setColor(0.6f, 0.05f, 0.95f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span + spurSize * 0.5f, 0, -spurSize).setColor(0.15f, 0.95f, 1.0f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span, 0, 0).setColor(0.15f, 0.95f, 1.0f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+    /**
+     * A closed ring facing the direction of travel. The empty middle is the void,
+     * the white line is the core, cyan is the edge, and the band slips backward
+     * so the ring has a follow-through before it collapses.
+     */
+    private static void drawVoidRing(Matrix4f matrix, VertexConsumer consumer, float radius, float band, float trail, float r, float g, float b, float a) {
+        int segments = 32;
+        float outer = radius + band;
+        float inner = Math.max(0.08f, radius - band);
+        for (int i = 0; i < segments; i++) {
+            double a1 = (i / (double) segments) * Math.PI * 2.0;
+            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
+            float c1 = (float) Math.cos(a1);
+            float s1 = (float) Math.sin(a1);
+            float c2 = (float) Math.cos(a2);
+            float s2 = (float) Math.sin(a2);
 
-        // Right Tip Spur
-        consumer.addVertex(matrix, span, 0, 0).setColor(0.15f, 0.95f, 1.0f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span + spurSize * 1.5f, 0, -spurSize * 2.0f).setColor(0.6f, 0.05f, 0.95f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span - spurSize * 0.5f, 0, -spurSize).setColor(0.15f, 0.95f, 1.0f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span, 0, 0).setColor(0.15f, 0.95f, 1.0f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, c1 * inner, s1 * inner, 0.0f).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, c2 * inner, s2 * inner, 0.0f).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, c2 * outer, s2 * outer, 0.0f).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, c1 * outer, s1 * outer, 0.0f).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+
+            if (trail > 0.01f) {
+                consumer.addVertex(matrix, c1 * inner, s1 * inner, 0.0f).setColor(r, g, b, a * 0.65f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, c2 * inner, s2 * inner, 0.0f).setColor(r, g, b, a * 0.65f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, c2 * outer, s2 * outer, -trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, c1 * outer, s1 * outer, -trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            }
+        }
     }
 }

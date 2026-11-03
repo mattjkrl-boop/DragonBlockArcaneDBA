@@ -18,7 +18,7 @@ def gen(race, out):
     for b in g['bones']:
         if b['name'] in GROUP:
             gn=grp(b['name'])
-        else: continue  # skip eyelids, tail, locators (rendered by dedicated layers)
+        else: continue  # BPM eyelid bones are floating plates; the face texels blink instead
         if b.get('rotation') and any(b['rotation']): print('warn rotated bone',race,b['name'])
         for c in b.get('cubes',[]):
             if c.get('rotation') and any(c['rotation']): print('warn rotated cube',race,b['name'])
@@ -193,6 +193,79 @@ def gen_bbmodel(race,out):
                         idx.append('%d/%d/%d'%(vi,vi,ni)); vi+=1
                     L.append('f '+' '.join(idx))
     open(out,'w').write('\n'.join(L)+'\n')
+
+def stamp_base_face_eyes():
+    """Paint eyes onto the unset base face and a closed eyelid of the same texels.
+
+    base.obj is the BPM universal humanoid. Its face is a flat gray north quad; the
+    old blink was a pair of plates (eyesopen / eyesclosed) in front of it. Those
+    plates are stripped. The eyes live on the face UV that sits just under the brow.
+    """
+    from PIL import Image
+    tex_dir = pathlib.Path(__file__).resolve().parent.parent / 'src/main/resources/assets/dragonblockarcanedba/textures/entity/player'
+    obj_path = pathlib.Path(__file__).resolve().parent.parent / 'src/main/resources/assets/dragonblockarcanedba/models/3d/base.obj'
+    lines = obj_path.read_text().splitlines()
+    kept = []
+    skip = False
+    for line in lines:
+        if line.startswith('o '):
+            skip = line.split()[1] in ('eyesopen', 'eyesclosed')
+        if not skip:
+            kept.append(line)
+    obj_path.write_text('\n'.join(kept).rstrip() + '\n')
+
+    # Face quad UV is pixels x 93-108, y 138-172. Eyes sit under the brow.
+    # Each tuple is outer, sclera, iris, inner so the iris sits toward the nose.
+    # Left eye (model +x) is columns 95-98. Right eye is columns 103-106.
+    eyes = ((95, 96, 97, 98), (106, 105, 104, 103))
+    NONE = (0, 0, 0, 0)
+    BLUE = (0, 0, 255, 255)
+    base = Image.open(tex_dir / 'base.png').convert('RGBA')
+    mask = Image.open(tex_dir / 'base_mask.png').convert('RGBA')
+    bp, mp = base.load(), mask.load()
+    for cols in eyes:
+        outer, sclera, iris, inner = cols
+        for x in cols:
+            bp[x, 157] = (32, 32, 32, 255); mp[x, 157] = NONE
+            bp[x, 160] = (150, 150, 150, 255); mp[x, 160] = NONE
+        for x, rgb, ch in (
+                (outer, (32, 32, 32), NONE), (sclera, (248, 248, 248), NONE),
+                (iris, (235, 235, 235), BLUE), (inner, (32, 32, 32), NONE)):
+            bp[x, 158] = rgb + (255,); mp[x, 158] = ch
+        for x, rgb, ch in (
+                (outer, (32, 32, 32), NONE), (sclera, (248, 248, 248), NONE),
+                (iris, (160, 160, 160), BLUE), (inner, (32, 32, 32), NONE)):
+            bp[x, 159] = rgb + (255,); mp[x, 159] = ch
+    for y in range(248, 256):
+        for x in range(248, 256):
+            mp[x, y] = NONE
+    blink = base.copy(); blink_mask = mask.copy()
+    bip, mip = blink.load(), blink_mask.load()
+    for cols in eyes:
+        outer, a, b, inner = cols
+        for x in cols:
+            bip[x, 158] = (148, 148, 148, 255); mip[x, 158] = NONE
+        for x, lum in ((outer, 120), (a, 200), (b, 200), (inner, 120)):
+            bip[x, 159] = (lum, lum, lum, 255); mip[x, 159] = BLUE
+    def save_png(img, path, tries=8):
+        import time
+        last = None
+        for i in range(tries):
+            try:
+                img.save(path)
+                return
+            except OSError as e:
+                last = e
+                time.sleep(0.2 * (i + 1))
+        raise last
+    for stem in ('base', 'universal_humanoid'):
+        save_png(base, tex_dir / (stem + '.png' if stem == 'base' else stem + '_base.png'))
+        save_png(mask, tex_dir / (stem + '_mask.png'))
+        save_png(blink, tex_dir / (stem + '_blink.png'))
+        save_png(blink_mask, tex_dir / (stem + '_blink_mask.png'))
+    print('stamped base face eyes; stripped eye plates')
+
+stamp_base_face_eyes()
 
 for r in sys.argv[1:]:
     bbp=BB/(r+'.bbmodel')

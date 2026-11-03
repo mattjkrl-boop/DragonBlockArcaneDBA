@@ -58,80 +58,30 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
 
         float expansionEase = (float) Math.sin(progress * (Math.PI / 2.0));
         float currentRadius = Math.max(0.5f, expansionEase * state.maxRadius);
-        float alpha = (1.0f - (progress * progress)) * 0.92f;
+        float alpha = (1.0f - smooth(progress)) * 0.92f;
+        float crest = 0.85f * (1.0f - smooth(progress));
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-
-            // 1. Raised Beveled 3D Heroic Golden Shockwave Ring
-            int segments = 44;
-            float ringWidth = Math.min(1.5f, currentRadius * 0.35f);
+            float ringWidth = Math.min(0.85f, currentRadius * 0.16f);
             float rOuter = currentRadius;
             float rInner = Math.max(0.1f, currentRadius - ringWidth);
-            float crestHeight = 0.70f * (1.0f - progress * 0.75f);
-
-            drawBeveledShockRing(matrix, buffer, 0, 0.05f, 0, rOuter, rInner, crestHeight, segments,
+            drawBeveledShockRing(matrix, buffer, 0, 0.05f, 0, rOuter, rInner, crest, 40,
                 1.0f, 0.84f, 0.0f, alpha,
-                1.0f, 1.0f, 0.90f, alpha * 0.95f
+                0.0f, 0.95f, 1.0f, alpha
             );
-
-            // 2. Secondary Inner Cyan Harmonic Compression Ring
-            float rSubOuter = currentRadius * 0.58f;
-            float rSubInner = Math.max(0.05f, rSubOuter - (ringWidth * 0.6f));
-            drawFlatRing(matrix, buffer, 0, 0.08f, 0, rSubOuter, rSubInner, 32, 0.0f, 0.95f, 1.0f, alpha * 0.70f);
-
-            // 3. Physical Vertical Heroic Valor Blades / Crystalline Needles
-            int shardCount = 18;
-            float shardRadius = currentRadius * 0.85f;
-            float shardHeight = 1.7f * (1.0f - progress);
-
-            for (int i = 0; i < shardCount; i++) {
-                double angle = (i / (double) shardCount) * Math.PI * 2.0 + (i % 2 == 0 ? 0.05 : -0.05);
-                float sx = (float) Math.cos(angle) * shardRadius;
-                float sz = (float) Math.sin(angle) * shardRadius;
-
-                // Outward radial lean
-                float leanX = (float) Math.cos(angle) * 0.45f * (1.0f - progress);
-                float leanZ = (float) Math.sin(angle) * 0.45f * (1.0f - progress);
-
-                float shardWidth = 0.30f * (1.0f - progress * 0.5f);
-                float perpX = (float) -Math.sin(angle) * shardWidth;
-                float perpZ = (float) Math.cos(angle) * shardWidth;
-
-                // 3D Shard Spike
-                drawTriangle(matrix, buffer,
-                    sx - perpX, 0.05f, sz - perpZ,
-                    sx + perpX, 0.05f, sz + perpZ,
-                    sx + leanX, 0.05f + shardHeight, sz + leanZ,
-                    1.0f, 0.84f, 0.0f, alpha * 0.88f
-                );
-                // Backface
-                drawTriangle(matrix, buffer,
-                    sx + perpX, 0.05f, sz + perpZ,
-                    sx - perpX, 0.05f, sz - perpZ,
-                    sx + leanX, 0.05f + shardHeight, sz + leanZ,
-                    0.0f, 0.95f, 1.0f, alpha * 0.88f
-                );
-            }
-
-            // 4. Ground Epicenter Starburst Core
-            float coreRadius = Math.max(0.2f, (1.0f - progress) * 2.2f);
-            drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreRadius, 0.0f, 24, 1.0f, 0.98f, 0.85f, alpha * 0.95f);
-        });
-
-        // Additive halo pass: a wider faint copy of the crest ring and the
-        // epicenter disc so the shockwave blooms and anchors to the ground.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawFlatRing(matrix, buffer, 0, 0.05f, 0, currentRadius * 1.08f, Math.max(0.1f, currentRadius * 0.92f), 44,
-                1.0f, 0.84f, 0.0f, alpha * 0.16f);
-            float coreRadius = Math.max(0.2f, (1.0f - progress) * 2.2f);
-            drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreRadius * 1.3f, 0.0f, 24, 1.0f, 0.98f, 0.85f, alpha * 0.18f);
+            float coreOuter = Math.max(0.12f, rInner * 0.72f);
+            drawFlatRing(matrix, buffer, 0, 0.09f, 0, coreOuter, coreOuter * 0.62f, 32, 1.0f, 1.0f, 1.0f, alpha * 0.9f);
         });
 
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
     }
 
     private static void drawBeveledShockRing(Matrix4f matrix, VertexConsumer consumer,

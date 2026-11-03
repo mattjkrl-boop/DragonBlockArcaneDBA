@@ -32,6 +32,8 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         public float ageInTicks;
         public boolean isAttached;
         public int orbitIndex;
+        public float yRot;
+        public float xRot;
     }
 
     @Override
@@ -45,6 +47,8 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         state.ageInTicks = entity.tickCount + partialTicks;
         state.isAttached = entity.isAttached();
         state.orbitIndex = entity.getOrbitIndex();
+        state.yRot = entity.getYRot();
+        state.xRot = entity.getXRot();
     }
 
     @Override
@@ -56,66 +60,77 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         float age = state.ageInTicks;
         boolean attached = state.isAttached;
         int orbit = state.orbitIndex;
+        float stretch = ease(Math.min(1.0f, age / 6.0f));
 
-        // Dynamic scale & orientation
-        float baseScale = attached ? 0.48f : 0.42f;
+        float baseScale = attached ? 0.55f : 0.46f;
         poseStack.scale(baseScale, baseScale, baseScale);
-
-        // Rotation & rhythmic constricting motion
-        float spinSpeed = attached ? 12.0f : 24.0f;
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * spinSpeed + (orbit * 36.0f))));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees((float) Math.sin(age * 0.2f + orbit) * 18.0f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(age * (attached ? 6.0f : 14.0f))));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-
             float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.35f + orbit);
-
-            // 1. Interlocking 3D Heavy Spiked Gothic Chain Links (4 links along vertical axis)
-            float linkSpacing = 0.72f;
-            for (int i = 0; i < 4; i++) {
-                float ly = (i - 1.5f) * linkSpacing;
-                boolean isAlt = (i % 2 == 1);
-
-                // Alternate link orientation 90 degrees
-                drawSpikedChainLink(matrix, buffer, 0, ly, 0, isAlt, pulse);
+            int links = attached ? 7 : 6;
+            float prevX = 0.0f;
+            float prevY = 0.0f;
+            float prevZ = 0.0f;
+            boolean hasPrev = false;
+            for (int i = 0; i < links; i++) {
+                float along = i / (float) (links - 1);
+                float lag = along * (0.25f + 0.75f * stretch);
+                float x;
+                float y;
+                float z;
+                if (attached) {
+                    float arc = (along - 0.5f) * 2.4f + orbit * 0.35f;
+                    float radius = 1.15f * (1.0f - 0.18f * stretch);
+                    x = (float) Math.cos(arc) * radius;
+                    y = (float) Math.sin(along * Math.PI) * 0.35f;
+                    z = (float) Math.sin(arc) * radius;
+                } else {
+                    x = 0.0f;
+                    y = 0.0f;
+                    z = -lag * 3.4f;
+                }
+                drawSpikedChainLink(matrix, buffer, x, y, z, (i % 2) == 1, pulse);
+                if (hasPrev) {
+                    drawChainSpine(matrix, buffer, prevX, prevY, prevZ, x, y, z);
+                }
+                prevX = x;
+                prevY = y;
+                prevZ = z;
+                hasPrev = true;
             }
-
-            // 2. Central Cursed Heavy Shackle / Demonic Collar
-            drawDemonicShackleCollar(matrix, buffer, 0, 0, 0, pulse);
-
-            // 3. 4 Orbiting 3D Runic Diamond Glyphs (Counter-rotating around chain waist)
-            float runeOrbitR = 1.35f * pulse;
-            float runeRot = -age * 22.0f + (orbit * 45.0f);
-            for (int r = 0; r < 4; r++) {
-                double rAngle = (r / 4.0) * Math.PI * 2.0 + Math.toRadians(runeRot);
-                float rx = (float) Math.cos(rAngle) * runeOrbitR;
-                float rz = (float) Math.sin(rAngle) * runeOrbitR;
-                float ry = (float) Math.sin(age * 0.3f + r * 1.5f) * 0.25f;
-
-                drawFloatingRunicGlyph(matrix, buffer, rx, ry, rz, age * 35.0f + r * 90.0f, pulse);
+            if (attached) {
+                float snapIn = ease(Math.min(1.0f, age / 3.0f));
+                float snapOut = ease(Math.max(0.0f, 1.0f - Math.max(0.0f, age - 3.0f) / 5.0f));
+                float snap = snapIn * snapOut;
+                drawDemonicShackleCollar(matrix, buffer, 0, 0, 0, pulse * (0.7f + 0.3f * snapIn));
+                if (snap > 0.02f) {
+                    float ring = 0.35f + 0.85f * snapIn;
+                    int segs = 16;
+                    for (int s = 0; s < segs; s++) {
+                        double a1 = (s / (double) segs) * Math.PI * 2.0;
+                        double a2 = ((s + 1) / (double) segs) * Math.PI * 2.0;
+                        float in = ring * 0.72f;
+                        drawQuad(matrix, buffer,
+                            (float) Math.cos(a1) * in, 0.0f, (float) Math.sin(a1) * in,
+                            (float) Math.cos(a2) * in, 0.0f, (float) Math.sin(a2) * in,
+                            (float) Math.cos(a2) * ring, 0.0f, (float) Math.sin(a2) * ring,
+                            (float) Math.cos(a1) * ring, 0.0f, (float) Math.sin(a1) * ring,
+                            1.0f, 0.85f, 0.95f, snap);
+                    }
+                }
             }
-
-            // 4. Undulating 3D Helical Void Aura Ribbons (Dark purple/crimson energy tendrils)
-            drawAuraRibbons(matrix, buffer, age, orbit, pulse);
-
-            // 5. Pulsating Demonic Hex Octahedron Core
-            float coreSize = 0.38f * pulse;
-            drawHexCore(matrix, buffer, 0, 0, 0, coreSize);
-        });
-
-        // T1: additive halo pass, a larger ghost of the hex core drawn under
-        // the same spin and scale, so the chain's heart blooms.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            float haloPulse = 0.85f + 0.15f * (float) Math.sin(age * 0.35f + orbit);
-            drawHexCore(matrix, buffer, 0, 0, 0, 0.38f * haloPulse * 1.7f);
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static float ease(float t) {
+        float c = Math.max(0.0f, Math.min(1.0f, t));
+        return c * c * (3.0f - 2.0f * c);
     }
 
     private static void drawSpikedChainLink(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, boolean rotated, float pulse) {
@@ -331,11 +346,109 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         }
     }
 
+    /** A curved barb: sheath, white core, and a short wake, not one triangle. */
     private static void drawSpikePyramid(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float tipX, float tipY, float tipZ, float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(1.0f, 0.9f, 1.0f, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(1.0f, 0.9f, 1.0f, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        float bx = (x1 + x2) * 0.5f;
+        float by = (y1 + y2) * 0.5f;
+        float bz = (z1 + z2) * 0.5f;
+        float dx = tipX - bx;
+        float dy = tipY - by;
+        float dz = tipZ - bz;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001f) {
+            return;
+        }
+        float sx = x2 - x1;
+        float sy = y2 - y1;
+        float sz = z2 - z1;
+        float sl = (float) Math.sqrt(sx * sx + sy * sy + sz * sz);
+        if (sl < 0.001f) {
+            sx = 1.0f;
+            sy = 0.0f;
+            sz = 0.0f;
+            sl = 1.0f;
+        }
+        float ux = dx / len;
+        float uy = dy / len;
+        float uz = dz / len;
+        float px = sy * uz - sz * uy;
+        float py = sz * ux - sx * uz;
+        float pz = sx * uy - sy * ux;
+        float pl = (float) Math.sqrt(px * px + py * py + pz * pz);
+        if (pl < 0.001f) {
+            px = 0.0f;
+            py = 1.0f;
+            pz = 0.0f;
+            pl = 1.0f;
+        }
+        px /= pl;
+        py /= pl;
+        pz /= pl;
+        float wx = sx / sl;
+        float wy = sy / sl;
+        float wz = sz / sl;
+        float bow = len * 0.42f;
+        float mx = bx + ux * len * 0.55f + px * bow;
+        float my = by + uy * len * 0.55f + py * bow;
+        float mz = bz + uz * len * 0.55f + pz * bow;
+        float half = sl * 0.5f;
+        spanRibbon(matrix, consumer, bx, by, bz, mx, my, mz, wx, wy, wz, half, half * 0.42f, r, g, b, a, a * 0.8f);
+        spanRibbon(matrix, consumer, mx, my, mz, tipX, tipY, tipZ, wx, wy, wz, half * 0.42f, 0.012f, r, g, b, a * 0.8f, a * 0.35f);
+        spanRibbon(matrix, consumer, bx, by, bz, mx, my, mz, wx, wy, wz, half * 0.22f, half * 0.1f, 1.0f, 0.9f, 0.95f, a, a * 0.9f);
+        spanRibbon(matrix, consumer, mx, my, mz, tipX, tipY, tipZ, wx, wy, wz, half * 0.1f, 0.006f, 1.0f, 0.95f, 1.0f, a * 0.9f, 0.0f);
+        float wake = len * 0.28f;
+        spanRibbon(matrix, consumer, mx, my, mz, mx - px * wake, my - py * wake, mz - pz * wake, wx, wy, wz, half * 0.3f, 0.01f, r, g, b, a * 0.45f, 0.0f);
+    }
+
+    private static void drawChainSpine(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001f) {
+            return;
+        }
+        float px = -dz / len;
+        float pz = dx / len;
+        float bow = Math.min(0.22f, len * 0.18f);
+        float mx = (x1 + x2) * 0.5f + px * bow;
+        float my = (y1 + y2) * 0.5f + bow * 0.35f;
+        float mz = (z1 + z2) * 0.5f + pz * bow;
+        spanRibbon(matrix, consumer, x1, y1, z1, mx, my, mz, px, 0.0f, pz, 0.07f, 0.05f, 0.72f, 0.06f, 0.9f, 0.9f, 0.85f);
+        spanRibbon(matrix, consumer, mx, my, mz, x2, y2, z2, px, 0.0f, pz, 0.05f, 0.035f, 0.72f, 0.06f, 0.9f, 0.85f, 0.7f);
+        spanRibbon(matrix, consumer, x1, y1, z1, mx, my, mz, px, 0.0f, pz, 0.02f, 0.014f, 1.0f, 0.92f, 0.98f, 1.0f, 1.0f);
+        spanRibbon(matrix, consumer, mx, my, mz, x2, y2, z2, px, 0.0f, pz, 0.014f, 0.01f, 1.0f, 0.92f, 0.98f, 1.0f, 0.85f);
+        spanRibbon(matrix, consumer, mx, my, mz, mx - px * bow * 1.6f, my - bow * 0.2f, mz - pz * bow * 1.6f, px, 0.0f, pz, 0.04f, 0.008f, 0.55f, 0.04f, 0.8f, 0.4f, 0.0f);
+    }
+
+    private static void spanRibbon(Matrix4f matrix, VertexConsumer consumer,
+                                   float x1, float y1, float z1, float x2, float y2, float z2,
+                                   float wx, float wy, float wz, float w1, float w2,
+                                   float r, float g, float b, float a1, float a2) {
+        float wlen = (float) Math.sqrt(wx * wx + wy * wy + wz * wz);
+        if (wlen < 0.001f) {
+            wx = 1.0f;
+            wy = 0.0f;
+            wz = 0.0f;
+        } else {
+            wx /= wlen;
+            wy /= wlen;
+            wz /= wlen;
+        }
+        fadeStrip(matrix, consumer, x1 - wx * w1, y1 - wy * w1, z1 - wz * w1, x1 + wx * w1, y1 + wy * w1, z1 + wz * w1, x2 + wx * w2, y2 + wy * w2, z2 + wz * w2, x2 - wx * w2, y2 - wy * w2, z2 - wz * w2, r, g, b, a1, a2);
+        float upx = Math.abs(wy) > 0.8f ? 1.0f : 0.0f;
+        float upy = Math.abs(wy) > 0.8f ? 0.0f : 1.0f;
+        fadeStrip(matrix, consumer, x1 - upx * w1, y1 - upy * w1, z1, x1 + upx * w1, y1 + upy * w1, z1, x2 + upx * w2, y2 + upy * w2, z2, x2 - upx * w2, y2 - upy * w2, z2, r, g, b, a1, a2);
+    }
+
+    private static void fadeStrip(Matrix4f matrix, VertexConsumer consumer,
+                                  float x1, float y1, float z1, float x2, float y2, float z2,
+                                  float x3, float y3, float z3, float x4, float y4, float z4,
+                                  float r, float g, float b, float a1, float a2) {
+        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawDiamondQuad(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float x3, float y3, float z3, float x4, float y4, float z4, float r, float g, float b, float a) {

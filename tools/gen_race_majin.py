@@ -8,7 +8,7 @@ boots and wrist cuffs.
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint, skin_lid
 
 SKIN_V = 212
 VEST = (26, 26, 32); VEST_D = (18, 18, 24); GOLD = (222, 172, 52); GOLD_D = (180, 134, 34)
@@ -34,13 +34,13 @@ for side, bone in ((1, 'right_leg'), (-1, 'left_leg')):
 m.cube('chest', 'body', 'skin_body', [-6.3, 19.8, -4.1], [6.3, 24, 4.1])
 m.cube('belly', 'body', 'skin_body', [-6.7, 12.2, -4.3], [6.7, 20.6, 4.3])
 m.cube('belly_front', 'body', 'skin_body', [-5.9, 13.2, -6.0], [5.9, 20.0, -4.15])
-m.mirror('vest', ('body', 'body'), 'vest', [3.3, 15.6, -4.55], [7.0, 24.3, 4.5])
-m.cube('vest_back', 'body', 'vest', [-7.0, 15.6, 3.3], [7.0, 24.3, 4.55])
-m.cube('cape_top', 'body', 'cape', [-6.9, 23.3, -4.6], [6.9, 24.9, 4.7])
+m.mirror('vest', ('body', 'body'), 'vest', [3.3, 15.6, -4.55], [7.0, 24.0, 4.5])
+m.cube('vest_back', 'body', 'vest', [-7.0, 15.6, 3.3], [7.0, 24.0, 4.55])
+m.cube('cape_top', 'body', 'cape', [-6.9, 23.3, -4.6], [6.9, 24.0, 4.7])
 m.mirror('cape_tie', ('body', 'body'), 'cape', [0.2, 21.2, -4.8], [2.7, 23.5, -4.2])
 m.cube('cape_back', 'body', 'cape', [-5.9, 13.8, 4.6], [5.9, 23.5, 5.05])
-m.cube('belt', 'body', 'vest', [-6.85, 11.5, -4.5], [6.85, 13.5, 4.45])
-m.cube('buckle', 'body', 'buckle', [-2.0, 10.7, -4.92], [2.0, 13.3, -4.48])
+m.cube('belt', 'body', 'vest', [-6.85, 12.0, -4.5], [6.85, 13.5, 4.45])
+m.cube('buckle', 'body', 'buckle', [-2.0, 12.0, -4.92], [2.0, 13.3, -4.48])
 
 # Arms: chubby pink arms, gold wrist cuffs
 m.mirror('upper', ('right_arm', 'left_arm'), 'skin_arm', [6.3, 16.0, -2.4], [10.8, 24.2, 2.4])
@@ -55,7 +55,7 @@ m.spike('tent', [0, 31.6, 0.4], 5.6, 2.7, (-24, 0, -8), False, bone='head', mat=
 m.cube('tent_tip', 'head', 'skin', [0.05, 35.8, -3.0], [1.55, 37.3, -1.55], [0.8, 36.5, -2.25], (-38, 0, -14))
 
 # ------------------------------------------------------------------ painting
-def paint_face(i, j, W, H):
+def paint_face(i, j, W, H, closed=False):
     """Buu face: small dark eyes, huge open smile with tongue."""
     sx = i - W // 2
     k = SKIN_V
@@ -63,8 +63,10 @@ def paint_face(i, j, W, H):
         a = sx if side > 0 else -sx - 1
         if 1 <= a <= 6:
             if j == 8 and 3 <= a <= 5: return (k * 0.82,) * 3, 'R'        # lid shade
-            if j == 9 and 3 <= a <= 5: return (22, 18, 22), None          # dark eyes
-            if j == 10 and a in (3, 5): return (22, 18, 22), None
+            if closed and j == 9 and 3 <= a <= 5: return eye_tint(200)    # small eye shuts to one line
+            if closed and j == 10 and a in (3, 5): return skin_lid(k)
+            if j == 9 and 3 <= a <= 5: return eye_tint(230)                # small eyes, player tint
+            if j == 10 and a in (3, 5): return eye_tint(140)
     if j == 11 and sx == -1: return (k * 0.88,) * 3, 'R'
     if j == 12 and -2 <= sx <= 2: return (110, 52, 64), None              # open smile top
     if j == 13:
@@ -120,7 +122,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
             if fn == 'north' and 0.3 < t < 0.42 and i % 2 == 0: v *= 0.85
             if fn == 'down' or t > 0.85: v *= 0.88
         if mt == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if mt == 'head' and fn == 'down': v *= 0.8
         if edge and mt != 'head': v *= 0.9

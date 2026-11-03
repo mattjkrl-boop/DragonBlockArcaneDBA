@@ -247,7 +247,8 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
             if (nearbyMarked.isEmpty()) break;
 
             // Nearest first: the chain used to take whatever the entity query returned first.
-            nearbyMarked.sort(java.util.Comparator.comparingDouble(e -> e.distanceToSqr(current)));
+            final LivingEntity chainFrom = current;
+            nearbyMarked.sort(java.util.Comparator.comparingDouble(e -> e.distanceToSqr(chainFrom)));
             LivingEntity next = nearbyMarked.get(0);
             chainTargets.add(next);
             visited.add(next.getId());

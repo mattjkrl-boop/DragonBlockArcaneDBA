@@ -9,7 +9,7 @@ the Blockbench sheet.
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint
 
 SKIN_V = 238
 GEM = (146, 102, 224); GEM_L = (182, 144, 248); GEM_D = (110, 72, 178)
@@ -66,8 +66,8 @@ seg_chain('tailprev', 'tail', 'tailp',
           1.9, 0.35, export=False)
 
 # ------------------------------------------------------------------ painting
-def paint_face(i, j, W, H):
-    """Frieza face: narrow red eyes, brow ridge shade, smug smile."""
+def paint_face(i, j, W, H, closed=False):
+    """Frieza face: narrow eyes, brow ridge shade, smug smile."""
     sx = i - W // 2
     k = SKIN_V
     for side in (-1, 1):
@@ -76,8 +76,11 @@ def paint_face(i, j, W, H):
             if j == 7 and a >= 2: return (k * 0.82,) * 3, 'R'             # brow ridge shade
             if j == 9 and 2 <= a <= 6: return (20, 18, 22), None          # liner
             if j == 10:
+                if closed:
+                    return eye_tint(130 if a in (2, 6) else 210)
                 if a in (2, 6): return (20, 18, 22), None
-                if a == 4: return RED, None                               # red iris
+                if a == 3: return eye_tint(100)
+                if a == 4: return eye_tint(235)
                 return (240, 240, 240), None
             if j == 11 and 3 <= a <= 5: return (k * 0.88,) * 3, 'R'
     if j == 12 and sx == -1: return (k * 0.9,) * 3, 'R'
@@ -113,7 +116,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
             if fn == 'down' or t > 0.85: v *= 0.9
         if mt == 'skin_leg' and c['name'].startswith('toe') and fn == 'north' and i % 3 == 1: v *= 0.84
         if mt == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if mt == 'head' and fn == 'down': v *= 0.85
         if edge and mt != 'head': v *= 0.93

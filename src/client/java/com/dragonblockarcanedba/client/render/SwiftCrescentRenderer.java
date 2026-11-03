@@ -66,9 +66,11 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         if (progress >= 1.0f) return;
 
-        float fade = 1.0f - (progress * progress);
-        float growth = 1.0f + progress * 0.45f;
-        float baseScale = state.scale * growth;
+        float open = smooth(Math.min(1.0f, progress / 0.30f));
+        float fade = 1.0f - smooth(progress);
+        float baseScale = state.scale * (0.76f + 0.30f * open);
+        float trail = 0.10f + 0.58f * smooth(Math.min(1.0f, progress / 0.65f));
+        float impact = strike(progress);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -79,51 +81,101 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
 
         float span = 2.4f;
         float chord = 0.85f;
-        int segments = 24;
-
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-
-            // 1. Outer Ethereal Silver-Cyan Spatial Distortion Wake
-            drawVolumetricCrescent(matrix, buffer, span + 0.35f, chord + 0.30f, 0.18f, 0.40f, segments,
-                0.0f, 0.80f, 1.0f, 0.75f * fade);
-
-            // 2. Radiant Razor Silver Plasma Crest
-            drawVolumetricCrescent(matrix, buffer, span, chord, 0.10f, 0.25f, segments,
-                0.85f, 0.95f, 1.0f, 0.95f * fade);
-
-            // 3. Piercing Razor White-Hot Cutting Edge Core
-            drawVolumetricCrescent(matrix, buffer, span * 0.8f, chord * 0.8f, 0.04f, 0.10f, segments,
-                1.0f, 1.0f, 1.0f, 1.0f * fade);
-
-            // 4. Secondary Cross-Cleave Cut & Void Decal (Speed slice in opposing diagonal)
-            float crossSpan = span * 0.75f;
-            float crossChord = -chord * 0.75f;
-            drawVolumetricCrescent(matrix, buffer, crossSpan, crossChord, 0.08f, 0.20f, segments,
-                0.30f, 0.90f, 1.0f, 0.85f * fade);
-
-            // 5. Central Diamond Clash Sparks & Speed Cut Streaks
-            drawDiamondSpark(matrix, buffer, 0, 0, 0, 0.40f * (1.0f - progress * 0.5f), 1.0f, 1.0f, 1.0f, fade);
-            drawDiamondSpark(matrix, buffer, 0.2f, 0.1f, -0.1f, 0.22f * (1.0f - progress * 0.6f), 0.2f, 0.9f, 1.0f, fade * 0.85f);
-            drawDiamondSpark(matrix, buffer, -0.2f, -0.1f, 0.1f, 0.22f * (1.0f - progress * 0.6f), 0.2f, 0.9f, 1.0f, fade * 0.85f);
-
-            // 6. Radial Slicing Shockwave Ring
-            drawShockRing(matrix, buffer, 0, span * 0.65f, span * 0.48f, 24, state.age * 20.0f,
-                0.0f, 0.85f, 1.0f, fade * 0.7f);
-        });
-
-        // Additive halo pass: a wider faint copy of the wake crescent and the
-        // silver crest so the slash blooms instead of reading matte.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawVolumetricCrescent(matrix, buffer, span + 0.60f, chord + 0.50f, 0.26f, 0.50f, segments,
-                0.0f, 0.80f, 1.0f, 0.20f * fade);
-            drawVolumetricCrescent(matrix, buffer, span, chord, 0.14f, 0.30f, segments,
-                0.85f, 0.95f, 1.0f, 0.14f * fade);
+            drawSilverCrescent(matrix, buffer, span, chord, trail, fade, impact);
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
+    }
+
+    /** Bright through the opening of the cut, then gone. */
+    private static float strike(float progress) {
+        if (progress >= 0.40f) return 0.0f;
+        return (float) Math.sin((progress / 0.40f) * Math.PI);
+    }
+
+    /**
+     * One silver crescent. The cyan lip is the edge, the white ribbon is the core,
+     * and the fading wake is the follow-through. The flash at the belly ends.
+     */
+    private static void drawSilverCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float trailLength, float fade, float impact) {
+        int segments = 22;
+        for (int i = 0; i < segments; i++) {
+            float t1 = (i / (float) segments) * 2.0f - 1.0f;
+            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
+            float x1 = t1 * span;
+            float z1 = (1.0f - t1 * t1) * chord;
+            float x2 = t2 * span;
+            float z2 = (1.0f - t2 * t2) * chord;
+            float taper1 = 1.0f - Math.abs(t1) * 0.78f;
+            float taper2 = 1.0f - Math.abs(t2) * 0.78f;
+            float th1 = 0.12f * taper1;
+            float th2 = 0.12f * taper2;
+            float z1Trail = z1 - trailLength * taper1;
+            float z2Trail = z2 - trailLength * taper2;
+
+            consumer.addVertex(matrix, x1, th1, z1).setColor(0.86f, 0.95f, 1.0f, 0.92f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, th2, z2).setColor(0.86f, 0.95f, 1.0f, 0.92f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, th2 * 0.22f, z2Trail).setColor(0.86f, 0.95f, 1.0f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, th1 * 0.22f, z1Trail).setColor(0.86f, 0.95f, 1.0f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+            consumer.addVertex(matrix, x1, -th1 * 0.22f, z1Trail).setColor(0.86f, 0.95f, 1.0f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x2, -th2 * 0.22f, z2Trail).setColor(0.86f, 0.95f, 1.0f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x2, -th2, z2).setColor(0.86f, 0.95f, 1.0f, 0.92f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x1, -th1, z1).setColor(0.86f, 0.95f, 1.0f, 0.92f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+
+            float lip = 0.02f;
+            consumer.addVertex(matrix, x1, -th1, z1).setColor(0.0f, 0.86f, 1.0f, 0.95f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x2, -th2, z2).setColor(0.0f, 0.86f, 1.0f, 0.95f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x2, th2, z2 + lip).setColor(0.0f, 0.86f, 1.0f, 0.95f * fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x1, th1, z1 + lip).setColor(0.0f, 0.86f, 1.0f, 0.95f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+
+            float c1 = th1 * 0.32f;
+            float c2 = th2 * 0.32f;
+            consumer.addVertex(matrix, x1, c1, z1).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, c2, z2).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, 0.0f, z2 - trailLength * 0.18f * taper2).setColor(1.0f, 1.0f, 1.0f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, 0.0f, z1 - trailLength * 0.18f * taper1).setColor(1.0f, 1.0f, 1.0f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        }
+
+        float spur = 0.16f;
+        for (int side = -1; side <= 1; side += 2) {
+            float sign = side;
+            int spurSteps = 5;
+            for (int s = 0; s < spurSteps; s++) {
+                float t1 = s / (float) spurSteps;
+                float t2 = (s + 1) / (float) spurSteps;
+                float z1 = -spur * 1.8f * t1;
+                float z2 = -spur * 1.8f * t2;
+                float bow1 = (float) Math.sin(t1 * Math.PI) * spur * 0.5f;
+                float bow2 = (float) Math.sin(t2 * Math.PI) * spur * 0.5f;
+                float x1 = sign * span + sign * (spur * 1.35f * t1 + bow1);
+                float x2 = sign * span + sign * (spur * 1.35f * t2 + bow2);
+                float w1 = spur * 0.2f * (1.0f - t1);
+                float w2 = spur * 0.2f * (1.0f - t2);
+                float a1 = fade * (1.0f - t1);
+                float a2 = fade * (1.0f - t2) * 0.12f;
+                consumer.addVertex(matrix, x1, -w1, z1).setColor(0.86f, 0.95f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x1, w1, z1).setColor(0.86f, 0.95f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2, w2, z2).setColor(0.0f, 0.86f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2, -w2, z2).setColor(0.0f, 0.86f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x1, -w1 * 0.3f, z1).setColor(1.0f, 1.0f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x1, w1 * 0.3f, z1).setColor(1.0f, 1.0f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2, w2 * 0.3f, z2).setColor(1.0f, 1.0f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2, -w2 * 0.3f, z2).setColor(1.0f, 1.0f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            }
+        }
+
+        if (impact > 0.02f) {
+            drawDiamondSpark(matrix, consumer, 0.0f, 0.0f, chord * 0.45f, 0.20f * impact, 1.0f, 1.0f, 1.0f, impact);
+        }
     }
 
     private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {
@@ -175,6 +227,39 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
         consumer.addVertex(matrix, cx, cy + h, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
         consumer.addVertex(matrix, cx, cy, cz + w).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
         consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        int arms = 4;
+        int steps = 3;
+        for (int arm = 0; arm < arms; arm++) {
+            float ang = arm * ((float) Math.PI * 0.5f) + 0.35f;
+            float dx = (float) Math.cos(ang);
+            float dz = (float) Math.sin(ang);
+            float px = -dz;
+            float pz = dx;
+            for (int i = 0; i < steps; i++) {
+                float t1 = i / (float) steps;
+                float t2 = (i + 1) / (float) steps;
+                float bow1 = (float) Math.sin(t1 * Math.PI) * size * 0.45f;
+                float bow2 = (float) Math.sin(t2 * Math.PI) * size * 0.45f;
+                float d1 = size * (0.35f + 1.15f * t1);
+                float d2 = size * (0.35f + 1.15f * t2);
+                float w1 = size * 0.28f * (1.0f - t1);
+                float w2 = size * 0.28f * (1.0f - t2);
+                float x1 = cx + dx * d1 + px * bow1;
+                float z1 = cz + dz * d1 + pz * bow1;
+                float x2 = cx + dx * d2 + px * bow2;
+                float z2 = cz + dz * d2 + pz * bow2;
+                float a1 = a * (1.0f - t1 * 0.25f);
+                float a2 = a * (1.0f - t2);
+                consumer.addVertex(matrix, x1 - px * w1, cy, z1 - pz * w1).setColor(r, g, b, a1 * 0.4f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x1 + px * w1, cy, z1 + pz * w1).setColor(r, g, b, a1 * 0.4f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2 + px * w2, cy, z2 + pz * w2).setColor(r, g, b, a2 * 0.08f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2 - px * w2, cy, z2 - pz * w2).setColor(r, g, b, a2 * 0.08f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x1 - px * w1 * 0.3f, cy, z1 - pz * w1 * 0.3f).setColor(1.0f, 1.0f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x1 + px * w1 * 0.3f, cy, z1 + pz * w1 * 0.3f).setColor(1.0f, 1.0f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2 + px * w2 * 0.3f, cy, z2 + pz * w2 * 0.3f).setColor(1.0f, 1.0f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2 - px * w2 * 0.3f, cy, z2 - pz * w2 * 0.3f).setColor(1.0f, 1.0f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            }
+        }
     }
 
     private static void drawShockRing(Matrix4f matrix, VertexConsumer consumer, float z, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {

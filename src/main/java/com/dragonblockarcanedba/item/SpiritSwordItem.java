@@ -3,6 +3,7 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.SpiritCannonBeamEntity;
+import com.dragonblockarcanedba.entity.SpiritCleaveEntity;
 import com.dragonblockarcanedba.entity.SpiritImpaleEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -93,9 +94,7 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
 
         // Spirit Cleave: 2% of target's max HP as bonus magic damage
         if (attacker instanceof ServerPlayer serverPlayer) {
-            // Drain discrete Ki for swing duration (~7 ticks at 3.0 attacks/sec)
-            WeaponDrainHelper.drainKiDiscrete(serverPlayer, 55.0, 7);
-
+            // Ki is charged once on the swing, in performSpiritSwing.
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
             float spiritCleave = target.getMaxHealth() * 0.02f;
             target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (spiritCleave)));
@@ -140,6 +139,25 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 1.1f, 1.35f * pitchJitter);
         }
+    }
+
+    /**
+     * The sword's own swing. A miss still throws the divine blade.
+     * A body already in melee reach is left to hurtEnemy so the cut is not paid twice.
+     */
+    public static void performSpiritSwing(ServerPlayer player, ItemStack stack) {
+        if (!WeaponDrainHelper.drainKiDiscrete(player, 55.0, 7)) {
+            return;
+        }
+        ServerLevel level = (ServerLevel) player.level();
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+        float damage = 500.0f + (float) (accessor.dba$getStrength() * 2.0);
+        Vec3 look = player.getLookAngle();
+        SpiritCleaveEntity cleave = new SpiritCleaveEntity(level, player, damage);
+        cleave.setDeltaMovement(look.scale(1.7));
+        level.addFreshEntity(cleave);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.1f, 1.45f);
     }
 
     // --- Right Click: Start holding to fire Spirit Cannon ---

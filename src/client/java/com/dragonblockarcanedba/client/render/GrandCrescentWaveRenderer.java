@@ -15,7 +15,7 @@ import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Grand Crescent Wave in Minecraft 26.2.
- * Renders a massive, physical volumetric 3D golden-white crescent energy greatsword wave:
+ * Renders a tapered golden crescent blade: core, edge, wings, and a wake on the arc.
  * - Multi-layered volumetric 3D double-beveled crescent wave blade
  * - Radiant golden outer canopy, pure white-gold energy core, blinding razor cutting edge
  * - Upper and lower helical vortex wing ribbons
@@ -71,77 +71,127 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         // at 50, leaving up to 30 ticks of invisible damage.
         float maxLife = 80.0f;
         float progress = Math.min(1.0f, state.ageInTicks / maxLife);
-        float fade = (1.0f - progress * progress);
+        float fade = 1.0f - smooth(progress);
+        float open = smooth(Math.min(1.0f, state.ageInTicks / 12.0f));
+        float impact = strike(progress);
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
-        float fpScale = (state.isFirstPersonOwner && state.ageInTicks < 6.0f) 
-            ? (0.55f + (state.ageInTicks / 6.0f) * 0.45f) 
+        float fpScale = (state.isFirstPersonOwner && state.ageInTicks < 6.0f)
+            ? (0.55f + (state.ageInTicks / 6.0f) * 0.45f)
             : 1.0f;
-        float span = 4.8f * fpScale;
-        float chord = 1.6f * fpScale;
-        int segments = 30;
+        float span = 4.8f * fpScale * (0.80f + 0.20f * open);
+        float chord = 1.55f * fpScale * (0.80f + 0.20f * open);
+        int segments = 32;
+        float age = state.ageInTicks;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-
-            // 1. Volumetric 3D Grand Crescent Wave Blade (Thick multi-layered bevel)
-            // Layer A: Outer Radiant Golden Canopy
-            drawVolumetricCrescent(matrix, buffer, span + 0.45f, chord + 0.45f, 0.28f, 0.70f, segments,
-                1.0f, 0.82f, 0.15f, 0.85f * fade);
-
-            // Layer B: Dense Pure White-Gold Core Blade
-            drawVolumetricCrescent(matrix, buffer, span, chord, 0.16f, 0.45f, segments,
-                1.0f, 0.98f, 0.80f, 0.98f * fade);
-
-            // Layer C: Blinding White Razor Cutting Edge
-            drawVolumetricCrescent(matrix, buffer, span * 0.75f, chord * 0.75f, 0.08f, 0.20f, segments,
-                1.0f, 1.0f, 1.0f, 1.0f * fade);
-
-            // 2. Dual Upper & Lower Vortex Wing Ribbons
-            float wingSpan = span * 1.08f;
-            float wingChord = chord * 1.15f;
-            drawWingRibbon(matrix, buffer, wingSpan, wingChord, 0.22f, segments, 1.0f, 0.90f, 0.30f, 0.75f * fade, state.ageInTicks * 0.2f);
-            drawWingRibbon(matrix, buffer, wingSpan, wingChord, -0.22f, segments, 1.0f, 0.90f, 0.30f, 0.75f * fade, -state.ageInTicks * 0.2f);
-
-            // 3. Trailing Secondary & Tertiary 3D Shockwave Arcs
-            drawTrailingArc(matrix, buffer, span * 0.90f, chord * 0.90f, -0.55f, segments, 1.0f, 0.75f, 0.10f, 0.60f * fade);
-            drawTrailingArc(matrix, buffer, span * 0.70f, chord * 0.70f, -1.05f, segments, 1.0f, 0.65f, 0.05f, 0.40f * fade);
-
-            // 4. Inscribed Sacred Valor Glyphs across center arc
-            drawValorGlyphs(matrix, buffer, span, chord, fade, state.ageInTicks);
-        });
-
-        // Additive halo pass: a wider faint copy of the golden canopy and one
-        // trailing arc so the great wave blooms along its whole span.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawVolumetricCrescent(matrix, buffer, span + 0.70f, chord + 0.65f, 0.36f, 0.80f, segments,
-                1.0f, 0.82f, 0.15f, 0.17f * fade);
-            drawTrailingArc(matrix, buffer, span * 0.90f, chord * 0.90f, -0.55f, segments, 1.0f, 0.75f, 0.10f, 0.14f * fade);
+            drawVolumetricCrescent(matrix, buffer, span, chord, 0.15f, 0.62f, segments, 1.0f, 0.82f, 0.15f, 0.88f * fade);
+            drawVolumetricCrescent(matrix, buffer, span * 0.78f, chord * 0.78f, 0.045f, 0.22f, segments, 1.0f, 0.98f, 0.80f, fade);
+            drawVolumetricCrescent(matrix, buffer, span * 0.68f, chord * 0.68f, 0.016f, 0.08f, segments, 1.0f, 1.0f, 1.0f, fade);
+            drawWingRibbon(matrix, buffer, span * 1.04f, chord, 0.18f, segments, 1.0f, 0.90f, 0.30f, 0.70f * fade, age * 0.2f);
+            drawWingRibbon(matrix, buffer, span * 1.04f, chord, -0.18f, segments, 1.0f, 0.90f, 0.30f, 0.70f * fade, -age * 0.2f);
+            drawTrailingArc(matrix, buffer, span * 0.88f, chord * 0.88f, -0.48f, segments, 1.0f, 0.75f, 0.10f, 0.45f * fade);
+            drawValorGlyphs(matrix, buffer, span, chord, fade, age);
+            if (impact > 0.02f) {
+                float s = 0.34f * impact;
+                float belly = chord * 0.5f;
+                buffer.addVertex(matrix, -s, 0.0f, belly).setColor(1.0f, 0.98f, 0.8f, impact).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                buffer.addVertex(matrix, 0.0f, s, belly).setColor(1.0f, 1.0f, 1.0f, impact).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                buffer.addVertex(matrix, s, 0.0f, belly).setColor(1.0f, 0.98f, 0.8f, impact).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                buffer.addVertex(matrix, 0.0f, -s, belly).setColor(1.0f, 1.0f, 1.0f, impact).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            }
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
+    }
+
+    private static float strike(float progress) {
+        if (progress >= 0.16f) return 0.0f;
+        return (float) Math.sin((progress / 0.16f) * Math.PI);
+    }
+
+    /** One point-first greatsword: gold blade, white-gold fuller, white edges, one wake, a launch flash. */
+    private static void drawFlyingSword(Matrix4f matrix, VertexConsumer consumer, float length, float fade, float impact, float open) {
+        int segments = 8;
+        float baseHalf = 0.46f;
+        for (int i = 0; i < segments; i++) {
+            float a1 = i / (float) segments;
+            float a2 = (i + 1) / (float) segments;
+            float h1 = baseHalf * (1.0f - a1 * 0.92f);
+            float h2 = baseHalf * (1.0f - a2 * 0.92f);
+            float z1 = a1 * length;
+            float z2 = a2 * length;
+            float thick = 0.07f;
+            consumer.addVertex(matrix, -h1, thick, z1).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, h1, thick, z1).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, h2, thick, z2).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, -h2, thick, z2).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+            consumer.addVertex(matrix, -h2, -thick, z2).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, h2, -thick, z2).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, h1, -thick, z1).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, -h1, -thick, z1).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+
+            float f1 = h1 * 0.22f;
+            float f2 = h2 * 0.22f;
+            consumer.addVertex(matrix, -f1, thick + 0.015f, z1).setColor(1.0f, 0.98f, 0.80f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, f1, thick + 0.015f, z1).setColor(1.0f, 0.98f, 0.80f, fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, f2, thick + 0.015f, z2).setColor(1.0f, 0.98f, 0.80f, fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, -f2, thick + 0.015f, z2).setColor(1.0f, 0.98f, 0.80f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+            consumer.addVertex(matrix, -h1, -0.02f, z1).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
+            consumer.addVertex(matrix, -h1, 0.02f, z1).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
+            consumer.addVertex(matrix, -h2, 0.02f, z2).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
+            consumer.addVertex(matrix, -h2, -0.02f, z2).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
+            consumer.addVertex(matrix, h1, 0.02f, z1).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+            consumer.addVertex(matrix, h1, -0.02f, z1).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+            consumer.addVertex(matrix, h2, -0.02f, z2).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+            consumer.addVertex(matrix, h2, 0.02f, z2).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        }
+
+        float guard = 0.72f;
+        consumer.addVertex(matrix, -guard, 0.05f, 0.12f).setColor(1.0f, 0.90f, 0.30f, 0.9f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, guard, 0.05f, 0.12f).setColor(1.0f, 0.90f, 0.30f, 0.9f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, guard, -0.05f, 0.12f).setColor(1.0f, 0.90f, 0.30f, 0.9f * fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, -guard, -0.05f, 0.12f).setColor(1.0f, 0.90f, 0.30f, 0.9f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+        float wake = 1.15f * open;
+        consumer.addVertex(matrix, -0.08f, 0.03f, 0.0f).setColor(1.0f, 0.82f, 0.15f, 0.7f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, 0.08f, 0.03f, 0.0f).setColor(1.0f, 0.82f, 0.15f, 0.7f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, 0.02f, 0.0f, -wake).setColor(1.0f, 0.82f, 0.15f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, -0.02f, 0.0f, -wake).setColor(1.0f, 0.82f, 0.15f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+
+        if (impact > 0.02f) {
+            float s = 0.4f * impact;
+            consumer.addVertex(matrix, -s, 0, 0.2f).setColor(1.0f, 0.98f, 0.8f, impact).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, 0, s, 0.2f).setColor(1.0f, 1.0f, 1.0f, impact).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, s, 0, 0.2f).setColor(1.0f, 0.98f, 0.8f, impact).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, 0, -s, 0.2f).setColor(1.0f, 1.0f, 1.0f, impact).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        }
+    }
+
     private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {
         for (int i = 0; i < segments; i++) {
             float t1 = (i / (float) segments) * 2.0f - 1.0f;
             float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-
             float x1 = t1 * span;
             float z1 = (1.0f - t1 * t1) * chord;
             float x2 = t2 * span;
             float z2 = (1.0f - t2 * t2) * chord;
-
-            float th1 = thickness * (1.0f - Math.abs(t1) * 0.70f);
-            float th2 = thickness * (1.0f - Math.abs(t2) * 0.70f);
-
-            float z1Trail = z1 - trailLength * (1.0f - Math.abs(t1) * 0.60f);
-            float z2Trail = z2 - trailLength * (1.0f - Math.abs(t2) * 0.60f);
+            float th1 = thickness * (1.0f - Math.abs(t1) * 0.78f);
+            float th2 = thickness * (1.0f - Math.abs(t2) * 0.78f);
+            float z1Trail = z1 - trailLength * (1.0f - Math.abs(t1) * 0.55f);
+            float z2Trail = z2 - trailLength * (1.0f - Math.abs(t2) * 0.55f);
 
             // Top Bevel Face
             consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
@@ -189,7 +239,6 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         for (int i = 0; i < segments; i++) {
             float t1 = (i / (float) segments) * 2.0f - 1.0f;
             float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-
             float x1 = t1 * span;
             float z1 = (1.0f - t1 * t1) * chord + zOffset;
             float x2 = t2 * span;
@@ -207,7 +256,7 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         for (int g = 0; g < glyphCount; g++) {
             float t = (g / (float) (glyphCount - 1)) * 1.6f - 0.8f;
             float gx = t * span;
-            float gz = (1.0f - t * t) * chord - 0.15f;
+            float gz = (1.0f - t * t) * chord * 0.72f;
 
             // Energy flow: a brightness pulse travels glyph to glyph along
             // the arc instead of every glyph sitting at one flat alpha.

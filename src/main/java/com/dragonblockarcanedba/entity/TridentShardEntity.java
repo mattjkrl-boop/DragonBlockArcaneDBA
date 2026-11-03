@@ -16,6 +16,8 @@ import com.dragonblockarcanedba.util.SwarmHelper;
 public class TridentShardEntity extends Projectile implements ITrackedSwarmEntity {
     private int shardIndex = 0;
     private boolean recalling = false;
+    /** Manual right-click recall. The wipe cooldown is not applied again when these arrive. */
+    private boolean manualRecall = false;
     private LivingEntity target = null;
     private int lifeTime = 0;
     private float health = 15000.0f; // 150 * 100 damage
@@ -38,6 +40,20 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
     }
 
     public void recall() {
+        this.recalling = true;
+        this.manualRecall = true;
+    }
+
+    /**
+     * Health is gone. Fly back into the trident and disappear only on arrival.
+     * Does not start the swarm cooldown; that waits until every shard is home.
+     */
+    public void returnHome() {
+        if (this.manualRecall || this.isRemoved()) {
+            return;
+        }
+        this.health = 0.0f;
+        this.updateHealthState();
         this.recalling = true;
     }
 
@@ -75,7 +91,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
         this.health -= 50.0f;
         this.updateHealthState();
         if (this.health <= 0) {
-            this.discard();
+            this.returnHome();
         }
     }
 
@@ -90,7 +106,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
             this.health -= amount;
             this.updateHealthState();
             if (this.health <= 0) {
-                this.discard();
+                this.returnHome();
             }
             return true;
         }
@@ -100,6 +116,65 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
     public int getOwnerId() {
         Entity owner = this.getOwner();
         return owner != null ? owner.getId() : -1;
+    }
+
+    /** The trident in the owner's hand, main hand or offhand. */
+    private Vec3 handPoint(Entity owner) {
+        Vec3 look = owner.getLookAngle();
+        Vec3 right = look.cross(new Vec3(0, 1, 0));
+        if (right.lengthSqr() < 1.0E-4) {
+            right = new Vec3(1, 0, 0);
+        } else {
+            right = right.normalize();
+        }
+        double side = 0.46;
+        if (owner instanceof Player player
+            && !(player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem)
+            && player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) {
+            side = -0.46;
+        }
+        return owner.getEyePosition().add(right.scale(side)).add(0.0, -0.48, 0.0).add(look.scale(0.32));
+    }
+
+    /** Removed on arrival. The wipe cooldown starts only when no shard is still out. */
+    private void finishReturn() {
+        boolean manual = this.manualRecall;
+        Entity owner = this.getOwner();
+        final int ownerId = owner == null ? -1 : owner.getId();
+        Level level = this.level();
+        this.discard();
+        if (manual || !(owner instanceof Player player) || !(level instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        boolean anyLeft = false;
+        for (TridentShardEntity other : serverLevel.getEntitiesOfClass(
+            TridentShardEntity.class,
+            player.getBoundingBox().inflate(128.0),
+            e -> e.getOwnerId() == ownerId && e != this && !e.isRemoved())) {
+            anyLeft = true;
+            break;
+        }
+        if (!anyLeft) {
+            com.dragonblockarcanedba.item.DevilTridentItem.onSwarmArrivedHome(player);
+        }
+    }
+
+    private void flyHome(Entity owner) {
+        Vec3 dir = this.handPoint(owner).subtract(this.position());
+        double dist = dir.length();
+        if (dist < 0.42) {
+            this.finishReturn();
+            return;
+        }
+        double speed = Math.min(1.8, Math.max(0.35, dist * 0.48));
+        Vec3 step = dir.scale(speed / dist);
+        Vec3 bow = dir.cross(new Vec3(0, 1, 0));
+        if (bow.lengthSqr() > 1.0E-4 && dist > 1.0) {
+            double curl = Math.sin(this.shardIndex * 1.3) * 0.16 * Math.min(1.0, (dist - 1.0) / 5.0);
+            step = step.add(bow.normalize().scale(curl));
+        }
+        this.updateHeading(step);
+        this.setPos(this.getX() + step.x, this.getY() + step.y, this.getZ() + step.z);
     }
 
     private void updateHeading(Vec3 motion) {
@@ -137,20 +212,16 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
                     0.08, 0.08, 0.08, 0.01);
             }
         }
-        if (!owner.isAlive() || this.distanceToSqr(owner) > 64 * 64) {
-            this.discard(); // Despawn if owner dead or far away
+        if (recalling) {
+            if (!owner.isAlive()) {
+                this.finishReturn();
+                return;
+            }
+            this.flyHome(owner);
             return;
         }
-
-        if (recalling) {
-            Vec3 dir = owner.position().add(0, owner.getBbHeight() / 2, 0).subtract(this.position());
-            if (dir.lengthSqr() < 1.0) {
-                this.discard();
-            } else {
-                Vec3 step = dir.normalize().scale(1.8);
-                updateHeading(step);
-                this.setPos(this.getX() + step.x, this.getY() + step.y, this.getZ() + step.z);
-            }
+        if (!owner.isAlive() || this.distanceToSqr(owner) > 64 * 64) {
+            this.discard();
             return;
         }
 
@@ -185,7 +256,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
                 this.health -= dealt;
                 this.updateHealthState();
                 if (this.health <= 0) {
-                    this.discard();
+                    this.returnHome();
                 }
             }
         } else {

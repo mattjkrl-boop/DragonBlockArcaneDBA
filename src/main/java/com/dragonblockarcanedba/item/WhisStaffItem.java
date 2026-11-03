@@ -23,6 +23,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
@@ -166,6 +167,83 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
                 0.9f, 1.9f
             );
         }
+    }
+
+    /**
+     * The staff's own strike. Glass cracks along the rod even on a miss.
+     * Someone already in melee reach is left to hurtEnemy.
+     */
+    public static void performTemporalStrike(ServerPlayer player, ItemStack stack) {
+        if (!WeaponDrainHelper.drainKiDiscrete(player, 100.0, 13)) {
+            return;
+        }
+        ServerLevel level = (ServerLevel) player.level();
+        Vec3 eye = player.getEyePosition();
+        Vec3 look = player.getLookAngle();
+        for (int step = 1; step <= 3; step++) {
+            Vec3 pos = eye.add(look.scale(1.5 * step));
+            level.addFreshEntity(new TimeShatterEntity(level, player, pos, 0.55f + step * 0.2f));
+        }
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.PLAYERS, 1.0f, 1.7f);
+
+        AABB reach = player.getBoundingBox().expandTowards(look.scale(6.5)).inflate(1.15);
+        LivingEntity struck = null;
+        double best = 6.5;
+        for (LivingEntity candidate : level.getEntitiesOfClass(LivingEntity.class, reach, e -> e != player && e.isAlive())) {
+            Vec3 to = candidate.getBoundingBox().getCenter().subtract(eye);
+            double dist = to.length();
+            if (dist < 3.0 || dist > 6.5 || to.lengthSqr() < 1.0E-4) {
+                continue;
+            }
+            if (look.dot(to.normalize()) < 0.84) {
+                continue;
+            }
+            if (dist < best) {
+                best = dist;
+                struck = candidate;
+            }
+        }
+        if (struck != null) {
+            applyStaffHit(player, level, struck, true);
+        }
+    }
+
+    /**
+     * @param includeBase true when vanilla melee did not already apply the staff's 350
+     */
+    private static void applyStaffHit(ServerPlayer player, ServerLevel level, LivingEntity target, boolean includeBase) {
+        if (target instanceof TimeTracker timeTracker) {
+            timeTracker.dba$startReversing(100);
+        }
+        target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, 100, 0, false, true), player);
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            target,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("whis_stasis_drag"),
+            4.0,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            target,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("whis_stasis_friction"),
+            3.0,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+        );
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+        float damage = (float) (accessor.dba$getDexterity() * 2.0) + target.getMaxHealth() * 0.015f;
+        if (includeBase) {
+            damage += 350.0f;
+        }
+        if (damage > 0.0f) {
+            target.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
+        }
+        level.addFreshEntity(new TimeShatterEntity(level, player, target.position().add(0, target.getBbHeight() * 0.5, 0), 1.2f));
+        level.playSound(null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+            SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.PLAYERS, 1.2f, 1.6f);
+        level.playSound(null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 0.9f, 1.9f);
     }
 
     // --- Right Click: Temporal Rift AOE ---

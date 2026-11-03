@@ -62,8 +62,10 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         if (progress >= 1.0f) return;
 
-        float fade = 1.0f - (progress * progress);
-        float scale = state.scale * (1.0f + progress * 0.35f);
+        float drawOut = smooth(Math.min(1.0f, progress / 0.46f));
+        float fade = 1.0f - smooth(progress);
+        float impact = strike(progress);
+        float scale = state.scale;
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
@@ -73,71 +75,102 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-
-            float span = 4.6f * scale;
-            float chord = 1.4f * scale;
-            int segments = 28;
-
-            // Render Blade 1: Tilted +45 degrees
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(45.0f)));
-            drawCrossBlade(pose.pose(), buffer, span, chord, segments, fade);
-            poseStack.popPose();
-
-            // Render Blade 2: Tilted -45 degrees
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(-45.0f)));
-            drawCrossBlade(pose.pose(), buffer, span, chord, segments, fade);
-            poseStack.popPose();
-
-            // Central Geometric Starburst Core Flare
-            float flareRadius = (1.4f + progress * 0.8f) * scale;
-            drawGeometricStarburst(matrix, buffer, 0, 0, 0.1f, flareRadius, 8, state.age * 25.0f,
-                1.0f, 0.88f, 0.20f, fade * 0.95f,
-                0.15f, 0.95f, 1.0f, fade * 0.90f
-            );
-
-            // Piercing Diagonal Light Vanes (Shooting outward along the diagonals)
-            float vaneLen = (3.5f + progress * 2.5f) * scale;
-            float vaneWidth = 0.18f * (1.0f - progress * 0.5f) * scale;
-            for (int i = 0; i < 4; i++) {
-                double angle = Math.toRadians(45.0 + i * 90.0);
-                float vx = (float) Math.cos(angle) * vaneLen;
-                float vy = (float) Math.sin(angle) * vaneLen;
-                drawTaperedBeam(matrix, buffer, 0, 0, 0.05f, vx, vy, 0.05f, vaneWidth, 1.0f, 0.95f, 0.4f, fade * 0.90f);
+            float span = 4.6f * scale * drawOut;
+            drawCrossBlade(matrix, buffer, span, fade, 45.0f);
+            drawCrossBlade(matrix, buffer, span, fade, -45.0f);
+            if (impact > 0.02f) {
+                drawGeometricStarburst(matrix, buffer, 0, 0, 0.1f, 1.15f * scale * impact, 8, 0.0f,
+                    1.0f, 0.88f, 0.20f, impact,
+                    0.15f, 0.95f, 1.0f, impact * 0.85f
+                );
             }
-        });
-
-        // Additive halo pass: an oversized faint copy of the starburst core
-        // so the center of the X blooms where the blades cross.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float flareRadius = (1.4f + progress * 0.8f) * scale * 1.25f;
-            drawGeometricStarburst(matrix, buffer, 0, 0, 0.1f, flareRadius, 8, state.age * 25.0f,
-                1.0f, 0.88f, 0.20f, fade * 0.20f,
-                0.15f, 0.95f, 1.0f, fade * 0.16f
-            );
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static void drawCrossBlade(Matrix4f matrix, VertexConsumer buffer, float span, float chord, int segments, float fade) {
-        // 1. Radiant Gold Outer Glow Crescent
-        drawVolumetricCrescent(matrix, buffer, span + 0.35f, chord + 0.35f, 0.25f, 0.55f, segments,
-            1.0f, 0.84f, 0.0f, 0.90f * fade);
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
+    }
 
-        // 2. Heroic Cyan Plasma Inner Core
-        drawVolumetricCrescent(matrix, buffer, span, chord, 0.14f, 0.38f, segments,
-            0.0f, 0.95f, 1.0f, 0.95f * fade);
+    private static float strike(float progress) {
+        if (progress <= 0.28f || progress >= 0.62f) return 0.0f;
+        return (float) Math.sin(((progress - 0.28f) / 0.34f) * Math.PI);
+    }
 
-        // 3. Pure White Hyper-Velocity Cutting Edge
-        drawVolumetricCrescent(matrix, buffer, span * 0.72f, chord * 0.72f, 0.06f, 0.12f, segments,
-            1.0f, 1.0f, 1.0f, 1.0f * fade);
+    private static void drawCrossBlade(Matrix4f matrix, VertexConsumer buffer, float span, float fade, float rollDeg) {
+        float rad = (float) Math.toRadians(rollDeg);
+        float cos = (float) Math.cos(rad);
+        float sin = (float) Math.sin(rad);
+        float reach = Math.abs(span);
+        float chord = reach * 0.30f;
+        int segments = 28;
+        drawRolledCrescent(matrix, buffer, reach, chord, 0.16f, 0.42f, segments, cos, sin, 1.0f, 0.84f, 0.0f, 0.90f * fade);
+        drawRolledCrescent(matrix, buffer, reach * 0.84f, chord * 0.84f, 0.055f, 0.16f, segments, cos, sin, 0.0f, 0.95f, 1.0f, 0.95f * fade);
+        drawRolledCrescent(matrix, buffer, reach * 0.72f, chord * 0.72f, 0.02f, 0.06f, segments, cos, sin, 1.0f, 1.0f, 1.0f, fade);
+        drawRolledSpur(matrix, buffer, -reach, 0.20f, cos, sin, fade);
+        drawRolledSpur(matrix, buffer, reach, 0.20f, cos, sin, fade);
+    }
 
-        // 4. Transversal Tip Spurs
-        drawTipSpurs(matrix, buffer, span, chord, 0.22f, fade);
+    /** Crescent in the blade plane, then rolled so the pair crosses. */
+    private static void drawRolledCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float cos, float sin, float r, float g, float b, float a) {
+        for (int i = 0; i < segments; i++) {
+            float t1 = (i / (float) segments) * 2.0f - 1.0f;
+            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
+            float x1 = t1 * span;
+            float x2 = t2 * span;
+            float z1 = (1.0f - t1 * t1) * chord;
+            float z2 = (1.0f - t2 * t2) * chord;
+            float th1 = thickness * (1.0f - Math.abs(t1) * 0.78f);
+            float th2 = thickness * (1.0f - Math.abs(t2) * 0.78f);
+            float wake1 = 1.0f - Math.abs(t1) * 0.65f;
+            float wake2 = 1.0f - Math.abs(t2) * 0.65f;
+
+            rolledVertex(matrix, consumer, x1, th1, z1, cos, sin, r, g, b, a);
+            rolledVertex(matrix, consumer, x2, th2, z2, cos, sin, r, g, b, a);
+            rolledVertex(matrix, consumer, x2, th2 * 0.25f, z2 - trailLength * wake2, cos, sin, r, g, b, 0.0f);
+            rolledVertex(matrix, consumer, x1, th1 * 0.25f, z1 - trailLength * wake1, cos, sin, r, g, b, 0.0f);
+
+            rolledVertex(matrix, consumer, x1, -th1 * 0.25f, z1 - trailLength * wake1, cos, sin, r, g, b, 0.0f);
+            rolledVertex(matrix, consumer, x2, -th2 * 0.25f, z2 - trailLength * wake2, cos, sin, r, g, b, 0.0f);
+            rolledVertex(matrix, consumer, x2, -th2, z2, cos, sin, r, g, b, a);
+            rolledVertex(matrix, consumer, x1, -th1, z1, cos, sin, r, g, b, a);
+        }
+    }
+
+    private static void drawRolledSpur(Matrix4f matrix, VertexConsumer consumer, float tipX, float spur, float cos, float sin, float fade) {
+        float sign = tipX < 0.0f ? -1.0f : 1.0f;
+        int steps = 5;
+        for (int i = 0; i < steps; i++) {
+            float t1 = i / (float) steps;
+            float t2 = (i + 1) / (float) steps;
+            float z1 = -spur * 1.9f * t1;
+            float z2 = -spur * 1.9f * t2;
+            float bow1 = (float) Math.sin(t1 * Math.PI) * spur * 0.45f;
+            float bow2 = (float) Math.sin(t2 * Math.PI) * spur * 0.45f;
+            float x1 = tipX + sign * (spur * 1.35f * t1) - sign * bow1;
+            float x2 = tipX + sign * (spur * 1.35f * t2) - sign * bow2;
+            float w1 = spur * 0.18f * (1.0f - t1);
+            float w2 = spur * 0.18f * (1.0f - t2);
+            float a1 = fade * (1.0f - t1);
+            float a2 = fade * (1.0f - t2) * 0.12f;
+            rolledVertex(matrix, consumer, x1, -w1, z1, cos, sin, 0.0f, 0.95f, 1.0f, a1);
+            rolledVertex(matrix, consumer, x1, w1, z1, cos, sin, 0.0f, 0.95f, 1.0f, a1);
+            rolledVertex(matrix, consumer, x2, w2, z2, cos, sin, 1.0f, 0.84f, 0.0f, a2);
+            rolledVertex(matrix, consumer, x2, -w2, z2, cos, sin, 1.0f, 0.84f, 0.0f, a2);
+            rolledVertex(matrix, consumer, x1, -w1 * 0.28f, z1, cos, sin, 1.0f, 1.0f, 1.0f, a1);
+            rolledVertex(matrix, consumer, x1, w1 * 0.28f, z1, cos, sin, 1.0f, 1.0f, 1.0f, a1);
+            rolledVertex(matrix, consumer, x2, w2 * 0.28f, z2, cos, sin, 1.0f, 1.0f, 1.0f, a2);
+            rolledVertex(matrix, consumer, x2, -w2 * 0.28f, z2, cos, sin, 1.0f, 1.0f, 1.0f, a2);
+        }
+    }
+
+    private static void rolledVertex(Matrix4f matrix, VertexConsumer consumer, float x, float y, float z, float cos, float sin, float r, float g, float b, float a) {
+        float xr = x * cos - y * sin;
+        float yr = x * sin + y * cos;
+        consumer.addVertex(matrix, xr, yr, z).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
     }
 
     private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {

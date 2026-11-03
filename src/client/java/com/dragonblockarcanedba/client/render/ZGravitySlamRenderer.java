@@ -66,7 +66,9 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
         float power = state.powerRatio;
         float age = state.age;
         float progress = Math.min(1.0f, age / (float) state.lifetime);
-        float fade = Math.max(0.0f, 1.0f - progress);
+        float fade = 1.0f - smooth(progress);
+        float grow = smooth(Math.min(1.0f, progress / 0.48f));
+        float impact = strike(progress);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         float rCol = 1.0f;
@@ -77,24 +79,19 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
 
-            // 1. Expanding 3D Gravitational Shockwave Discs & Kinetic Repulsion Dome
-            float shockR = Math.min(radius * 1.35f, age * (0.85f + power * 0.45f));
-            if (fade > 0.05f) {
-                // Outer Golden Shockwave Crest
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.85f, 48, rCol, gCol, bCol, fade * 0.90f);
-                // Inner Violet Gravitational Core Bed
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 36, 0.55f, 0.15f, 0.95f, fade * 0.75f);
-
-                // Expanding 3D Hemispherical Kinetic Repulsion Dome Wall
-                float domeH = (3.0f + power * 3.5f) * (1.0f - progress * 0.55f);
-                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR, domeH, 44, rCol, gCol, bCol, fade * 0.65f);
+            float shockR = radius * grow;
+            float domeH = (2.2f + power * 2.6f) * (0.35f + 0.65f * fade);
+            if (fade > 0.04f) {
+                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR, domeH, 40, rCol, gCol, bCol, fade * 0.5f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.88f, 40, rCol, gCol, bCol, fade * 0.72f);
+                drawGroundRing(matrix, buffer, 0, 0.07f, 0, shockR * 0.36f, shockR * 0.22f, 28, 1.0f, 0.96f, 0.72f, fade * (0.55f + 0.45f * impact));
             }
 
             // 2. Radiating 3D Tectonic Gravity Canyon Fractures / Branching Rupture Trenches
             int trenchCount = 14 + (int) (power * 6); // 14 to 20 trenches
             for (int t = 0; t < trenchCount; t++) {
                 double tAngle = (t / (double) trenchCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.25);
-                float trenchLen = radius * (0.75f + rng.nextFloat() * 0.40f);
+                float trenchLen = radius * grow * (0.75f + rng.nextFloat() * 0.40f);
 
                 float curX = 0, curZ = 0;
                 int steps = 6;
@@ -102,7 +99,7 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
                     float nxtX = curX + (float) Math.cos(tAngle) * (trenchLen / steps) + (rng.nextFloat() - 0.5f) * 0.45f;
                     float nxtZ = curZ + (float) Math.sin(tAngle) * (trenchLen / steps) + (rng.nextFloat() - 0.5f) * 0.45f;
 
-                    float width = (0.35f + power * 0.20f) * (1.0f - (s / (float) steps) * 0.45f) * Math.min(1.0f, age * 0.40f);
+                    float width = (0.35f + power * 0.20f) * (1.0f - (s / (float) steps) * 0.45f);
                     // Violet Gravity Base Trench
                     drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width, 0.35f, 0.08f, 0.65f, fade * 0.95f);
                     // Glowing Incandescent Golden Core
@@ -116,14 +113,14 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
             int rockCount = 18 + (int) (power * 10); // 18 to 28 monoliths
             for (int r = 0; r < rockCount; r++) {
                 double rockAngle = (r / (double) rockCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.35);
-                float rockDist = radius * (0.22f + rng.nextFloat() * 0.70f);
+                float rockDist = radius * grow * (0.22f + rng.nextFloat() * 0.70f);
 
                 float rx = (float) Math.cos(rockAngle) * rockDist;
                 float rz = (float) Math.sin(rockAngle) * rockDist;
 
                 float maxH = (1.8f + power * 2.2f) + rng.nextFloat() * (2.0f + power * 1.5f);
-                float slabHeight = maxH * Math.min(1.0f, age * 0.50f);
-                float slabWidth = 0.50f + rng.nextFloat() * 0.45f;
+                float slabHeight = maxH * grow;
+                float slabWidth = 0.22f + rng.nextFloat() * 0.16f;
 
                 // Outward leaning angle
                 float tiltFactor = 0.30f + rng.nextFloat() * 0.30f;
@@ -143,32 +140,17 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
                 );
             }
 
-            // 4. Vertical Erupting Gravitational Singularity Pillars / Energy Geysers
-            int geyserCount = 8 + (int) (power * 4); // 8 to 12 geysers
-            for (int g = 0; g < geyserCount; g++) {
-                double gAng = (g / (double) geyserCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.2);
-                float gDist = radius * (0.40f + rng.nextFloat() * 0.45f);
-                float gx = (float) Math.cos(gAng) * gDist;
-                float gz = (float) Math.sin(gAng) * gDist;
-
-                float gHeight = (6.0f + power * 4.0f) + rng.nextFloat() * 3.0f;
-                float gWidth = 0.60f + power * 0.25f;
-
-                drawVerticalGeyser(matrix, buffer, gx, gz, gHeight, gWidth, fade);
-            }
         });
+    }
 
-        // Additive halo pass: a wider faint copy of the shock crest and dome
-        // wall so the slam blooms and sits in the ground instead of floating.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float shockR = Math.min(radius * 1.35f, age * (0.85f + power * 0.45f));
-            if (fade > 0.05f) {
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR * 1.10f, shockR * 0.80f, 48, rCol, gCol, bCol, fade * 0.16f);
-                float domeH = (3.0f + power * 3.5f) * (1.0f - progress * 0.55f);
-                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR * 1.05f, domeH, 44, rCol, gCol, bCol, fade * 0.10f);
-            }
-        });
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
+    }
+
+    private static float strike(float progress) {
+        if (progress >= 0.42f) return 0.0f;
+        return (float) Math.sin((progress / 0.42f) * Math.PI);
     }
 
     private static void drawTrenchSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {
@@ -178,11 +160,14 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
 
         float nx = -dz / len * width;
         float nz = dx / len * width;
-
         consumer.addVertex(matrix, x1 - nx, 0.04f, z1 - nz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x1 + nx, 0.04f, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, 0.04f, z2 + nz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, 0.04f, z2 - nz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * 0.86f, 0.04f, z2 + nz * 0.86f).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * 0.86f, 0.04f, z2 - nz * 0.86f).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 - nx * 0.22f, 0.055f, z1 - nz * 0.22f).setColor(1.0f, 0.92f, 0.55f, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 + nx * 0.22f, 0.055f, z1 + nz * 0.22f).setColor(1.0f, 0.92f, 0.55f, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * 0.16f, 0.055f, z2 + nz * 0.16f).setColor(1.0f, 0.92f, 0.55f, a * 0.7f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * 0.16f, 0.055f, z2 - nz * 0.16f).setColor(1.0f, 0.92f, 0.55f, a * 0.7f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawGroundRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float r, float g, float b, float a) {
@@ -231,17 +216,61 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
                                          float tipX, float tipY, float tipZ,
                                          float rBase, float gBase, float bBase, float aBase,
                                          float rTip, float gTip, float bTip, float aTip) {
-        // Front Face
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Back Face
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        float mx = (x1 + x2) * 0.5f;
+        float my = (y1 + y2) * 0.5f;
+        float mz = (z1 + z2) * 0.5f;
+        float hx = (x2 - x1) * 0.5f;
+        float hy = (y2 - y1) * 0.5f;
+        float hz = (z2 - z1) * 0.5f;
+        float dx = tipX - mx;
+        float dy = tipY - my;
+        float dz = tipZ - mz;
+        float bx = hy * dz - hz * dy;
+        float by = hz * dx - hx * dz;
+        float bz = hx * dy - hy * dx;
+        float bl = (float) Math.sqrt(bx * bx + by * by + bz * bz);
+        if (bl > 0.001f) {
+            bx /= bl;
+            by /= bl;
+            bz /= bl;
+        }
+        float bowAmp = (float) Math.sqrt(hx * hx + hy * hy + hz * hz) * 0.65f;
+        float cr = Math.max(rBase, rTip);
+        float cg = Math.max(gBase, gTip);
+        float cb = Math.max(bBase, bTip);
+        int steps = 6;
+        for (int i = 0; i < steps; i++) {
+            float t1 = i / (float) steps;
+            float t2 = (i + 1) / (float) steps;
+            float bow1 = (float) Math.sin(t1 * Math.PI) * bowAmp;
+            float bow2 = (float) Math.sin(t2 * Math.PI) * bowAmp;
+            float w1 = 1.0f - t1 * 0.8f;
+            float w2 = 1.0f - t2 * 0.8f;
+            float ax = mx + dx * t1 + bx * bow1;
+            float ay = my + dy * t1 + by * bow1;
+            float az = mz + dz * t1 + bz * bow1;
+            float cx = mx + dx * t2 + bx * bow2;
+            float cy = my + dy * t2 + by * bow2;
+            float cz = mz + dz * t2 + bz * bow2;
+            float ar = rBase + (rTip - rBase) * t1;
+            float ag = gBase + (gTip - gBase) * t1;
+            float ab = bBase + (bTip - bBase) * t1;
+            float aa = aBase + (aTip - aBase) * t1;
+            float br = rBase + (rTip - rBase) * t2;
+            float bg = gBase + (gTip - gBase) * t2;
+            float bb = bBase + (bTip - bBase) * t2;
+            float ba = aBase + (aTip - aBase) * t2;
+            consumer.addVertex(matrix, ax - hx * w1, ay - hy * w1, az - hz * w1).setColor(ar, ag, ab, aa).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, ax + hx * w1, ay + hy * w1, az + hz * w1).setColor(ar, ag, ab, aa).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx + hx * w2, cy + hy * w2, cz + hz * w2).setColor(br, bg, bb, ba).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx - hx * w2, cy - hy * w2, cz - hz * w2).setColor(br, bg, bb, ba).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            float k1 = w1 * 0.2f;
+            float k2 = w2 * 0.2f;
+            consumer.addVertex(matrix, ax - hx * k1, ay - hy * k1, az - hz * k1).setColor(cr, cg, cb, aa).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, ax + hx * k1, ay + hy * k1, az + hz * k1).setColor(cr, cg, cb, aa).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx + hx * k2, cy + hy * k2, cz + hz * k2).setColor(cr, cg, cb, ba).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx - hx * k2, cy - hy * k2, cz - hz * k2).setColor(cr, cg, cb, ba).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        }
     }
 
     private static void drawVerticalGeyser(Matrix4f matrix, VertexConsumer consumer, float x, float z, float height, float width, float fade) {

@@ -64,9 +64,10 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         if (progress >= 1.0f) return;
 
-        float fade = (1.0f - progress * progress);
-        float expansion = 0.6f + progress * 1.4f;
-        float scale = state.scale * expansion;
+        float fade = 1.0f - smooth(progress);
+        float open = smooth(Math.min(1.0f, progress / 0.45f));
+        float impact = strike(progress);
+        float scale = state.scale * (0.55f + 0.7f * open);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -75,46 +76,40 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-
-            // 1. Dual Counter-Rotating Concentric Sonic Shock Rings
-            int ringSegments = 28;
-            float rOuter = 1.8f * scale;
-            float rInner = rOuter * 0.72f;
-            drawShockRing(matrix, buffer, rOuter, rInner, ringSegments, state.age * 25.0f,
-                0.0f, 0.85f, 1.0f, fade * 0.85f);
-            drawShockRing(matrix, buffer, rOuter * 0.75f, rInner * 0.65f, ringSegments, -state.age * 40.0f,
-                0.85f, 0.98f, 1.0f, fade * 0.95f);
-
-            // 2. 3D Conical Sonic Boom Slipstream (expanding forward along look vector)
-            drawSonicCone(matrix, buffer, scale, progress, fade);
-
-            // 3. Central Vertical Spatial Tear Rift Slit
-            float slitH = 1.4f * (1.0f - progress * 0.4f) * state.scale;
-            float slitW = 0.15f * (1.0f - progress * 0.8f) * state.scale;
+            float slitH = 1.35f * (0.4f + 0.6f * open) * state.scale;
+            float slitW = 0.12f * (1.0f - progress * 0.55f) * state.scale;
             drawRiftSlit(matrix, buffer, slitW, slitH, fade);
-
-            // 4. 6-Point Radial Void Rupture Spikes
             int spikeCount = 6;
             for (int i = 0; i < spikeCount; i++) {
                 double angle = (i / (double) spikeCount) * Math.PI * 2.0 + (state.age * 0.12);
-                float spikeLen = 1.6f * scale;
+                float spikeLen = 1.15f * scale;
                 float tipX = (float) Math.cos(angle) * spikeLen;
                 float tipY = (float) Math.sin(angle) * spikeLen;
-                drawSpike(matrix, buffer, tipX, tipY, 0.16f * (1.0f - progress), fade);
+                drawSpike(matrix, buffer, tipX, tipY, 0.10f * (0.45f + 0.55f * open), fade * 0.85f);
             }
-        });
-
-        // Additive halo pass: a wider faint copy of the outer shock ring so
-        // the tear blooms around its dark rim.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float rOuter = 1.8f * scale * 1.12f;
-            drawShockRing(matrix, buffer, rOuter, rOuter * 0.70f, 28, state.age * 25.0f,
-                0.0f, 0.85f, 1.0f, fade * 0.16f);
+            float coneFade = fade * (1.0f - smooth(Math.max(0.0f, (progress - 0.4f) / 0.6f)));
+            if (coneFade > 0.02f) {
+                drawSonicCone(matrix, buffer, scale, open, coneFade);
+            }
+            if (impact > 0.02f) {
+                float rOuter = 1.15f * scale * (0.45f + impact);
+                drawShockRing(matrix, buffer, rOuter, rOuter * 0.78f, 24, 0.0f,
+                    0.0f, 0.85f, 1.0f, impact * 0.9f);
+            }
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
+    }
+
+    private static float strike(float progress) {
+        if (progress >= 0.48f) return 0.0f;
+        return (float) Math.sin((progress / 0.48f) * Math.PI);
     }
 
     private static void drawShockRing(Matrix4f matrix, VertexConsumer consumer, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
@@ -184,12 +179,40 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
     }
 
     private static void drawSpike(Matrix4f matrix, VertexConsumer consumer, float tipX, float tipY, float baseW, float fade) {
-        float normX = -tipY * (baseW / (float) Math.sqrt(tipX * tipX + tipY * tipY));
-        float normY = tipX * (baseW / (float) Math.sqrt(tipX * tipX + tipY * tipY));
-
-        consumer.addVertex(matrix, -normX, -normY, 0).setColor(0.0f, 0.85f, 1.0f, fade * 0.8f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, normX, normY, 0).setColor(0.0f, 0.85f, 1.0f, fade * 0.8f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, tipX, tipY, 0).setColor(1.0f, 1.0f, 1.0f, 0.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, tipX, tipY, 0).setColor(1.0f, 1.0f, 1.0f, 0.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        float len = (float) Math.sqrt(tipX * tipX + tipY * tipY);
+        if (len < 0.001f) return;
+        float dx = tipX / len;
+        float dy = tipY / len;
+        float px = -dy;
+        float py = dx;
+        int steps = 6;
+        for (int i = 0; i < steps; i++) {
+            float t1 = i / (float) steps;
+            float t2 = (i + 1) / (float) steps;
+            float bow1 = (float) Math.sin(t1 * Math.PI) * baseW * 1.6f;
+            float bow2 = (float) Math.sin(t2 * Math.PI) * baseW * 1.6f;
+            float w1 = baseW * (1.0f - t1);
+            float w2 = baseW * (1.0f - t2);
+            float x1 = dx * len * t1 + px * bow1;
+            float y1 = dy * len * t1 + py * bow1;
+            float x2 = dx * len * t2 + px * bow2;
+            float y2 = dy * len * t2 + py * bow2;
+            float a1 = fade * (1.0f - t1 * 0.85f);
+            float a2 = fade * (1.0f - t2 * 0.85f);
+            consumer.addVertex(matrix, x1 - px * w1, y1 - py * w1, 0).setColor(0.0f, 0.85f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x1 + px * w1, y1 + py * w1, 0).setColor(0.0f, 0.85f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x2 + px * w2, y2 + py * w2, 0).setColor(0.0f, 0.85f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x2 - px * w2, y2 - py * w2, 0).setColor(0.0f, 0.85f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            float c1 = w1 * 0.28f;
+            float c2 = w2 * 0.28f;
+            consumer.addVertex(matrix, x1 - px * c1, y1 - py * c1, 0.02f).setColor(1.0f, 1.0f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x1 + px * c1, y1 + py * c1, 0.02f).setColor(1.0f, 1.0f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x2 + px * c2, y2 + py * c2, 0.02f).setColor(1.0f, 1.0f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, x2 - px * c2, y2 - py * c2, 0.02f).setColor(1.0f, 1.0f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        }
+        consumer.addVertex(matrix, -px * baseW, -py * baseW, 0).setColor(0.0f, 0.85f, 1.0f, fade * 0.7f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, px * baseW, py * baseW, 0).setColor(0.0f, 0.85f, 1.0f, fade * 0.7f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, -dx * baseW * 1.4f + px * baseW * 0.15f, -dy * baseW * 1.4f + py * baseW * 0.15f, 0).setColor(0.0f, 0.85f, 1.0f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, -dx * baseW * 1.4f - px * baseW * 0.15f, -dy * baseW * 1.4f - py * baseW * 0.15f, 0).setColor(0.0f, 0.85f, 1.0f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
     }
 }

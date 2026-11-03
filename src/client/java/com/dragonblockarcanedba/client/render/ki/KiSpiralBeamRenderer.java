@@ -9,10 +9,9 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.util.Mth;
 
 /**
- * Renders a Spiral Beam — a core beam with two helix tendrils rotating around it.
+ * A spiral beam is a core cylinder with two ribbons winding around it.
  */
 public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiSpiralBeamRenderer.SpiralBeamRenderState> {
 
@@ -41,67 +40,17 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
         float g = KiRenderHelper.green(state.color);
         float b = KiRenderHelper.blue(state.color);
         RenderType renderType = KiRenderHelper.kiRenderType();
-
         float beamLength = state.length;
-        float pulse = 1.0f + 0.06f * Mth.sin(state.ageInTicks * 1.5f);
-        float age = state.ageInTicks;
-
-        // Inner core beam
-        float coreRadius = 0.12f * pulse;
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -coreRadius, -coreRadius, 0,
-                    coreRadius, coreRadius, beamLength,
-                    r, g, b, 0.9f);
-        });
-        poseStack.popPose();
-
-        // Spiral tendrils — draw small cubes along a helix path
-        float spiralRadius = 0.35f;
-        float spiralSegSize = 0.08f;
-        int segments = Math.min((int)(beamLength * 2), 120); // cap segments
-        float spiralSpeed = age * 3.0f;
+        float phase = state.ageInTicks * 0.35f;
+        int steps = Math.min(40, Math.max(8, (int) (beamLength * 1.2f)));
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            for (int i = 0; i < segments; i++) {
-                float z = (i / (float)segments) * beamLength;
-                float angle = spiralSpeed + (i * 0.8f);
-
-                // Tendril 1
-                float tx1 = Mth.cos(angle) * spiralRadius;
-                float ty1 = Mth.sin(angle) * spiralRadius;
-                KiRenderHelper.drawColoredBox(pose, buffer,
-                        tx1 - spiralSegSize, ty1 - spiralSegSize, z - spiralSegSize,
-                        tx1 + spiralSegSize, ty1 + spiralSegSize, z + spiralSegSize,
-                        r, g, b, 0.6f);
-
-                // Tendril 2 (opposite side)
-                float tx2 = Mth.cos(angle + Mth.PI) * spiralRadius;
-                float ty2 = Mth.sin(angle + Mth.PI) * spiralRadius;
-                KiRenderHelper.drawColoredBox(pose, buffer,
-                        tx2 - spiralSegSize, ty2 - spiralSegSize, z - spiralSegSize,
-                        tx2 + spiralSegSize, ty2 + spiralSegSize, z + spiralSegSize,
-                        r, g, b, 0.6f);
-            }
-        });
-        poseStack.popPose();
-
-        // Outer glow
-        float glowRadius = 0.25f * pulse;
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -glowRadius, -glowRadius, -0.1f,
-                    glowRadius, glowRadius, beamLength + 0.2f,
-                    r, g, b, 0.2f);
+            KiRenderHelper.drawCylinder(pose, buffer, 0.08f, 0f, beamLength, 8, 1f, 1f, 1f, 0.95f);
+            KiRenderHelper.drawHelix(pose, buffer, 0.28f, 0f, beamLength, 3.5f, phase, 0.045f, steps, r, g, b, 0.85f);
+            KiRenderHelper.drawHelix(pose, buffer, 0.28f, 0f, beamLength, 3.5f, phase + (float) Math.PI, 0.045f, steps, r, g, b, 0.85f);
         });
         poseStack.popPose();
 

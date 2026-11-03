@@ -86,16 +86,19 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         float age = state.age;
         float maxLife = (float) state.maxLifetime;
 
-        // Smooth fade in & fade out
-        float alphaMult = 1.0f;
-        if (age < 1.5f) {
-            alphaMult = age / 1.5f;
-        } else if (age > maxLife - 2.5f) {
-            alphaMult = Math.max(0.0f, (maxLife - age) / 2.5f);
+        float lifeT = maxLife <= 0.0f ? 1.0f : Math.min(1.0f, age / maxLife);
+        float alphaMult;
+        if (lifeT < 0.25f) {
+            float t = lifeT / 0.25f;
+            alphaMult = t * t * (3.0f - 2.0f * t);
+        } else if (lifeT > 0.6f) {
+            float t = (lifeT - 0.6f) / 0.4f;
+            alphaMult = 1.0f - t * t * (3.0f - 2.0f * t);
+        } else {
+            alphaMult = 1.0f;
         }
 
         final float finalAlpha = alphaMult;
-        final float coneTanSubmit = (float) Math.tan(Math.toRadians(state.coneAngle));
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -110,9 +113,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
             // 1. Staff Origin Kinetic Whirling Sweep Disc (Rapid staff spinning plane at base)
             float spinRot = age * 65.0f * (float) (Math.PI / 180.0);
             float discR1 = 2.2f * fpScale;
-            float discR2 = 1.6f * fpScale;
             drawOriginDisc(matrix, buffer, 0.4f, discR1, 28, spinRot, 0.0f, 1.0f, 0.75f, 0.70f * finalAlpha);
-            drawOriginDisc(matrix, buffer, 0.8f, discR2, 24, -spinRot * 1.3f, 1.0f, 0.85f, 0.2f, 0.60f * finalAlpha);
 
             // 2. Multi-Tiered Conical Aerodynamic Hurricane Vortex Tunnel
             int tiers = 12;
@@ -251,111 +252,110 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
                     float tx2 = (float) -Math.sin(ang2) * bandW;
                     float ty2 = (float) Math.cos(ang2) * bandW;
 
+                    float along = t1 * t1 * (3.0f - 2.0f * t1);
                     drawQuad(matrix, buffer,
                         x1 - tx1, y1 - ty1, z1,
                         x1 + tx1, y1 + ty1, z1,
                         x2 + tx2, y2 + ty2, z2,
                         x2 - tx2, y2 - ty2, z2,
-                        redC, greenC, blueC, 0.65f * finalAlpha
+                        redC, greenC, blueC, (1.0f - along) * 0.7f * finalAlpha
                     );
                 }
             }
 
-            // 4. Physical 3D Orbiting Crescent Gale Blades (10 blades flying forward in the gale)
+            // Crescent cutters riding the cone. Diamonds of wind, not slabs.
             int bladeCount = 10;
             for (int b = 0; b < bladeCount; b++) {
                 float bProgress = ((b / (float) bladeCount) + (age * 0.18f)) % 1.0f;
                 float bZ = bProgress * range + 0.6f;
                 float bRadius = bZ * coneTan * 0.82f;
-
                 double bAngle = (b / (float) bladeCount) * Math.PI * 2.0 + (spinRot * 1.5) + (bProgress * Math.PI * 2.5);
-
                 float bx = (float) Math.cos(bAngle) * bRadius;
                 float by = (float) Math.sin(bAngle) * bRadius;
-
-                // Tangent vector
                 float tx = (float) -Math.sin(bAngle);
                 float ty = (float) Math.cos(bAngle);
-
-                float bladeLen = 0.8f + bProgress * 0.6f;
-                float bladeW = 0.22f + bProgress * 0.12f;
-
-                float tipX = bx + tx * (bladeLen * 0.6f);
-                float tipY = by + ty * (bladeLen * 0.6f);
-                float tipZ = bZ + 0.3f;
-
-                float tailX = bx - tx * (bladeLen * 0.4f);
-                float tailY = by - ty * (bladeLen * 0.4f);
-                float tailZ = bZ - 0.2f;
-
+                float bladeLen = 0.85f + bProgress * 0.55f;
+                float bladeW = 0.16f + bProgress * 0.08f;
+                float tipX = bx + tx * (bladeLen * 0.62f);
+                float tipY = by + ty * (bladeLen * 0.62f);
+                float tipZb = bZ + 0.35f;
+                float tailX = bx - tx * (bladeLen * 0.38f);
+                float tailY = by - ty * (bladeLen * 0.38f);
+                float tailZ = bZ - 0.18f;
                 float nx = -ty * bladeW;
                 float ny = tx * bladeW;
-
-                // 3D Diamond Wind Blade
-                drawTriangle(matrix, buffer,
-                    tailX - nx, tailY - ny, tailZ,
-                    tailX + nx, tailY + ny, tailZ,
-                    tipX, tipY, tipZ,
-                    0.8f, 1.0f, 1.0f, 0.85f * finalAlpha
-                );
-                drawTriangle(matrix, buffer,
-                    tailX - nx, tailY - ny, tailZ,
-                    tipX, tipY, tipZ,
-                    tailX + nx, tailY + ny, tailZ,
-                    0.0f, 1.0f, 0.70f, 0.85f * finalAlpha
-                );
+                float bladeFade = (1.0f - bProgress);
+                bladeFade = bladeFade * bladeFade;
+                float bladeAlpha = 0.9f * finalAlpha * (0.4f + 0.6f * bladeFade);
+                float radX = (float) Math.cos(bAngle);
+                float radY = (float) Math.sin(bAngle);
+                float unx = -ty;
+                float uny = tx;
+                int crest = 6;
+                for (int s = 0; s < crest; s++) {
+                    float u1 = s / (float) crest;
+                    float u2 = (s + 1) / (float) crest;
+                    float bow1 = (float) Math.sin(u1 * Math.PI);
+                    float bow2 = (float) Math.sin(u2 * Math.PI);
+                    float xA = tailX + (tipX - tailX) * u1 + radX * bow1 * bladeW * 1.5f;
+                    float yA = tailY + (tipY - tailY) * u1 + radY * bow1 * bladeW * 1.5f;
+                    float zA = tailZ + (tipZb - tailZ) * u1;
+                    float xB = tailX + (tipX - tailX) * u2 + radX * bow2 * bladeW * 1.5f;
+                    float yB = tailY + (tipY - tailY) * u2 + radY * bow2 * bladeW * 1.5f;
+                    float zB = tailZ + (tipZb - tailZ) * u2;
+                    float wA = bladeW * (0.28f + 0.72f * bow1) * (1.0f - u1 * 0.7f);
+                    float wB = bladeW * (0.28f + 0.72f * bow2) * (1.0f - u2 * 0.7f);
+                    float aA = bladeAlpha * (0.15f + 0.85f * u1);
+                    float aB = bladeAlpha * (0.15f + 0.85f * u2);
+                    drawQuad(matrix, buffer,
+                        xA - unx * wA, yA - uny * wA, zA,
+                        xA + unx * wA, yA + uny * wA, zA,
+                        xB + unx * wB, yB + uny * wB, zB,
+                        xB - unx * wB, yB - uny * wB, zB,
+                        0.05f, 0.82f, 0.62f, (aA + aB) * 0.5f);
+                    drawQuad(matrix, buffer,
+                        xA - unx * wA * 0.28f, yA - uny * wA * 0.28f, zA,
+                        xA + unx * wA * 0.28f, yA + uny * wA * 0.28f, zA,
+                        xB + unx * wB * 0.28f, yB + uny * wB * 0.28f, zB,
+                        xB - unx * wB * 0.28f, yB - uny * wB * 0.28f, zB,
+                        0.9f, 1.0f, 1.0f, (aA + aB) * 0.5f);
+                }
             }
 
-            // 5. Supersonic Mach Pressure Shock Rings (Concentric compression wavefronts)
+            // Shock rings run the length of the cone and die at the mouth.
             int shockWaves = 3;
             for (int w = 0; w < shockWaves; w++) {
                 float waveProgress = ((age * 0.30f) + (w / (float) shockWaves)) % 1.0f;
-                float waveZ = waveProgress * range + 0.5f;
-                float waveR = waveZ * coneTan * 0.90f;
-                float waveAlpha = (1.0f - waveProgress) * 0.75f * finalAlpha;
-
-                drawOriginDisc(matrix, buffer, waveR * 0.85f, waveR * 1.05f, 28, waveZ, 0.4f, 1.0f, 0.9f, waveAlpha);
+                float waveEase = waveProgress * waveProgress * (3.0f - 2.0f * waveProgress);
+                float waveZ = 0.5f + waveEase * Math.max(0.2f, range - 0.8f);
+                float waveR = waveZ * coneTan * 0.92f;
+                float waveAlpha = (float) Math.sin(waveProgress * (float) Math.PI) * 0.65f * finalAlpha;
+                drawRingAt(matrix, buffer, waveZ, waveR * 0.86f, waveR, 0.55f, 1.0f, 0.92f, waveAlpha);
             }
-        });
 
-        // Additive glow halo (T1): enlarged origin discs and a wide soft cone
-        // sheath bloom around the matte body so the vortex reads as energy.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float spinRot = age * 65.0f * (float) (Math.PI / 180.0);
-            float discR1 = 2.2f * fpScale;
-
-            drawOriginDisc(matrix, buffer, 0.4f, discR1 * 1.3f, 28, spinRot, 0.2f, 1.0f, 0.8f, 0.20f * finalAlpha);
-
-            int haloTiers = 8;
-            int haloSegments = 28;
-            for (int t = 0; t < haloTiers; t++) {
-                float z1 = (t / (float) haloTiers) * range + 0.5f;
-                float z2 = ((t + 1) / (float) haloTiers) * range + 0.5f;
-                float r1 = z1 * coneTanSubmit * 1.08f;
-                float r2 = z2 * coneTanSubmit * 1.08f;
-                float twist1 = -spinRot * 0.8f + (z1 * 0.25f);
-                float twist2 = -spinRot * 0.8f + (z2 * 0.25f);
-                float haloAlpha = 0.10f * (1.0f - (t / (float) haloTiers) * 0.5f) * finalAlpha;
-
-                for (int i = 0; i < haloSegments; i++) {
-                    double a1 = ((i / (double) haloSegments) * Math.PI * 2.0) + twist1;
-                    double a2 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + twist1;
-                    double a3 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + twist2;
-                    double a4 = ((i / (double) haloSegments) * Math.PI * 2.0) + twist2;
-
-                    drawQuad(matrix, buffer,
-                        (float) Math.cos(a1) * r1, (float) Math.sin(a1) * r1, z1,
-                        (float) Math.cos(a2) * r1, (float) Math.sin(a2) * r1, z1,
-                        (float) Math.cos(a3) * r2, (float) Math.sin(a3) * r2, z2,
-                        (float) Math.cos(a4) * r2, (float) Math.sin(a4) * r2, z2,
-                        0.1f, 1.0f, 0.6f, haloAlpha
-                    );
-                }
-            }
+            // One ring travels to the mouth of the cone and fades there.
+            float mouth = lifeT * lifeT * (3.0f - 2.0f * lifeT);
+            float mouthZ = 0.6f + mouth * Math.max(0.2f, range - 0.8f);
+            float mouthR = mouthZ * coneTan * 0.95f;
+            float mouthA = (float) Math.sin(Math.min(1.0f, lifeT) * Math.PI) * 0.55f * finalAlpha;
+            drawRingAt(matrix, buffer, mouthZ, mouthR * 0.82f, mouthR, 0.85f, 1.0f, 0.95f, mouthA);
         });
 
         poseStack.popPose();
+    }
+
+    private static void drawRingAt(Matrix4f matrix, VertexConsumer buffer, float z, float innerR, float outerR, float r, float g, float b, float a) {
+        int segments = 28;
+        for (int i = 0; i < segments; i++) {
+            double a1 = (i / (double) segments) * Math.PI * 2.0;
+            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
+            drawQuad(matrix, buffer,
+                (float) Math.cos(a1) * innerR, (float) Math.sin(a1) * innerR, z,
+                (float) Math.cos(a2) * innerR, (float) Math.sin(a2) * innerR, z,
+                (float) Math.cos(a2) * outerR, (float) Math.sin(a2) * outerR, z,
+                (float) Math.cos(a1) * outerR, (float) Math.sin(a1) * outerR, z,
+                r, g, b, a);
+        }
     }
 
     private static void drawOriginDisc(Matrix4f matrix, VertexConsumer buffer, float innerR, float outerR, int segments, float rotZ, float r, float g, float b, float a) {

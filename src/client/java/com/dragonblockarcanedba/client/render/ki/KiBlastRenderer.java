@@ -62,7 +62,7 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         // Spin along flight axis
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.ageInTicks * 30.0f)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.ageInTicks * 12.0f)));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -82,14 +82,6 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
 
             // 4. Perpendicular Energy Resonance Ring
             drawResonanceRing(matrix, buffer, 0, 0, 0, radius * 1.5f, radius * 1.1f, 16, r, g, b, 0.75f);
-        });
-
-        // Additive glow halo (redesign T1): a soft sheath in the bolt's own
-        // synced color so every bolt blooms in its shooter's color.
-        float haloRadius = 0.20f * pulse * 1.55f;
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawLaserBoltBody(matrix, buffer, haloRadius, 0.75f, 1.6f, 12, r, g, b, 0.20f);
         });
 
         poseStack.popPose();

@@ -183,6 +183,12 @@ public final class BedrockAnimationRegistry {
 
                             Keyframe[] rotKeys = parseTrack(boneObj, "rotation");
                             Keyframe[] posKeys = parseTrack(boneObj, "position");
+                            // Some exported clips store rotation samples directly on the bone
+                            // (time -> [x, y, z]) instead of under a "rotation" object. Those
+                            // samples used to be dropped, so the limb kept the vanilla pose.
+                            if (rotKeys == null) {
+                                rotKeys = parseFlatRotation(boneObj);
+                            }
 
                             if (rotKeys != null || posKeys != null) {
                                 animation.bones.put(boneName.toLowerCase(), new BoneTrack(rotKeys, posKeys));
@@ -221,6 +227,40 @@ public final class BedrockAnimationRegistry {
             } catch (Exception ignored) {}
         }
 
+        list.sort(Comparator.comparingDouble(Keyframe::time));
+        return list.toArray(new Keyframe[0]);
+    }
+
+    /**
+     * Reads a bone whose keys are timestamps and whose values are [x, y, z]
+     * rotations. A few exported clips saved the samples that way, and the
+     * loader used to drop them so the limb kept the vanilla pose.
+     */
+    private static Keyframe[] parseFlatRotation(JsonObject boneObj) {
+        List<Keyframe> list = new ArrayList<>();
+        for (Map.Entry<String, JsonElement> entry : boneObj.entrySet()) {
+            String key = entry.getKey();
+            if ("rotation".equals(key) || "position".equals(key) || "scale".equals(key)) {
+                continue;
+            }
+            try {
+                float time = Float.parseFloat(key);
+                JsonElement ptElem = entry.getValue();
+                if (!ptElem.isJsonArray()) {
+                    return null;
+                }
+                JsonArray arr = ptElem.getAsJsonArray();
+                if (arr.size() < 3) {
+                    return null;
+                }
+                list.add(new Keyframe(time, arr.get(0).getAsFloat(), arr.get(1).getAsFloat(), arr.get(2).getAsFloat()));
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        if (list.isEmpty()) {
+            return null;
+        }
         list.sort(Comparator.comparingDouble(Keyframe::time));
         return list.toArray(new Keyframe[0]);
     }

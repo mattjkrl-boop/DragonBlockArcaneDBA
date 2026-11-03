@@ -100,6 +100,7 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
             // 2. Blinding White-Hot Razor Cutting Core
             float coreRadius = 0.012f + (charge * 0.008f);
             drawLaserBeam(matrix, buffer, zStart, range, coreRadius, 1.0f, 1.0f, 1.0f, alpha * 0.95f);
+            drawRingZ(matrix, buffer, zStart + 0.2f, 0.16f + charge * 0.10f, 0.10f + charge * 0.04f, 20, age * 28.0f, 1.0f, 1.0f, 1.0f, alpha);
 
             // 2b. Energy flow bands: brighter sheath segments travel down the
             // beam so the guide reads as flowing energy, not a static tube.
@@ -152,29 +153,20 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
     }
 
     private static void drawLaserBeam(Matrix4f matrix, VertexConsumer consumer, float zStart, float zEnd, float radius, float r, float g, float b, float a) {
-        // Horizontal Quad
-        consumer.addVertex(matrix, -radius, 0, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, radius, 0, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, radius, 0, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -radius, 0, zEnd).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Vertical Quad
-        consumer.addVertex(matrix, 0, -radius, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, 0, radius, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, 0, radius, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, 0, -radius, zEnd).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-
-        // Reverse Horizontal
-        consumer.addVertex(matrix, -radius, 0, zEnd).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, radius, 0, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, radius, 0, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, -radius, 0, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-        // Reverse Vertical
-        consumer.addVertex(matrix, 0, -radius, zEnd).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, 0, radius, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, 0, radius, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, 0, -radius, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
+        int sides = 8;
+        float tipRadius = radius * 0.55f;
+        for (int i = 0; i < sides; i++) {
+            double a1 = (i / (double) sides) * Math.PI * 2.0;
+            double a2 = ((i + 1) / (double) sides) * Math.PI * 2.0;
+            float c1 = (float) Math.cos(a1);
+            float s1 = (float) Math.sin(a1);
+            float c2 = (float) Math.cos(a2);
+            float s2 = (float) Math.sin(a2);
+            consumer.addVertex(matrix, c1 * radius, s1 * radius, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c1, s1, 0);
+            consumer.addVertex(matrix, c2 * radius, s2 * radius, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c2, s2, 0);
+            consumer.addVertex(matrix, c2 * tipRadius, s2 * tipRadius, zEnd).setColor(r, g, b, a * 0.18f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c2, s2, 0);
+            consumer.addVertex(matrix, c1 * tipRadius, s1 * tipRadius, zEnd).setColor(r, g, b, a * 0.18f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c1, s1, 0);
+        }
     }
 
     private static void drawRingZ(Matrix4f matrix, VertexConsumer consumer, float z, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
@@ -201,32 +193,78 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
     }
 
     private static void drawDiamondBracket(Matrix4f matrix, VertexConsumer consumer, float z, float s, float r, float g, float b, float a) {
-        float w = s * 0.15f;
-        // 4 corner diamond brackets
-        float[][] corners = { {s, 0}, {0, s}, {-s, 0}, {0, -s} };
-        for (int i = 0; i < 4; i++) {
-            float cx = corners[i][0];
-            float cy = corners[i][1];
-            consumer.addVertex(matrix, cx - w, cy, z).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, cx, cy + w, z).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, cx + w, cy, z).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, cx, cy - w, z).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        float[] dirX = {1.0f, 0.0f, -1.0f, 0.0f};
+        float[] dirY = {0.0f, 1.0f, 0.0f, -1.0f};
+        int steps = 4;
+        for (int arm = 0; arm < 4; arm++) {
+            float dx = dirX[arm];
+            float dy = dirY[arm];
+            float px = -dy;
+            float py = dx;
+            for (int i = 0; i < steps; i++) {
+                float t1 = i / (float) steps;
+                float t2 = (i + 1) / (float) steps;
+                float d1 = s * (0.72f + 0.55f * t1);
+                float d2 = s * (0.72f + 0.55f * t2);
+                float bow1 = (float) Math.sin(t1 * Math.PI) * s * 0.12f;
+                float bow2 = (float) Math.sin(t2 * Math.PI) * s * 0.12f;
+                float w1 = s * 0.09f * (1.0f - t1);
+                float w2 = s * 0.09f * (1.0f - t2);
+                float x1 = dx * d1 + px * bow1;
+                float y1 = dy * d1 + py * bow1;
+                float x2 = dx * d2 + px * bow2;
+                float y2 = dy * d2 + py * bow2;
+                float a1 = a * (1.0f - t1 * 0.2f);
+                float a2 = a * (1.0f - t2);
+                consumer.addVertex(matrix, x1 - px * w1, y1 - py * w1, z).setColor(r, g, b, a1 * 0.4f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x1 + px * w1, y1 + py * w1, z).setColor(r, g, b, a1 * 0.4f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 + px * w2, y2 + py * w2, z).setColor(r, g, b, a2 * 0.08f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 - px * w2, y2 - py * w2, z).setColor(r, g, b, a2 * 0.08f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x1 - px * w1 * 0.28f, y1 - py * w1 * 0.28f, z).setColor(1.0f, 1.0f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x1 + px * w1 * 0.28f, y1 + py * w1 * 0.28f, z).setColor(1.0f, 1.0f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 + px * w2 * 0.28f, y2 + py * w2 * 0.28f, z).setColor(1.0f, 1.0f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 - px * w2 * 0.28f, y2 - py * w2 * 0.28f, z).setColor(1.0f, 1.0f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            }
         }
     }
 
     private static void drawCrosshairSpokes(Matrix4f matrix, VertexConsumer consumer, float z, float len, float r, float g, float b, float a) {
-        float w = 0.02f;
-        // Horizontal Spoke
-        consumer.addVertex(matrix, -len, -w, z).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, len, -w, z).setColor(r, g, b, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, len, w, z).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, -len, w, z).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-
-        // Vertical Spoke
-        consumer.addVertex(matrix, -w, -len, z).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, w, -len, z).setColor(r, g, b, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, w, len, z).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, -w, len, z).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        float gap = len * 0.34f;
+        float[] dirX = {1.0f, 0.0f, -1.0f, 0.0f};
+        float[] dirY = {0.0f, 1.0f, 0.0f, -1.0f};
+        int steps = 4;
+        for (int arm = 0; arm < 4; arm++) {
+            float dx = dirX[arm];
+            float dy = dirY[arm];
+            float px = -dy;
+            float py = dx;
+            for (int i = 0; i < steps; i++) {
+                float t1 = i / (float) steps;
+                float t2 = (i + 1) / (float) steps;
+                float d1 = gap + (len - gap) * t1;
+                float d2 = gap + (len - gap) * t2;
+                float bow1 = (float) Math.sin(t1 * Math.PI) * len * 0.06f;
+                float bow2 = (float) Math.sin(t2 * Math.PI) * len * 0.06f;
+                float w1 = 0.045f * (1.0f - t1);
+                float w2 = 0.045f * (1.0f - t2);
+                float a1 = a * (1.0f - t1 * 0.35f);
+                float a2 = a * (1.0f - t2);
+                float x1 = dx * d1 + px * bow1;
+                float y1 = dy * d1 + py * bow1;
+                float x2 = dx * d2 + px * bow2;
+                float y2 = dy * d2 + py * bow2;
+                consumer.addVertex(matrix, x1 - px * w1, y1 - py * w1, z).setColor(r, g, b, a1 * 0.45f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x1 + px * w1, y1 + py * w1, z).setColor(r, g, b, a1 * 0.45f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 + px * w2, y2 + py * w2, z).setColor(r, g, b, a2 * 0.1f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 - px * w2, y2 - py * w2, z).setColor(r, g, b, a2 * 0.1f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                float c1 = w1 * 0.32f;
+                float c2 = w2 * 0.32f;
+                consumer.addVertex(matrix, x1 - px * c1, y1 - py * c1, z).setColor(1.0f, 1.0f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x1 + px * c1, y1 + py * c1, z).setColor(1.0f, 1.0f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 + px * c2, y2 + py * c2, z).setColor(1.0f, 1.0f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 - px * c2, y2 - py * c2, z).setColor(1.0f, 1.0f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            }
+        }
     }
 
     private static void drawDiamondSparkZ(Matrix4f matrix, VertexConsumer consumer, float z, float size, float r, float g, float b, float a) {

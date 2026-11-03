@@ -81,11 +81,10 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         float pulse = 0.92f + 0.08f * (float) Math.sin(age * 0.65f);
 
         // Scaled down smaller in first person
-        float orbRadius = (0.22f + charge * 0.95f) * pulse * (state.isFirstPersonOwner ? 0.45f : 1.0f);
-        // The orb used to pop into existence at 0.75 alpha on the first charge
-        // tick. Base alpha now tracks the charge itself, so it materializes
-        // from a faint seed as it grows to full.
-        float alpha = 0.10f + charge * 0.90f;
+        float chargeEase = charge * charge * (3.0f - 2.0f * charge);
+        float orbRadius = (0.22f + chargeEase * 0.95f) * pulse * (state.isFirstPersonOwner ? 0.45f : 1.0f);
+        float alpha = 0.10f + chargeEase * 0.90f;
+        float hot = charge <= 0.75f ? 0.0f : (charge - 0.75f) / 0.25f;
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
@@ -102,31 +101,23 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // 1. Inner Energy Singularity (Hyper-dense white-cyan rotating octahedron core)
-            float coreRadius = orbRadius * 0.42f;
-            drawRotatingOctahedron(matrix, buffer, coreRadius, age * 45.0f, age * 30.0f, 1.0f, 1.0f, 1.0f, 0.98f * (0.25f + charge * 0.75f));
+            // White core, one cyan shell that whitens as the charge peaks, one muzzle ring as the edge.
+            float coreRadius = orbRadius * 0.38f;
+            drawRotatingOctahedron(matrix, buffer, coreRadius, age * 36.0f, age * 22.0f, 1.0f, 1.0f, 1.0f, 0.98f * (0.25f + chargeEase * 0.75f));
 
-            // 2. Middle Radiant Cyan Plasma Geodesic Sphere
-            drawGeodesicSphere(matrix, buffer, orbRadius * 0.75f, age * -25.0f, 18, 0.0f, 0.95f, 1.0f, alpha * 0.85f);
+            float shellR = hot * 0.85f;
+            float shellG = 0.95f;
+            float shellB = 1.0f;
+            drawGeodesicSphere(matrix, buffer, orbRadius * 0.82f, age * -18.0f, 16, shellR, shellG, shellB, alpha * 0.72f);
+            drawGeodesicSphere(matrix, buffer, orbRadius * 0.48f, age * 26.0f, 12, 0.85f + hot * 0.15f, 0.96f, 1.0f, alpha * (0.40f + hot * 0.45f));
 
-            // 3. Outer Hexagonal Synchrotron Energy Cage
-            drawGeodesicSphere(matrix, buffer, orbRadius, age * 18.0f, 12, 0.10f, 0.70f, 1.0f, alpha * 0.45f);
+            float ringR = orbRadius * (1.48f - chargeEase * 0.28f);
+            drawPlaneRing(matrix, buffer, 0, 0, 0, ringR, ringR * 0.86f, 28, age * 22.0f,
+                hot, 0.90f, 1.0f, alpha * 0.90f);
 
-            // 4. 3 Concentric Synchrotron Muzzle Accelerator Rings (perpendicular to look vector)
-            int ringSegments = 32;
-            // Outer Ring
-            drawPlaneRing(matrix, buffer, 0, 0, 0, orbRadius * 1.45f, orbRadius * 1.25f, ringSegments, age * 35.0f,
-                0.0f, 0.90f, 1.0f, alpha * 0.85f);
-            // Middle Counter-rotating Ring
-            drawPlaneRing(matrix, buffer, 0, 0, 0.05f, orbRadius * 1.20f, orbRadius * 1.05f, ringSegments, age * -50.0f,
-                1.0f, 1.0f, 1.0f, alpha * 0.90f);
-            // Inner High-Frequency Ring
-            drawPlaneRing(matrix, buffer, 0, 0, -0.05f, orbRadius * 0.95f, orbRadius * 0.82f, ringSegments, age * 70.0f,
-                0.0f, 0.80f, 1.0f, alpha * 0.75f);
-
-            // 5. 8 Inward-Converging Plasma Intake Spikes (Spiraling and gathering into orb)
+            // Intake spikes spiral inward as the charge eases up. They are the follow-through, not a second orb.
             int spikeCount = 8;
-            float intakeRadius = orbRadius * (2.2f - charge * 0.6f);
+            float intakeRadius = orbRadius * (2.3f - chargeEase * 0.95f);
             float intakeSpeed = 30.0f + (charge * 60.0f);
 
             for (int s = 0; s < spikeCount; s++) {
@@ -149,45 +140,18 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
                 float tipX = sx + toCenterX * spikeLen;
                 float tipY = sy + toCenterY * spikeLen;
                 float tipZ = sz + toCenterZ * spikeLen;
-
-                float baseWidth = 0.05f + (charge * 0.04f);
-                drawQuad(matrix, buffer,
-                    sx - baseWidth, sy - baseWidth, sz,
-                    sx + baseWidth, sy + baseWidth, sz,
+                float bow = orbRadius * 0.16f;
+                drawLash(matrix, buffer,
+                    sx, sy, sz,
+                    sx * 0.55f + (float) Math.cos(angle + 1.2) * bow, sy * 0.55f + (float) Math.sin(angle + 1.2) * bow, sz * 0.35f,
                     tipX, tipY, tipZ,
-                    tipX, tipY, tipZ,
-                    0.0f, 0.95f, 1.0f, alpha * 0.90f
+                    0.045f + charge * 0.03f, 5,
+                    0.0f, 0.72f, 1.0f,
+                    0.90f, 0.98f, 1.0f,
+                    alpha * 0.92f
                 );
             }
 
-            // 6. Overdrive Corona Discharge Arcs (At high charge >= 0.75)
-            if (charge >= 0.75f) {
-                float overdriveRatio = (charge - 0.75f) / 0.25f;
-                int arcCount = 6;
-                for (int a = 0; a < arcCount; a++) {
-                    double arcAngle = (a / (double) arcCount) * Math.PI * 2.0 + Math.toRadians(age * 80.0f);
-                    float ax = (float) Math.cos(arcAngle) * orbRadius * (1.2f + overdriveRatio * 0.6f);
-                    float ay = (float) Math.sin(arcAngle) * orbRadius * (1.2f + overdriveRatio * 0.6f);
-
-                    drawQuad(matrix, buffer,
-                        ax * 0.6f, ay * 0.6f, 0,
-                        ax * 0.6f + 0.04f, ay * 0.6f + 0.04f, 0,
-                        ax, ay, 0.1f,
-                        ax, ay, -0.1f,
-                        1.0f, 1.0f, 1.0f, 0.95f
-                    );
-                }
-            }
-        });
-
-        // Additive glow halo (T1): an oversized faint shell and a bloomed core
-        // octahedron, both riding the same charge-driven alpha so the bloom
-        // materializes with the orb instead of popping in.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawGeodesicSphere(matrix, buffer, orbRadius * 1.22f, age * 18.0f, 12, 0.10f, 0.80f, 1.0f, alpha * 0.20f);
-            drawRotatingOctahedron(matrix, buffer, orbRadius * 0.42f * 1.5f, age * 45.0f, age * 30.0f,
-                0.60f, 0.95f, 1.0f, 0.25f * (0.25f + charge * 0.75f));
         });
 
         poseStack.popPose();
@@ -293,6 +257,71 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
                                      float x3, float y3, float z3,
                                      float r, float g, float b, float a) {
         drawQuad(matrix, consumer, x1, y1, z1, x2, y2, z2, x3, y3, z3, x1, y1, z1, r, g, b, a);
+    }
+
+    private static void drawLash(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float xc, float yc, float zc,
+                                 float x1, float y1, float z1,
+                                 float width, int steps,
+                                 float er, float eg, float eb,
+                                 float cr, float cg, float cb,
+                                 float alpha) {
+        int n = Math.max(4, steps);
+        float px = x0;
+        float py = y0;
+        float pz = z0;
+        for (int i = 1; i <= n; i++) {
+            float t = i / (float) n;
+            float u = 1.0f - t;
+            float x = u * u * x0 + 2.0f * u * t * xc + t * t * x1;
+            float y = u * u * y0 + 2.0f * u * t * yc + t * t * y1;
+            float z = u * u * z0 + 2.0f * u * t * zc + t * t * z1;
+            float w = width * (1.0f - t * 0.9f);
+            float a = alpha * (1.0f - t * t);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w, er, eg, eb, a);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.32f, cr, cg, cb, Math.min(1.0f, a * 1.2f));
+            px = x;
+            py = y;
+            pz = z;
+        }
+    }
+
+    private static void lashSpan(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float x1, float y1, float z1,
+                                 float width,
+                                 float r, float g, float b, float a) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float ax = 0.0f;
+        float ay = 1.0f;
+        float az = 0.0f;
+        if (dx * dx + dz * dz < dy * dy) {
+            ax = 1.0f;
+            ay = 0.0f;
+            az = 0.0f;
+        }
+        float px = dy * az - dz * ay;
+        float py = dz * ax - dx * az;
+        float pz = dx * ay - dy * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        if (plen < 0.0001f) {
+            return;
+        }
+        float s = width / plen;
+        px *= s;
+        py *= s;
+        pz *= s;
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
     }
 
     private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,

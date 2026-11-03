@@ -97,7 +97,8 @@ public class OxShockwaveEntity extends Projectile {
     public void tick() {
         super.tick();
 
-        float progress = Math.min(1.0f, (float) this.tickCount / (float) this.maxTicks);
+        float linear = Math.min(1.0f, (float) this.tickCount / (float) this.maxTicks);
+        float progress = 1.0f - (1.0f - linear) * (1.0f - linear) * (1.0f - linear);
         float currentRadius = 0.5f + (progress * (this.maxRadius - 0.5f));
         this.entityData.set(CURRENT_RADIUS, currentRadius);
 
@@ -106,19 +107,6 @@ public class OxShockwaveEntity extends Projectile {
             boolean subWave = isSubWave();
             Vec3 center = this.position();
             Entity owner = this.getOwner();
-
-            // Theme particles (redesign T5): the leading edge sheds embers as
-            // it tears outward, on top of the existing burst and block debris.
-            if (this.tickCount % 2 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    serverLevel.sendParticles(
-                        com.dragonblockarcanedba.particle.DbaParticles.EMBER,
-                        center.x, center.y + 0.3, center.z,
-                        Math.max(2, Math.round(currentRadius * 1.5f * density)),
-                        currentRadius * 0.8, 0.4, currentRadius * 0.8, 0.05);
-                }
-            }
 
             // Initial burst sound & explosion at start
             if (this.tickCount == 1 && !subWave) {

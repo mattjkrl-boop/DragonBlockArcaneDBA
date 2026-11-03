@@ -251,6 +251,8 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
             } else {
                 Vec3 step = dir.normalize().scale(1.6);
                 this.setPos(currentPos.x + step.x, currentPos.y + step.y, currentPos.z + step.z);
+                this.setYRot((float) (Math.atan2(step.z, step.x) * (180.0 / Math.PI)) - 90.0f);
+                this.setXRot((float) (-(Math.atan2(step.y, Math.sqrt(step.x * step.x + step.z * step.z)) * (180.0 / Math.PI))));
             }
         } else {
             // Attached state: orbit/wrap tightly around target's torso/limbs
@@ -269,6 +271,8 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
             double oz = Math.sin(angle) * radius;
 
             this.setPos(target.getX() + ox, target.getY() + heightOffset, target.getZ() + oz);
+            this.setYRot((float) Math.toDegrees(angle));
+            this.setXRot(0.0f);
         }
     }
 }

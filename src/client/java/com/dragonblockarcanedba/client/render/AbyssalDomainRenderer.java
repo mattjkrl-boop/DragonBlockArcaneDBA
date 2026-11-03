@@ -234,27 +234,43 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
                 }
             }
 
-            // 5. Atmospheric 3D Void Lightning Discharges
-            Random rng = new Random(state.seed + ((long) (age / 3.0f) * 1000));
-            int arcCount = 4;
-            for (int a = 0; a < arcCount; a++) {
-                double startAngle = rng.nextDouble() * Math.PI * 2.0;
-                float arcR = radius * (0.30f + rng.nextFloat() * 0.60f);
-                float sx = (float) Math.cos(startAngle) * arcR;
-                float sz = (float) Math.sin(startAngle) * arcR;
-                float sy = 6.0f + rng.nextFloat() * 10.0f;
+            drawRotatingRing(matrix, buffer, 0, 1.05f, 0, radius * 0.98f, radius * 0.93f, 48, age * 6.0f, 0.95f, 0.08f, 0.38f, 0.55f);
+            drawRotatingRing(matrix, buffer, 0, 0.55f, 0, radius * 0.86f, radius * 0.78f, 40, age * 6.0f - 22.0f, 0.55f, 0.04f, 0.85f, 0.22f);
 
-                float curX = sx, curY = sy, curZ = sz;
-                int arcSteps = 5;
-                for (int s = 0; s < arcSteps; s++) {
-                    float nxtX = curX + (rng.nextFloat() - 0.5f) * 3.2f;
-                    float nxtY = curY - (1.2f + rng.nextFloat() * 1.6f);
-                    float nxtZ = curZ + (rng.nextFloat() - 0.5f) * 3.2f;
+            // Bolts born on the cloud shell and ending at a point inside the dome.
+            // Each one flashes and is gone; it is not a bar left sitting on the storm.
+            float boltCycle = age % 8.0f;
+            float boltOn = boltCycle < 3.5f ? (1.0f - boltCycle / 3.5f) : 0.0f;
+            float boltFlash = boltOn * boltOn * (3.0f - 2.0f * boltOn);
+            if (boltFlash > 0.04f) {
+                Random boltRng = new Random(state.seed + ((long) (age / 8.0f) * 1000L));
+                for (int a = 0; a < 3; a++) {
+                    double ang = boltRng.nextDouble() * Math.PI * 2.0;
+                    float lat = 0.22f + boltRng.nextFloat() * 0.48f;
+                    float shellR = radius * (float) Math.cos(lat * (Math.PI / 2.0));
+                    float yS = 1.0f + (float) Math.sin(lat * (Math.PI / 2.0)) * domeHeight;
+                    float xS = (float) Math.cos(ang) * shellR * 0.96f;
+                    float zS = (float) Math.sin(ang) * shellR * 0.96f;
+                    float yE = 1.2f + boltRng.nextFloat() * Math.min(4.0f, domeHeight * 0.28f);
+                    float xE = (float) Math.cos(ang) * shellR * 0.16f + (boltRng.nextFloat() - 0.5f) * 1.2f;
+                    float zE = (float) Math.sin(ang) * shellR * 0.16f + (boltRng.nextFloat() - 0.5f) * 1.2f;
 
-                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.18f, 0.95f, 0.05f, 0.25f, 0.90f);
-                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.06f, 1.0f, 0.85f, 0.95f, 1.0f);
-
-                    curX = nxtX; curY = nxtY; curZ = nxtZ;
+                    float cx = xS;
+                    float cy = yS;
+                    float cz = zS;
+                    int steps = 7;
+                    for (int s = 0; s < steps; s++) {
+                        float u = (s + 1) / (float) steps;
+                        float wander = (float) Math.sin(u * Math.PI);
+                        float nx = xS + (xE - xS) * u + (boltRng.nextFloat() - 0.5f) * 1.5f * wander;
+                        float ny = yS + (yE - yS) * u;
+                        float nz = zS + (zE - zS) * u + (boltRng.nextFloat() - 0.5f) * 1.5f * wander;
+                        float sheath = 0.10f * (0.30f + 0.70f * wander);
+                        drawBoltRibbon(matrix, buffer, cx, cy, cz, nx, ny, nz, sheath, 0.78f, 0.04f, 0.42f, 0.88f * boltFlash);
+                        cx = nx;
+                        cy = ny;
+                        cz = nz;
+                    }
                 }
             }
         });
@@ -336,6 +352,51 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
         consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+    }
+
+    /** A bowed bolt kink with a sheath, a white core, and a wake. The jagged path stays. */
+    private static void drawBoltRibbon(Matrix4f matrix, VertexConsumer consumer,
+                                       float x1, float y1, float z1, float x2, float y2, float z2,
+                                       float radius, float r, float g, float b, float a) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001f || a < 0.02f) {
+            return;
+        }
+        float px = -dz / len;
+        float pz = dx / len;
+        float bow = Math.min(radius * 3.0f, len * 0.35f);
+        float mx = (x1 + x2) * 0.5f + px * bow;
+        float my = (y1 + y2) * 0.5f + bow * 0.4f;
+        float mz = (z1 + z2) * 0.5f + pz * bow;
+        boltHalf(matrix, consumer, x1, y1, z1, mx, my, mz, radius, radius * 0.6f, r, g, b, a, a * 0.85f);
+        boltHalf(matrix, consumer, mx, my, mz, x2, y2, z2, radius * 0.6f, radius * 0.25f, r, g, b, a * 0.85f, a * 0.5f);
+        boltHalf(matrix, consumer, x1, y1, z1, mx, my, mz, radius * 0.26f, radius * 0.14f, 1.0f, 0.92f, 0.96f, a, a);
+        boltHalf(matrix, consumer, mx, my, mz, x2, y2, z2, radius * 0.14f, radius * 0.05f, 1.0f, 0.92f, 0.96f, a, a * 0.65f);
+        boltHalf(matrix, consumer, mx, my, mz, mx - px * bow * 1.4f, my - bow * 0.25f, mz - pz * bow * 1.4f, radius * 0.4f, 0.01f, r, g, b, a * 0.4f, 0.0f);
+    }
+
+    private static void boltHalf(Matrix4f matrix, VertexConsumer consumer,
+                                 float x1, float y1, float z1, float x2, float y2, float z2,
+                                 float w1, float w2, float r, float g, float b, float a1, float a2) {
+        float dx = x2 - x1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + (y2 - y1) * (y2 - y1) + dz * dz);
+        if (len < 0.001f) {
+            return;
+        }
+        float nx = -dz / len;
+        float nz = dx / len;
+        consumer.addVertex(matrix, x1 - nx * w1, y1, z1 - nz * w1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 + nx * w1, y1, z1 + nz * w1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * w2, y2, z2 + nz * w2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * w2, y2, z2 - nz * w2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1, y1 - w1, z1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, x1, y1 + w1, z1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, x2, y2 + w2, z2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, x2, y2 - w2, z2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
     }
 
     private static void renderBeam(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float radius, float r, float g, float b, float a) {

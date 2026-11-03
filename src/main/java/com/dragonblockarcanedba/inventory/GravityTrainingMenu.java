@@ -27,19 +27,16 @@ public class GravityTrainingMenu extends AbstractContainerMenu {
 
         container.startOpen(playerInventory.player);
 
-        // Machine Fuel Slot (0)
-        this.addSlot(new Slot(container, 0, 80, 53));
+        this.addSlot(new Slot(container, 0, 16, 80));
 
-        // Player Inventory
         for (int i = 0; i < 3; ++i) {
             for (int j = 0; j < 9; ++j) {
-                this.addSlot(new Slot(playerInventory, j + i * 9 + 9, 8 + j * 18, 84 + i * 18));
+                this.addSlot(new Slot(playerInventory, j + i * 9 + 9, 8 + j * 18, 114 + i * 18));
             }
         }
 
-        // Player Hotbar
         for (int k = 0; k < 9; ++k) {
-            this.addSlot(new Slot(playerInventory, k, 8 + k * 18, 142));
+            this.addSlot(new Slot(playerInventory, k, 8 + k * 18, 172));
         }
 
         this.addDataSlots(data);

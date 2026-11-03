@@ -35,6 +35,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     private static float lastCameraYRot = 0;
     private static float lastCameraXRot = 0;
     private static boolean manualSaberCameraOverride = false;
+    /** Previous tick's attack key, so a press is one click even when vanilla does not swing. */
+    private static boolean weaponAttackWasDown = false;
+    /** The press already sent the click that this swing would have sent. */
+    private static boolean weaponClickCoversSwing = false;
 
 
 
@@ -225,6 +229,18 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.BLASTER_BOLT,
             com.dragonblockarcanedba.client.render.BlasterBoltRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.TRIDENT_PRONG,
+            com.dragonblockarcanedba.client.render.TridentProngRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SPIRIT_CLEAVE,
+            com.dragonblockarcanedba.client.render.SpiritCleaveRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BANSHO_GALE,
+            com.dragonblockarcanedba.client.render.BanshoGaleRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.BRAVE_SLASH,
@@ -449,12 +465,18 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         com.dragonblockarcanedba.client.fx.ScreenShakeHandler.scale = com.dragonblockarcanedba.config.DbaEffectsConfig.screenShake();
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openMenuKey.consumeClick()) {
-                if (client.player != null) {
+                if (client.player == null) {
+                    continue;
+                }
+                if (client.gui.screen() == null) {
                     client.setScreenAndShow(new DbaMenuScreen());
                 }
             }
             while (openEmoteMenuKey.consumeClick()) {
-                if (client.player != null) {
+                if (client.player == null) {
+                    continue;
+                }
+                if (client.gui.screen() == null) {
                     client.setScreenAndShow(new com.dragonblockarcanedba.client.gui.EmoteSelectionScreen());
                 }
             }
@@ -486,10 +508,13 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 }
 
                 net.minecraft.world.item.ItemStack stack = client.player.getMainHandItem();
+                boolean attackDown = client.options.keyAttack.isDown();
+                boolean attackPressed = attackDown && !weaponAttackWasDown;
+                weaponAttackWasDown = attackDown;
 
                 // 1. Z Sword Left-Click Charge & Release
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) {
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         zSwordChargeTicks = Math.min(300, zSwordChargeTicks + 1);
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -512,7 +537,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 // 2. Hollow's Edge Charge & Multi-Dash
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) {
                     boolean isHoldingS = client.options.keyDown.isDown();
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         hollowChargeTicks = Math.min(100, hollowChargeTicks + 1);
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -544,7 +569,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 // 3. Azure Dragon Sword Rush
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) {
                     boolean isSneaking = client.options.keyShift.isDown();
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         isAzureRushing = true;
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -567,7 +592,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
                 // 4. Curse Blade Continuous Stream
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) {
-                    if (client.options.keyAttack.isDown() && weaponUseTimer <= 0) {
+                    if (attackDown && weaponUseTimer <= 0) {
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
                             0
@@ -581,7 +606,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 boolean isRapidWeapon = stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem || 
                                         stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem;
 
-                if (isRapidWeapon && client.options.keyAttack.isDown()) {
+                if (isRapidWeapon && attackDown) {
                     if (weaponUseTimer <= 0) {
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
@@ -594,7 +619,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
                 // 6. Saber Blitz Flurry (Hold Left Click)
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         saberChargeTicks++;
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -674,7 +699,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
                 // 7. Ox King's Axe Left-Click Groundbreaker Charge & Release
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) {
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         oxAxeChargeTicks = Math.min(200, oxAxeChargeTicks + 1);
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -696,7 +721,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
                 // 8. Grand Sword Left-Click Spin & Blade Shards Fire
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) {
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         grandSwordSpinTicks++;
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -725,7 +750,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
                 // 9. Darkness Sword (Dabura Sword) Left-Click Abyssal Slash Charge & Release
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem) {
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         daburaChargeTicks = Math.min(160, daburaChargeTicks + 1);
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -747,7 +772,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
                 // 10. Evil Spear Left-Click Impale Charge & Release
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem) {
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         evilSpearChargeTicks = Math.min(120, evilSpearChargeTicks + 1);
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -769,7 +794,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
                 // 11. Katana Left-Click Flashdraw Charge & Release
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem) {
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         katanaDrawTicks = Math.min(100, katanaDrawTicks + 1);
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -791,7 +816,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
                 // 12. Blaster Gun Left-Click Barrage (Continuous)
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem) {
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         blasterBarrageTicks++;
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -811,7 +836,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
                 // 13. Brave Sword Left-Click Assault (Continuous Combo)
                 if (stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem) {
-                    if (client.options.keyAttack.isDown()) {
+                    if (attackDown) {
                         braveAssaultTicks++;
                         ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                             com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK,
@@ -830,13 +855,32 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 }
 
                 if (!isRapidWeapon && !(stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem) && !(stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem)) {
-                    if (client.player.swingTime == 1 && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND) {
-                        if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem ||
-                            stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem ||
-                            ((com.dragonblockarcanedba.attribute.PlayerStatsAccessor) client.player).dba$isSickleActive() ||
-                            stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem ||
-                            stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
-                            stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
+                    boolean swingClick = client.player.swingTime == 1
+                        && client.player.swingingArm == net.minecraft.world.InteractionHand.MAIN_HAND;
+                    if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem ||
+                        stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem ||
+                        ((com.dragonblockarcanedba.attribute.PlayerStatsAccessor) client.player).dba$isSickleActive() ||
+                        stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem ||
+                        stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
+                        stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
+                        // Vanilla only repeats a swing while a block is inside attack reach.
+                        // The press itself is the ability, including a miss and open sky.
+                        // The swing that follows that press must not send a second packet.
+                        boolean sendClick = false;
+                        if (attackPressed) {
+                            sendClick = true;
+                            weaponClickCoversSwing = true;
+                        } else if (swingClick) {
+                            if (weaponClickCoversSwing) {
+                                weaponClickCoversSwing = false;
+                            } else {
+                                sendClick = true;
+                            }
+                        }
+                        if (!attackPressed && !swingClick && !client.player.swinging) {
+                            weaponClickCoversSwing = false;
+                        }
+                        if (sendClick) {
                             ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload(
                                 com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
                                 0

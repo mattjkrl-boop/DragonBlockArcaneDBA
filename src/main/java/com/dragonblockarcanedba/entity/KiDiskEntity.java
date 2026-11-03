@@ -34,8 +34,8 @@ public class KiDiskEntity extends ThrowableProjectile {
     @Override
     public void tick() {
         super.tick();
-        if (this.level().isClientSide() && this.tickCount > 1) {
-            this.level().addParticle(new DustParticleOptions(getColor(), 1.0f),
+        if (this.level().isClientSide() && this.tickCount > 1 && this.tickCount % 4 == 0) {
+            this.level().addParticle(new DustParticleOptions(getColor(), 0.7f),
                     this.getX(), this.getY(), this.getZ(),
                     0, 0, 0);
         }

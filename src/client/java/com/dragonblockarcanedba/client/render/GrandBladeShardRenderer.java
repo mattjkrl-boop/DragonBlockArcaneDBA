@@ -101,24 +101,6 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                 drawPhysicalBlade(bladeStack.last().pose(), buffer, state.ageInTicks, 1.0f);
             });
 
-            // Additive halo pass: the fracture cracks, warning ring, and
-            // beacon get a faint bloom so the hazard reads at a distance.
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                Matrix4f matrix = pose.pose();
-                float pulse = 0.85f + 0.15f * (float) Math.sin(state.ageInTicks * 0.25f);
-
-                int crackRays = 6;
-                for (int c = 0; c < crackRays; c++) {
-                    double angle = (c / (double) crackRays) * Math.PI * 2.0;
-                    float crackLen = 0.75f + (c % 2 == 0 ? 0.35f : 0.0f);
-                    float x2 = (float) Math.cos(angle) * crackLen;
-                    float z2 = (float) Math.sin(angle) * crackLen;
-                    drawCrackLine(matrix, buffer, 0, 0.03f, 0, x2, 0.03f, z2, 0.10f, 1.0f, 0.85f, 0.20f, 0.30f * pulse);
-                }
-                drawGroundRing(matrix, buffer, 0.85f, 0.55f, 24, 1.0f, 0.80f, 0.10f, 0.25f * pulse);
-                drawBeaconPlume(matrix, buffer, 0, 0, 0.10f, 1.6f * pulse, 1.0f, 0.90f, 0.30f, 0.22f * pulse);
-            });
-
         } else {
             // --- FLYING AIRBORNE STATE ---
             poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
@@ -128,19 +110,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
 
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
                 Matrix4f matrix = pose.pose();
-
-                // 1. Physical 3D Greatsword Shard
                 drawPhysicalBlade(matrix, buffer, state.ageInTicks, 1.0f);
-
-                // 2. Volumetric 3D Helical Energy Trail Ribbon Vortex
-                drawHelicalWake(matrix, buffer, state.ageInTicks);
-            });
-
-            // Additive halo pass: a faint copy of the blade and its helical
-            // wake so the spinning shard blooms in flight.
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                Matrix4f matrix = pose.pose();
-                drawPhysicalBlade(matrix, buffer, state.ageInTicks, 0.28f);
                 drawHelicalWake(matrix, buffer, state.ageInTicks);
             });
         }
@@ -186,7 +156,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
         );
 
         // 2. Central Raised Radiant Golden Spine / Fuller
-        float fullerWidth = 0.05f;
+        float fullerWidth = 0.045f;
         drawQuad3D(matrix, consumer,
             -fullerWidth, spineThickness * 1.05f, hiltBack,
             fullerWidth, spineThickness * 1.05f, hiltBack,
@@ -196,13 +166,19 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
         );
 
         // 3. Blinding White-Gold Cutting Edge Bevels
-        drawEdgeLine(matrix, consumer, -bladeHalfWidth, 0, 0, 0, 0, bladeLength, 0.025f, 1.0f, 1.0f, 1.0f, 1.0f * alpha);
-        drawEdgeLine(matrix, consumer, bladeHalfWidth, 0, 0, 0, 0, bladeLength, 0.025f, 1.0f, 1.0f, 1.0f, 1.0f * alpha);
+        drawEdgeLine(matrix, consumer, -bladeHalfWidth, 0, 0, 0, 0, bladeLength, 0.02f, 1.0f, 1.0f, 1.0f, 1.0f * alpha);
+        drawEdgeLine(matrix, consumer, bladeHalfWidth, 0, 0, 0, 0, bladeLength, 0.02f, 1.0f, 1.0f, 1.0f, 1.0f * alpha);
+        drawTriangle(matrix, consumer,
+            -0.04f, 0.02f, bladeLength * 0.78f,
+            0.04f, 0.02f, bladeLength * 0.78f,
+            0.0f, 0.0f, bladeLength + 0.06f,
+            1.0f, 1.0f, 1.0f, alpha
+        );
     }
 
     private static void drawHelicalWake(Matrix4f matrix, VertexConsumer consumer, float age) {
-        int steps = 10;
-        float trailLength = 1.4f;
+        int steps = 12;
+        float trailLength = 2.05f;
 
         for (int i = 0; i < steps; i++) {
             float p1 = i / (float) steps;
@@ -222,7 +198,8 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
             float x2 = (float) Math.cos(a2) * r2;
             float y2 = (float) Math.sin(a2) * r2;
 
-            float alpha = (1.0f - p1) * 0.75f;
+            float falloff = 1.0f - p1;
+            float alpha = falloff * falloff * 0.8f;
             drawCrackLine(matrix, consumer, x1, y1, z1, x2, y2, z2, 0.04f, 1.0f, 0.85f, 0.20f, alpha);
         }
     }
@@ -266,18 +243,35 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
 
         float nx = -dz / len * width * 0.5f;
         float nz = dx / len * width * 0.5f;
-
+        float bow = width * 0.35f;
+        float mx = (x1 + x2) * 0.5f + (-dz / len) * bow;
+        float mz = (z1 + z2) * 0.5f + (dx / len) * bow;
+        float my = (y1 + y2) * 0.5f;
         consumer.addVertex(matrix, x1 - nx, y1, z1 - nz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x1 + nx, y1, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, y2, z2 + nz).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, y2, z2 - nz).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, mx + nx * 0.45f, my, mz + nz * 0.45f).setColor(r, g, b, a * 0.45f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, mx - nx * 0.45f, my, mz - nz * 0.45f).setColor(r, g, b, a * 0.45f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, mx - nx * 0.45f, my, mz - nz * 0.45f).setColor(r, g, b, a * 0.45f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, mx + nx * 0.45f, my, mz + nz * 0.45f).setColor(r, g, b, a * 0.45f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * 0.2f, y2, z2 + nz * 0.2f).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * 0.2f, y2, z2 - nz * 0.2f).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 - nx * 0.22f, y1 + 0.01f, z1 - nz * 0.22f).setColor(1.0f, 0.96f, 0.82f, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 + nx * 0.22f, y1 + 0.01f, z1 + nz * 0.22f).setColor(1.0f, 0.96f, 0.82f, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * 0.05f, y2 + 0.01f, z2 + nz * 0.05f).setColor(1.0f, 0.96f, 0.82f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * 0.05f, y2 + 0.01f, z2 - nz * 0.05f).setColor(1.0f, 0.96f, 0.82f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawEdgeLine(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float width, float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1 - width, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1 + width, y1, z1).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + width, y2, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - width, y2, z2).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        float tip = width * 0.18f;
+        consumer.addVertex(matrix, x1 - width, y1, z1).setColor(r, g, b, a * 0.35f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 + width, y1, z1).setColor(r, g, b, a * 0.35f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + tip, y2, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - tip, y2, z2).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        float core = width * 0.28f;
+        consumer.addVertex(matrix, x1 - core, y1 + 0.012f, z1).setColor(1.0f, 1.0f, 1.0f, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 + core, y1 + 0.012f, z1).setColor(1.0f, 1.0f, 1.0f, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + tip * 0.4f, y2 + 0.012f, z2).setColor(1.0f, 1.0f, 1.0f, a * 0.2f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - tip * 0.4f, y2 + 0.012f, z2).setColor(1.0f, 1.0f, 1.0f, a * 0.2f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawGroundRing(Matrix4f matrix, VertexConsumer consumer, float rOuter, float rInner, int segments, float r, float g, float b, float a) {

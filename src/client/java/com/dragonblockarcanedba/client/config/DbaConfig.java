@@ -11,10 +11,6 @@ public class DbaConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final File FILE = new File(FabricLoader.getInstance().getConfigDir().toFile(), "dragonblockarcanedba.json");
 
-    public static double baseKiRecoveryMultiplier = 1.0;
-    public static boolean chargeVisualsEnabled = true;
-    public static double statGainMultiplier = 1.0;
-    public static boolean use3dWeapons = false;
     public static int firstPersonTransparency = 0; // 0 to 100 (0% transparent = fully opaque)
 
     public static void load() {
@@ -23,10 +19,6 @@ public class DbaConfig {
                 try (FileReader reader = new FileReader(FILE)) {
                     ConfigData data = GSON.fromJson(reader, ConfigData.class);
                     if (data != null) {
-                        baseKiRecoveryMultiplier = data.baseKiRecoveryMultiplier;
-                        chargeVisualsEnabled = data.chargeVisualsEnabled;
-                        statGainMultiplier = data.statGainMultiplier;
-                        use3dWeapons = data.use3dWeapons;
                         firstPersonTransparency = data.firstPersonTransparency;
                         // Migration support from legacy boolean setting
                         if (firstPersonTransparency == 0 && data.firstPersonHalfTransparency) {
@@ -45,7 +37,7 @@ public class DbaConfig {
     public static void save() {
         try {
             try (FileWriter writer = new FileWriter(FILE)) {
-                GSON.toJson(new ConfigData(baseKiRecoveryMultiplier, chargeVisualsEnabled, statGainMultiplier, use3dWeapons, firstPersonTransparency), writer);
+                GSON.toJson(new ConfigData(firstPersonTransparency), writer);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -53,18 +45,10 @@ public class DbaConfig {
     }
 
     private static class ConfigData {
-        double baseKiRecoveryMultiplier;
-        boolean chargeVisualsEnabled;
-        double statGainMultiplier;
-        boolean use3dWeapons;
         int firstPersonTransparency;
         boolean firstPersonHalfTransparency; // for backwards compatibility reading
 
-        ConfigData(double b, boolean c, double s, boolean u, int f) {
-            this.baseKiRecoveryMultiplier = b;
-            this.chargeVisualsEnabled = c;
-            this.statGainMultiplier = s;
-            this.use3dWeapons = u;
+        ConfigData(int f) {
             this.firstPersonTransparency = f;
         }
     }

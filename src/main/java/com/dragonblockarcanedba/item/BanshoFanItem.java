@@ -3,6 +3,7 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.BanshoCycloneEntity;
+import com.dragonblockarcanedba.entity.BanshoGaleEntity;
 import com.dragonblockarcanedba.entity.BanshoShockwaveEntity;
 import com.dragonblockarcanedba.entity.BanshoWindProjectileEntity;
 import net.minecraft.server.level.ServerLevel;
@@ -164,6 +165,25 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.2f);
         }
+    }
+
+    /**
+     * The fan's own swing. Opens a gale even when the fan misses.
+     * A body already in melee reach is left to hurtEnemy.
+     */
+    public static void performGaleSwing(ServerPlayer player, ItemStack stack) {
+        if (!WeaponDrainHelper.drainStaminaDiscrete(player, 45.0, 10)) {
+            return;
+        }
+        ServerLevel level = (ServerLevel) player.level();
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+        float damage = 400.0f + (float) (accessor.dba$getStrength() * 1.5);
+        Vec3 look = player.getLookAngle();
+        BanshoGaleEntity gale = new BanshoGaleEntity(level, player, damage);
+        gale.setDeltaMovement(look.scale(1.35));
+        level.addFreshEntity(gale);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.0f, 1.3f);
     }
 
     // --- Right Click: Tempest Barrage — Physical 3D launch shockwave + 5 custom wind projectiles ---

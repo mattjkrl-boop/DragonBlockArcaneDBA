@@ -13,6 +13,7 @@ public interface DbaPlayerState {
     boolean dba$isCrouching();
     boolean dba$isSwimming();
     boolean dba$isFlying();
+    boolean dba$isOnGround();
     float dba$getHorizontalSpeed();
     float dba$getYawVelocity();
     float dba$getBodyYawVelocity();

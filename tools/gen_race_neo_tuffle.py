@@ -7,7 +7,7 @@ buckle, gold wrist and ankle guards, bare pale arms. Muscular build.
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint, skin_lid
 
 SKIN_V = 208; HAIR_V = 218
 BLACK = (26, 26, 32); BLACK_D = (18, 18, 24); MAROON = (110, 30, 34); MAROON_D = (84, 22, 28)
@@ -70,8 +70,8 @@ m.spike('fall_s', [3.2, 27.5, 3.8], 9.5, 4.2, (170, 0, -6), True, bone=hb)
 m.spike('fall_o', [4.3, 28.5, 2.6], 7.5, 3.4, (168, 0, -11), True, bone=hb)
 
 # ------------------------------------------------------------------ painting
-def paint_face(i, j, W, H):
-    """Baby Vegeta face: heavy maroon brow ridge, red eyes, black tear lines."""
+def paint_face(i, j, W, H, closed=False):
+    """Baby Vegeta face: heavy maroon brow ridge, small irises, black tear lines."""
     sx = i - W // 2
     k = SKIN_V
     for side in (-1, 1):
@@ -81,8 +81,12 @@ def paint_face(i, j, W, H):
             if j == 8 and a <= 3: return (96, 40, 40), None
             if j == 9 and 2 <= a <= 5: return (22, 18, 20), None          # upper lid
             if j == 10:
+                # Iris is two texels wide. Closed, those texels are the shut line.
+                if closed:
+                    if a in (3, 4): return eye_tint(200)
+                    if a in (2, 5): return skin_lid(k)
                 if a in (2, 5): return (22, 18, 20), None
-                if a in (3, 4): return (208, 36, 36), None                # red eyes
+                if a in (3, 4): return eye_tint(235)
             if j == 11 and 3 <= a <= 4: return (k * 0.85,) * 3, 'R'
             if j in (12, 13, 14) and a in (3, 5): return (24, 20, 22), None   # tear lines
     if j == 13 and sx == -1: return (k * 0.82,) * 3, 'R'
@@ -131,7 +135,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
             if fn == 'north' and 0.3 < t < 0.42 and i % 2 == 0: v *= 0.82
             if fn == 'down' or t > 0.85: v *= 0.87
         if mt == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if mt == 'head' and fn == 'down': v *= 0.78
         if edge and mt != 'head': v *= 0.89

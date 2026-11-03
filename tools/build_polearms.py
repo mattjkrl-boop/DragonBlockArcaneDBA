@@ -24,17 +24,17 @@ ASSETS = os.path.join(ROOT, "src/main/resources/assets/dragonblockarcanedba")
 SPECS = {
     "evil_spear": {
         "head": "spear", "swing_len": 0.45, "charge_tilt": -6, "pommel": "spike",
-        "pal": {"blade_light": (74, 76, 88), "blade_dark": (44, 46, 56),
-                "grip_main": (76, 51, 34), "grip_second": (56, 37, 24),
-                "metal": (42, 42, 50), "glow": (196, 10, 64),
-                "metal_dark": (24, 24, 30), "accent": (196, 10, 64)},
+        "pal": {"blade_light": (220, 86, 160), "blade_dark": (140, 40, 100),
+                "grip_main": (84, 58, 34), "grip_second": (58, 40, 24),
+                "metal": (48, 36, 28), "glow": (244, 140, 196),
+                "metal_dark": (28, 22, 18), "accent": (236, 110, 176)},
     },
     "devil_trident": {
         "head": "trident", "swing_len": 0.48, "charge_tilt": -6, "pommel": "spike",
-        "pal": {"blade_light": (54, 52, 62), "blade_dark": (30, 28, 36),
-                "grip_main": (142, 22, 38), "grip_second": (24, 20, 28),
-                "metal": (32, 28, 36), "glow": (255, 34, 68),
-                "metal_dark": (16, 14, 20), "accent": (255, 34, 68)},
+        "pal": {"blade_light": (92, 94, 102), "blade_dark": (58, 60, 68),
+                "grip_main": (70, 72, 78), "grip_second": (48, 50, 56),
+                "metal": (62, 64, 70), "glow": (128, 132, 140),
+                "metal_dark": (36, 38, 44), "accent": (110, 114, 122)},
     },
     "power_pole": {
         "head": "pole", "swing_len": 0.4, "charge_tilt": -5, "pommel": "ball",
@@ -45,17 +45,17 @@ SPECS = {
     },
     "sickle_of_sorrow": {
         "head": "sickle", "swing_len": 0.5, "charge_tilt": -5, "pommel": "spike",
-        "pal": {"blade_light": (68, 72, 84), "blade_dark": (40, 44, 54),
-                "grip_main": (54, 45, 41), "grip_second": (38, 32, 28),
-                "metal": (36, 34, 38), "glow": (186, 22, 28),
-                "metal_dark": (20, 19, 22), "accent": (186, 22, 28)},
+        "pal": {"blade_light": (232, 176, 224), "blade_dark": (150, 56, 120),
+                "grip_main": (96, 20, 64), "grip_second": (64, 14, 44),
+                "metal": (72, 18, 52), "glow": (255, 196, 244),
+                "metal_dark": (42, 12, 32), "accent": (244, 170, 230)},
     },
     "ox_kings_ax": {
         "head": "axe", "swing_len": 0.55, "charge_tilt": -4, "pommel": "spike",
-        "pal": {"blade_light": (170, 178, 190), "blade_dark": (104, 110, 122),
-                "grip_main": (112, 78, 45), "grip_second": (84, 57, 32),
-                "metal": (98, 102, 112), "glow": (255, 106, 43),
-                "metal_dark": (58, 60, 66), "accent": (255, 150, 60)},
+        "pal": {"blade_light": (200, 206, 214), "blade_dark": (130, 140, 154),
+                "grip_main": (36, 74, 140), "grip_second": (22, 48, 104),
+                "metal": (96, 104, 116), "glow": (214, 220, 228),
+                "metal_dark": (28, 40, 72), "accent": (180, 190, 202)},
     },
 }
 

@@ -115,6 +115,13 @@ public final class BedrockAnimationApplier {
 
         // ==================== 6. FLYING (Elytra / Ki Flight) ====================
         if (state.isFallFlying || dbaState.dba$isFlying()) {
+            // The rush forces fall-flying. The shared fly clip leans the bones
+            // again on top of that, so the body stays upright or folds into the
+            // camera. The rush gets its own forward pose instead.
+            if (state.isFallFlying && holdsAzureDragon(state)) {
+                applyAzureRushPose(model, dbaState);
+                return true;
+            }
             BedrockAnimationRegistry.BedrockAnimation flyAnim = getAnim("fly");
             if (flyAnim != null) {
                 float time = flyAnim.calculatePlayTime(ageSeconds);
@@ -142,10 +149,12 @@ public final class BedrockAnimationApplier {
         }
 
         // ==================== 8. AIRBORNE: JUMPING & FALLING ====================
+        // Anything still off the ground here is a jump or a fall. The old gap
+        // between those two velocity bands fell through to the walk clip, so a
+        // jump apex and an unflagged hover played the ground cycle in midair.
         float velY = dbaState.dba$getLocalVelocityY();
-        if (!state.isPassenger && !state.isInWater && !state.isFallFlying) {
-            if (velY > 0.15f) {
-                // Rising / Jumping
+        if (!state.isPassenger && !state.isInWater && !state.isFallFlying && !dbaState.dba$isOnGround()) {
+            if (velY > 0.12f) {
                 String jumpId = dbaState.dba$isSprinting() ? "running_jump" : "jump";
                 BedrockAnimationRegistry.BedrockAnimation jumpAnim = getAnim(jumpId);
                 if (jumpAnim != null) {
@@ -153,14 +162,12 @@ public final class BedrockAnimationApplier {
                     applyTrackedBones(model, jumpAnim, time, 1.0f);
                     return true;
                 }
-            } else if (velY < -0.35f) {
-                // Falling through air
-                BedrockAnimationRegistry.BedrockAnimation fallAnim = getAnim("fall");
-                if (fallAnim != null) {
-                    float time = fallAnim.calculatePlayTime(ageSeconds);
-                    applyTrackedBones(model, fallAnim, time, 1.0f);
-                    return true;
-                }
+            }
+            BedrockAnimationRegistry.BedrockAnimation fallAnim = getAnim("fall");
+            if (fallAnim != null) {
+                float time = fallAnim.calculatePlayTime(ageSeconds);
+                applyTrackedBones(model, fallAnim, time, 1.0f);
+                return true;
             }
         }
 
@@ -218,8 +225,9 @@ public final class BedrockAnimationApplier {
 
         // ==================== 13. LOCOMOTION (Walking, Sprinting, Backward) ====================
         if (dbaState.dba$getHorizontalSpeed() > 0.05f) {
-            if (dbaState.dba$getLocalVelocityZ() > 0.08f) {
-                // Walking backwards
+            // Local Z is positive when moving the way the body faces. The old
+            // test used the opposite sign, so ordinary walking played walk_back.
+            if (dbaState.dba$getLocalVelocityZ() < -0.08f) {
                 BedrockAnimationRegistry.BedrockAnimation walkBackAnim = getAnim("walk_back");
                 if (walkBackAnim != null) {
                     float time = (limbSwing * 0.12f) % walkBackAnim.length;
@@ -258,6 +266,48 @@ public final class BedrockAnimationApplier {
         }
 
         return false;
+    }
+
+    /** Held azure rush. The pose stack already leans the body; these bones trail. */
+    private static void applyAzureRushPose(HumanoidModel<?> model, DbaPlayerState dbaState) {
+        float lookYaw = model.head.yRot;
+        restoreBind(model);
+        model.body.xRot = 0.2F;
+        model.head.xRot = -0.55F;
+        model.head.yRot = Mth.clamp(lookYaw, -0.7F, 0.7F) * 0.35F;
+
+        model.rightArm.xRot = 0.9F;
+        model.leftArm.xRot = 0.9F;
+        model.rightArm.yRot = 0.22F;
+        model.leftArm.yRot = -0.22F;
+        model.rightArm.zRot = 0.5F;
+        model.leftArm.zRot = -0.5F;
+        model.rightArm.z += 2.0F;
+        model.leftArm.z += 2.0F;
+
+        model.rightLeg.xRot = 0.65F;
+        model.leftLeg.xRot = 0.42F;
+        model.rightLeg.zRot = 0.1F;
+        model.leftLeg.zRot = -0.1F;
+        model.rightLeg.z += 1.0F;
+        model.leftLeg.z += 1.0F;
+
+        float bank = (float) Math.toRadians(Mth.clamp(dbaState.dba$getFlightBank(), -14.0F, 14.0F));
+        model.body.zRot += bank;
+        model.rightArm.zRot += bank;
+        model.leftArm.zRot += bank;
+        model.rightLeg.zRot += bank;
+        model.leftLeg.zRot += bank;
+        model.head.zRot -= bank * 0.25F;
+    }
+
+    private static boolean holdsAzureDragon(AvatarRenderState state) {
+        if (state.rightHandItemStack != null
+                && state.rightHandItemStack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) {
+            return true;
+        }
+        return state.leftHandItemStack != null
+                && state.leftHandItemStack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem;
     }
 
     private static BedrockAnimationRegistry.BedrockAnimation getAnim(String id) {
@@ -305,26 +355,14 @@ public final class BedrockAnimationApplier {
     ) {
         if (anim == null || anim.bones.isEmpty()) return;
 
-        // Root bone (overall elevation and lean)
-        BedrockAnimationRegistry.BoneTrack rootTrack = anim.bones.get("root");
-        if (rootTrack != null) {
-            float[] rootPos = rootTrack.samplePosition(time);
-            float[] rootRot = rootTrack.sampleRotation(time);
-
-            float elev = -rootPos[1] * weight;
-            model.body.y += elev;
-            model.head.y += elev;
-            model.rightArm.y += elev;
-            model.leftArm.y += elev;
-            model.rightLeg.y += elev;
-            model.leftLeg.y += elev;
-
-            if (rootRot[0] != 0.0f || rootRot[1] != 0.0f || rootRot[2] != 0.0f) {
-                model.body.xRot += (float) Math.toRadians(rootRot[0]) * weight;
-                model.body.yRot += (float) Math.toRadians(rootRot[1]) * weight;
-                model.body.zRot += (float) Math.toRadians(rootRot[2]) * weight;
-            }
-        }
+        // Vanilla setupAnim leaves attack offsets and a one-arm swing on the
+        // parts. Clear back to the humanoid bind so a clip that does not mention
+        // a channel cannot inherit that pose. Head look is restored afterwards.
+        float lookPitch = model.head.xRot;
+        float lookYaw = model.head.yRot;
+        restoreBind(model);
+        model.head.xRot = lookPitch;
+        model.head.yRot = lookYaw;
 
         applyHeadBone(model.head, anim.bones.get("head"), time, weight, overrideLook);
         applyBone(model.body, anim.bones.get("body"), time, weight);
@@ -332,6 +370,74 @@ public final class BedrockAnimationApplier {
         applyBone(model.leftArm, anim.bones.get("left_arm"), time, weight);
         applyBone(model.rightLeg, anim.bones.get("right_leg"), time, weight);
         applyBone(model.leftLeg, anim.bones.get("left_leg"), time, weight);
+
+        // The custom mesh draws each limb from its own part. Those parts are
+        // siblings, so a lean stored only on "root" never pitched the arms or
+        // the legs. Fold the root rotation into every limb after the local tracks.
+        BedrockAnimationRegistry.BoneTrack rootTrack = anim.bones.get("root");
+        if (rootTrack != null) {
+            float[] rootPos = rootTrack.samplePosition(time);
+            float[] rootRot = rootTrack.sampleRotation(time);
+            float rx = (float) Math.toRadians(rootRot[0]) * weight;
+            float ry = (float) Math.toRadians(rootRot[1]) * weight;
+            float rz = (float) Math.toRadians(rootRot[2]) * weight;
+            if (rx != 0.0f || ry != 0.0f || rz != 0.0f) {
+                addRot(model.body, rx, ry, rz);
+                addRot(model.head, rx, ry, rz);
+                addRot(model.rightArm, rx, ry, rz);
+                addRot(model.leftArm, rx, ry, rz);
+                addRot(model.rightLeg, rx, ry, rz);
+                addRot(model.leftLeg, rx, ry, rz);
+            }
+            float elev = -rootPos[1] * weight;
+            float slideX = rootPos[0] * weight;
+            float slideZ = rootPos[2] * weight;
+            if (elev != 0.0f || slideX != 0.0f || slideZ != 0.0f) {
+                shift(model.body, slideX, elev, slideZ);
+                shift(model.head, slideX, elev, slideZ);
+                shift(model.rightArm, slideX, elev, slideZ);
+                shift(model.leftArm, slideX, elev, slideZ);
+                shift(model.rightLeg, slideX, elev, slideZ);
+                shift(model.leftLeg, slideX, elev, slideZ);
+            }
+        }
+    }
+
+    /** Humanoid bind offsets, in pixels, matching HumanoidModel.createMesh. */
+    private static void restoreBind(HumanoidModel<?> model) {
+        bind(model.head, 0.0f, 0.0f, 0.0f);
+        bind(model.body, 0.0f, 0.0f, 0.0f);
+        bind(model.rightArm, -5.0f, 2.0f, 0.0f);
+        bind(model.leftArm, 5.0f, 2.0f, 0.0f);
+        bind(model.rightLeg, -1.9f, 12.0f, 0.0f);
+        bind(model.leftLeg, 1.9f, 12.0f, 0.0f);
+        ModelPart root = model.root();
+        if (root != null) {
+            root.xRot = 0.0f;
+            root.yRot = 0.0f;
+            root.zRot = 0.0f;
+        }
+    }
+
+    private static void bind(ModelPart part, float x, float y, float z) {
+        part.x = x;
+        part.y = y;
+        part.z = z;
+        part.xRot = 0.0f;
+        part.yRot = 0.0f;
+        part.zRot = 0.0f;
+    }
+
+    private static void addRot(ModelPart part, float x, float y, float z) {
+        part.xRot += x;
+        part.yRot += y;
+        part.zRot += z;
+    }
+
+    private static void shift(ModelPart part, float x, float y, float z) {
+        part.x += x;
+        part.y += y;
+        part.z += z;
     }
 
     private static void applyHeadBone(

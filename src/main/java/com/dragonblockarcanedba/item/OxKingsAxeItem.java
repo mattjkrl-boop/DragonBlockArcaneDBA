@@ -101,9 +101,8 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (attacker instanceof Player player && !player.level().isClientSide()) {
-            WeaponDrainHelper.drainStaminaDiscrete(player, 125.0, 15);
-        }
+        // Groundbreaker and the king's slam already pay. A vanilla connect used to
+        // spend stamina again and show nothing of its own.
     }
 
     // --- LEFT CLICK: Groundbreaker Charging & Downward Shockwave Strike ---

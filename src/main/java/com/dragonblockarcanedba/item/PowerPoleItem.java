@@ -65,12 +65,10 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
         return builder.build();
     }
 
-    // Plain melee hit: stamina cost only. The Whirlwind Staff AoE lives in performWindSpin.
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (attacker instanceof Player player && !player.level().isClientSide()) {
-            WeaponDrainHelper.drainStaminaDiscrete(player, 20.0, 10);
-        }
+        // The whirlwind and the extended poke already pay. A vanilla connect used to
+        // spend stamina again and show nothing of its own.
     }
 
     // Per-target whirlwind hit gate: the spin is called every 2 ticks while held, and

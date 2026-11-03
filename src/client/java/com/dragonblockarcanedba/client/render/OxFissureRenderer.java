@@ -57,7 +57,11 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         float pulse = 0.75f + 0.25f * (float) Math.sin(state.ageInTicks * 0.25f);
-        float fade = Math.max(0.0f, 1.0f - (state.ageInTicks / (float) OxFissureEntity.MAX_LIFETIME));
+        float life = state.ageInTicks / (float) OxFissureEntity.MAX_LIFETIME;
+        float inT = Math.min(1.0f, state.ageInTicks / 4.0f);
+        float inEase = 1.0f - (1.0f - inT) * (1.0f - inT) * (1.0f - inT);
+        float outT = life <= 0.70f ? 0.0f : Math.min(1.0f, (life - 0.70f) / 0.30f);
+        float fade = inEase * (1.0f - outT * outT * (3.0f - 2.0f * outT));
 
         // Align the trench with the yaw the spawner set (radially outward from
         // the slam). Every fissure used to render pointing the same way.
@@ -94,6 +98,7 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
                 drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.45f, 1.0f, 0.25f * pulse * segShade, 0.0f, 0.95f * fade);
                 // Glowing Heat Core
                 drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.18f, 1.0f, 0.90f * pulse * segShade, 0.2f, fade * (0.70f + 0.30f * segShade));
+                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.05f, 1.0f, 0.98f, 0.72f, fade * (0.85f + 0.15f * segShade) * (1.0f - outT));
 
                 // Small 3D stone fissure teeth along edges
                 if (i % 2 == 0) {
@@ -124,8 +129,10 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
                     float segLen = 0.55f - s * 0.15f;
                     float nx2 = bx + (float) dirX * segLen + (rng.nextFloat() - 0.5f) * 0.2f;
                     float nz2 = bz + (float) dirZ * segLen;
-                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.30f, 1.0f, 0.25f * pulse, 0.0f, 0.85f * fade);
-                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.12f, 1.0f, 0.90f * pulse, 0.2f, 0.95f * fade);
+                    float branchDie = 1.0f - s * 0.42f;
+                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.30f * branchDie, 1.0f, 0.25f * pulse, 0.0f, 0.85f * fade * branchDie);
+                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.12f * branchDie, 1.0f, 0.90f * pulse, 0.2f, 0.95f * fade * branchDie);
+                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.04f * branchDie, 1.0f, 0.98f, 0.72f, 0.80f * fade * branchDie);
                     bx = nx2; bz = nz2;
                 }
             }
@@ -178,9 +185,53 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
                                       float tipX, float tipY, float tipZ,
                                       float rBase, float gBase, float bBase, float aBase,
                                       float rTip, float gTip, float bTip, float aTip) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        float bx = (x1 + x2) * 0.5f;
+        float by = (y1 + y2) * 0.5f;
+        float bz = (z1 + z2) * 0.5f;
+        float width = (float) Math.sqrt((x2 - x1) * (x2 - x1) + (z2 - z1) * (z2 - z1)) * 0.5f;
+        float mx = (bx + tipX) * 0.5f + (x1 - x2) * 0.35f;
+        float my = (by + tipY) * 0.62f;
+        float mz = (bz + tipZ) * 0.5f + (z1 - z2) * 0.35f;
+        int steps = 5;
+        float px = bx;
+        float py = by;
+        float pz = bz;
+        for (int i = 1; i <= steps; i++) {
+            float t = i / (float) steps;
+            float u = 1.0f - t;
+            float x = u * u * bx + 2.0f * u * t * mx + t * t * tipX;
+            float y = u * u * by + 2.0f * u * t * my + t * t * tipY;
+            float z = u * u * bz + 2.0f * u * t * mz + t * t * tipZ;
+            float w = width * (1.0f - t * 0.88f);
+            float a = aBase * (1.0f - t * t * 0.55f);
+            toothSpan(matrix, consumer, px, py, pz, x, y, z, w, rBase, gBase, bBase, a);
+            toothSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.30f, 1.0f, 0.82f, 0.22f, Math.min(1.0f, aTip * (1.0f - t * 0.4f)));
+            px = x;
+            py = y;
+            pz = z;
+        }
+    }
+
+    private static void toothSpan(Matrix4f matrix, VertexConsumer consumer,
+                                  float x0, float y0, float z0,
+                                  float x1, float y1, float z1,
+                                  float width, float r, float g, float b, float a) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float px = -dz;
+        float py = 0.0f;
+        float pz = dx;
+        float plen = (float) Math.sqrt(px * px + pz * pz + dy * dy);
+        if (plen < 0.0001f) {
+            return;
+        }
+        float s = width / plen;
+        px *= s;
+        pz *= s;
+        consumer.addVertex(matrix, x0 - px, y0, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, 1, pz);
+        consumer.addVertex(matrix, x0 + px, y0, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, 1, pz);
+        consumer.addVertex(matrix, x1 + px, y1, z1 + pz).setColor(r, g, b, a * 0.6f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, 1, pz);
+        consumer.addVertex(matrix, x1 - px, y1, z1 - pz).setColor(r, g, b, a * 0.6f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, 1, pz);
     }
 }

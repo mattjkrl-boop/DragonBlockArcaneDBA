@@ -8,7 +8,7 @@ pants, brown shoes.
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint
 
 SKIN_V = 202
 GI = (88, 62, 168); GI_D = (68, 46, 136); SASH = (52, 96, 205); SASH_D = (40, 76, 168)
@@ -17,13 +17,19 @@ BROWN = (128, 82, 50); BROWN_D = (102, 64, 38); GEM = (52, 120, 235); GOLD = (21
 
 m = RaceModel('namekian', None)
 
-# Legs: baggy purple gi pants, brown shoes
+# Legs meet the gi at y=12. The hip block matches the torso footprint and the
+# pant tubes overlap it, so the standing pose reads as one connected pair of legs.
+# Body cubes must stay inside y=12..24. Anything hanging below the waist belongs
+# on a leg bone: the runtime scales the body from its full Y bounds, and a sash
+# or cape tip below the waist shortens the torso and leaves a gap over the legs.
 for side, bone in ((1, 'right_leg'), (-1, 'left_leg')):
     def X(a, b): return (a, b) if side > 0 else (-b, -a)
-    x = X(0, 4.9)
-    m.cube('pants_' + bone, bone, 'gi', [x[0], 3.9, -2.55], [x[1], 12, 2.55])
-    xb = X(0.05, 5.15)
-    m.cube('pants_bag_' + bone, bone, 'gi', [xb[0], 6.8, -2.8], [xb[1], 10.6, 2.8])
+    xh = X(0.0, 6.15)
+    m.cube('hip_' + bone, bone, 'gi', [xh[0], 9.2, -3.0], [xh[1], 12.0, 3.0])
+    x = X(0.0, 4.7)
+    m.cube('pants_' + bone, bone, 'gi', [x[0], 3.4, -2.55], [x[1], 10.2, 2.55])
+    xb = X(0.05, 4.95)
+    m.cube('pants_bag_' + bone, bone, 'gi', [xb[0], 5.4, -2.75], [xb[1], 9.6, 2.75])
     xo = X(0.3, 4.6)
     m.cube('shoe_' + bone, bone, 'shoe', [xo[0], 0, -2.55], [xo[1], 4.0, 2.35])
     m.cube('shoe_toe_' + bone, bone, 'shoe', [xo[0], 0, -3.6], [xo[1], 2.2, -2.55])
@@ -32,13 +38,14 @@ for side, bone in ((1, 'right_leg'), (-1, 'left_leg')):
 m.cube('torso', 'body', 'gi', [-5.0, 12, -3.0], [5.0, 24, 3.0])
 m.cube('chest', 'body', 'gi', [-5.5, 16.5, -3.3], [5.5, 24, 3.1])
 m.cube('chestpatch', 'body', 'patch', [-3.3, 16.9, -3.62], [3.3, 23.7, -3.05])
-m.cube('cape_top', 'body', 'cape', [-5.9, 22.5, -3.5], [5.9, 24.7, 3.6])
+m.cube('cape_top', 'body', 'cape', [-5.9, 22.5, -3.5], [5.9, 24.0, 3.6])
 m.cube('cape_back', 'body', 'cape', [-5.7, 12.7, 3.3], [5.7, 23.2, 3.85])
 for wx in (-5.0, 0.0, 5.0):
-    m.cube('cape_tip_%d' % int(wx + 5), 'body', 'cape', [wx - 0.55, 11.5, 3.35], [wx + 0.55, 12.8, 3.8])
+    m.cube('cape_tip_%d' % int(wx + 5), 'body', 'cape', [wx - 0.55, 12.0, 3.35], [wx + 0.55, 12.8, 3.8])
     m.cube('cape_wt_%d' % int(wx + 5), 'body', 'gold', [wx - 0.55, 12.75, 3.35], [wx + 0.55, 13.35, 3.8])
 m.cube('sash', 'body', 'sash', [-5.2, 12.2, -3.25], [5.2, 14.3, 3.2])
-m.mirror('sash_end', ('body', 'body'), 'sash', [0.5, 6.8, -3.35], [2.2, 12.4, -2.9])
+m.cube('sash_end_r', 'right_leg', 'sash', [0.45, 6.6, -3.35], [2.15, 12.0, -2.95])
+m.cube('sash_end_l', 'left_leg', 'sash', [-2.15, 6.6, -3.35], [-0.45, 12.0, -2.95])
 
 # Arms: pink segmented upper arms, green forearms with pink bands, brown wristbands
 m.mirror('upper', ('right_arm', 'left_arm'), 'patch', [5.35, 16.6, -2.3], [9.7, 24.1, 2.3])
@@ -63,8 +70,8 @@ m.cube('turban_tail', 'head', 'cape', [-2.0, 25.8, 4.25], [2.0, 30.4, 4.72])
 m.cube('gem', 'head', 'gem', [-0.78, 30.65, -4.66], [0.78, 32.05, -4.36])
 
 # ------------------------------------------------------------------ painting
-def paint_face(i, j, W, H):
-    """Piccolo face: heavy slanted brows, narrow eyes, frown."""
+def paint_face(i, j, W, H, closed=False):
+    """Piccolo face: heavy slanted brows, narrow one-row eyes, frown."""
     sx = i - W // 2
     k = SKIN_V
     for side in (-1, 1):
@@ -74,8 +81,13 @@ def paint_face(i, j, W, H):
             if j == 7 and a >= 2: return (26, 34, 22), None               # slanted heavy brow
             if j == 9 and 2 <= a <= 6: return (22, 26, 20), None          # upper lid
             if j == 10:
+                # Narrow row. Closed, the same row is the eyelid line.
+                if closed:
+                    if a in (2, 6): return (22, 26, 20), None
+                    return eye_tint(110 if a == 3 else 210)
                 if a in (2, 6): return (22, 26, 20), None
-                if a == 4: return (16, 16, 16), None                      # pupil
+                if a == 3: return eye_tint(100)
+                if a == 4: return eye_tint(235)
                 return (244, 244, 240), None                              # white narrow eye
             if j == 11 and 3 <= a <= 5: return (k * 0.85,) * 3, 'R'
     if j == 13 and sx in (-2, 1): return (k * 0.62,) * 3, 'R'             # nostrils
@@ -130,7 +142,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
             if fn == 'north' and 0.3 < t < 0.42 and i % 2 == 0: v *= 0.82
             if fn == 'down' or t > 0.85: v *= 0.87
         if mt == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if mt == 'head' and fn == 'down': v *= 0.78
         if edge and mt != 'head': v *= 0.89

@@ -60,13 +60,12 @@ public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity,
         float flashTime = state.age;
         if (flashTime > 12.0f) return;
 
-        // Flash curve: blinding burst at 0-3 ticks, then crackling flicker & fade out
-        float flashAlpha = 1.0f;
-        if (flashTime > 3.0f) {
-            flashAlpha = Math.max(0.0f, 1.0f - ((flashTime - 3.0f) / 9.0f));
-            if (((int) (flashTime * 4)) % 2 == 0) {
-                flashAlpha *= 0.65f;
-            }
+        // The bolt eases out over its 12 ticks. A short flicker keeps the crackle
+        // without popping off at full brightness.
+        float life = Math.min(1.0f, flashTime / 12.0f);
+        float flashAlpha = 1.0f - life * life * (3.0f - 2.0f * life);
+        if (flashTime > 3.0f && ((int) (flashTime * 4)) % 2 == 0) {
+            flashAlpha *= 0.65f;
         }
 
         final float finalAlpha = flashAlpha;
@@ -144,30 +143,16 @@ public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity,
             float outerG = state.isRare ? 1.0f : 0.88f;
             float outerB = 1.0f;
 
-            // Ground Impact Electric Shockwave Ring
-            float groundRingRadius = Math.min(4.2f, flashTime * 0.85f);
-            float ringAlpha = finalAlpha * Math.max(0.0f, 1.0f - (flashTime / 10.0f));
+            // Ground ring eases out from the strike and dies with the bolt.
+            float groundLife = Math.min(1.0f, flashTime / 10.0f);
+            float groundEase = 1.0f - (1.0f - groundLife) * (1.0f - groundLife) * (1.0f - groundLife);
+            float groundRingRadius = 4.2f * groundEase;
+            float ringAlpha = finalAlpha * (1.0f - groundLife * groundLife * (3.0f - 2.0f * groundLife));
             if (ringAlpha > 0.01f) {
                 drawGroundRing(matrix, buffer, 0, 0.05f, 0, groundRingRadius, groundRingRadius * 0.78f, 28, outerR, outerG, outerB, ringAlpha * 0.8f);
                 drawGroundRing(matrix, buffer, 0, 0.06f, 0, groundRingRadius * 0.55f, 0.0f, 20, 0.9f, 1.0f, 1.0f, ringAlpha * 0.95f);
             }
         });
-
-        // Pass 3 (T1): additive impact flare echoing the ground rings slightly
-        // wider, so the strike point blooms. The bolt texture itself is the
-        // identity of this effect and is left untouched.
-        float flareRadius = Math.min(4.2f, flashTime * 0.85f) * 1.15f;
-        float flareAlpha = finalAlpha * Math.max(0.0f, 1.0f - (flashTime / 10.0f));
-        if (flareAlpha > 0.01f) {
-            float flareR = (state.isRare ? 0.2f : 0.0f) * 0.6f;
-            float flareG = (state.isRare ? 1.0f : 0.88f) * 0.6f;
-            float flareB = 0.6f;
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                Matrix4f matrix = pose.pose();
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, flareRadius, flareRadius * 0.78f, 28, flareR, flareG, flareB, flareAlpha * 0.45f);
-                drawGroundRing(matrix, buffer, 0, 0.07f, 0, flareRadius * 0.40f, 0.0f, 20, 0.55f, 0.60f, 0.60f, flareAlpha * 0.40f);
-            });
-        }
     }
 
     private static void renderBoltSegmentTextured(Matrix4f matrix, VertexConsumer consumer,

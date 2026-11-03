@@ -77,52 +77,63 @@ public final class DynamicSkinManager {
 
         if (sR == 0 && sG == 0 && sB == 0) { sR = 255; sG = 180; sB = 160; }
         if (hR == 0 && hG == 0 && hB == 0) { hR = 255; hG = 240; hB = 140; }
-        if (eR == 0 && eG == 0 && eB == 0) { eR = 255; eG = 255; eB = 255; }
+        // Black is a real eye color. Callers pass white when the player has not chosen one.
 
         return new int[]{ sR, sG, sB, hR, hG, hB, eR, eG, eB };
     }
 
     public static Identifier getOrGenerateSkin(String racePath, int skinColor, int hairColor, int eyeColor) {
+        return getOrGenerateSkin(racePath, skinColor, hairColor, eyeColor, false);
+    }
+
+    /**
+     * @param eyesClosed when true, the face atlas is the closed-eyelid variant.
+     *                   Only the eye texels differ from the open face. Both variants
+     *                   keep mask B on the eye so the chosen eye color tints them.
+     */
+    public static Identifier getOrGenerateSkin(String racePath, int skinColor, int hairColor, int eyeColor, boolean eyesClosed) {
         if (racePath == null || racePath.isEmpty()) racePath = "base";
 
         int[] c = resolveColors(skinColor, hairColor, eyeColor);
-        String key = String.format("%s_%02x%02x%02x_%02x%02x%02x_%02x%02x%02x", racePath, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8]);
+        String key = String.format("%s_%s_%02x%02x%02x_%02x%02x%02x_%02x%02x%02x",
+                racePath, eyesClosed ? "shut" : "open", c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8]);
 
         if (CACHED_SKINS.containsKey(key)) {
             return CACHED_SKINS.get(key);
         }
 
-        Identifier skinId = generateAndRegister(racePath, key, c);
+        Identifier skinId = generateAndRegister(racePath, key, c, eyesClosed);
         if (skinId != null) {
             CACHED_SKINS.put(key, skinId);
         }
         return skinId;
     }
 
-    private static Identifier generateAndRegister(String racePath, String key, int[] c) {
-        String baseTexPath = "entity/player/" + racePath + "_base";
-        String maskTexPath = "entity/player/" + racePath + "_mask";
+    private static NativeImage resolveImage(String racePath, String suffix, String universalStem, String baseStem) {
+        NativeImage img = getImage("entity/player/" + racePath + suffix);
+        if (img == null && !racePath.equals("universal_humanoid")) {
+            img = getImage("entity/player/" + universalStem);
+        }
+        if (img == null) {
+            img = getImage("entity/player/" + baseStem);
+        }
+        return img;
+    }
 
-        NativeImage baseImage = getImage(baseTexPath);
-        if (baseImage == null && !racePath.equals("universal_humanoid")) {
-            baseTexPath = "entity/player/universal_humanoid_base";
-            baseImage = getImage(baseTexPath);
+    private static Identifier generateAndRegister(String racePath, String key, int[] c, boolean eyesClosed) {
+        NativeImage baseImage;
+        NativeImage maskImage;
+        if (eyesClosed) {
+            baseImage = getImage("entity/player/" + racePath + "_blink");
+            maskImage = getImage("entity/player/" + racePath + "_blink_mask");
+            // A missing closed face keeps this race's open face. Do not borrow another race.
+            if (baseImage == null || maskImage == null) {
+                return generateAndRegister(racePath, key, c, false);
+            }
+        } else {
+            baseImage = resolveImage(racePath, "_base", "universal_humanoid_base", "base");
+            maskImage = resolveImage(racePath, "_mask", "universal_humanoid_mask", "base_mask");
         }
-        if (baseImage == null) {
-            baseTexPath = "entity/player/base";
-            baseImage = getImage(baseTexPath);
-        }
-
-        NativeImage maskImage = getImage(maskTexPath);
-        if (maskImage == null && !racePath.equals("universal_humanoid")) {
-            maskTexPath = "entity/player/universal_humanoid_mask";
-            maskImage = getImage(maskTexPath);
-        }
-        if (maskImage == null) {
-            maskTexPath = "entity/player/base_mask";
-            maskImage = getImage(maskTexPath);
-        }
-
         if (baseImage == null || maskImage == null) return null;
 
         int sR = c[0], sG = c[1], sB = c[2], hR = c[3], hG = c[4], hB = c[5], eR = c[6], eG = c[7], eB = c[8];
@@ -167,11 +178,15 @@ public final class DynamicSkinManager {
                     finalG = Math.min(255, Math.round(hG * hLum));
                     finalB = Math.min(255, Math.round(hB * hLum));
                 } else if (maskB > 128) {
+                    // Iris and blink texels are grayscale. A straight multiply by that gray
+                    // (often ~90/255) turns every chosen color into the same dark speck
+                    // beside the pupil, so the eyes never appear to change.
                     float eLum = (0.299f * baseR + 0.587f * baseG + 0.114f * baseB) / 255.0f;
-                    if (eLum > 1.25f) eLum = 1.25f;
-                    finalR = Math.min(255, Math.round(eR * eLum));
-                    finalG = Math.min(255, Math.round(eG * eLum));
-                    finalB = Math.min(255, Math.round(eB * eLum));
+                    if (eLum > 1.0f) eLum = 1.0f;
+                    float shade = 0.35f + 0.65f * eLum;
+                    finalR = Math.min(255, Math.round(eR * shade));
+                    finalG = Math.min(255, Math.round(eG * shade));
+                    finalB = Math.min(255, Math.round(eB * shade));
                 }
 
                 out.setPixel(x, y, ARGB.color(baseA, finalR, finalG, finalB));

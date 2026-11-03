@@ -81,9 +81,10 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         // Lifetime fade: the wave lives up to 80 ticks and used to vanish at full
         // opacity on discard. Fade in over the first 3 ticks, hold, then ease out
         // over the final 25 ticks.
-        float fadeIn = Math.min(1.0f, age / 3.0f);
-        float fadeOut = age <= 55.0f ? 1.0f : 1.0f - ((age - 55.0f) / 25.0f) * ((age - 55.0f) / 25.0f);
+        float fadeIn = smooth(Math.min(1.0f, age / 6.0f));
+        float fadeOut = age <= 55.0f ? 1.0f : 1.0f - smooth((age - 55.0f) / 25.0f);
         float fade = fadeIn * Math.max(0.0f, fadeOut);
+        float impact = strike(Math.min(1.0f, age / 18.0f));
 
         float fpScale = (state.isFirstPersonOwner && state.age < 6.0f) ? (0.55f + (state.age / 6.0f) * 0.45f) : 1.0f;
         float span = (sub ? (3.2f + charge * 3.2f) : (4.8f + charge * 6.2f)) * fpScale;
@@ -94,66 +95,17 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
-
-            // 1. Radiant Outer Golden-Amber Volumetric Sheath (Expansive Aura)
-            drawVolumetricCrescent(matrix, buffer, span + 0.6f, chord + 0.5f, height + 0.4f, thickness + 0.20f,
-                1.4f, segments, 1.0f, 0.70f, 0.08f, 0.75f * fade, 0.0f);
-
-            // 2. Main Towering 3D Divine Golden Blade Body (Solid Physical Presence)
-            drawVolumetricCrescent(matrix, buffer, span, chord, height, thickness,
-                1.0f, segments, 1.0f, 0.88f, 0.20f, 0.95f * fade, 0.85f * fade);
-
-            // 3. High-Pressure Incandescent White-Gold Leading Cutting Spine
-            drawVolumetricCrescent(matrix, buffer, span * 0.92f, chord * 0.96f, height * 0.65f, thickness * 0.45f,
-                0.5f, segments, 1.0f, 1.0f, 0.92f, 1.0f * fade, 1.0f * fade);
-
-            // 4. Transverse Geometric Kinetic Shock Ribs (Hypersonic shockwave struts)
-            int ribCount = sub ? 8 : (12 + (int) (charge * 6));
-            for (int r = 1; r < ribCount; r++) {
-                float t = (r / (float) ribCount) * 2.0f - 1.0f;
-                if (Math.abs(t) < 0.1f) continue; // Skip center nose
-
-                float rx = t * span;
-                float rz = (1.0f - t * t) * chord;
-                float rH = height * (1.0f - Math.abs(t) * 0.4f);
-                float rTrail = (1.2f + charge * 0.8f) * (1.0f - Math.abs(t) * 0.6f);
-
-                drawShockRib(matrix, buffer, rx, rz, rH, rTrail, 0.14f,
-                    1.0f, 0.95f, 0.50f, 0.90f * fade);
+            float plate = thickness * 0.16f;
+            drawVolumetricCrescent(matrix, buffer, span, chord, height, plate,
+                0.85f, segments, 1.0f, 0.88f, 0.20f, 0.95f * fade, fade * 0.32f);
+            drawVolumetricCrescent(matrix, buffer, span * 0.26f, chord * 0.94f, height * 0.78f, plate * 0.30f,
+                0.20f, segments, 1.0f, 1.0f, 0.92f, fade, 0.0f);
+            drawWakeRibbon(matrix, buffer, span * 0.92f, chord, height * 0.48f, 0.40f, segments,
+                1.0f, 0.80f, 0.15f, fade * 0.40f);
+            if (impact > 0.02f) {
+                drawApexSolarCore(matrix, buffer, 0, 0, chord, (0.28f + charge * 0.16f) * impact,
+                    1.0f, 1.0f, 0.95f, impact);
             }
-
-            // 5. Swept-Back 3D Kinetic Wake Flow Ribbons (Layered atmospheric displacement)
-            int ribbonLayers = sub ? 2 : 4;
-            for (int l = 0; l < ribbonLayers; l++) {
-                float layerOffset = (l + 1) * 0.55f;
-                float lAlpha = (1.0f - (l / (float) ribbonLayers)) * 0.60f * fade;
-                drawWakeRibbon(matrix, buffer, span * 0.95f, chord, height * 0.8f, layerOffset, segments,
-                    1.0f, 0.80f, 0.15f, lAlpha);
-            }
-
-            // 6. Central Solar Apex Core & Leading Kinetic Compression Rings
-            // The core breathes while it travels (secondary motion).
-            float coreZ = chord + 0.15f;
-            float corePulse = 0.94f + 0.10f * (float) Math.sin(age * 0.8f);
-            drawApexSolarCore(matrix, buffer, 0, 0, coreZ, (0.45f + charge * 0.35f) * corePulse,
-                1.0f, 1.0f, 0.95f, 1.0f * fade);
-
-            // Rotating front compression rings
-            drawFrontCompressionRing(matrix, buffer, 0, 0, coreZ + 0.25f, 0.65f + charge * 0.45f, 0.08f, 28, age * 24.0f,
-                1.0f, 0.90f, 0.30f, 0.90f * fade);
-            drawFrontCompressionRing(matrix, buffer, 0, 0, coreZ + 0.50f, 0.45f + charge * 0.35f, 0.06f, 24, age * -32.0f,
-                1.0f, 1.0f, 0.85f, 0.95f * fade);
-        });
-
-        // Additive halo pass: a wider faint copy of the golden sheath and the
-        // solar core so the wave front blooms as it travels.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawVolumetricCrescent(matrix, buffer, span + 0.95f, chord + 0.75f, height + 0.55f, thickness + 0.28f,
-                1.6f, segments, 1.0f, 0.70f, 0.08f, 0.16f * fade, 0.0f);
-            drawApexSolarCore(matrix, buffer, 0, 0, chord + 0.15f, (0.45f + charge * 0.35f) * 1.7f,
-                1.0f, 1.0f, 0.95f, 0.18f * fade);
         });
 
         poseStack.popPose();
@@ -163,6 +115,16 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
     /**
      * Renders a fully closed 3D volumetric crescent geometry with top, bottom, front bevels, and tapered trail.
      */
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
+    }
+
+    private static float strike(float progress) {
+        if (progress >= 0.7f) return 0.0f;
+        return (float) Math.sin((progress / 0.7f) * Math.PI);
+    }
+
     private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer,
                                                float span, float chord, float height, float thickness, float trailLength,
                                                int segments, float r, float g, float b, float aLead, float aTrail) {
@@ -264,6 +226,33 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         consumer.addVertex(matrix, cx - rHalf, cy, cz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, cx, cy - radius, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, cx, cy - radius, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        int arms = 4;
+        int steps = 3;
+        for (int arm = 0; arm < arms; arm++) {
+            float ang = arm * ((float) Math.PI * 0.5f);
+            float dx = (float) Math.cos(ang);
+            float dy = (float) Math.sin(ang);
+            float px = -dy;
+            float py = dx;
+            for (int i = 0; i < steps; i++) {
+                float t1 = i / (float) steps;
+                float t2 = (i + 1) / (float) steps;
+                float bow1 = (float) Math.sin(t1 * Math.PI) * radius * 0.35f;
+                float bow2 = (float) Math.sin(t2 * Math.PI) * radius * 0.35f;
+                float d1 = radius * (0.45f + 0.9f * t1);
+                float d2 = radius * (0.45f + 0.9f * t2);
+                float w1 = radius * 0.16f * (1.0f - t1);
+                float w2 = radius * 0.16f * (1.0f - t2);
+                float x1 = cx + dx * d1 + px * bow1;
+                float y1 = cy + dy * d1 + py * bow1;
+                float x2 = cx + dx * d2 + px * bow2;
+                float y2 = cy + dy * d2 + py * bow2;
+                consumer.addVertex(matrix, x1 - px * w1, y1 - py * w1, cz).setColor(r, g, b, a * (1.0f - t1)).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x1 + px * w1, y1 + py * w1, cz).setColor(r, g, b, a * (1.0f - t1)).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 + px * w2, y2 + py * w2, cz).setColor(1.0f, 0.95f, 0.7f, a * (1.0f - t2) * 0.15f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                consumer.addVertex(matrix, x2 - px * w2, y2 - py * w2, cz).setColor(1.0f, 0.95f, 0.7f, a * (1.0f - t2) * 0.15f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            }
+        }
     }
 
     private static void drawFrontCompressionRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float radius, float thickness, int segments, float rotDeg,

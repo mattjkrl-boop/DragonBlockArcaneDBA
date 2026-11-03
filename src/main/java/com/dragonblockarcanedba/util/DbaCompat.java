@@ -122,7 +122,7 @@ public final class DbaCompat {
             Class<?> swingAnimation = Class.forName("net.minecraft.world.item.component.SwingAnimation");
             swingAnimationDefault = swingAnimation.getField("DEFAULT").get(null);
             swingMethod = LivingEntity.class.getMethod("swing", InteractionHand.class, swingAnimation, boolean.class);
-        } catch (ReflectiveOperationException | ClassNotFoundException ignored) {
+        } catch (ReflectiveOperationException ignored) {
         }
     }
 

@@ -12,8 +12,6 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import org.joml.Matrix4f;
 
-import java.util.Random;
-
 /**
  * Entity Renderer for Dimensional Warp Rift in Minecraft 26.2.
  * Renders a physical 3D spacetime tear and void portal:
@@ -69,8 +67,7 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         if (progress >= 1.0f) return;
 
-        float entrance = Math.min(1.0f, state.age / 4.0f);
-        float exit = Math.max(0.0f, 1.0f - progress);
+        float entrance = ease(Math.min(1.0f, state.age / 6.0f));
         float fade = (float) Math.sin(progress * Math.PI);
         if (fade <= 0.001f) return;
 
@@ -83,144 +80,26 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
 
-            // 1. Ground-Plane 3D Rotating Spacetime Astrolabe & Concentric Shock Rings
-            int groundSegments = 48;
-
-            // Outer Crimson Rift Ring
-            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, radius * 1.05f, radius * 0.92f, groundSegments, state.age * 8.0f,
-                0.85f, 0.05f, 0.20f, fade * 0.85f * pulse);
-
-            // Middle Abyssal Violet Glyph Ring
-            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, radius * 0.82f, radius * 0.68f, groundSegments, -state.age * 12.0f,
-                0.55f, 0.02f, 0.90f, fade * 0.90f * pulse);
-
-            // Inner Neon Magenta Accretion Ring
-            drawRotatingRing(matrix, buffer, 0, 0.08f, 0, radius * 0.50f, radius * 0.32f, groundSegments, state.age * 20.0f,
-                1.0f, 0.15f, 0.85f, fade * 0.95f * pulse);
-
-            // Central Pure White Singularity Eye Disk
-            drawRotatingRing(matrix, buffer, 0, 0.10f, 0, radius * 0.22f, 0.0f, 24, -state.age * 28.0f,
-                1.0f, 0.95f, 1.0f, fade * 1.0f);
-
-            // 2. 8 Radiating 3D Tectonic Spatial Fissure Trenches
-            int trenchCount = 8;
-            for (int t = 0; t < trenchCount; t++) {
-                double tAngle = (t / (double) trenchCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.25);
-                float trenchLen = radius * (0.85f + rng.nextFloat() * 0.35f);
-
-                float curX = 0, curZ = 0;
-                int steps = 4;
-                for (int s = 0; s < steps; s++) {
-                    float nxtX = curX + (float) Math.cos(tAngle) * (trenchLen / steps) + (rng.nextFloat() - 0.5f) * 0.3f;
-                    float nxtZ = curZ + (float) Math.sin(tAngle) * (trenchLen / steps) + (rng.nextFloat() - 0.5f) * 0.3f;
-
-                    float width = 0.22f * (1.0f - (s / (float) steps)) * entrance;
-                    // Deep violet base
-                    drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width,
-                        0.60f, 0.05f, 0.90f, fade * 0.90f);
-                    // Magma blood-red core
-                    drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width * 0.45f,
-                        1.0f, 0.10f, 0.25f, fade * 0.95f);
-
-                    curX = nxtX;
-                    curZ = nxtZ;
-                }
-            }
-
-            // 3. 10 Floating/Erupting Shattered Obsidian Void Debris Slabs
-            int slabCount = 10;
-            for (int s = 0; s < slabCount; s++) {
-                double sAngle = (s / (double) slabCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.3);
-                float sDist = radius * (0.45f + rng.nextFloat() * 0.45f);
-
-                float sx = (float) Math.cos(sAngle) * sDist;
-                float sz = (float) Math.sin(sAngle) * sDist;
-
-                float slabHeight = (0.4f + rng.nextFloat() * 0.6f) * entrance * (1.0f - (state.isDestination ? 0.0f : progress * 0.5f));
-                float slabWidth = 0.25f + rng.nextFloat() * 0.2f;
-
-                float tiltX = (float) Math.cos(sAngle) * (state.isDestination ? -0.2f : 0.25f);
-                float tiltZ = (float) Math.sin(sAngle) * (state.isDestination ? -0.2f : 0.25f);
-
-                float perpX = -(float) Math.sin(sAngle) * slabWidth * 0.5f;
-                float perpZ = (float) Math.cos(sAngle) * slabWidth * 0.5f;
-
-                drawRockSlab(matrix, buffer,
-                    sx - perpX, 0.05f, sz - perpZ,
-                    sx + perpX, 0.05f, sz + perpZ,
-                    sx + tiltX, slabHeight, sz + tiltZ,
-                    0.12f, 0.02f, 0.20f, fade * 0.90f,
-                    0.95f, 0.10f, 0.45f, fade * 0.95f
-                );
-            }
-
-            // 4. Towering Volumetric Vertical Spacetime Tear (Event Horizon Portal Slit)
-            float tearH = (2.6f + pulse * 0.4f) * entrance * (state.isDestination ? 1.1f : (1.0f - progress * 0.3f));
-            float tearW = 0.45f * entrance * (state.isDestination ? (1.0f + progress * 0.3f) : (1.0f - progress * 0.5f));
+            float shut = ease(Math.max(0.0f, (progress - 0.55f) / 0.45f));
+            float openTear = 1.0f - 0.88f * shut;
+            float tearH = (2.8f + pulse * 0.35f) * entrance * openTear * (state.isDestination ? (0.55f + 0.55f * ease(progress)) : (1.0f - 0.45f * ease(progress)));
+            float tearW = 0.42f * entrance * openTear * (state.isDestination ? (0.35f + 0.75f * ease(progress)) : (1.0f - 0.7f * ease(progress)));
             float tearY = 1.4f;
 
-            // Multi-angle vertical diamond tear planes
-            drawVerticalTearSlit(matrix, buffer, tearW, tearH, tearY, 0.0f, fade);
-            drawVerticalTearSlit(matrix, buffer, tearW * 0.75f, tearH * 0.85f, tearY, 45.0f, fade * 0.85f);
-            drawVerticalTearSlit(matrix, buffer, tearW, tearH, tearY, 90.0f, fade);
-            drawVerticalTearSlit(matrix, buffer, tearW * 0.75f, tearH * 0.85f, tearY, 135.0f, fade * 0.85f);
-
-            // 5. Dual Tilted Gyroscopic Orbital Accretion Rings (+38° and -38°)
-            float ringR = radius * 0.75f;
-            drawTiltedOrbitalRing(matrix, buffer, ringR, tearY, 38.0f, state.age * 18.0f,
-                0.85f, 0.05f, 0.45f, fade * 0.85f * pulse);
-            drawTiltedOrbitalRing(matrix, buffer, ringR * 0.82f, tearY, -38.0f, -state.age * 22.0f,
-                0.45f, 0.02f, 0.95f, fade * 0.85f * pulse);
-
-            // 6. 8 Orbiting 3D Crystalline Void Shards (Pyramids)
-            int shardCount = 8;
-            for (int i = 0; i < shardCount; i++) {
-                double shardAngle = (i / (double) shardCount) * Math.PI * 2.0 + Math.toRadians(state.age * 25.0f);
-                float shardOrbit = state.isDestination
-                    ? (radius * (0.3f + progress * 0.6f)) // Expanding outward on destination
-                    : (radius * (0.85f - progress * 0.55f)); // Spiraling inward on origin
-
-                float sx = (float) Math.cos(shardAngle) * shardOrbit;
-                float sz = (float) Math.sin(shardAngle) * shardOrbit;
-                float sy = tearY + (float) Math.sin(state.age * 0.3f + i * 0.8f) * 0.5f;
-
-                float shardSize = 0.28f * entrance;
-                draw3DShardPyramid(matrix, buffer,
-                    sx - shardSize * 0.5f, sy, sz - shardSize * 0.5f,
-                    sx + shardSize * 0.5f, sy, sz + shardSize * 0.5f,
-                    sx, sy + shardSize * 1.4f * (i % 2 == 0 ? 1.0f : -1.0f), sz,
-                    0.20f, 0.02f, 0.35f, fade * 0.85f,
-                    1.0f, 0.15f, 0.85f, fade * 0.98f
-                );
-            }
-
-            // 7. Central Spinning Singularity Octahedron Core
-            float coreSize = 0.45f * entrance * pulse * (state.isDestination ? (1.0f + progress * 0.4f) : (1.0f - progress * 0.4f));
-            drawSingularityOctahedron(matrix, buffer, 0, tearY, 0, coreSize, state.age * 35.0f,
-                0.02f, 0.0f, 0.05f, 0.99f * fade,
-                0.90f, 0.10f, 0.95f, fade * 0.95f,
-                1.0f, 1.0f, 1.0f, fade
-            );
-        });
-
-        // T1: additive halo pass over the tear slit on its two main planes,
-        // slightly wider than the slit, sharing the sine fade envelope, so
-        // the warp tear blooms like the standard this renderer sets.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            float haloTearH = (2.6f + pulse * 0.4f) * entrance * (state.isDestination ? 1.1f : (1.0f - progress * 0.3f));
-            float haloTearW = 0.45f * entrance * (state.isDestination ? (1.0f + progress * 0.3f) : (1.0f - progress * 0.5f));
-            float haloTearY = 1.4f;
-
-            drawVerticalTearSlit(matrix, buffer, haloTearW * 1.30f, haloTearH * 1.05f, haloTearY, 0.0f, fade * 0.30f);
-            drawVerticalTearSlit(matrix, buffer, haloTearW * 1.30f, haloTearH * 1.05f, haloTearY, 90.0f, fade * 0.30f);
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, radius * 0.72f, radius * 0.58f, 32, state.age * 10.0f,
+                0.55f, 0.02f, 0.90f, fade * 0.75f);
+            drawVerticalTearSlit(matrix, buffer, tearW, tearH, tearY, 0.0f, fade * openTear);
+            drawTearWake(matrix, buffer, tearW, tearH, tearY, fade * (1.0f - shut), shut);
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static float ease(float t) {
+        float c = Math.max(0.0f, Math.min(1.0f, t));
+        return c * c * (3.0f - 2.0f * c);
     }
 
     private static void drawRotatingRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
@@ -306,6 +185,40 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
         // Center White-Hot Reality Seam
         drawTearQuad(matrix, consumer, x1 * 0.15f, cy, z1 * 0.15f, x2 * 0.15f, cy, z2 * 0.15f, 0, cy + halfH * 0.9f, 0, 0, cy - halfH * 0.9f, 0,
             1.0f, 1.0f, 1.0f, fade);
+    }
+
+    /** A curved ribbon behind the tear. It pinches and disappears as the rift shuts. */
+    private static void drawTearWake(Matrix4f matrix, VertexConsumer consumer, float halfW, float halfH, float cy, float fade, float shut) {
+        float trail = 1.15f * (1.0f - shut);
+        if (trail < 0.04f || fade < 0.02f) {
+            return;
+        }
+        int segs = 5;
+        for (int i = 0; i < segs; i++) {
+            float t1 = i / (float) segs;
+            float t2 = (i + 1) / (float) segs;
+            float z1 = -trail * t1;
+            float z2 = -trail * t2;
+            float bow1 = halfW * 0.85f * (float) Math.sin(t1 * Math.PI);
+            float bow2 = halfW * 0.85f * (float) Math.sin(t2 * Math.PI);
+            float h1 = halfH * 0.42f * (1.0f - t1);
+            float h2 = halfH * 0.42f * (1.0f - t2);
+            float a1 = fade * 0.75f * (1.0f - t1);
+            float a2 = fade * 0.75f * (1.0f - t2);
+            wakeStrip(matrix, consumer, -halfW * 0.4f + bow1, cy + h1, z1, halfW * 0.4f + bow1, cy + h1, z1, halfW * 0.2f + bow2, cy + h2, z2, -halfW * 0.2f + bow2, cy + h2, z2, 0.75f, 0.08f, 0.95f, a1, a2);
+            wakeStrip(matrix, consumer, -halfW * 0.12f + bow1, cy + h1 * 0.35f, z1, halfW * 0.12f + bow1, cy + h1 * 0.35f, z1, halfW * 0.05f + bow2, cy, z2, -halfW * 0.05f + bow2, cy, z2, 1.0f, 1.0f, 1.0f, a1, a2 * 0.4f);
+            wakeStrip(matrix, consumer, bow1, cy + h1 * 0.5f, z1, bow1, cy - h1 * 0.5f, z1, bow2 * 0.4f, cy - h2 * 0.15f, z2 - trail * 0.05f, bow2 * 0.4f, cy + h2 * 0.15f, z2 - trail * 0.05f, 0.55f, 0.04f, 0.85f, a1 * 0.4f, 0.0f);
+        }
+    }
+
+    private static void wakeStrip(Matrix4f matrix, VertexConsumer consumer,
+                                  float x1, float y1, float z1, float x2, float y2, float z2,
+                                  float x3, float y3, float z3, float x4, float y4, float z4,
+                                  float r, float g, float b, float a1, float a2) {
+        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
     }
 
     private static void drawTearQuad(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float topX, float topY, float topZ, float botX, float botY, float botZ, float r, float g, float b, float a) {

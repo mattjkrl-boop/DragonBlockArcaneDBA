@@ -368,6 +368,36 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("blaster_bolt")))
     );
 
+    public static final EntityType<TridentProngEntity> TRIDENT_PRONG = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("trident_prong"),
+            EntityType.Builder.<TridentProngEntity>of(TridentProngEntity::new, MobCategory.MISC)
+                    .sized(0.9f, 0.4f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("trident_prong")))
+    );
+
+    public static final EntityType<SpiritCleaveEntity> SPIRIT_CLEAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("spirit_cleave"),
+            EntityType.Builder.<SpiritCleaveEntity>of(SpiritCleaveEntity::new, MobCategory.MISC)
+                    .sized(2.2f, 0.6f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("spirit_cleave")))
+    );
+
+    public static final EntityType<BanshoGaleEntity> BANSHO_GALE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("bansho_gale"),
+            EntityType.Builder.<BanshoGaleEntity>of(BanshoGaleEntity::new, MobCategory.MISC)
+                    .sized(3.0f, 1.0f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("bansho_gale")))
+    );
+
     public static final EntityType<BraveSlashEntity> BRAVE_SLASH = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("brave_slash"),

@@ -131,13 +131,17 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
                 );
             }
 
-            // 4. Demonic Hexagram / Octahedron Core Matrix (Pulsating nested 3D octahedrons)
-            float coreSize = (0.72f - charge * 0.20f) * pulse;
+            // Nested seal: dark shell, blood mid, and a heart that brightens as the charge fills.
+            float coreSize = (0.62f + charge * 0.18f) * pulse;
             drawOctahedron(matrix, buffer, coreSize, 0.85f, age * 24.0f, 0.85f, 0.0f, 0.12f, baseAlpha * 0.82f);
             drawOctahedron(matrix, buffer, coreSize * 0.58f, 0.85f, -age * 36.0f, 1.0f, 0.10f, 0.28f, baseAlpha * 0.95f);
-            if (charge >= 0.35f) {
-                drawOctahedron(matrix, buffer, coreSize * 0.28f, 0.85f, age * 60.0f, 1.0f, 0.90f, 0.95f, 1.0f);
-            }
+            float heart = Math.min(1.0f, charge);
+            drawOctahedron(matrix, buffer, coreSize * 0.26f, 0.85f, age * 60.0f,
+                0.85f + 0.15f * heart, 0.12f + 0.78f * heart, 0.22f + 0.73f * heart, baseAlpha);
+            // A thin filament tightens onto the seals while the button is held.
+            float filament = baseRadius * (1.02f - charge * 0.42f);
+            drawRotatingRing(matrix, buffer, 0, 0.12f, 0, filament, filament * 0.90f, 36, age * 48.0f,
+                1.0f, 0.82f, 0.90f, baseAlpha * 0.72f);
 
             // 5. Twin Helical Blood Plasma Vortex Ribbons (Ascending dark-crimson ribbons)
             int ribbonSteps = 12;
@@ -166,29 +170,27 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
                     float x2 = (float) Math.cos(ang2) * r2;
                     float z2 = (float) Math.sin(ang2) * r2;
 
-                    float rw = 0.15f * (1.0f - t1 * 0.4f);
+                    float rw1 = 0.15f * (1.0f - t1 * 0.45f);
+                    float rw2 = 0.15f * (1.0f - t2 * 0.45f);
+                    // Width sits across the helix, so the plasma is a ribbon instead of a stack of squares.
+                    float px1 = (float) -Math.sin(ang1) * rw1;
+                    float pz1 = (float) Math.cos(ang1) * rw1;
+                    float px2 = (float) -Math.sin(ang2) * rw2;
+                    float pz2 = (float) Math.cos(ang2) * rw2;
+                    float lift1 = rw1 * 0.7f;
+                    float lift2 = rw2 * 0.7f;
 
+                    float ribbonTail = 1.0f - t1;
+                    ribbonTail = ribbonTail * ribbonTail;
                     drawQuad(matrix, buffer,
-                        x1 - rw, y1, z1 - rw,
-                        x1 + rw, y1, z1 + rw,
-                        x2 + rw, y2, z2 + rw,
-                        x2 - rw, y2, z2 - rw,
-                        sr, sg, sb, baseAlpha * (1.0f - t1 * 0.4f)
+                        x1 - px1, y1 - lift1, z1 - pz1,
+                        x1 + px1, y1 + lift1, z1 + pz1,
+                        x2 + px2, y2 + lift2, z2 + pz2,
+                        x2 - px2, y2 - lift2, z2 - pz2,
+                        sr, sg, sb, baseAlpha * ribbonTail
                     );
                 }
             }
-        });
-
-        // Additive glow halo (redesign T1): the seal rings and the octahedron
-        // core bloom in crimson so the charge reads as gathered light.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.24f, baseRadius * 1.02f, 40, age * -18.0f,
-                0.80f, 0.0f, 0.10f, baseAlpha * 0.18f);
-            drawRotatingRing(matrix, buffer, 0, 0.09f, 0, baseRadius * 0.52f, baseRadius * 0.32f, 40, age * -42.0f,
-                1.0f, 0.65f, 0.75f, baseAlpha * 0.22f);
-            float haloCore = (0.72f - charge * 0.20f) * pulse * 1.25f;
-            drawOctahedron(matrix, buffer, haloCore, 0.85f, age * 24.0f, 0.85f, 0.0f, 0.12f, baseAlpha * 0.16f);
         });
 
         super.submit(state, poseStack, collector, cameraState);
@@ -220,17 +222,69 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
                                    float tipX, float tipY, float tipZ,
                                    float rBase, float gBase, float bBase, float aBase,
                                    float rTip, float gTip, float bTip, float aTip) {
-        // Front Face
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        crystal(matrix, consumer, x1, y1, z1, x2, y2, z2, tipX, tipY, tipZ, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
+    }
 
-        // Back Face
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+    /** Four-sided needle: dark edge, pale core, and a wake off the back. */
+    private static void crystal(Matrix4f matrix, VertexConsumer consumer,
+                                float x1, float y1, float z1,
+                                float x2, float y2, float z2,
+                                float tipX, float tipY, float tipZ,
+                                float rBase, float gBase, float bBase, float aBase,
+                                float rTip, float gTip, float bTip, float aTip) {
+        float mx = (x1 + x2) * 0.5f;
+        float my = (y1 + y2) * 0.5f;
+        float mz = (z1 + z2) * 0.5f;
+        float ex = x2 - mx;
+        float ey = y2 - my;
+        float ez = z2 - mz;
+        float ax = tipX - mx;
+        float ay = tipY - my;
+        float az = tipZ - mz;
+        float px = ey * az - ez * ay;
+        float py = ez * ax - ex * az;
+        float pz = ex * ay - ey * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        float elen = (float) Math.sqrt(ex * ex + ey * ey + ez * ez);
+        if (plen < 1.0e-4f) {
+            px = 0.0f;
+            py = Math.max(elen, 0.04f);
+            pz = 0.0f;
+            plen = py;
+        }
+        float thick = Math.max(elen, 0.03f);
+        px = px / plen * thick;
+        py = py / plen * thick;
+        pz = pz / plen * thick;
+        float[] bx = { mx - ex, mx + px, mx + ex, mx - px };
+        float[] by = { my - ey, my + py, my + ey, my - py };
+        float[] bz = { mz - ez, mz + pz, mz + ez, mz - pz };
+        for (int i = 0; i < 4; i++) {
+            int n = (i + 1) % 4;
+            consumer.addVertex(matrix, bx[i], by[i], bz[i]).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, bx[n], by[n], bz[n]).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            float ix = mx + (bx[i] - mx) * 0.34f + ax * 0.2f;
+            float iy = my + (by[i] - my) * 0.34f + ay * 0.2f;
+            float iz = mz + (bz[i] - mz) * 0.34f + az * 0.2f;
+            float jx = mx + (bx[n] - mx) * 0.34f + ax * 0.2f;
+            float jy = my + (by[n] - my) * 0.34f + ay * 0.2f;
+            float jz = mz + (bz[n] - mz) * 0.34f + az * 0.2f;
+            float kx = mx + ax * 0.86f;
+            float ky = my + ay * 0.86f;
+            float kz = mz + az * 0.86f;
+            consumer.addVertex(matrix, ix, iy, iz).setColor(1.0f, 0.86f, 0.9f, aTip).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, jx, jy, jz).setColor(1.0f, 0.86f, 0.9f, aTip).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, kx, ky, kz).setColor(1.0f, 0.97f, 0.98f, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, kx, ky, kz).setColor(1.0f, 0.97f, 0.98f, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        }
+        float alen = (float) Math.sqrt(ax * ax + ay * ay + az * az);
+        float back = alen < 1.0e-4f ? 0.0f : 0.45f / alen;
+        consumer.addVertex(matrix, bx[0], by[0], bz[0]).setColor(rBase, gBase, bBase, aBase * 0.4f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, bx[2], by[2], bz[2]).setColor(rBase, gBase, bBase, aBase * 0.4f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, mx - ax * back, my - ay * back, mz - az * back).setColor(rBase, gBase, bBase, 0.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, mx - ax * back, my - ay * back, mz - az * back).setColor(rBase, gBase, bBase, 0.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawOctahedron(Matrix4f matrix, VertexConsumer consumer, float s, float centerY, float rotDeg, float r, float g, float b, float a) {

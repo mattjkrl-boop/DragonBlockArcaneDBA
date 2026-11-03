@@ -7,7 +7,7 @@ green camo socks, brown shoes. Lean build, no tail.
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint
 
 SKIN_V = 216; HAIR_V = 208
 TEE = (34, 34, 40); TEE_D = (24, 24, 30); WHITE = (240, 240, 240)
@@ -33,13 +33,15 @@ for side, bone in ((1, 'right_leg'), (-1, 'left_leg')):
 # Torso: black tee, brown belt with gold buckle, hip pouch on his left side
 m.cube('torso', 'body', 'tee', [-4.9, 12, -2.9], [4.9, 24, 2.9])
 m.cube('chest', 'body', 'tee', [-5.3, 16.5, -3.2], [5.3, 24, 3.05])
-m.cube('belt', 'body', 'belt', [-5.15, 11.9, -3.15], [5.15, 13.7, 3.1])
-m.cube('buckle', 'body', 'buckle', [-1.3, 11.8, -3.6], [1.3, 13.8, -3.15])
-m.cube('pouch', 'body', 'pouch', [-7.6, 9.3, -2.6], [-4.95, 13.9, 0.6])
-# bandana scarf: neck ring and the hanging front point
-m.cube('scarf_front', 'body', 'scarf', [-3.4, 22.9, -3.6], [3.4, 24.9, -2.8])
-m.cube('scarf_back', 'body', 'scarf', [-3.4, 22.9, 2.8], [3.4, 24.9, 3.55])
-m.mirror('scarf_side', ('body', 'body'), 'scarf', [3.3, 22.9, -2.9], [4.05, 24.9, 2.9])
+m.cube('belt', 'body', 'belt', [-5.15, 12.0, -3.15], [5.15, 13.7, 3.1])
+m.cube('buckle', 'body', 'buckle', [-1.3, 12.0, -3.6], [1.3, 13.8, -3.15])
+# The pouch crosses the waist. The hang is on the leg so it does not stretch the torso.
+m.cube('pouch', 'body', 'pouch', [-7.6, 12.0, -2.6], [-4.95, 13.9, 0.6])
+m.cube('pouch_hang', 'left_leg', 'pouch', [-7.6, 9.3, -2.6], [-4.95, 12.0, 0.6])
+# bandana scarf: neck ring and the hanging front point. Tops stay at the neck line.
+m.cube('scarf_front', 'body', 'scarf', [-3.4, 22.9, -3.6], [3.4, 24.0, -2.8])
+m.cube('scarf_back', 'body', 'scarf', [-3.4, 22.9, 2.8], [3.4, 24.0, 3.55])
+m.mirror('scarf_side', ('body', 'body'), 'scarf', [3.3, 22.9, -2.9], [4.05, 24.0, 2.9])
 m.cube('scarf drape_r'.replace(' ', '_'), 'body', 'scarf', [0.15, 18.7, -3.55], [2.6, 23.2, -2.9], [0.3, 23.0, -3.2], (0, 0, 16))
 m.cube('scarf_drape_l', 'body', 'scarf', [-2.6, 18.7, -3.55], [-0.15, 23.2, -2.9], [-0.3, 23.0, -3.2], (0, 0, -16))
 m.cube('scarf_tip', 'body', 'scarf', [-0.75, 17.2, -3.5], [0.75, 19.2, -2.95])
@@ -65,8 +67,8 @@ m.cube('fringe_r', hb, 'hair', [0.8, 30.4, -4.58], [4.42, 33.05, -3.85])
 m.cube('fringe_l', hb, 'hair', [-4.42, 30.4, -4.58], [-0.8, 33.05, -3.85])
 
 # ------------------------------------------------------------------ painting
-def paint_face(i, j, W, H):
-    """Calm 17 face: light brows, blue eyes, relaxed slight smile."""
+def paint_face(i, j, W, H, closed=False):
+    """Calm 17 face: light brows, one-row eyes, relaxed slight smile."""
     sx = i - W // 2
     k = SKIN_V
     for side in (-1, 1):
@@ -75,9 +77,12 @@ def paint_face(i, j, W, H):
             if j == 7 and a >= 2: return (120, 110, 100), 'G'             # brow drawn in hair tint (dark)
             if j == 9 and 2 <= a <= 6: return (24, 20, 20), None
             if j == 10:
+                # One-row eye. Closed, that row is the eyelid line, still eye-tinted.
+                if closed:
+                    return eye_tint(130 if a in (2, 6) else 210)
                 if a == 6 or a == 2: return (24, 20, 20), None
-                if a == 3: return (20, 20, 24), None
-                if a == 4: return (120, 170, 220), 'B'
+                if a == 3: return eye_tint(80)
+                if a == 4: return eye_tint(235)
                 return (246, 246, 246), None
             if j == 11 and 3 <= a <= 5: return (k * 0.88,) * 3, 'R'
     if j == 12 and sx == -1: return (k * 0.86,) * 3, 'R'
@@ -144,7 +149,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
             if fn == 'north' and 0.3 < t < 0.42 and i % 2 == 0: v *= 0.82
             if fn == 'down' or t > 0.85: v *= 0.87
         if mt == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if mt == 'head' and fn == 'down': v *= 0.78
         if edge and mt != 'head': v *= 0.89

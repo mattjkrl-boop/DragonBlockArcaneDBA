@@ -18,13 +18,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Swing trail ribbons for every weapon, driven entirely by WeaponTrailProfiles.
- * While a player is mid swing, the weapon's arc (or thrust, fan sweep, or muzzle
- * flash, per its profile) is sampled with substeps and drawn as a two-tone ribbon:
- * the weapon's color at low alpha with a hot near-white core along the leading
- * half. Elemental weapons shed their profile's tip particles mid swing. Purely
- * client side, no networking; other players' swings render from their synced
- * attack animation, same as before.
+ * Draws only the trails listed in WeaponTrailProfiles. That table is the katana's
+ * white slash. The old generic swing (one arc on every weapon, on top of the
+ * weapon's own effect) is not drawn. Purely client side.
  */
 public final class SwingTrailRenderer {
     private SwingTrailRenderer() {}
@@ -72,7 +68,9 @@ public final class SwingTrailRenderer {
 
     private static float alpha(WeaponTrailProfiles.Profile p, Sample s) {
         float t = 1f - (clock - s.born) / (float) p.fadeTicks();
-        return Math.max(0f, t) * p.alpha();
+        t = Math.max(0f, Math.min(1f, t));
+        float eased = t * t * (3f - 2f * t);
+        return eased * p.alpha();
     }
 
     private static void ribbon(com.mojang.blaze3d.vertex.VertexConsumer buffer, Matrix4f mat, com.mojang.blaze3d.vertex.PoseStack.Pose pose,

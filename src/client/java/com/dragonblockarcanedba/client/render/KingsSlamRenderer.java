@@ -65,8 +65,11 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
         float radius = state.radius;
         boolean isFlawless = state.isFlawless;
         float age = state.age;
-        float progress = Math.min(1.0f, age / (float) state.lifetime);
-        float fade = Math.max(0.0f, 1.0f - progress);
+        float life = Math.min(1.0f, age / (float) Math.max(1, state.lifetime));
+        float growT = Math.min(1.0f, life / 0.55f);
+        float grow = 1.0f - (1.0f - growT) * (1.0f - growT) * (1.0f - growT);
+        float exitT = life <= 0.62f ? 0.0f : Math.min(1.0f, (life - 0.62f) / 0.38f);
+        float fade = 1.0f - exitT * exitT * (3.0f - 2.0f * exitT);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         float rCol = isFlawless ? 1.0f : 1.0f;
@@ -78,7 +81,7 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
             Random rng = new Random(state.seed);
 
             // 1. Expanding 3D Volcanic Ground Shockwave Discs & Caldera Blast Core
-            float shockR = Math.min(radius * 1.35f, age * (isFlawless ? 0.95f : 0.70f));
+            float shockR = radius * grow;
             if (fade > 0.05f) {
                 // Outer Shockwave Crest
                 drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.84f, 48, rCol, gCol, bCol, fade * 0.85f);
@@ -86,8 +89,10 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
                 drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 32, 1.0f, isFlawless ? 0.95f : 0.60f, 0.10f, fade * 0.70f);
 
                 // Expanding 3D Hemispherical Volcanic Dome Wall
-                float domeH = (2.5f + (isFlawless ? 3.0f : 1.5f)) * (1.0f - progress * 0.6f);
+                float domeH = (2.5f + (isFlawless ? 3.0f : 1.5f)) * grow * (1.0f - exitT * 0.55f);
                 drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR, domeH, 40, rCol, gCol, bCol, fade * 0.65f);
+                drawShockwaveDome(matrix, buffer, 0, 0.08f, 0, shockR * 0.52f, domeH * 0.70f, 28,
+                    1.0f, isFlawless ? 1.0f : 0.82f, isFlawless ? 0.45f : 0.22f, fade * 0.55f);
             }
 
             // 2. Radiating 3D Tectonic Canyon Fissure Trenches
@@ -102,11 +107,12 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
                     float nxtX = curX + (float) Math.cos(tAngle) * (trenchLen / steps) + (rng.nextFloat() - 0.5f) * 0.45f;
                     float nxtZ = curZ + (float) Math.sin(tAngle) * (trenchLen / steps) + (rng.nextFloat() - 0.5f) * 0.45f;
 
-                    float width = (isFlawless ? 0.45f : 0.32f) * (1.0f - (s / (float) steps) * 0.4f) * Math.min(1.0f, age * 0.35f);
-                    // Magma Base Trench
-                    drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width, rCol, gCol * 0.7f, bCol * 0.5f, fade * 0.95f);
-                    // Glowing Molten Core
-                    drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width * 0.38f, 1.0f, isFlawless ? 1.0f : 0.85f, 0.40f, fade);
+                    float along = s / (float) steps;
+                    float width = (isFlawless ? 0.45f : 0.32f) * (1.0f - along * 0.55f) * grow;
+                    float trenchDie = 1.0f - along * along;
+                    drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width, rCol, gCol * 0.7f, bCol * 0.5f, fade * 0.95f * trenchDie);
+                    drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width * 0.38f, 1.0f, isFlawless ? 1.0f : 0.85f, 0.40f, fade * trenchDie);
+                    drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width * 0.10f, 1.0f, 0.98f, 0.72f, fade * 0.80f * trenchDie);
 
                     curX = nxtX; curZ = nxtZ;
                 }
@@ -122,7 +128,7 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
                 float rz = (float) Math.sin(rockAngle) * rockDist;
 
                 float maxH = (isFlawless ? 2.5f : 1.5f) + rng.nextFloat() * (isFlawless ? 3.0f : 1.8f);
-                float slabHeight = maxH * Math.min(1.0f, age * 0.45f);
+                float slabHeight = maxH * grow * (1.0f - exitT * 0.35f);
                 float slabWidth = 0.45f + rng.nextFloat() * 0.40f;
 
                 // Outward leaning angle
@@ -156,24 +162,13 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
 
                     // Secondary motion (redesign T4): geyser heights flicker
                     // on their own phases instead of standing frozen.
-                    gHeight *= 0.90f + 0.10f * (float) Math.sin(age * 0.9f + g * 1.7f);
+                    gHeight *= grow * (1.0f - exitT) * (0.90f + 0.10f * (float) Math.sin(age * 0.9f + g * 1.7f));
 
                     drawVerticalGeyser(matrix, buffer, gx, gz, gHeight, gWidth, fade);
                 }
             }
         });
 
-        // Additive glow halo (redesign T1): the dome wall and crest bloom in
-        // the slam's own color, orange normally and pale gold when Flawless.
-        float haloShockR = Math.min(radius * 1.35f, age * (isFlawless ? 0.95f : 0.70f));
-        if (fade > 0.05f) {
-            float haloDomeH = (2.5f + (isFlawless ? 3.0f : 1.5f)) * (1.0f - progress * 0.6f);
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                Matrix4f matrix = pose.pose();
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, haloShockR, haloShockR * 0.84f, 48, rCol, gCol, bCol, fade * 0.22f);
-                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, haloShockR, haloDomeH, 40, rCol, gCol, bCol, fade * 0.25f);
-            });
-        }
     }
 
     private static void drawTrenchSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {
@@ -250,16 +245,38 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
     }
 
     private static void drawVerticalGeyser(Matrix4f matrix, VertexConsumer consumer, float x, float z, float height, float width, float fade) {
-        // Core Column
-        consumer.addVertex(matrix, x - width, 0.05f, z).setColor(1.0f, 0.90f, 0.20f, fade * 0.95f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x + width, 0.05f, z).setColor(1.0f, 0.90f, 0.20f, fade * 0.95f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x + width * 0.3f, height, z).setColor(1.0f, 0.40f, 0.02f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x - width * 0.3f, height, z).setColor(1.0f, 0.40f, 0.02f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Perpendicular Column
-        consumer.addVertex(matrix, x, 0.05f, z - width).setColor(1.0f, 0.90f, 0.20f, fade * 0.95f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x, 0.05f, z + width).setColor(1.0f, 0.90f, 0.20f, fade * 0.95f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x, height, z + width * 0.3f).setColor(1.0f, 0.40f, 0.02f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x, height, z - width * 0.3f).setColor(1.0f, 0.40f, 0.02f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        int bands = 6;
+        int sides = 8;
+        for (int band = 0; band < bands; band++) {
+            float p1 = band / (float) bands;
+            float p2 = (band + 1) / (float) bands;
+            float y1 = 0.05f + p1 * height;
+            float y2 = 0.05f + p2 * height;
+            float rad1 = width * (1.0f - p1 * 0.82f);
+            float rad2 = width * (1.0f - p2 * 0.82f);
+            float a1 = fade * (1.0f - p1 * p1);
+            float a2 = fade * (1.0f - p2 * p2);
+            float twist = p1 * 0.7f;
+            for (int i = 0; i < sides; i++) {
+                double a = (i / (double) sides) * Math.PI * 2.0 + twist;
+                double b = ((i + 1) / (double) sides) * Math.PI * 2.0 + twist;
+                float x1 = x + (float) Math.cos(a) * rad1;
+                float z1 = z + (float) Math.sin(a) * rad1;
+                float x2 = x + (float) Math.cos(b) * rad1;
+                float z2 = z + (float) Math.sin(b) * rad1;
+                float x3 = x + (float) Math.cos(b) * rad2;
+                float z3 = z + (float) Math.sin(b) * rad2;
+                float x4 = x + (float) Math.cos(a) * rad2;
+                float z4 = z + (float) Math.sin(a) * rad2;
+                consumer.addVertex(matrix, x1, y1, z1).setColor(1.0f, 0.55f, 0.08f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x2, y1, z2).setColor(1.0f, 0.55f, 0.08f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x3, y2, z3).setColor(1.0f, 0.35f, 0.02f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x4, y2, z4).setColor(1.0f, 0.35f, 0.02f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x + (x1 - x) * 0.32f, y1, z + (z1 - z) * 0.32f).setColor(1.0f, 0.98f, 0.72f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x + (x2 - x) * 0.32f, y1, z + (z2 - z) * 0.32f).setColor(1.0f, 0.98f, 0.72f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x + (x3 - x) * 0.32f, y2, z + (z3 - z) * 0.32f).setColor(1.0f, 0.85f, 0.35f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                consumer.addVertex(matrix, x + (x4 - x) * 0.32f, y2, z + (z4 - z) * 0.32f).setColor(1.0f, 0.85f, 0.35f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            }
+        }
     }
 }

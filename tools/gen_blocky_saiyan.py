@@ -71,7 +71,7 @@ mirror('gi_shoulder', ('right_arm', 'left_arm'), 'gi', [5.3, 22.6, -2.65], [9.7,
 mirror('wristband', ('right_arm', 'left_arm'), 'wrist', [5.3, 11.6, -2.3], [9.7, 13.8, 2.3])
 mirror('hand', ('right_arm', 'left_arm'), 'hand', [5.6, 9.0, -1.9], [9.4, 11.7, 1.9])
 
-# Head
+# Head. Eyes are painted on the face (two rows) and blink by swapping those texels.
 cube('head', 'head', 'head', [-4, 24, -4], [4, 32, 4])
 mirror('ear', ('head', 'head'), 'skin', [4.0, 27.0, -0.6], [4.7, 29.2, 0.9])
 
@@ -178,8 +178,7 @@ for i in order:
         c['uv'][fn] = (u, v, u + w, v + h)
 
 # ------------------------------------------------------------------ painting
-base = Image.new('RGBA', (TEX, TEX), (0, 0, 0, 0)); mask = Image.new('RGBA', (TEX, TEX), (0, 0, 0, 0))
-BP, MP = base.load(), mask.load()
+BLINK = False
 def h01(*a):
     n = 0
     for v in a: n = (n * 73856093) ^ int(v * 7919 + 1013)
@@ -265,31 +264,34 @@ def paint_texel(c, fn, s, t, W, H, i, j, P):
             if fn == 'down' or t > 0.85: v *= 0.86
             if fn in ('east', 'west') and t > 0.35 and abs(s - 0.5) < 0.12: v *= 0.82   # curled fingers
         if m == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, BLINK)
             if r: return r
         if m == 'head' and fn == 'down': v *= 0.75
         if edge and m != 'head': v *= 0.88
         return (v, v, v), 'R'
     return (200, 200, 200), None
 
-def paint_face(i, j, W, H):
-    """16x16 pixel-art Goku face; row 0 is the top of the head front."""
+def paint_face(i, j, W, H, closed=False):
+    """16x16 pixel-art Goku face; row 0 is the top of the head front. Two-row eyes."""
     sx = i - W // 2   # screen-left negative
     k = SKIN_V
     # brows: thick and angled down toward the nose (hair tint so they follow hair color)
     for side in (-1, 1):
-        ex = side * 3   # eye center column offset (pixel centers at -3.5..)
         a = sx if side > 0 else -sx - 1    # 0..7 from the middle outward
         if 1 <= a <= 6:
             by = 7 - (1 if a >= 4 else 0) - (1 if a >= 6 else 0)
             if j == by or (j == by + 1 and a <= 2): return (110, 110, 110), 'G'
-            # eye block: rows 9-10, columns a 2..5
+            # eye block: rows 10-11, columns a 2..5
             if j == 9 and 2 <= a <= 6: return (24, 20, 20), None                       # upper lid line
             if j in (10, 11):
+                # Top row becomes the lid. The lower row is the shut line, still eye-tinted.
+                if closed:
+                    if j == 10: return (k * 0.72,) * 3, 'R'
+                    return ((140, 140, 140) if a in (2, 6) else (210, 210, 210)), 'B'
                 if a == 6 or (a == 2 and j == 10): return (24, 20, 20), None              # outer corner
                 if a == 2: return (k * 0.75,) * 3, 'R'
-                if a == 3: return (20, 20, 24), None                                     # pupil (inner)
-                if a == 4: return (90, 90, 90), 'B'                                      # iris, eye color tint
+                if a == 3: return (80, 80, 80), 'B'                                      # pupil, same eye tint, darker
+                if a == 4: return (235, 235, 235), 'B'                                   # iris, eye color tint
                 return (246, 246, 246), None                                             # sclera
             if j == 12 and 3 <= a <= 5: return (k * 0.86,) * 3, 'R'                    # lower lid shade
     # nose: shadow pixel under and beside the bridge
@@ -302,18 +304,28 @@ def paint_face(i, j, W, H):
     if j >= 14 and (sx <= -6 or sx >= 5): return (k * 0.88,) * 3, 'R'
     return None
 
-for c in cubes:
-    for fn, q in face_corners(c).items():
-        u0, v0, u1, v1 = c['uv'][fn]; W, H = u1 - u0, v1 - v0
-        for j in range(H):
-            for i in range(W):
-                s, t = (i + 0.5) / W, (j + 0.5) / H
-                top = [q[0][k] + (q[1][k] - q[0][k]) * s for k in range(3)]
-                bot = [q[3][k] + (q[2][k] - q[3][k]) * s for k in range(3)]
-                P = [top[k] + (bot[k] - top[k]) * t for k in range(3)]
-                rgb, ch = paint_texel(c, fn, s, t, W, H, i, j, P)
-                BP[u0 + i, v0 + j] = (clamp(rgb[0]), clamp(rgb[1]), clamp(rgb[2]), 255)
-                MP[u0 + i, v0 + j] = MASKC[ch]
+def paint_atlas(blink):
+    global BLINK
+    BLINK = blink
+    img = Image.new('RGBA', (TEX, TEX), (0, 0, 0, 0))
+    msk = Image.new('RGBA', (TEX, TEX), (0, 0, 0, 0))
+    ip, mp = img.load(), msk.load()
+    for c in cubes:
+        for fn, q in face_corners(c).items():
+            u0, v0, u1, v1 = c['uv'][fn]; W, H = u1 - u0, v1 - v0
+            for j in range(H):
+                for i in range(W):
+                    s, t = (i + 0.5) / W, (j + 0.5) / H
+                    top = [q[0][k] + (q[1][k] - q[0][k]) * s for k in range(3)]
+                    bot = [q[3][k] + (q[2][k] - q[3][k]) * s for k in range(3)]
+                    P = [top[k] + (bot[k] - top[k]) * t for k in range(3)]
+                    rgb, ch = paint_texel(c, fn, s, t, W, H, i, j, P)
+                    ip[u0 + i, v0 + j] = (clamp(rgb[0]), clamp(rgb[1]), clamp(rgb[2]), 255)
+                    mp[u0 + i, v0 + j] = MASKC[ch]
+    BLINK = False
+    return img, msk
+base, mask = paint_atlas(False)
+blink, blink_mask = paint_atlas(True)
 
 # ------------------------------------------------------------------ OBJ export
 GROUP = {'right_arm': 'rightarm', 'body': 'body', 'left_arm': 'leftarm', 'right_leg': 'rightleg', 'head': 'head', 'left_leg': 'leftleg', 'hair': 'hair', 'hair_ssj3': 'hair_ssj3', 'hair_ssj2': 'hair_ssj2'}
@@ -338,6 +350,20 @@ for g in ['rightarm', 'body', 'leftarm', 'rightleg', 'head', 'hair', 'hair_ssj3'
             L.append('f ' + ' '.join(idx))
 (RES / 'models/3d/saiyan.obj').write_text('\n'.join(L) + '\n')
 
+import time as _time
+def save_png(img, path, tries=8):
+    last = None
+    for i in range(tries):
+        try:
+            img.save(path)
+            return
+        except OSError as e:
+            last = e
+            _time.sleep(0.2 * (i + 1))
+    raise last
+save_png(base, RES / 'textures/entity/player/saiyan_base.png'); save_png(mask, RES / 'textures/entity/player/saiyan_mask.png')
+save_png(blink, RES / 'textures/entity/player/saiyan_blink.png'); save_png(blink_mask, RES / 'textures/entity/player/saiyan_blink_mask.png')
+
 # ------------------------------------------------------------------ Blockbench project (Bedrock format)
 buf = io.BytesIO(); base.save(buf, 'PNG')
 def uid(s): return str(uuid.uuid5(uuid.NAMESPACE_URL, 'dba-saiyan-' + s))
@@ -359,5 +385,4 @@ bb = {'meta': {'format_version': '4.10', 'model_format': 'bedrock', 'box_uv': Fa
       'textures': [{'name': 'saiyan_base.png', 'id': '0', 'width': TEX, 'height': TEX, 'uv_width': TEX, 'uv_height': TEX,
                     'source': 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()}]}
 (ROOT / 'assets/blockbench/races/saiyan.bbmodel').write_text(json.dumps(bb, indent=1))
-base.save(RES / 'textures/entity/player/saiyan_base.png'); mask.save(RES / 'textures/entity/player/saiyan_mask.png')
 print('cubes', len(cubes), 'exported', sum(c['export'] for c in cubes), 'atlas rows used to', pk.y + pk.row)

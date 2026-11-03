@@ -11,8 +11,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 
 /**
- * Renders a Ki Laser as a thin, bright, instant line of energy.
- * White-hot core with colored glow.
+ * A ki laser is a thin line: white core, one tight colored edge, aimed down the look direction.
  */
 public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRenderer.LaserRenderState> {
 
@@ -40,32 +39,14 @@ public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRender
         float g = KiRenderHelper.green(state.color);
         float b = KiRenderHelper.blue(state.color);
         RenderType renderType = KiRenderHelper.kiRenderType();
-
         float laserLength = state.length;
 
-        // Thin white-hot core
-        float thinRadius = 0.04f;
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -thinRadius, -thinRadius, 0,
-                    thinRadius, thinRadius, laserLength,
-                    1.0f, 1.0f, 1.0f, 1.0f);
-        });
-        poseStack.popPose();
-
-        // Colored glow around it
-        float glowRadius = 0.1f;
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -glowRadius, -glowRadius, -0.05f,
-                    glowRadius, glowRadius, laserLength + 0.1f,
-                    r, g, b, 0.5f);
+            KiRenderHelper.drawCylinder(pose, buffer, 0.06f, 0f, laserLength, 8, r, g, b, 0.4f);
+            KiRenderHelper.drawCylinder(pose, buffer, 0.02f, 0f, laserLength, 6, 1f, 1f, 1f, 1f);
         });
         poseStack.popPose();
 

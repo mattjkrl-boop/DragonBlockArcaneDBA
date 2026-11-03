@@ -71,20 +71,24 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
         poseStack.scale(fpScale, fpScale, fpScale);
 
-        // End of flight fade: the spear body used to hold full alpha until the
-        // 40 tick cap and pop out. It dissolves over the final 5 ticks.
-        float bodyFade = age <= 35.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - 35.0f) / 5.0f);
+        // The throw holds, then eases out over the last part of the flight.
+        float endT = age > 32.0f ? Math.min(1.0f, (age - 32.0f) / 8.0f) : 0.0f;
+        final float bodyFade = 1.0f - endT * endT * (3.0f - 2.0f * endT);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // 1. Demonic Multi-Faceted Spear Shaft (8-sided outer dark obsidian & inner glowing core)
-            drawCylinder(matrix, buffer, 0.10f, -2.0f, 1.4f, 8, 0.22f, 0.02f, 0.08f, 0.95f * bodyFade);
-            drawCylinder(matrix, buffer, 0.05f, -1.9f, 1.35f, 6, 1.0f, 0.15f, 0.30f, 1.0f * bodyFade);
+            // Tapered shaft: narrow at the butt, wider at the neck under the diamond. Not a rod.
+            drawTaper(matrix, buffer, 0.055f, 0.13f, -2.0f, 1.35f, 12, 0.22f, 0.02f, 0.08f, 0.95f * bodyFade);
+            drawTaper(matrix, buffer, 0.022f, 0.048f, -1.85f, 1.22f, 8, 1.0f, 0.55f, 0.68f, 1.0f * bodyFade);
 
-            // 2. Multi-Beveled Diamond Blood Spearhead & Inner Burning Core
-            drawSpearHead(matrix, buffer, 0.42f, 1.2f, 2.85f, 0.95f, 0.05f, 0.20f, 0.95f * bodyFade);
-            drawSpearHead(matrix, buffer, 0.20f, 1.35f, 2.95f, 1.0f, 0.85f, 0.90f, 1.0f * bodyFade);
+            // Diamond head: crimson edge, pale cutting tip, and a hotter core inside it.
+            drawSpearHead(matrix, buffer, 0.42f, 1.2f, 2.85f,
+                0.95f, 0.05f, 0.20f, 0.95f * bodyFade,
+                1.0f, 0.85f, 0.90f, 1.0f * bodyFade);
+            drawSpearHead(matrix, buffer, 0.16f, 1.55f, 2.68f,
+                1.0f, 0.72f, 0.80f, bodyFade,
+                1.0f, 0.96f, 0.98f, bodyFade);
 
             // 3. Barbed Crossguards & 4 Flared Demonic Aerodynamic Fins
             drawFin(matrix, buffer, 0.55f, 0, -2.0f, -0.9f, 0.85f, 0.0f, 0.15f, 0.90f * bodyFade);
@@ -96,26 +100,25 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
             drawFin(matrix, buffer, 0.35f, 0, 1.2f, 0.7f, 1.0f, 0.1f, 0.25f, 0.95f * bodyFade);
             drawFin(matrix, buffer, -0.35f, 0, 1.2f, 0.7f, 1.0f, 0.1f, 0.25f, 0.95f * bodyFade);
 
-            // 4. Supersonic Demonic 3D Mach Shock Cone
-            int coneSegments = 24;
-            float tipZ = 2.85f;
-            float coneLength = 2.6f;
-            float coneBaseRadius = 0.95f;
-            float baseZ = tipZ - coneLength;
-
+            // Mach cone around the head. Pale at the tip, crimson at the mouth, with a thin rim.
+            int coneSegments = 28;
+            float coneTipZ = 2.85f;
+            float coneBaseZ = coneTipZ - 2.55f;
+            float coneRadius = 0.92f;
             for (int i = 0; i < coneSegments; i++) {
                 double a1 = (i / (double) coneSegments) * Math.PI * 2.0;
                 double a2 = ((i + 1) / (double) coneSegments) * Math.PI * 2.0;
-
-                float x1 = (float) Math.cos(a1) * coneBaseRadius;
-                float y1 = (float) Math.sin(a1) * coneBaseRadius;
-                float x2 = (float) Math.cos(a2) * coneBaseRadius;
-                float y2 = (float) Math.sin(a2) * coneBaseRadius;
-
-                drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, 1.0f, 0.08f, 0.22f, 0.50f * bodyFade);
+                float x1 = (float) Math.cos(a1) * coneRadius;
+                float y1 = (float) Math.sin(a1) * coneRadius;
+                float x2 = (float) Math.cos(a2) * coneRadius;
+                float y2 = (float) Math.sin(a2) * coneRadius;
+                drawTriangle(matrix, buffer, 0, 0, coneTipZ, x1, y1, coneBaseZ, x2, y2, coneBaseZ,
+                    1.0f, 0.12f, 0.24f, 0.42f * bodyFade);
             }
+            drawRing(matrix, buffer, 0, 0, coneBaseZ, coneRadius * 1.06f, coneRadius * 0.84f, 24,
+                1.0f, 0.72f, 0.78f, 0.55f * bodyFade);
 
-            // 5. Dynamic Physical 3D Trail: Twin Helical Blood Vortex Ribbons trailing behind spear
+            // Blood ribbon trailing the throw. Width sits across the helix.
             int ribbonSteps = 14;
             float trailStart = -2.0f;
             float trailLength = 4.2f;
@@ -140,79 +143,115 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
                     float rx2 = (float) Math.cos(ang2) * r2;
                     float ry2 = (float) Math.sin(ang2) * r2;
 
-                    float rw1 = 0.20f * (1.0f - t1 * 0.5f);
-                    float rw2 = 0.20f * (1.0f - t2 * 0.5f);
+                    float rw1 = 0.18f * (1.0f - t1 * 0.6f);
+                    float rw2 = 0.18f * (1.0f - t2 * 0.6f);
+                    float px1 = (float) -Math.sin(ang1) * rw1;
+                    float py1 = (float) Math.cos(ang1) * rw1;
+                    float px2 = (float) -Math.sin(ang2) * rw2;
+                    float py2 = (float) Math.cos(ang2) * rw2;
+                    float tail = 1.0f - t1;
+                    tail = tail * tail;
 
                     drawQuad(matrix, buffer,
-                        rx1 - rw1, ry1, z1,
-                        rx1 + rw1, ry1, z1,
-                        rx2 + rw2, ry2, z2,
-                        rx2 - rw2, ry2, z2,
-                        1.0f, 0.10f + t1 * 0.3f, 0.25f, 0.85f * (1.0f - t1 * 0.6f)
+                        rx1 - px1, ry1 - py1, z1,
+                        rx1 + px1, ry1 + py1, z1,
+                        rx2 + px2, ry2 + py2, z2,
+                        rx2 - px2, ry2 - py2, z2,
+                        1.0f, 0.10f + t1 * 0.25f, 0.22f, 0.85f * tail * bodyFade
                     );
                 }
             }
 
-            // 6. Expanding Wake Vortex Rings pulsing along the flight axis
-            for (int k = 0; k < 3; k++) {
-                float ringPhase = (age * 0.15f + (k / 3.0f)) % 1.0f;
-                float ringZ = trailStart - (ringPhase * trailLength);
-                float ringRadius = (0.35f + ringPhase * 1.2f);
-                float ringAlpha = (float) Math.sin(ringPhase * Math.PI) * 0.65f;
-
-                drawRing(matrix, buffer, 0, 0, ringZ, ringRadius, ringRadius * 0.80f, 24, 0.95f, 0.05f, 0.20f, ringAlpha);
-            }
-
-            // 7. Kinetic Plasma Thrust Core Beam
-            drawBeam(matrix, buffer, 0, 0, trailStart + 0.2f, 0, 0, trailStart - trailLength * 0.75f, 0.08f, 1.0f, 0.80f, 0.85f, 0.95f * bodyFade);
-        });
-
-        // Additive glow halo (redesign T1): the burning core and spearhead
-        // bloom through the obsidian shaft so the throw reads as light.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawCylinder(matrix, buffer, 0.075f, -1.9f, 1.35f, 8, 1.0f, 0.15f, 0.30f, 0.30f * bodyFade);
-            drawSpearHead(matrix, buffer, 0.27f, 1.35f, 2.95f, 1.0f, 0.85f, 0.90f, 0.25f * bodyFade);
+            // One wake ring eases back off the spear and dies.
+            float wake = (age * 0.12f) % 1.0f;
+            float wakeEase = wake * wake * (3.0f - 2.0f * wake);
+            float ringZ = trailStart - wakeEase * trailLength;
+            float ringRadius = 0.28f + wakeEase * 0.7f;
+            float ringAlpha = (float) Math.sin(wake * Math.PI) * 0.5f * bodyFade;
+            drawRing(matrix, buffer, 0, 0, ringZ, ringRadius, ringRadius * 0.78f, 20, 0.95f, 0.05f, 0.20f, ringAlpha);
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static void drawCylinder(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float zEnd, int sides, float r, float g, float b, float a) {
+    private static void drawTaper(Matrix4f matrix, VertexConsumer consumer, float radiusStart, float radiusEnd, float zStart, float zEnd, int sides, float r, float g, float b, float a) {
         for (int i = 0; i < sides; i++) {
             double a1 = (i / (double) sides) * Math.PI * 2;
             double a2 = ((i + 1) / (double) sides) * Math.PI * 2;
 
-            float x1 = (float) Math.cos(a1) * radius;
-            float y1 = (float) Math.sin(a1) * radius;
-            float x2 = (float) Math.cos(a2) * radius;
-            float y2 = (float) Math.sin(a2) * radius;
+            float x1s = (float) Math.cos(a1) * radiusStart;
+            float y1s = (float) Math.sin(a1) * radiusStart;
+            float x2s = (float) Math.cos(a2) * radiusStart;
+            float y2s = (float) Math.sin(a2) * radiusStart;
+            float x1e = (float) Math.cos(a1) * radiusEnd;
+            float y1e = (float) Math.sin(a1) * radiusEnd;
+            float x2e = (float) Math.cos(a2) * radiusEnd;
+            float y2e = (float) Math.sin(a2) * radiusEnd;
 
-            consumer.addVertex(matrix, x1, y1, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, y2, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, y2, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, y1, zEnd).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1s, y1s, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2s, y2s, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2e, y2e, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1e, y1e, zEnd).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         }
     }
 
-    private static void drawSpearHead(Matrix4f matrix, VertexConsumer consumer, float width, float zBase, float zTip, float r, float g, float b, float a) {
-        // 4-sided diamond pyramid head
+    private static void drawSpearHead(Matrix4f matrix, VertexConsumer consumer, float width, float zBase, float zTip,
+                                      float r, float g, float b, float a,
+                                      float tr, float tg, float tb, float ta) {
+        // 4-sided diamond. The base is the crimson edge, the tip is the pale core.
         float[][] pts = { { width, 0 }, { 0, width }, { -width, 0 }, { 0, -width } };
         for (int i = 0; i < 4; i++) {
             int nxt = (i + 1) % 4;
             consumer.addVertex(matrix, pts[i][0], pts[i][1], zBase).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
             consumer.addVertex(matrix, pts[nxt][0], pts[nxt][1], zBase).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, 0, 0, zTip).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, 0, 0, zTip).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, 0, 0, zTip).setColor(tr, tg, tb, ta).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+            consumer.addVertex(matrix, 0, 0, zTip).setColor(tr, tg, tb, ta).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
         }
     }
 
+    /** Curved barb: dark root, bright outer edge, a taper to the tip, and a short wake behind the root. */
     private static void drawFin(Matrix4f matrix, VertexConsumer consumer, float widthX, float widthY, float zStart, float zEnd, float r, float g, float b, float a) {
-        consumer.addVertex(matrix, 0, 0, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, widthX, widthY, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, 0, 0, zEnd).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, 0, 0, zEnd).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        float span = (float) Math.sqrt(widthX * widthX + widthY * widthY);
+        float tx = 0.0f;
+        float ty = 1.0f;
+        if (span > 1.0e-4f) {
+            tx = -widthY / span;
+            ty = widthX / span;
+        }
+        int steps = 7;
+        for (int i = 0; i < steps; i++) {
+            float t1 = i / (float) steps;
+            float t2 = (i + 1) / (float) steps;
+            float bow1 = (float) Math.sin(t1 * Math.PI);
+            float bow2 = (float) Math.sin(t2 * Math.PI);
+            float reach1 = (1.0f - t1) * (0.4f + 0.6f * bow1);
+            float reach2 = (1.0f - t2) * (0.4f + 0.6f * bow2);
+            float thick1 = 0.05f * (1.0f - t1);
+            float thick2 = 0.05f * (1.0f - t2);
+            float z1 = zStart + (zEnd - zStart) * t1;
+            float z2 = zStart + (zEnd - zStart) * t2;
+            float ox1 = widthX * reach1;
+            float oy1 = widthY * reach1;
+            float ox2 = widthX * reach2;
+            float oy2 = widthY * reach2;
+            float er = r + (1.0f - r) * 0.55f;
+            float eg = g + (0.85f - g) * 0.55f;
+            float eb = b + (0.9f - b) * 0.55f;
+            consumer.addVertex(matrix, 0, 0, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+            consumer.addVertex(matrix, ox1, oy1, z1).setColor(er, eg, eb, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+            consumer.addVertex(matrix, ox2, oy2, z2).setColor(er, eg, eb, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+            consumer.addVertex(matrix, 0, 0, z2).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+            consumer.addVertex(matrix, ox1, oy1, z1).setColor(er, eg, eb, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, ox1 + tx * thick1, oy1 + ty * thick1, z1).setColor(1.0f, 0.9f, 0.92f, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, ox2 + tx * thick2, oy2 + ty * thick2, z2).setColor(1.0f, 0.9f, 0.92f, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, ox2, oy2, z2).setColor(er, eg, eb, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        }
+        float wakeZ = zStart + Math.copySign(0.34f, zStart - zEnd);
+        consumer.addVertex(matrix, 0, 0, zStart).setColor(r, g, b, a * 0.5f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, widthX * 0.28f, widthY * 0.28f, zStart).setColor(r, g, b, a * 0.5f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, widthX * 0.05f, widthY * 0.05f, wakeZ).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, 0, 0, wakeZ).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
     }
 
     private static void drawTriangle(Matrix4f matrix, VertexConsumer consumer,

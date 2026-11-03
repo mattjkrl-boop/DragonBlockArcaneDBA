@@ -11,8 +11,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 
 /**
- * Renders a Ki Explosion as an expanding, fading sphere of light.
- * Multiple rotated cubes layered to approximate a sphere.
+ * A ki explosion is one shell and a white core. It eases open, then fades out before the entity ends.
  */
 public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExplosionRenderer.ExplosionRenderState> {
 
@@ -40,59 +39,32 @@ public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExp
         float b = KiRenderHelper.blue(state.color);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
-        // Expand over first 10 ticks, then hold
-        float expansion = Math.min(1.0f, state.ageInTicks / 10.0f);
-        float currentRadius = expansion * state.radius;
-
-        // Fade out over 40 ticks
-        float alpha = Math.max(0.0f, 1.0f - (state.ageInTicks / 40.0f));
-        if (alpha <= 0.01f) {
+        float open = Math.min(1f, state.ageInTicks / 8f);
+        float ease = 1f - (1f - open) * (1f - open);
+        float fade = Math.max(0f, 1f - state.ageInTicks / 36f);
+        fade = fade * fade;
+        if (fade <= 0.02f) {
             super.submit(state, poseStack, collector, cameraState);
             return;
         }
 
-        float halfSize = currentRadius;
+        float radius = ease * state.radius;
+        float shellA = 0.55f * fade;
+        float coreA = 0.9f * fade;
+        float ringA = 0.7f * fade * (1f - open);
+        float ring = radius * (0.85f + open * 0.35f);
 
-        // Layer 1 — base cube
         poseStack.pushPose();
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -halfSize, -halfSize, -halfSize,
-                    halfSize, halfSize, halfSize,
-                    r, g, b, alpha * 0.7f);
+            KiRenderHelper.drawSphere(pose, buffer, radius, 8, 12, r, g, b, shellA);
+            KiRenderHelper.drawSphere(pose, buffer, radius * 0.38f, 6, 8, 1f, 1f, 1f, coreA);
         });
         poseStack.popPose();
 
-        // Layer 2 — rotated 45° on Y
-        float s2 = halfSize * 0.92f;
         poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(45.0f)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -s2, -s2, -s2, s2, s2, s2,
-                    r, g, b, alpha * 0.5f);
-        });
-        poseStack.popPose();
-
-        // Layer 3 — rotated 45° on X
-        float s3 = halfSize * 0.85f;
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(45.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -s3, -s3, -s3, s3, s3, s3,
-                    r, g, b, alpha * 0.4f);
-        });
-        poseStack.popPose();
-
-        // White-hot core
-        float coreSize = halfSize * 0.4f;
-        poseStack.pushPose();
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -coreSize, -coreSize, -coreSize,
-                    coreSize, coreSize, coreSize,
-                    1.0f, 1.0f, 1.0f, alpha * 0.9f);
+            KiRenderHelper.drawDisc(pose, buffer, ring * 0.92f, ring, 24, r, g, b, ringA);
         });
         poseStack.popPose();
 

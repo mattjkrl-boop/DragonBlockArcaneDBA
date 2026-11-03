@@ -64,8 +64,10 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         if (progress >= 1.0f) return;
 
-        float fade = 1.0f - (progress * progress);
-        float scale = state.scale * (0.8f + progress * 1.1f);
+        float travel = 1.0f - (1.0f - progress) * (1.0f - progress) * (1.0f - progress);
+        float exitT = progress <= 0.50f ? 0.0f : Math.min(1.0f, (progress - 0.50f) / 0.50f);
+        float fade = 1.0f - exitT * exitT * (3.0f - 2.0f * exitT);
+        float scale = state.scale * (0.55f + travel * 0.85f);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -105,15 +107,6 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
             }
         });
 
-        // Additive glow halo (T1) for the billboarded layer: the dial redrawn
-        // slightly larger and faint, so the shatter blooms toward the viewer.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float ringR = 1.8f * scale * 1.07f;
-            float ringWidth = 0.12f * (1.0f - progress * 0.6f) * 1.8f;
-            drawSplinteringDial(matrix, buffer, ringR, ringWidth, 36, state.age * 25.0f, progress, fade * 0.30f);
-        });
-
         poseStack.popPose();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
@@ -125,7 +118,7 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
             for (int s = 0; s < shardCount; s++) {
                 double shardAngle = (s / (double) shardCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.35);
                 float speed = 1.4f + rng.nextFloat() * 1.8f;
-                float dist = progress * speed * 2.4f * scale;
+                float dist = travel * speed * 2.4f * scale;
 
                 float sx = (float) Math.cos(shardAngle) * dist;
                 float sy = (float) Math.sin(shardAngle) * dist + (rng.nextFloat() - 0.5f) * 0.6f;
@@ -140,19 +133,19 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
                 float cb = 1.0f;
 
                 drawGlassPrismShard(matrix, buffer, sx, sy, sz, shardSize, rot, cr, cg, cb, fade);
+                drawGlassPrismShard(matrix, buffer, sx, sy, sz, shardSize * 0.40f, rot + 16.0f, 1.0f, 1.0f, 1.0f, fade * 0.80f);
+                float wake = 0.38f;
+                drawSpoke(matrix, buffer,
+                    sx * (1.0f - wake), sy * (1.0f - wake), sz * (1.0f - wake),
+                    sx, sy, sz,
+                    shardSize * 0.22f,
+                    cr, cg, cb, 0.0f,
+                    1.0f, 1.0f, 1.0f, fade * 0.50f);
             }
 
             // 4. Radiant Celestial Core Diamond / Octahedron Burst
             float coreSize = 0.85f * (1.0f - progress * 0.7f) * scale;
             drawOctahedralCore(matrix, buffer, 0, 0, 0, coreSize, state.age * 40.0f, 0.98f, 0.98f, 1.0f, fade);
-        });
-
-        // Additive glow halo (T1) for the world-space layer: an oversized faint
-        // core octahedron blooms behind the shards.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float coreSize = 0.85f * (1.0f - progress * 0.7f) * scale * 1.45f;
-            drawOctahedralCore(matrix, buffer, 0, 0, 0, coreSize, state.age * 40.0f, 0.70f, 0.90f, 1.0f, fade * 0.30f);
         });
 
         poseStack.popPose();
@@ -205,17 +198,62 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
     }
 
     private static void drawSpoke(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float width, float r1, float g1, float b1, float a1, float r2, float g2, float b2, float a2) {
-        float dx = x2 - x1, dy = y2 - y1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (len < 0.001f) return;
 
-        float nx = -dy / len * width * 0.5f;
-        float ny = dx / len * width * 0.5f;
+        float bx = -dy;
+        float by = dx;
+        float bz = 0.0f;
+        if (dx * dx + dy * dy < dz * dz) {
+            bx = 1.0f;
+            by = 0.0f;
+            bz = 0.0f;
+        }
+        float blen = (float) Math.sqrt(bx * bx + by * by + bz * bz);
+        bx /= blen;
+        by /= blen;
+        bz /= blen;
 
-        consumer.addVertex(matrix, x1 - nx, y1 - ny, z1).setColor(r1, g1, b1, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x1 + nx, y1 + ny, z1).setColor(r1, g1, b1, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x2 + nx, y2 + ny, z2).setColor(r2, g2, b2, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x2 - nx, y2 - ny, z2).setColor(r2, g2, b2, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+        int steps = 6;
+        for (int i = 0; i < steps; i++) {
+            float t1 = i / (float) steps;
+            float t2 = (i + 1) / (float) steps;
+            float bow1 = (float) Math.sin(t1 * Math.PI) * width * 0.85f;
+            float bow2 = (float) Math.sin(t2 * Math.PI) * width * 0.85f;
+            float w1 = width * (1.0f - t1 * 0.85f) * 0.5f;
+            float w2 = width * (1.0f - t2 * 0.85f) * 0.5f;
+            float fade1 = 1.0f - t1 * t1 * 0.40f;
+            float fade2 = 1.0f - t2 * t2 * 0.40f;
+            float er1 = r1 + (r2 - r1) * t1;
+            float eg1 = g1 + (g2 - g1) * t1;
+            float eb1 = b1 + (b2 - b1) * t1;
+            float ea1 = (a1 + (a2 - a1) * t1) * fade1;
+            float er2 = r1 + (r2 - r1) * t2;
+            float eg2 = g1 + (g2 - g1) * t2;
+            float eb2 = b1 + (b2 - b1) * t2;
+            float ea2 = (a1 + (a2 - a1) * t2) * fade2;
+            float sx1 = x1 + dx * t1 + bx * bow1;
+            float sy1 = y1 + dy * t1 + by * bow1;
+            float sz1 = z1 + dz * t1 + bz * bow1;
+            float sx2 = x1 + dx * t2 + bx * bow2;
+            float sy2 = y1 + dy * t2 + by * bow2;
+            float sz2 = z1 + dz * t2 + bz * bow2;
+
+            consumer.addVertex(matrix, sx1 - bx * w1, sy1 - by * w1, sz1 - bz * w1).setColor(er1, eg1, eb1, ea1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(bx, by, bz);
+            consumer.addVertex(matrix, sx1 + bx * w1, sy1 + by * w1, sz1 + bz * w1).setColor(er1, eg1, eb1, ea1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(bx, by, bz);
+            consumer.addVertex(matrix, sx2 + bx * w2, sy2 + by * w2, sz2 + bz * w2).setColor(er2, eg2, eb2, ea2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(bx, by, bz);
+            consumer.addVertex(matrix, sx2 - bx * w2, sy2 - by * w2, sz2 - bz * w2).setColor(er2, eg2, eb2, ea2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(bx, by, bz);
+
+            float c1 = w1 * 0.32f;
+            float c2 = w2 * 0.32f;
+            consumer.addVertex(matrix, sx1 - bx * c1, sy1 - by * c1, sz1 - bz * c1).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, ea1 * 1.2f)).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(bx, by, bz);
+            consumer.addVertex(matrix, sx1 + bx * c1, sy1 + by * c1, sz1 + bz * c1).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, ea1 * 1.2f)).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(bx, by, bz);
+            consumer.addVertex(matrix, sx2 + bx * c2, sy2 + by * c2, sz2 + bz * c2).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, ea2 * 1.2f)).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(bx, by, bz);
+            consumer.addVertex(matrix, sx2 - bx * c2, sy2 - by * c2, sz2 - bz * c2).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, ea2 * 1.2f)).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(bx, by, bz);
+        }
     }
 
     private static void drawGlassPrismShard(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float size, float rotDeg, float r, float g, float b, float a) {

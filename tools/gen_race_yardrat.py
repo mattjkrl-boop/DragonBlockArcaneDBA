@@ -7,7 +7,7 @@ cream pants, brown shoes. Gentle face, no brows. Stocky standard frame.
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint, skin_lid
 
 SKIN_V = 202
 CREAM = (238, 228, 200); CREAM_D = (214, 202, 172); BROWN = (146, 92, 52); BROWN_D = (116, 70, 38)
@@ -28,14 +28,21 @@ for side, bone in ((1, 'right_leg'), (-1, 'left_leg')):
     m.cube('shoe_' + bone, bone, 'shoe', [xo[0], 0, -2.5], [xo[1], 2.1, 2.3])
     m.cube('shoe_toe_' + bone, bone, 'shoe', [xo[0], 0, -3.6], [xo[1], 1.6, -2.5])
 
-# Torso: cream shirt, brown open vest, orange trim, dark red sash
+# Torso stays inside y=12..24. The vest skirts and sash knot hang on the legs,
+# same as the Namekian sash: a body cube below the waist stretches the torso
+# scale and leaves the pants short of the hips.
 m.cube('torso', 'body', 'shirt', [-4.9, 12, -2.9], [4.9, 24, 2.9])
-m.cube('vest_back', 'body', 'vest', [-5.15, 12.2, 1.9], [5.15, 24.2, 3.25])
-m.mirror('vest_front', ('body', 'body'), 'vest', [2.1, 12.2, -3.3], [5.15, 24.2, -2.35])
-m.cube('vest_skirt_back', 'body', 'vest', [-4.7, 5.8, 2.35], [4.7, 12.6, 3.2])
-m.mirror('vest_skirt_front', ('body', 'body'), 'vest', [1.9, 5.8, -3.25], [4.7, 12.6, -2.45])
-m.cube('belt', 'body', 'belt', [-5.2, 11.6, -3.2], [5.2, 13.6, 3.15])
-m.cube('belt_knot', 'body', 'belt_knot', [-1.1, 8.2, -3.35], [0.3, 13.4, -2.95], [ -0.4, 13.2, -3.15], (6, 0, 4))
+m.cube('vest_back', 'body', 'vest', [-5.15, 12.2, 1.9], [5.15, 24.0, 3.25])
+m.mirror('vest_front', ('body', 'body'), 'vest', [2.1, 12.2, -3.3], [5.15, 24.0, -2.35])
+m.cube('vest_skirt_back_r', 'right_leg', 'vest', [0.0, 5.8, 2.35], [4.7, 12.0, 3.2])
+m.cube('vest_skirt_back_l', 'left_leg', 'vest', [-4.7, 5.8, 2.35], [0.0, 12.0, 3.2])
+m.cube('vest_skirt_tuck_r', 'body', 'vest', [0.0, 12.0, 2.35], [4.7, 12.6, 3.2])
+m.cube('vest_skirt_tuck_l', 'body', 'vest', [-4.7, 12.0, 2.35], [0.0, 12.6, 3.2])
+m.mirror('vest_skirt_front', ('right_leg', 'left_leg'), 'vest', [1.9, 5.8, -3.25], [4.7, 12.0, -2.45])
+m.mirror('vest_skirt_front_tuck', ('body', 'body'), 'vest', [1.9, 12.0, -3.25], [4.7, 12.6, -2.45])
+m.cube('belt', 'body', 'belt', [-5.2, 12.0, -3.2], [5.2, 13.6, 3.15])
+m.cube('belt_knot', 'body', 'belt_knot', [-1.1, 12.0, -3.35], [0.3, 13.4, -2.95], [-0.4, 13.2, -3.15], (6, 0, 4))
+m.cube('belt_knot_tail', 'right_leg', 'belt_knot', [-1.1, 8.2, -3.35], [0.3, 12.0, -2.95], [-0.4, 13.2, -3.15], (6, 0, 4))
 
 # Arms: cream long sleeves, vest shoulder caps, skin hands
 m.mirror('sleeve', ('right_arm', 'left_arm'), 'shirt', [5.2, 13.2, -2.2], [9.6, 24.1, 2.2])
@@ -67,7 +74,7 @@ ear(1, 'r'); ear(-1, 'l')
 
 # ------------------------------------------------------------------ painting
 SPOTS = {(2, 1), (5, 0), (9, 2), (12, 1), (6, 3), (11, 4), (3, 5), (13, 3)}
-def paint_face(i, j, W, H):
+def paint_face(i, j, W, H, closed=False):
     """Gentle Yardrat face: no brows, calm eyes set a little low, small mouth."""
     sx = i - W // 2
     k = SKIN_V
@@ -76,8 +83,13 @@ def paint_face(i, j, W, H):
         if 2 <= a <= 5:
             if j == 9: return (k * 0.72,) * 3, 'R'                       # upper lid line (skin shade, no brow)
             if j in (10, 11):
-                if a == 3: return (246, 246, 246), None                  # sclera
-                if a == 4: return (30, 26, 34), None                     # pupil
+                # Low two-row eye, only two columns wide. The lower row is the shut line.
+                if closed:
+                    if j == 10: return skin_lid(k)
+                    if a in (3, 4): return eye_tint(200)
+                    return (k * 0.9,) * 3, 'R'
+                if a == 3: return eye_tint(110)
+                if a == 4: return eye_tint(235)
                 return (k * 0.9,) * 3, 'R'
             if j == 12 and 3 <= a <= 4: return (k * 0.84,) * 3, 'R'
     if j == 12 and sx in (-1, 0): return (k * 0.78,) * 3, 'R'            # nose shadow
@@ -96,7 +108,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
         if mt == 'dome' and fn == 'up' and (i // 2, j // 2) in SPOTS: v *= 0.78  # scalp spots
         if mt == 'head' and fn == 'north':
             if j <= 2 and (i // 2, j) in ((3, 1), (11, 0), (7, 2)): v *= 0.8     # forehead spots
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if mt == 'hand':
             if fn == 'north' and 0.3 < t < 0.42 and i % 2 == 0: v *= 0.85

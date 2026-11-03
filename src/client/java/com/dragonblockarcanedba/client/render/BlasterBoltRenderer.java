@@ -33,6 +33,7 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         public boolean isOvercharged = false;
         public float heatRatio = 0.0f;
         public float age = 0.0f;
+        public int impactAge = -1;
         public boolean isFirstPersonOwner = false;
     }
 
@@ -49,6 +50,7 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         state.isOvercharged = entity.isOvercharged();
         state.heatRatio = entity.getHeatRatio();
         state.age = entity.tickCount + partialTicks;
+        state.impactAge = entity.getImpactAge();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null && 
@@ -91,60 +93,112 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
             b = 0.10f;
         }
 
+        // On impact the same finned bolt collapses and fades. It does not swap for a disc.
+        final float impactT = state.impactAge < 0 ? 0.0f : Math.min(1.0f, state.impactAge / 5.0f);
+        final float impactEase = 1.0f - (1.0f - impactT) * (1.0f - impactT) * (1.0f - impactT);
+        final float boltDie = 1.0f - impactT * impactT * (3.0f - 2.0f * impactT);
+        final float drawRadius = radius * (1.0f - impactEase * 0.62f);
+        final float drawHead = headLength * (1.0f - impactEase * 0.70f);
+        final float drawTail = tailLength * (1.0f - impactEase * 0.20f);
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             int sides = 12;
 
-            // 1. Outer Fluted Plasma Sheath (Faceted cylinder with nose cone and ion tail)
-            drawPlasmaBolt(matrix, buffer, radius, headLength, tailLength, sides, age * 20.0f, r, g, b, 0.88f);
+            // Soft edge of the same tapered sheath, then the body, then the white core.
+            drawPlasmaBolt(matrix, buffer, drawRadius * 1.22f, drawHead, drawTail * 0.85f, sides, age * 20.0f, r, g, b, 0.22f * boltDie);
+            drawPlasmaBolt(matrix, buffer, drawRadius, drawHead, drawTail, sides, age * 20.0f, r, g, b, 0.88f * boltDie);
+            drawPlasmaBolt(matrix, buffer, drawRadius * 0.38f, drawHead * 0.85f, drawTail * 0.55f, sides, -age * 30.0f, 1.0f, 0.97f, 0.82f, boltDie);
 
-            // 2. Dense White-Hot Plasma Core (Inner high-intensity rod)
-            drawPlasmaBolt(matrix, buffer, radius * 0.45f, headLength * 0.9f, tailLength * 0.65f, sides, -age * 30.0f, 1.0f, 1.0f, 0.95f, 1.0f);
-
-            // 3. 4 Aerodynamic Stabilizing Energy Vanes / Fins (swept backward)
-            float finSpan = radius * 2.3f;
-            float finBaseZ = -headLength * 0.2f;
-            float finBackZ = -tailLength * 0.55f;
+            float finSpan = drawRadius * 2.3f;
+            float finBaseZ = -drawHead * 0.2f;
+            float finBackZ = -drawTail * 0.55f;
 
             for (int f = 0; f < 4; f++) {
-                double angle = (f / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 15.0f);
+                double angle = (f / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 12.0f);
                 float fx = (float) Math.cos(angle) * finSpan;
                 float fy = (float) Math.sin(angle) * finSpan;
-
-                drawQuad(matrix, buffer,
-                    0, 0, headLength * 0.4f,
-                    fx, fy, finBaseZ,
-                    fx * 0.6f, fy * 0.6f, finBackZ,
-                    0, 0, finBackZ * 0.7f,
-                    r, g, b, 0.75f
+                float ox = (float) Math.cos(angle);
+                float oy = (float) Math.sin(angle);
+                drawLash(matrix, buffer,
+                    ox * drawRadius * 0.25f, oy * drawRadius * 0.25f, drawHead * 0.28f,
+                    fx * 0.92f, fy * 0.92f, finBaseZ,
+                    fx * 0.38f, fy * 0.38f, finBackZ,
+                    drawRadius * 0.20f, 6,
+                    r, g, b,
+                    1.0f, 0.96f, 0.78f,
+                    0.88f * boltDie
                 );
             }
-
-            // 4. Plasma Compression Ringlets (Orbital energy nodes)
-            drawPlaneRing(matrix, buffer, 0, 0, 0, radius * 1.35f, radius * 1.05f, 18, age * 40.0f, r, g, b, 0.85f);
-            drawPlaneRing(matrix, buffer, 0, 0, -headLength * 0.5f, radius * 1.20f, radius * 0.95f, 18, -age * 45.0f, 1.0f, 1.0f, 0.9f, 0.90f);
-
-            // 5. Leading Edge Cross-Flare (at bolt apex)
-            float flareSize = radius * 1.6f;
-            drawQuad(matrix, buffer,
-                -flareSize, 0, headLength,
-                flareSize, 0, headLength,
-                0, -flareSize, headLength,
-                0, flareSize, headLength,
-                1.0f, 1.0f, 1.0f, 0.95f
-            );
-        });
-
-        // Additive glow halo (T1): a fat faint sheath in the bolt's own heat
-        // color blooms around the matte body. The heat palette above is
-        // untouched; this pass only reuses its result.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawPlasmaBolt(matrix, buffer, radius * 1.5f, headLength, tailLength * 0.8f, 12, age * 20.0f, r, g, b, 0.16f);
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void drawLash(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float xc, float yc, float zc,
+                                 float x1, float y1, float z1,
+                                 float width, int steps,
+                                 float er, float eg, float eb,
+                                 float cr, float cg, float cb,
+                                 float alpha) {
+        int n = Math.max(4, steps);
+        float px = x0;
+        float py = y0;
+        float pz = z0;
+        for (int i = 1; i <= n; i++) {
+            float t = i / (float) n;
+            float u = 1.0f - t;
+            float x = u * u * x0 + 2.0f * u * t * xc + t * t * x1;
+            float y = u * u * y0 + 2.0f * u * t * yc + t * t * y1;
+            float z = u * u * z0 + 2.0f * u * t * zc + t * t * z1;
+            float w = width * (1.0f - t * 0.9f);
+            float a = alpha * (1.0f - t * t);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w, er, eg, eb, a);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.32f, cr, cg, cb, Math.min(1.0f, a * 1.2f));
+            px = x;
+            py = y;
+            pz = z;
+        }
+    }
+
+    private static void lashSpan(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float x1, float y1, float z1,
+                                 float width,
+                                 float r, float g, float b, float a) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float ax = 0.0f;
+        float ay = 1.0f;
+        float az = 0.0f;
+        if (dx * dx + dz * dz < dy * dy) {
+            ax = 1.0f;
+            ay = 0.0f;
+            az = 0.0f;
+        }
+        float px = dy * az - dz * ay;
+        float py = dz * ax - dx * az;
+        float pz = dx * ay - dy * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        if (plen < 0.0001f) {
+            return;
+        }
+        float s = width / plen;
+        px *= s;
+        py *= s;
+        pz *= s;
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
     }
 
     private static void drawPlasmaBolt(Matrix4f matrix, VertexConsumer consumer,
@@ -188,26 +242,6 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
             consumer.addVertex(matrix, 0, 0, -tailLen).setColor(r, g, b, 0.0f).setUv(0.5f, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
             consumer.addVertex(matrix, x2, y2, -tailLen * 0.35f).setColor(r, g, b, a).setUv(1, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
             consumer.addVertex(matrix, x1, y1, -tailLen * 0.35f).setColor(r, g, b, a).setUv(0, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
-    }
-
-    private static void drawPlaneRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
-        double rotRad = Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0 + rotRad;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0 + rotRad;
-
-            float x1Out = cx + (float) Math.cos(a1) * rOuter;
-            float y1Out = cy + (float) Math.sin(a1) * rOuter;
-            float x2Out = cx + (float) Math.cos(a2) * rOuter;
-            float y2Out = cy + (float) Math.sin(a2) * rOuter;
-
-            float x1In = cx + (float) Math.cos(a1) * rInner;
-            float y1In = cy + (float) Math.sin(a1) * rInner;
-            float x2In = cx + (float) Math.cos(a2) * rInner;
-            float y2In = cy + (float) Math.sin(a2) * rInner;
-
-            drawQuad(matrix, consumer, x1In, y1In, cz, x2In, y2In, cz, x2Out, y2Out, cz, x1Out, y1Out, cz, r, g, b, a);
         }
     }
 

@@ -65,7 +65,8 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
         float progress = Math.min(1.0f, state.age / maxLife);
         if (progress >= 1.0f) return;
 
-        float alpha = (1.0f - (progress * progress)) * 0.95f;
+        float exitT = progress <= 0.55f ? 0.0f : Math.min(1.0f, (progress - 0.55f) / 0.45f);
+        float alpha = (1.0f - exitT * exitT * (3.0f - 2.0f * exitT)) * 0.95f;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -106,16 +107,24 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
                         x1, y1, coneLength,
                         0.4f, 1.0f, 0.85f, alpha * 0.85f
                     );
+                    float cx1 = x1 * 0.42f;
+                    float cy1 = y1 * 0.42f;
+                    float cx2 = x2 * 0.42f;
+                    float cy2 = y2 * 0.42f;
+                    drawTriangle(matrix, buffer,
+                        0, 0, 0.12f,
+                        cx1, cy1, coneLength * 0.90f,
+                        cx2, cy2, coneLength * 0.90f,
+                        0.90f, 1.0f, 0.96f, alpha * 0.55f
+                    );
                 }
 
-                // 2. Dual Forward-Expanding Supersonic Vapor Rings
-                float ringZ1 = coneLength * 0.6f;
-                float ringR1 = coneRadius * 0.7f;
-                drawRingZ(matrix, buffer, ringZ1, ringR1, ringR1 * 0.75f, 28, 0.2f, 1.0f, 0.75f, alpha * 0.80f);
+                // The mouth of the cone is one jade lip. The needles carry past it, then fall back as the wave resolves.
+                float mouthR = coneRadius * 1.02f;
+                drawRingZ(matrix, buffer, coneLength * 0.96f, mouthR, mouthR * 0.82f, 28, 0.85f, 1.0f, 0.92f, alpha * 0.90f);
 
-                float ringZ2 = coneLength * 0.95f;
-                float ringR2 = coneRadius * 1.05f;
-                drawRingZ(matrix, buffer, ringZ2, ringR2, ringR2 * 0.80f, 28, 0.0f, 1.0f, 0.55f, alpha * 0.60f);
+                float follow = progress <= 0.40f ? 0.0f : Math.min(1.0f, (progress - 0.40f) / 0.40f);
+                float needleReach = 1.05f + (1.0f - follow) * 0.35f;
 
                 // 3. Radiating Forward Wind Needles / Flare Spikes
                 int needleCount = 10;
@@ -124,47 +133,23 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
                     float nx = (float) Math.cos(angle) * (coneRadius * 0.85f);
                     float ny = (float) Math.sin(angle) * (coneRadius * 0.85f);
 
-                    float perpX = (float) -Math.sin(angle) * 0.12f;
-                    float perpY = (float) Math.cos(angle) * 0.12f;
-
-                    drawTriangle(matrix, buffer,
-                        nx - perpX, ny - perpY, coneLength * 0.5f,
-                        nx + perpX, ny + perpY, coneLength * 0.5f,
-                        nx * 1.35f, ny * 1.35f, coneLength * 1.25f,
-                        0.90f, 1.0f, 0.95f, alpha * 0.90f
+                    float curl = 0.16f;
+                    float px = (float) -Math.sin(angle) * curl;
+                    float py = (float) Math.cos(angle) * curl;
+                    float tipZ = coneLength * (1.05f + (1.0f - follow) * 0.28f);
+                    drawLash(matrix, buffer,
+                        nx, ny, coneLength * 0.42f,
+                        nx * (0.65f + needleReach * 0.28f) + px, ny * (0.65f + needleReach * 0.28f) + py, coneLength * 0.78f,
+                        nx * needleReach, ny * needleReach, tipZ,
+                        0.09f, 6,
+                        0.12f, 0.72f, 0.42f,
+                        0.95f, 1.0f, 0.96f,
+                        alpha * 0.95f
                     );
                 }
 
                 // 4. Epicenter White-Emerald Muzzle Flare
                 drawRingZ(matrix, buffer, 0.05f, 0.45f * (1.0f - progress), 0.05f, 24, 1.0f, 1.0f, 1.0f, alpha);
-            });
-
-            // Additive glow halo (T1): the cone shell redrawn wider and faint
-            // so the launch wave blooms instead of reading matte.
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                Matrix4f matrix = pose.pose();
-
-                float expansion = (float) Math.sin(progress * (Math.PI / 2.0));
-                float coneLength = state.maxRadius * (0.4f + 0.8f * expansion) * 1.05f;
-                float coneRadius = state.maxRadius * (0.3f + 0.9f * expansion) * 1.15f;
-
-                int haloSegments = 32;
-                for (int i = 0; i < haloSegments; i++) {
-                    double a1 = (i / (double) haloSegments) * Math.PI * 2.0;
-                    double a2 = ((i + 1) / (double) haloSegments) * Math.PI * 2.0;
-
-                    float x1 = (float) Math.cos(a1) * coneRadius;
-                    float y1 = (float) Math.sin(a1) * coneRadius;
-                    float x2 = (float) Math.cos(a2) * coneRadius;
-                    float y2 = (float) Math.sin(a2) * coneRadius;
-
-                    drawTriangle(matrix, buffer,
-                        0, 0, 0.1f,
-                        x1, y1, coneLength,
-                        x2, y2, coneLength,
-                        0.2f, 1.0f, 0.75f, alpha * 0.22f
-                    );
-                }
             });
         } else {
             // Radial Planar / Impact Shockwave (Gale Force / Wind Projectile Hit)
@@ -194,11 +179,6 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
                     0.8f, 1.0f, 0.95f, alpha * 0.95f
                 );
 
-                // 2. Secondary Inner Jade Harmonic Ring
-                float rSubOuter = currentRadius * 0.60f;
-                float rSubInner = Math.max(0.05f, rSubOuter - (ringWidth * 0.55f));
-                drawFlatRing(matrix, buffer, 0, 0.08f, 0, rSubOuter, rSubInner, 28, 0.3f, 1.0f, 0.85f, alpha * 0.65f);
-
                 // 3. Physical Intersecting Emerald Wind Crescent Blades (Cross Slash Slices)
                 int bladeCount = 6;
                 for (int b = 0; b < bladeCount; b++) {
@@ -206,45 +186,102 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
                     float span = currentRadius * 0.95f;
                     float bHeight = 0.85f * (1.0f - progress);
 
-                    float bx1 = (float) Math.cos(bAngle) * span;
-                    float bz1 = (float) Math.sin(bAngle) * span;
-                    float bx2 = (float) -Math.cos(bAngle) * span;
-                    float bz2 = (float) -Math.sin(bAngle) * span;
-
-                    drawQuad(matrix, buffer,
-                        bx1, 0.05f, bz1,
-                        bx2, 0.05f, bz2,
-                        bx2 * 0.6f, bHeight, bz2 * 0.6f,
-                        bx1 * 0.6f, bHeight, bz1 * 0.6f,
-                        0.2f, 1.0f, 0.75f, alpha * 0.75f
-                    );
+                    int arcSteps = 7;
+                    float sweep = 1.05f;
+                    for (int s = 0; s < arcSteps; s++) {
+                        float u0 = s / (float) arcSteps;
+                        float u1 = (s + 1) / (float) arcSteps;
+                        double a0 = bAngle - sweep * 0.5 + sweep * u0;
+                        double a1 = bAngle - sweep * 0.5 + sweep * u1;
+                        float hump0 = (float) Math.sin(u0 * Math.PI);
+                        float hump1 = (float) Math.sin(u1 * Math.PI);
+                        float rOut0 = span * (0.78f + 0.22f * hump0);
+                        float rOut1 = span * (0.78f + 0.22f * hump1);
+                        float y0 = 0.05f + bHeight * hump0;
+                        float y1 = 0.05f + bHeight * hump1;
+                        drawQuad(matrix, buffer,
+                            (float) Math.cos(a0) * rOut0 * 0.68f, y0 * 0.30f, (float) Math.sin(a0) * rOut0 * 0.68f,
+                            (float) Math.cos(a1) * rOut1 * 0.68f, y1 * 0.30f, (float) Math.sin(a1) * rOut1 * 0.68f,
+                            (float) Math.cos(a1) * rOut1, y1, (float) Math.sin(a1) * rOut1,
+                            (float) Math.cos(a0) * rOut0, y0, (float) Math.sin(a0) * rOut0,
+                            0.70f + 0.30f * hump0, 1.0f, 0.90f, alpha * (0.30f + 0.60f * hump0)
+                        );
+                    }
                 }
 
                 // 4. Epicenter Radiating White-Emerald Core
                 float coreR = Math.max(0.1f, (state.maxRadius * 0.3f) * (1.0f - progress));
                 drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreR, 0.02f, 24, 0.95f, 1.0f, 0.98f, alpha);
             });
-
-            // Additive glow halo (T1): a soft emerald wash just outside the
-            // beveled crest plus a bloomed core, inside the same oriented pose
-            // as the burst itself.
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                Matrix4f matrix = pose.pose();
-
-                float expansionEase = (float) Math.sin(progress * (Math.PI / 2.0));
-                float currentRadius = Math.max(0.4f, expansionEase * state.maxRadius);
-
-                drawFlatRing(matrix, buffer, 0, 0.06f, 0, currentRadius * 1.05f, currentRadius * 0.82f, 40,
-                    0.3f, 1.0f, 0.8f, alpha * 0.26f);
-
-                float coreR = Math.max(0.1f, (state.maxRadius * 0.3f) * (1.0f - progress));
-                drawFlatRing(matrix, buffer, 0, 0.12f, 0, coreR * 1.3f, 0.02f, 24,
-                    0.9f, 1.0f, 0.95f, alpha * 0.30f);
-            });
         }
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void drawLash(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float xc, float yc, float zc,
+                                 float x1, float y1, float z1,
+                                 float width, int steps,
+                                 float er, float eg, float eb,
+                                 float cr, float cg, float cb,
+                                 float alpha) {
+        int n = Math.max(4, steps);
+        float px = x0;
+        float py = y0;
+        float pz = z0;
+        for (int i = 1; i <= n; i++) {
+            float t = i / (float) n;
+            float u = 1.0f - t;
+            float x = u * u * x0 + 2.0f * u * t * xc + t * t * x1;
+            float y = u * u * y0 + 2.0f * u * t * yc + t * t * y1;
+            float z = u * u * z0 + 2.0f * u * t * zc + t * t * z1;
+            float w = width * (1.0f - t * 0.9f);
+            float a = alpha * (1.0f - t * t);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w, er, eg, eb, a);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.32f, cr, cg, cb, Math.min(1.0f, a * 1.2f));
+            px = x;
+            py = y;
+            pz = z;
+        }
+    }
+
+    private static void lashSpan(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float x1, float y1, float z1,
+                                 float width,
+                                 float r, float g, float b, float a) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float ax = 0.0f;
+        float ay = 1.0f;
+        float az = 0.0f;
+        if (dx * dx + dz * dz < dy * dy) {
+            ax = 1.0f;
+            ay = 0.0f;
+            az = 0.0f;
+        }
+        float px = dy * az - dz * ay;
+        float py = dz * ax - dx * az;
+        float pz = dx * ay - dy * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        if (plen < 0.0001f) {
+            return;
+        }
+        float s = width / plen;
+        px *= s;
+        py *= s;
+        pz *= s;
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
     }
 
     private static void drawRingZ(Matrix4f matrix, VertexConsumer consumer, float z, float rOut, float rIn, int segments, float r, float g, float b, float a) {

@@ -13,10 +13,16 @@ import net.minecraft.client.renderer.state.level.CameraRenderState;
 import org.joml.Matrix4f;
 
 /**
- * Entity Renderer for Void Rift Singularity in Minecraft 26.2.
- * Renders a physical 3D multi-layered inverted event horizon core, dual counter-rotating 3D beveled accretion disks, 14 orbital gravitational void shards, vertical 4-way spatial eye tears, and dynamic implosion collapse shockwaves.
+ * Hollow's Edge void rift. One dimensional tear facing the viewer: a recessed
+ * black throat, bowed violet lips, a white rim with a short wake, and crystal
+ * shards along the wound. The implosion closes that mouth on the entity's
+ * existing 10-tick collapse instead of popping a disc.
  */
 public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRenderer.RiftRenderState> {
+
+    private static final int SEGMENTS = 16;
+    private static final int SHARDS = 7;
+    private static final int CRYSTAL_SIDES = 6;
 
     public VoidRiftRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -58,313 +64,411 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         RenderType renderType = KiRenderHelper.kiRenderType();
         float radius = state.radius;
         boolean imploding = state.isImploding;
-
-        float rot = state.age * (imploding ? 40.0f : 12.0f);
-        float pulseSpeed = imploding ? 0.9f : 0.28f;
-        float pulse = 0.88f + 0.12f * (float) Math.sin(state.age * pulseSpeed);
-        // Implosion phase runs from the synced trigger tick, not total age
-        // modulo 10, so the collapse always starts at full scale on release.
+        float age = state.age;
+        // Collapse is measured from the synced trigger tick. The entity discards
+        // itself after 10 ticks, so the draw has to finish inside that window.
         float implodeAge = (imploding && state.implodeStartTick >= 0)
-            ? Math.min(10.0f, Math.max(0.0f, state.age - state.implodeStartTick)) : 0.0f;
-        float collapseScale = imploding ? Math.max(0.2f, 1.0f - implodeAge * 0.08f) : 1.0f;
+            ? Math.min(10.0f, Math.max(0.0f, age - state.implodeStartTick)) : 0.0f;
+        float implodeT = implodeAge / 10.0f;
 
         poseStack.pushPose();
+        // The rift entity has no synced look direction. Camera.rotation() is copied
+        // into orientation, and particles face the viewer with that quaternion.
+        // Positive local Z then points back at the camera, so the throat can sit
+        // behind the rim. A world-fixed sheet would vanish whenever the player
+        // looked along it.
+        if (cameraState.orientation != null) {
+            poseStack.mulPose(new org.joml.Quaternionf(cameraState.orientation));
+        }
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            // 1. Central 3D Inverted Singularity Core (Nested Polyhedrons)
-            float coreSize = radius * (imploding ? 0.65f : 0.45f) * pulse * collapseScale;
-            // Pitch-Black Event Horizon
-            drawSingularityOctahedron(matrix, buffer, coreSize, 0.02f, 0.0f, 0.04f, 0.99f);
-            // Glowing Radiant Cyan/Violet Singularity Shell
-            drawSingularityOctahedron(matrix, buffer, coreSize * 0.70f, 0.65f, 0.05f, 0.95f, 0.95f);
-            // Pristine White Singularity Eye
-            drawSingularityOctahedron(matrix, buffer, coreSize * 0.35f, 1.0f, 1.0f, 1.0f, 1.0f);
-
-            // 2. Primary 3D Beveled Horizontal Accretion Disk (Spins Clockwise)
-            int diskSegments = 48;
-            float rOut1 = radius * collapseScale;
-            float rIn1 = radius * 0.45f * collapseScale;
-            float diskHeight = 0.18f * pulse;
-
-            draw3DBeveledDisk(matrix, buffer, 0, 0, 0, rOut1, rIn1, diskHeight, diskSegments, rot,
-                0.40f, 0.02f, 0.70f, 0.85f,
-                0.85f, 0.10f, 1.0f, 0.95f,
-                0.15f, 0.90f, 1.0f, 0.90f
-            );
-
-            // 3. Secondary 3D Inclined Accretion Disk (Tilted at 28°, Spins Counter-Clockwise)
-            float rOut2 = radius * 0.82f * collapseScale;
-            float rIn2 = radius * 0.38f * collapseScale;
-            drawInclinedDisk(matrix, buffer, 28.0f, -rot * 1.4f, rOut2, rIn2, 32,
-                0.15f, 0.90f, 1.0f, 0.80f,
-                0.80f, 0.10f, 0.95f, 0.90f
-            );
-
-            // 4. Orbital Gravitational Void Spikes (14 3D crystalline void shards orbiting & leaning inward)
-            int shardCount = 14;
-            float orbitR = radius * 0.82f * collapseScale;
-            float shardHeight = 1.1f * pulse;
-
-            for (int i = 0; i < shardCount; i++) {
-                double shardAngle = (i / (double) shardCount) * Math.PI * 2.0 + Math.toRadians(rot * 0.75f);
-                float sx = (float) Math.cos(shardAngle) * orbitR;
-                float sz = (float) Math.sin(shardAngle) * orbitR;
-
-                float leanX = -(float) Math.cos(shardAngle) * (0.35f * pulse);
-                float leanZ = -(float) Math.sin(shardAngle) * (0.35f * pulse);
-
-                float perpX = -(float) Math.sin(shardAngle) * 0.16f;
-                float perpZ = (float) Math.cos(shardAngle) * 0.16f;
-
-                draw3DShardPyramid(matrix, buffer,
-                    sx - perpX, 0, sz - perpZ,
-                    sx + perpX, 0, sz + perpZ,
-                    sx + leanX, shardHeight * (i % 2 == 0 ? 1.0f : -1.0f), sz + leanZ,
-                    0.30f, 0.02f, 0.60f, 0.85f,
-                    0.15f, 0.95f, 1.0f, 0.98f
-                );
-            }
-
-            // 5. Vertical 4-Way Cross-Planar Dimensional Eye Fissures (Towering spatial tear quads)
-            float vHeight = radius * 1.6f * pulse;
-            float vWidth = radius * 0.38f * collapseScale;
-            drawVerticalTearPlane(matrix, buffer, vWidth, vHeight, 0.0f, 0.05f, 0.0f, 0.10f, 0.95f, 0.75f, 0.05f, 0.95f, 0.95f);
-            drawVerticalTearPlane(matrix, buffer, vWidth, vHeight, 45.0f, 0.05f, 0.0f, 0.10f, 0.90f, 0.15f, 0.90f, 1.0f, 0.90f);
-            drawVerticalTearPlane(matrix, buffer, vWidth, vHeight, 90.0f, 0.05f, 0.0f, 0.10f, 0.95f, 0.75f, 0.05f, 0.95f, 0.95f);
-            drawVerticalTearPlane(matrix, buffer, vWidth, vHeight, 135.0f, 0.05f, 0.0f, 0.10f, 0.90f, 0.15f, 0.90f, 1.0f, 0.90f);
-
-            // 6. Dynamic Implosion Detonation Shockwave Rings (Expanding outward when collapsing)
-            if (imploding) {
-                float burstR = radius * (1.2f + implodeAge * 0.35f);
-                float burstAlpha = Math.max(0.0f, 1.0f - implodeAge * 0.10f);
-                drawFlatRing(matrix, buffer, rot * 3.0f, burstR, burstR * 0.85f, 36, 0.95f, 0.20f, 1.0f, burstAlpha * 0.95f);
-                drawFlatRing(matrix, buffer, -rot * 2.5f, burstR * 0.70f, burstR * 0.55f, 32, 0.15f, 0.95f, 1.0f, burstAlpha * 0.85f);
-            }
-        });
-
-        // T1: additive halo pass over the primary accretion disk, the rift's
-        // signature shape, at slightly wider radii with the same 3-stop
-        // gradient dimmed down, so the disk blooms while it feeds.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            float haloOut = radius * collapseScale * 1.10f;
-            float haloIn = radius * 0.45f * collapseScale * 1.10f;
-            float haloHeight = 0.18f * pulse;
-
-            draw3DBeveledDisk(matrix, buffer, 0, 0, 0, haloOut, haloIn, haloHeight, 48, rot,
-                0.40f, 0.02f, 0.70f, 0.30f,
-                0.85f, 0.10f, 1.0f, 0.33f,
-                0.15f, 0.90f, 1.0f, 0.32f
-            );
-        });
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            drawTear(pose.pose(), buffer, radius, age, imploding, implodeT));
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static void draw3DBeveledDisk(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz,
-                                          float rOuter, float rInner, float halfHeight, int segments, float rotDeg,
-                                          float rBase, float gBase, float bBase, float aBase,
-                                          float rMid, float gMid, float bMid, float aMid,
-                                          float rEdge, float gEdge, float bEdge, float aEdge) {
-        double rotRad = Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = ((i / (double) segments) * Math.PI * 2.0) + rotRad;
-            double a2 = (((i + 1) / (double) segments) * Math.PI * 2.0) + rotRad;
+    private static float ease(float t) {
+        float c = Math.max(0.0f, Math.min(1.0f, t));
+        return c * c * (3.0f - 2.0f * c);
+    }
 
-            float x1Out = cx + (float) Math.cos(a1) * rOuter;
-            float z1Out = cz + (float) Math.sin(a1) * rOuter;
-            float x2Out = cx + (float) Math.cos(a2) * rOuter;
-            float z2Out = cz + (float) Math.sin(a2) * rOuter;
+    private static void drawTear(Matrix4f matrix, VertexConsumer buffer, float radius, float age, boolean imploding, float implodeT) {
+        float eased = imploding ? ease(implodeT) : 0.0f;
+        float open = 1.0f - eased;
+        float pulse = 0.94f + 0.06f * (float) Math.sin(age * (imploding ? 0.9f : 0.28f));
+        float halfH = radius * 1.12f * (imploding ? (1.0f - 0.82f * eased) : 1.0f);
+        float belly = radius * 0.56f * pulse;
+        float bowAmp = radius * 0.24f * open;
+        float depthBase = radius * 0.28f;
+        // The curl peaks halfway through the collapse and is gone when the seam dies,
+        // so the ending is a closing cut rather than a spinning leftover.
+        float twistEnv = imploding ? (float) Math.sin(implodeT * Math.PI) : 1.0f;
+        float twist = (float) Math.toRadians(imploding ? 42.0 * twistEnv : 5.0 * Math.sin(age * 0.13));
 
-            float x1In = cx + (float) Math.cos(a1) * rInner;
-            float z1In = cz + (float) Math.sin(a1) * rInner;
-            float x2In = cx + (float) Math.cos(a2) * rInner;
-            float z2In = cz + (float) Math.sin(a2) * rInner;
+        float bodyA = imploding ? (1.0f - ease((implodeT - 0.30f) / 0.48f)) : 1.0f;
+        float rimA = imploding ? (1.0f - ease((implodeT - 0.50f) / 0.36f)) : 1.0f;
+        float seamA = imploding
+            ? (0.55f + 0.45f * eased) * (1.0f - ease((implodeT - 0.74f) / 0.26f))
+            : (0.58f + 0.12f * (float) Math.sin(age * 0.28f));
+        float shardA = imploding ? (1.0f - ease(implodeT / 0.70f)) : 0.94f;
 
-            // Top Bevel Face
-            drawQuad(matrix, consumer,
-                x1In, cy + halfHeight * 0.5f, z1In,
-                x2In, cy + halfHeight * 0.5f, z2In,
-                x2Out, cy, z2Out,
-                x1Out, cy, z1Out,
-                rMid, gMid, bMid, aMid
-            );
+        Cut low = new Cut();
+        Cut high = new Cut();
+        fillCut(low, 0.0f, radius, age, open, halfH, belly, bowAmp, depthBase, twist);
+        for (int i = 0; i < SEGMENTS; i++) {
+            float t1 = (i + 1) / (float) SEGMENTS;
+            fillCut(high, t1, radius, age, open, halfH, belly, bowAmp, depthBase, twist);
+            if (low.width > 0.02f || high.width > 0.02f) {
+                drawMouth(matrix, buffer, low, high, bodyA, rimA);
+            }
+            if (seamA > 0.03f) {
+                float a0 = seamA * (0.40f + 0.60f * low.pinch);
+                float a1 = seamA * (0.40f + 0.60f * high.pinch);
+                along(buffer, matrix,
+                    low.seamLX, low.seamLY, low.seamLZ,
+                    low.seamRX, low.seamRY, low.seamRZ,
+                    high.seamRX, high.seamRY, high.seamRZ,
+                    high.seamLX, high.seamLY, high.seamLZ,
+                    1.0f, 1.0f, 1.0f, a0,
+                    1.0f, 1.0f, 1.0f, a1);
+            }
+            Cut swap = low;
+            low = high;
+            high = swap;
+        }
 
-            // Bottom Bevel Face
-            drawQuad(matrix, consumer,
-                x1Out, cy, z1Out,
-                x2Out, cy, z2Out,
-                x2In, cy - halfHeight * 0.5f, z2In,
-                x1In, cy - halfHeight * 0.5f, z1In,
-                rBase, gBase, bBase, aBase
-            );
-
-            // Outer Rim
-            drawQuad(matrix, consumer,
-                x1Out, cy - halfHeight * 0.2f, z1Out,
-                x2Out, cy - halfHeight * 0.2f, z2Out,
-                x2Out, cy + halfHeight * 0.2f, z2Out,
-                x1Out, cy + halfHeight * 0.2f, z1Out,
-                rEdge, gEdge, bEdge, aEdge
-            );
+        if (shardA > 0.04f && open > 0.04f) {
+            Cut shardCut = new Cut();
+            for (int i = 0; i < SHARDS; i++) {
+                float t = 0.18f + 0.64f * (i / (float) (SHARDS - 1));
+                boolean left = (i & 1) == 0;
+                fillCut(shardCut, t, radius, age, open, halfH, belly, bowAmp, depthBase, twist);
+                drawShard(matrix, buffer, shardCut, left, radius, age, i, eased, shardA);
+            }
         }
     }
 
-    private static void drawInclinedDisk(Matrix4f matrix, VertexConsumer consumer, float inclineDeg, float rotDeg,
-                                         float rOuter, float rInner, int segments,
-                                         float r1, float g1, float b1, float a1,
-                                         float r2, float g2, float b2, float a2) {
-        double incRad = Math.toRadians(inclineDeg);
-        float cosInc = (float) Math.cos(incRad);
-        float sinInc = (float) Math.sin(incRad);
-        double rotRad = Math.toRadians(rotDeg);
+    /**
+     * One height sample of the tear. Width pinches at the tips, the edge is
+     * ragged, and the white lip sits toward the camera with the throat behind it.
+     */
+    private static void fillCut(Cut c, float t, float radius, float age, float open, float halfH, float belly, float bowAmp, float depthBase, float twist) {
+        float pinch = (float) Math.sin(t * Math.PI);
+        float y = (t - 0.5f) * 2.0f * halfH;
+        float shaped = (float) Math.pow(Math.max(pinch, 0.0f), 0.55f + 1.35f * (1.0f - open));
+        float halfL = belly * open * shaped * rag(t, age, -1.0f, open);
+        float halfR = belly * open * shaped * rag(t, age, 1.0f, open);
+        halfL *= 1.0f - 0.22f * bite(t, 0.36f) * open;
+        halfR *= 1.0f - 0.28f * bite(t, 0.63f) * open;
 
-        for (int i = 0; i < segments; i++) {
-            double aStart = ((i / (double) segments) * Math.PI * 2.0) + rotRad;
-            double aEnd = (((i + 1) / (double) segments) * Math.PI * 2.0) + rotRad;
+        float crook = (float) (radius * 0.07 * Math.sin(t * Math.PI * 2.0 + age * 0.18)) * (0.35f + 0.65f * open);
+        float depth = depthBase * pinch * (0.45f + 0.55f * open);
+        float zLip = bowAmp * pinch;
+        float zInner = zLip - depth;
+        float zThroat = zInner - depth * 0.65f;
+        zThroat -= (float) Math.sin(t * 6.2832f + age * 0.40f) * radius * 0.015f * pinch * open;
+        float zBevel = zLip - depth * 0.42f;
+        float zSeam = zThroat + (zLip - zThroat) * 0.55f;
+        float seamHalf = radius * 0.018f * (0.15f + 0.85f * pinch);
 
-            float x1Out = (float) Math.cos(aStart) * rOuter;
-            float z1Out = (float) Math.sin(aStart) * rOuter;
-            float y1Out = z1Out * sinInc;
-            z1Out *= cosInc;
+        float ang = (t - 0.5f) * twist;
+        float cos = (float) Math.cos(ang);
+        float sin = (float) Math.sin(ang);
 
-            float x2Out = (float) Math.cos(aEnd) * rOuter;
-            float z2Out = (float) Math.sin(aEnd) * rOuter;
-            float y2Out = z2Out * sinInc;
-            z2Out *= cosInc;
+        c.width = halfL + halfR;
+        c.pinch = pinch;
+        put(c, crook, y, zThroat, cos, sin, 0);
+        put(c, crook - halfL * 0.68f, y, zInner, cos, sin, 1);
+        put(c, crook + halfR * 0.68f, y, zInner, cos, sin, 2);
+        put(c, crook - halfL, y, zLip, cos, sin, 3);
+        put(c, crook + halfR, y, zLip, cos, sin, 4);
+        put(c, crook - halfL * 1.16f, y, zBevel, cos, sin, 5);
+        put(c, crook + halfR * 1.16f, y, zBevel, cos, sin, 6);
+        put(c, crook - halfL * 1.34f, y, zLip - depth * 0.12f, cos, sin, 7);
+        put(c, crook + halfR * 1.34f, y, zLip - depth * 0.12f, cos, sin, 8);
+        put(c, crook - seamHalf, y, zSeam, cos, sin, 9);
+        put(c, crook + seamHalf, y, zSeam, cos, sin, 10);
+    }
 
-            float x1In = (float) Math.cos(aStart) * rInner;
-            float z1In = (float) Math.sin(aStart) * rInner;
-            float y1In = z1In * sinInc;
-            z1In *= cosInc;
-
-            float x2In = (float) Math.cos(aEnd) * rInner;
-            float z2In = (float) Math.sin(aEnd) * rInner;
-            float y2In = z2In * sinInc;
-            z2In *= cosInc;
-
-            drawQuad(matrix, consumer,
-                x1In, y1In, z1In,
-                x2In, y2In, z2In,
-                x2Out, y2Out, z2Out,
-                x1Out, y1Out, z1Out,
-                r1, g1, b1, a1
-            );
+    /** slot: 0 throat, 1 innerL, 2 innerR, 3 outerL, 4 outerR, 5 flareL, 6 flareR, 7 wakeL, 8 wakeR, 9 seamL, 10 seamR */
+    private static void put(Cut c, float x, float y, float z, float cos, float sin, int slot) {
+        float xr = x * cos - y * sin;
+        float yr = x * sin + y * cos;
+        switch (slot) {
+            case 0 -> { c.throatX = xr; c.throatY = yr; c.throatZ = z; }
+            case 1 -> { c.innerLX = xr; c.innerLY = yr; c.innerLZ = z; }
+            case 2 -> { c.innerRX = xr; c.innerRY = yr; c.innerRZ = z; }
+            case 3 -> { c.outerLX = xr; c.outerLY = yr; c.outerLZ = z; }
+            case 4 -> { c.outerRX = xr; c.outerRY = yr; c.outerRZ = z; }
+            case 5 -> { c.flareLX = xr; c.flareLY = yr; c.flareLZ = z; }
+            case 6 -> { c.flareRX = xr; c.flareRY = yr; c.flareRZ = z; }
+            case 7 -> { c.wakeLX = xr; c.wakeLY = yr; c.wakeLZ = z; }
+            case 8 -> { c.wakeRX = xr; c.wakeRY = yr; c.wakeRZ = z; }
+            case 9 -> { c.seamLX = xr; c.seamLY = yr; c.seamLZ = z; }
+            default -> { c.seamRX = xr; c.seamRY = yr; c.seamRZ = z; }
         }
     }
 
-    private static void drawFlatRing(Matrix4f matrix, VertexConsumer consumer, float rotDeg, float rOuter, float rInner, int segments, float r, float g, float b, float a) {
-        double rotRad = Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = ((i / (double) segments) * Math.PI * 2.0) + rotRad;
-            double a2 = (((i + 1) / (double) segments) * Math.PI * 2.0) + rotRad;
+    private static float rag(float t, float age, float side, float open) {
+        float n = (float) Math.sin(t * Math.PI * 3.0 + side * 1.3 + age * 0.31);
+        float n2 = (float) Math.sin(t * Math.PI * 8.0 - side * 0.6 + age * 0.19);
+        float torn = 0.86f + 0.10f * n + 0.06f * n2;
+        torn = Math.max(0.72f, Math.min(1.08f, torn));
+        return 1.0f + (torn - 1.0f) * (0.35f + 0.65f * open);
+    }
 
-            float x1Out = (float) Math.cos(a1) * rOuter;
-            float z1Out = (float) Math.sin(a1) * rOuter;
-            float x2Out = (float) Math.cos(a2) * rOuter;
-            float z2Out = (float) Math.sin(a2) * rOuter;
+    private static float bite(float t, float at) {
+        float d = t - at;
+        return (float) Math.exp(-(d * d) / 0.007f);
+    }
 
-            float x1In = (float) Math.cos(a1) * rInner;
-            float z1In = (float) Math.sin(a1) * rInner;
-            float x2In = (float) Math.cos(a2) * rInner;
-            float z2In = (float) Math.sin(a2) * rInner;
-
-            drawQuad(matrix, consumer, x1In, 0, z1In, x2In, 0, z2In, x2Out, 0, z2Out, x1Out, 0, z1Out, r, g, b, a);
+    private static void drawMouth(Matrix4f matrix, VertexConsumer buffer, Cut a, Cut b, float bodyA, float rimA) {
+        if (bodyA > 0.02f) {
+            across(buffer, matrix,
+                a.innerLX, a.innerLY, a.innerLZ,
+                a.throatX, a.throatY, a.throatZ,
+                b.throatX, b.throatY, b.throatZ,
+                b.innerLX, b.innerLY, b.innerLZ,
+                0.14f, 0.02f, 0.24f, 0.96f * bodyA,
+                0.02f, 0.00f, 0.05f, 0.98f * bodyA);
+            across(buffer, matrix,
+                a.throatX, a.throatY, a.throatZ,
+                a.innerRX, a.innerRY, a.innerRZ,
+                b.innerRX, b.innerRY, b.innerRZ,
+                b.throatX, b.throatY, b.throatZ,
+                0.02f, 0.00f, 0.05f, 0.98f * bodyA,
+                0.14f, 0.02f, 0.24f, 0.96f * bodyA);
+        }
+        if (bodyA > 0.02f || rimA > 0.02f) {
+            across(buffer, matrix,
+                a.innerLX, a.innerLY, a.innerLZ,
+                a.outerLX, a.outerLY, a.outerLZ,
+                b.outerLX, b.outerLY, b.outerLZ,
+                b.innerLX, b.innerLY, b.innerLZ,
+                0.50f, 0.05f, 0.88f, 0.90f * bodyA,
+                1.0f, 1.0f, 1.0f, rimA);
+            across(buffer, matrix,
+                a.outerRX, a.outerRY, a.outerRZ,
+                a.innerRX, a.innerRY, a.innerRZ,
+                b.innerRX, b.innerRY, b.innerRZ,
+                b.outerRX, b.outerRY, b.outerRZ,
+                1.0f, 1.0f, 1.0f, rimA,
+                0.50f, 0.05f, 0.88f, 0.90f * bodyA);
+        }
+        if (rimA > 0.02f) {
+            across(buffer, matrix,
+                a.outerLX, a.outerLY, a.outerLZ,
+                a.flareLX, a.flareLY, a.flareLZ,
+                b.flareLX, b.flareLY, b.flareLZ,
+                b.outerLX, b.outerLY, b.outerLZ,
+                1.0f, 1.0f, 1.0f, rimA,
+                0.55f, 0.06f, 0.92f, 0.72f * rimA);
+            across(buffer, matrix,
+                a.flareRX, a.flareRY, a.flareRZ,
+                a.outerRX, a.outerRY, a.outerRZ,
+                b.outerRX, b.outerRY, b.outerRZ,
+                b.flareRX, b.flareRY, b.flareRZ,
+                0.55f, 0.06f, 0.92f, 0.72f * rimA,
+                1.0f, 1.0f, 1.0f, rimA);
+            across(buffer, matrix,
+                a.flareLX, a.flareLY, a.flareLZ,
+                a.wakeLX, a.wakeLY, a.wakeLZ,
+                b.wakeLX, b.wakeLY, b.wakeLZ,
+                b.flareLX, b.flareLY, b.flareLZ,
+                0.60f, 0.08f, 0.96f, 0.22f * rimA,
+                0.60f, 0.08f, 0.96f, 0.0f);
+            across(buffer, matrix,
+                a.wakeRX, a.wakeRY, a.wakeRZ,
+                a.flareRX, a.flareRY, a.flareRZ,
+                b.flareRX, b.flareRY, b.flareRZ,
+                b.wakeRX, b.wakeRY, b.wakeRZ,
+                0.60f, 0.08f, 0.96f, 0.0f,
+                0.60f, 0.08f, 0.96f, 0.22f * rimA);
         }
     }
 
-    private static void draw3DShardPyramid(Matrix4f matrix, VertexConsumer consumer,
-                                          float x1, float y1, float z1,
-                                          float x2, float y2, float z2,
-                                          float tipX, float tipY, float tipZ,
-                                          float rBase, float gBase, float bBase, float aBase,
-                                          float rTip, float gTip, float bTip, float aTip) {
-        // Front Face
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+    private static void drawShard(Matrix4f matrix, VertexConsumer buffer, Cut c, boolean left, float radius, float age, int index, float suck, float alpha) {
+        float ox = left ? c.outerLX : c.outerRX;
+        float oy = left ? c.outerLY : c.outerRY;
+        float oz = left ? c.outerLZ : c.outerRZ;
+        float dx = ox - c.throatX;
+        float dy = oy - c.throatY;
+        float dz = oz - c.throatZ;
+        float mag = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (mag < 1.0e-4f) {
+            return;
+        }
+        dx /= mag;
+        dy /= mag;
+        dz /= mag;
 
-        // Back Face
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        float tx = -dz;
+        float tz = dx;
+        float tm = (float) Math.sqrt(tx * tx + tz * tz);
+        if (tm > 1.0e-4f) {
+            tx /= tm;
+            tz /= tm;
+        }
+        float slim = 0.80f + (index % 3) * 0.22f;
+        float length = radius * 0.34f * slim * (1.0f - suck);
+        float girth = length * 0.20f;
+        if (length < 0.04f) {
+            return;
+        }
+        float hug = girth * (3.4f + (index % 4) * 0.60f) * (1.0f - suck);
+        float wob = (float) Math.sin(age * 0.55f + index * 1.7f) * girth * 1.6f * (1.0f - suck);
+        float lift = (float) Math.cos(age * 0.40f + index) * girth * (1.0f - suck);
+        float sx = ox + dx * hug + tx * wob;
+        float sy = oy + dy * hug;
+        float sz = oz + dz * hug + tz * wob + lift;
+        sx += (c.throatX - sx) * suck;
+        sy += (c.throatY - sy) * suck;
+        sz += (c.throatZ - sz) * suck;
+
+        drawCrystal(matrix, buffer, sx, sy, sz, dx, dy, dz, length, girth, age * 0.35f + index * 0.9f, alpha);
     }
 
-    private static void drawVerticalTearPlane(Matrix4f matrix, VertexConsumer consumer, float halfWidth, float height, float angleDeg,
-                                              float rCore, float gCore, float bCore, float aCore,
-                                              float rEdge, float gEdge, float bEdge, float aEdge) {
-        double rad = Math.toRadians(angleDeg);
-        float cos = (float) Math.cos(rad);
-        float sin = (float) Math.sin(rad);
+    /**
+     * Hexagonal shard with a narrow root, a wide belly, and a white tip.
+     * Odd faces are darker so the facets read without a lighting pass.
+     */
+    private static void drawCrystal(Matrix4f matrix, VertexConsumer buffer,
+                                    float ox, float oy, float oz,
+                                    float dx, float dy, float dz,
+                                    float length, float girth, float roll, float alpha) {
+        float mag = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (mag < 1.0e-4f || length < 0.02f || girth < 0.008f) {
+            return;
+        }
+        dx /= mag;
+        dy /= mag;
+        dz /= mag;
 
-        float x1 = -halfWidth * cos;
-        float z1 = -halfWidth * sin;
-        float x2 = halfWidth * cos;
-        float z2 = halfWidth * sin;
+        float hx = 0.0f;
+        float hy = 1.0f;
+        float hz = 0.0f;
+        if (Math.abs(dy) > 0.85f) {
+            hx = 1.0f;
+            hy = 0.0f;
+            hz = 0.0f;
+        }
+        float ux = dy * hz - dz * hy;
+        float uy = dz * hx - dx * hz;
+        float uz = dx * hy - dy * hx;
+        float um = (float) Math.sqrt(ux * ux + uy * uy + uz * uz);
+        if (um < 1.0e-4f) {
+            return;
+        }
+        ux /= um;
+        uy /= um;
+        uz /= um;
+        float vx = dy * uz - dz * uy;
+        float vy = dz * ux - dx * uz;
+        float vz = dx * uy - dy * ux;
 
-        // Top diamond half
-        consumer.addVertex(matrix, x1, 0, z1).setColor(rEdge, gEdge, bEdge, aEdge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, 0, z2).setColor(rEdge, gEdge, bEdge, aEdge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, 0, height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, 0, height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        float[] alongP = {-0.50f, 0.04f, 0.50f};
+        float[] rad = {0.30f, 1.00f, 0.14f};
+        float[] rollOff = {0.0f, 0.55f, 1.10f};
+        float[] cr = {0.16f, 0.58f, 1.0f};
+        float[] cg = {0.02f, 0.07f, 1.0f};
+        float[] cb = {0.30f, 0.94f, 1.0f};
 
-        // Bottom diamond half
-        consumer.addVertex(matrix, x1, 0, z1).setColor(rEdge, gEdge, bEdge, aEdge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, 0, z2).setColor(rEdge, gEdge, bEdge, aEdge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, 0, -height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, 0, -height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        int count = 3 * CRYSTAL_SIDES;
+        float[] px = new float[count];
+        float[] py = new float[count];
+        float[] pz = new float[count];
+        for (int station = 0; station < 3; station++) {
+            for (int side = 0; side < CRYSTAL_SIDES; side++) {
+                float ang = roll + rollOff[station] + side * ((float) Math.PI * 2.0f / CRYSTAL_SIDES);
+                float c = (float) Math.cos(ang);
+                float s = (float) Math.sin(ang);
+                float gr = girth * rad[station];
+                float ax = alongP[station] * length;
+                int idx = station * CRYSTAL_SIDES + side;
+                px[idx] = ox + dx * ax + (ux * c + vx * s) * gr;
+                py[idx] = oy + dy * ax + (uy * c + vy * s) * gr;
+                pz[idx] = oz + dz * ax + (uz * c + vz * s) * gr;
+            }
+        }
 
-        // Reverse Faces
-        consumer.addVertex(matrix, 0, height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, 0, height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, 0, z2).setColor(rEdge, gEdge, bEdge, aEdge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, 0, z1).setColor(rEdge, gEdge, bEdge, aEdge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-        consumer.addVertex(matrix, 0, -height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, 0, -height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, 0, z2).setColor(rEdge, gEdge, bEdge, aEdge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1, 0, z1).setColor(rEdge, gEdge, bEdge, aEdge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-    }
-
-    private static void drawSingularityOctahedron(Matrix4f matrix, VertexConsumer consumer, float s, float r, float g, float b, float a) {
-        float[][] top = { {s,0,0}, {0,0,s}, {-s,0,0}, {0,0,-s} };
-        for (int i = 0; i < 4; i++) {
-            int nxt = (i + 1) % 4;
-            // Top pyramid
-            consumer.addVertex(matrix, top[i][0], 0, top[i][2]).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, top[nxt][0], 0, top[nxt][2]).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, 0, s * 1.3f, 0).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, 0, s * 1.3f, 0).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Bottom pyramid
-            consumer.addVertex(matrix, top[i][0], 0, top[i][2]).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, top[nxt][0], 0, top[nxt][2]).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, 0, -s * 1.3f, 0).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, 0, -s * 1.3f, 0).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        for (int station = 0; station < 2; station++) {
+            for (int side = 0; side < CRYSTAL_SIDES; side++) {
+                int next = (side + 1) % CRYSTAL_SIDES;
+                int i00 = station * CRYSTAL_SIDES + side;
+                int i01 = station * CRYSTAL_SIDES + next;
+                int i11 = (station + 1) * CRYSTAL_SIDES + next;
+                int i10 = (station + 1) * CRYSTAL_SIDES + side;
+                float shade = (side & 1) == 0 ? 1.0f : 0.58f;
+                along(buffer, matrix,
+                    px[i00], py[i00], pz[i00],
+                    px[i01], py[i01], pz[i01],
+                    px[i11], py[i11], pz[i11],
+                    px[i10], py[i10], pz[i10],
+                    cr[station] * shade, cg[station] * shade, cb[station] * shade, alpha,
+                    cr[station + 1] * shade, cg[station + 1] * shade, cb[station + 1] * shade, alpha);
+            }
         }
     }
 
-    private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,
-                                 float x1, float y1, float z1,
-                                 float x2, float y2, float z2,
-                                 float x3, float y3, float z3,
-                                 float x4, float y4, float z4,
-                                 float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+    /** color0 stays on the v0-v3 edge, color1 on the v1-v2 edge. Both windings. */
+    private static void across(VertexConsumer buffer, Matrix4f matrix,
+                               float x0, float y0, float z0,
+                               float x1, float y1, float z1,
+                               float x2, float y2, float z2,
+                               float x3, float y3, float z3,
+                               float r0, float g0, float b0, float a0,
+                               float r1, float g1, float b1, float a1) {
+        vert(buffer, matrix, x0, y0, z0, 0.0f, 0.0f, r0, g0, b0, a0);
+        vert(buffer, matrix, x1, y1, z1, 1.0f, 0.0f, r1, g1, b1, a1);
+        vert(buffer, matrix, x2, y2, z2, 1.0f, 1.0f, r1, g1, b1, a1);
+        vert(buffer, matrix, x3, y3, z3, 0.0f, 1.0f, r0, g0, b0, a0);
+        vert(buffer, matrix, x3, y3, z3, 0.0f, 1.0f, r0, g0, b0, a0);
+        vert(buffer, matrix, x2, y2, z2, 1.0f, 1.0f, r1, g1, b1, a1);
+        vert(buffer, matrix, x1, y1, z1, 1.0f, 0.0f, r1, g1, b1, a1);
+        vert(buffer, matrix, x0, y0, z0, 0.0f, 0.0f, r0, g0, b0, a0);
+    }
 
-        // Reverse
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+    /** color0 stays on the v0-v1 edge, color1 on the v2-v3 edge. Both windings. */
+    private static void along(VertexConsumer buffer, Matrix4f matrix,
+                              float x0, float y0, float z0,
+                              float x1, float y1, float z1,
+                              float x2, float y2, float z2,
+                              float x3, float y3, float z3,
+                              float r0, float g0, float b0, float a0,
+                              float r1, float g1, float b1, float a1) {
+        vert(buffer, matrix, x0, y0, z0, 0.0f, 0.0f, r0, g0, b0, a0);
+        vert(buffer, matrix, x1, y1, z1, 1.0f, 0.0f, r0, g0, b0, a0);
+        vert(buffer, matrix, x2, y2, z2, 1.0f, 1.0f, r1, g1, b1, a1);
+        vert(buffer, matrix, x3, y3, z3, 0.0f, 1.0f, r1, g1, b1, a1);
+        vert(buffer, matrix, x3, y3, z3, 0.0f, 1.0f, r1, g1, b1, a1);
+        vert(buffer, matrix, x2, y2, z2, 1.0f, 1.0f, r1, g1, b1, a1);
+        vert(buffer, matrix, x1, y1, z1, 1.0f, 0.0f, r0, g0, b0, a0);
+        vert(buffer, matrix, x0, y0, z0, 0.0f, 0.0f, r0, g0, b0, a0);
+    }
+
+    private static void vert(VertexConsumer buffer, Matrix4f matrix, float x, float y, float z, float u, float v, float r, float g, float b, float a) {
+        buffer.addVertex(matrix, x, y, z)
+            .setColor(r, g, b, a)
+            .setUv(u, v)
+            .setOverlay(KiRenderHelper.NO_OVERLAY)
+            .setLight(KiRenderHelper.FULL_BRIGHT)
+            .setNormal(0.0f, 1.0f, 0.0f);
+    }
+
+    private static final class Cut {
+        float width;
+        float pinch;
+        float throatX, throatY, throatZ;
+        float innerLX, innerLY, innerLZ;
+        float innerRX, innerRY, innerRZ;
+        float outerLX, outerLY, outerLZ;
+        float outerRX, outerRY, outerRZ;
+        float flareLX, flareLY, flareLZ;
+        float flareRX, flareRY, flareRZ;
+        float wakeLX, wakeLY, wakeLZ;
+        float wakeRX, wakeRY, wakeRZ;
+        float seamLX, seamLY, seamLZ;
+        float seamRX, seamRY, seamRZ;
     }
 }

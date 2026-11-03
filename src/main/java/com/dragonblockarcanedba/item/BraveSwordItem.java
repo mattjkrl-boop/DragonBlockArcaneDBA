@@ -86,9 +86,8 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (attacker instanceof Player player && !player.level().isClientSide()) {
-            WeaponDrainHelper.drainBothDiscrete(player, 25.0, 20.0, 10);
-        }
+        // Assault strikes and the heroic dash already pay. A vanilla connect
+        // used to spend ki and stamina again with no swing of its own.
     }
 
     // --- Combo Tracking ---
@@ -151,8 +150,7 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
         );
 
         if (!targets.isEmpty()) {
-            // Drain Ki: 25% per min + Stamina: 20% per min (smooth). Only while a target is
-            // actually in the assault box: holding into empty air used to burn both at full rate.
+            // Drain Ki: 25% per min + Stamina: 20% per min (smooth) on a landed combo step.
             if (!WeaponDrainHelper.drainBothPerTick(player, 25.0, 20.0)) {
                 return;
             }
@@ -198,15 +196,14 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 setCombo(stack, 0); // Reset combo
                 player.sendSystemMessage(Component.literal("§6★ BRAVE FINISHER! ★"), true);
             } else {
-                // Standard combo strike
+                // The straight cut is the hit. A fifth-hit cut is heavier. There is no
+                // second invisible strike under it.
                 float hitDmg = 400.0f + (strength * 2.0f);
-                target.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (hitDmg)));
-
-                // Tweak B: Every 5th hit releases bonus golden energy crescent wave
-                if (combo % 5 == 0) {
-                    BraveSlashEntity crescent = new BraveSlashEntity(level, player, hitDmg * 1.5f);
-                    crescent.setDeltaMovement(look.x * 1.8, look.y * 1.8, look.z * 1.8);
-                    level.addFreshEntity(crescent);
+                boolean heavy = combo % 5 == 0;
+                BraveSlashEntity cut = new BraveSlashEntity(level, player, heavy ? hitDmg * 1.5f : hitDmg);
+                cut.setDeltaMovement(look.scale(1.8));
+                level.addFreshEntity(cut);
+                if (heavy) {
                     level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 1.4f);
                     level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 1.4f);
                 }
@@ -217,6 +214,19 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
                 player.sendSystemMessage(Component.literal(String.format("§6Brave Power: §e%d Hits", combo)), true);
             }
+        } else {
+            // An empty swing still throws the sword's own straight cut.
+            if (!WeaponDrainHelper.drainBothPerTick(player, 25.0, 20.0)) {
+                return;
+            }
+            float hitDmg = 400.0f + (accessor.dba$getStrength() * 2.0f);
+            BraveSlashEntity cut = new BraveSlashEntity(level, player, hitDmg);
+            cut.setDeltaMovement(look.scale(1.8));
+            level.addFreshEntity(cut);
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 1.35f);
+            level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.0f, 1.35f);
         }
     }
 

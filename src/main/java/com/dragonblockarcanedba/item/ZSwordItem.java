@@ -97,9 +97,8 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        if (attacker instanceof Player player && !player.level().isClientSide()) {
-            WeaponDrainHelper.drainBothDiscrete(player, 75.0, 50.0, 15);
-        }
+        // The katchin wave and the gravity slam already pay. A vanilla connect used to
+        // spend ki and stamina again and show nothing of its own.
     }
 
     // --- LEFT CLICK: Z Shockwave Charging & Firing ---

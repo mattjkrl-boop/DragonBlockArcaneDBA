@@ -71,6 +71,8 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
         // presence. In over the first 20 ticks, out over the last 40.
         float fadeIn = Math.min(1.0f, age / 20.0f);
         float fadeOut = age <= 180.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - 180.0f) / 40.0f);
+        fadeIn = fadeIn * fadeIn * (3.0f - 2.0f * fadeIn);
+        fadeOut = fadeOut * fadeOut * (3.0f - 2.0f * fadeOut);
         float fade = fadeIn * fadeOut;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
@@ -131,43 +133,6 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                 }
             }
 
-            // Layer B: Inner Turbulent Stratus Cyclone Ceiling (Counter-Rotating)
-            int innerLats = 6;
-            int innerLons = 24;
-            float innerDomeHeight = domeHeight * 0.70f;
-            float innerRadius = radius * 0.85f;
-
-            for (int lat = 0; lat < innerLats; lat++) {
-                float p1 = lat / (float) innerLats;
-                float p2 = (lat + 1) / (float) innerLats;
-
-                float iy1 = 3.0f + (float) Math.sin(p1 * (Math.PI / 2.0)) * innerDomeHeight;
-                float iy2 = 3.0f + (float) Math.sin(p2 * (Math.PI / 2.0)) * innerDomeHeight;
-
-                float ir1 = innerRadius * (float) Math.cos(p1 * (Math.PI / 2.0));
-                float ir2 = innerRadius * (float) Math.cos(p2 * (Math.PI / 2.0));
-
-                float alpha = (0.28f + (p1 * 0.20f)) * fade;
-
-                for (int lon = 0; lon < innerLons; lon++) {
-                    double angleOffset = (-age * (8.0f + lat * 3.0f)) * (Math.PI / 180.0);
-                    double a1 = ((lon / (double) innerLons) * Math.PI * 2.0) + angleOffset;
-                    double a2 = (((lon + 1) / (double) innerLons) * Math.PI * 2.0) + angleOffset;
-
-                    float x1 = (float) Math.cos(a1) * ir1;
-                    float z1 = (float) Math.sin(a1) * ir1;
-                    float x2 = (float) Math.cos(a2) * ir1;
-                    float z2 = (float) Math.sin(a2) * ir1;
-
-                    float x3 = (float) Math.cos(a2) * ir2;
-                    float z3 = (float) Math.sin(a2) * ir2;
-                    float x4 = (float) Math.cos(a1) * ir2;
-                    float z4 = (float) Math.sin(a1) * ir2;
-
-                    drawQuad(matrix, buffer, x1, iy1, z1, x2, iy1, z2, x3, iy2, z3, x4, iy2, z4, 0.0f, 0.85f, 1.0f, alpha);
-                }
-            }
-
             // 3. Physical Geometric Rain Shafts & Downburst Streamlines
             Random rainRng = new Random(state.seed + 777);
             int shaftCount = 14;
@@ -181,12 +146,14 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                 float topY = 4.0f + rainRng.nextFloat() * (domeHeight * 0.7f);
                 float botY = 0.1f;
 
-                // Animate downward falling streaks
-                float animOffset = (age * 0.8f + i * 1.5f) % 4.0f;
-                float streakTop = Math.max(botY, topY - animOffset * 3.0f);
+                // Rain eases down the shaft and thins out as it meets the ground.
+                float fallT = ((age * 0.8f + i * 1.5f) % 4.0f) / 4.0f;
+                float fallEase = fallT * fallT;
+                float streakTop = Math.max(botY, topY - fallEase * 12.0f);
                 float streakBot = Math.max(botY, streakTop - 3.5f);
+                float groundFade = Math.min(1.0f, (streakBot - botY) / 1.4f + 0.2f);
 
-                renderBeam(matrix, buffer, sx, streakTop, sz, sx + 0.2f, streakBot, sz + 0.2f, 0.08f, 0.5f, 0.9f, 1.0f, 0.60f * fade);
+                renderBeam(matrix, buffer, sx, streakTop, sz, sx + 0.2f, streakBot, sz + 0.2f, 0.08f, 0.5f, 0.9f, 1.0f, 0.60f * fade * groundFade);
             }
 
             // 4. Central Tempest Eye Updraft Column (Intense central cyclone core)
@@ -242,51 +209,19 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                     float nxtY = curY - (1.1f + rng.nextFloat() * 1.8f);
                     float nxtZ = curZ + (rng.nextFloat() - 0.5f) * 3.5f;
 
-                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.20f, 0.0f, 0.95f, 1.0f, 0.90f * fade);
-                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.07f, 0.95f, 1.0f, 1.0f, 1.0f * fade);
+                    // One bolt: cyan sheath and the white core the lightning texture uses.
+                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.16f, 0.0f, 0.85f, 1.0f, 0.75f * fade);
+                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.05f, 0.95f, 1.0f, 1.0f, 0.95f * fade);
+                    if (s == 2) {
+                        float forkX = nxtX + (rng.nextFloat() - 0.5f) * 2.4f;
+                        float forkY = nxtY - (0.8f + rng.nextFloat());
+                        float forkZ = nxtZ + (rng.nextFloat() - 0.5f) * 2.4f;
+                        renderBeam(matrix, buffer, nxtX, nxtY, nxtZ, forkX, forkY, forkZ, 0.07f, 0.15f, 0.9f, 1.0f, 0.55f * fade);
+                    }
 
                     curX = nxtX; curY = nxtY; curZ = nxtZ;
                 }
             }
-        });
-
-        // T1 plus T6: one additive pass holding a halo shell around the eye
-        // column and a soft ground glow disc, so the storm blooms at its core
-        // and sits anchored in the scene.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            float glowDomeHeight = Math.min(22.0f, radius * 1.35f);
-            float glowEyeRadius = radius * 0.18f * 1.5f;
-            int glowLevels = 6;
-            int glowSegments = 16;
-
-            for (int lvl = 0; lvl < glowLevels; lvl++) {
-                float ey1 = (lvl / (float) glowLevels) * glowDomeHeight;
-                float ey2 = ((lvl + 1) / (float) glowLevels) * glowDomeHeight;
-                float er1 = glowEyeRadius * (0.6f + 0.4f * (lvl / (float) glowLevels));
-                float er2 = glowEyeRadius * (0.6f + 0.4f * ((lvl + 1) / (float) glowLevels));
-
-                float rotEye = age * (30.0f + lvl * 5.0f) * (float) (Math.PI / 180.0);
-                for (int i = 0; i < glowSegments; i++) {
-                    double a1 = ((i / (double) glowSegments) * Math.PI * 2.0) + rotEye;
-                    double a2 = (((i + 1) / (double) glowSegments) * Math.PI * 2.0) + rotEye;
-
-                    float x1 = (float) Math.cos(a1) * er1;
-                    float z1 = (float) Math.sin(a1) * er1;
-                    float x2 = (float) Math.cos(a2) * er1;
-                    float z2 = (float) Math.sin(a2) * er1;
-
-                    float x3 = (float) Math.cos(a2) * er2;
-                    float z3 = (float) Math.sin(a2) * er2;
-                    float x4 = (float) Math.cos(a1) * er2;
-                    float z4 = (float) Math.sin(a1) * er2;
-
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.0f, 0.50f, 0.55f, 0.14f * fade);
-                }
-            }
-
-            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, radius * 0.50f, 0.0f, 48, age * 10.0f, 0.0f, 0.45f, 0.50f, 0.10f * fade);
         });
     }
 

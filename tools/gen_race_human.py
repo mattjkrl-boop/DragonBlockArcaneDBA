@@ -7,7 +7,7 @@ Humans use the base hair group only (Kaioken needs no hair swap).
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint, skin_lid
 
 SKIN_V = 214; HAIR_V = 210
 ORANGE = (238, 116, 30); ORANGE_D = (196, 82, 18); BLUE = (34, 64, 186); BLUE_D = (22, 40, 132)
@@ -67,8 +67,8 @@ m.cube('fringe_r', hb, 'hair', [0.55, 30.3, -4.6], [4.45, 33.1, -3.85], [0.55, 3
 m.cube('fringe_l', hb, 'hair', [-4.45, 30.3, -4.6], [-0.55, 33.1, -3.85], [-0.55, 33.1, -4.2], (0, 0, -7))
 
 # ------------------------------------------------------------------ painting
-def paint_face(i, j, W, H):
-    """16x16 Yamcha face: confident brows, standard eyes, X scar on his left cheek."""
+def paint_face(i, j, W, H, closed=False):
+    """16x16 Yamcha face: confident brows, two-row eyes, X scar on his left cheek."""
     sx = i - W // 2
     k = SKIN_V
     # X scar: character's left cheek (sx > 0 side), crossing below the eye
@@ -81,10 +81,14 @@ def paint_face(i, j, W, H):
             if j == by or (j == by + 1 and a <= 2): return (110, 110, 110), 'G'
             if j == 9 and 2 <= a <= 6: return (24, 20, 20), None
             if j in (10, 11):
+                # Two-row eye. The top row becomes the lid; the lower row is the shut line.
+                if closed:
+                    if j == 10: return skin_lid(k)
+                    return eye_tint(140 if a in (2, 6) else 210)
                 if a == 6 or (a == 2 and j == 10): return (24, 20, 20), None
                 if a == 2: return (k * 0.75,) * 3, 'R'
-                if a == 3: return (20, 20, 24), None
-                if a == 4: return (90, 90, 90), 'B'
+                if a == 3: return eye_tint(80)
+                if a == 4: return eye_tint(235)
                 return (246, 246, 246), None
             if j == 12 and 3 <= a <= 5: return (k * 0.86,) * 3, 'R'
     if j == 13 and sx in (-1, 0): return (k * 0.8,) * 3, 'R'
@@ -154,7 +158,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
             if fn == 'north' and 0.3 < t < 0.42 and i % 2 == 0: v *= 0.8
             if fn == 'down' or t > 0.85: v *= 0.86
         if mt == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if mt == 'head' and fn == 'down': v *= 0.75
         if edge and mt != 'head': v *= 0.88

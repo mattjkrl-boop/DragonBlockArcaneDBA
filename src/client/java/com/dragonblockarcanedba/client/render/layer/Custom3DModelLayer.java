@@ -53,9 +53,10 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
             int sColor = dbaState.dba$getSkinColor();
             int hColor = dbaState.dba$getHairColor();
             int eColor = dbaState.dba$getEyeColor();
-            if (sColor != 0) skinColor = sColor;
-            if (hColor != 0) hairColor = hColor;
-            if (eColor != 0) eyeColor = eColor;
+            if (sColor != 0) skinColor = sColor & 0xFFFFFF;
+            if (hColor != 0) hairColor = hColor & 0xFFFFFF;
+            // 0xFF000000 is chosen black. Only an unset color (0) keeps the white default.
+            if (eColor != 0) eyeColor = eColor & 0xFFFFFF;
 
             com.dragonblockarcanedba.client.render.animation.BedrockAnimationApplier.apply(
                 humanoidModel,
@@ -87,13 +88,25 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
             playerModel.jacket.visible = false;
         }
 
-        // Uniform dynamic texture generation for all races (Yardrat, Saiyan, Half-Saiyan, etc.)
-        Identifier texture = DynamicSkinManager.getOrGenerateSkin(race, skinColor, hairColor, eyeColor);
+        // The face atlas already contains the eyes. A short blink swaps that atlas for the
+        // closed-eyelid atlas, which differs only in those eye texels. Eye color tints both.
+        boolean eyesClosed = (System.currentTimeMillis() + state.id * 12345L) % 4000L < 150L;
+        Identifier texture = DynamicSkinManager.getOrGenerateSkin(race, skinColor, hairColor, eyeColor, eyesClosed);
         if (texture == null) {
             texture = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/player/" + race + "_base.png");
         }
 
         RenderType renderType = RenderTypes.entityCutout(texture, false);
+
+        // The custom geometry runs later in the frame. setupAnim can run again
+        // before that and put the vanilla one-arm swing back on the shared model.
+        // Freeze the pose that the movement clip just wrote.
+        final LimbPose headPose = LimbPose.capture(humanoidModel.head);
+        final LimbPose bodyPose = LimbPose.capture(humanoidModel.body);
+        final LimbPose rightArmPose = LimbPose.capture(humanoidModel.rightArm);
+        final LimbPose leftArmPose = LimbPose.capture(humanoidModel.leftArm);
+        final LimbPose rightLegPose = LimbPose.capture(humanoidModel.rightLeg);
+        final LimbPose leftLegPose = LimbPose.capture(humanoidModel.leftLeg);
 
         final Identifier finalFormForHair = activeFormId;
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
@@ -101,7 +114,7 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
             stack.last().pose().set(pose.pose());
             stack.last().normal().set(pose.normal());
 
-            renderLimb(mesh.getLimb("head"), humanoidModel.head, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("head"), headPose, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
             // Per-form modelled hair: SSJ3 swaps in the long mane group when the model has one
             ObjMesh.LimbGroup hairLimb = mesh.getLimb("hair");
             if (finalFormForHair != null && finalFormForHair.getPath().contains("super_saiyan_3") && mesh.getLimb("hair_ssj3") != null) {
@@ -117,7 +130,7 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
                 float swayX = (float) (Math.sin(age * 0.08f) * 0.025f + Math.abs(Math.sin(state.walkAnimationPos * 0.6662f)) * 0.06f * walk);
                 float swayZ = (float) (Math.sin(age * 0.05f + 1.3f) * 0.02f + Math.sin(state.walkAnimationPos * 0.6662f) * 0.03f * walk);
                 stack.pushPose();
-                humanoidModel.head.translateAndRotate(stack);
+                headPose.apply(stack);
                 stack.translate(0.0f, -0.25f, 0.0f);
                 stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotation(swayX)));
                 stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(swayZ)));
@@ -125,13 +138,13 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
                 hairLimb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f);
                 stack.popPose();
             }
-            renderLimb(mesh.getLimb("body"), humanoidModel.body, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("body"), bodyPose, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
             // Modelled-hair races (blocky Saiyan) hang their arms slightly away from the body
             float armSplay = mesh.hasModelledHair() ? 0.16f : 0.0f;
-            renderLimb(mesh.getLimb("rightarm"), humanoidModel.rightArm, stack, buffer, packedLight, armSplay, 1.0f, 1.0f, 1.0f, 1.0f);
-            renderLimb(mesh.getLimb("leftarm"), humanoidModel.leftArm, stack, buffer, packedLight, -armSplay, 1.0f, 1.0f, 1.0f, 1.0f);
-            renderLimb(mesh.getLimb("rightleg"), humanoidModel.rightLeg, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
-            renderLimb(mesh.getLimb("leftleg"), humanoidModel.leftLeg, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("rightarm"), rightArmPose, stack, buffer, packedLight, armSplay, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("leftarm"), leftArmPose, stack, buffer, packedLight, -armSplay, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("rightleg"), rightLegPose, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderLimb(mesh.getLimb("leftleg"), leftLegPose, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
         });
 
         // 3D Dynamic Hair Spikes for Saiyan, Half-Saiyan, and humanoid races
@@ -149,7 +162,7 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
                 stack.last().normal().set(pose.normal());
 
                 stack.pushPose();
-                humanoidModel.head.translateAndRotate(stack);
+                headPose.apply(stack);
                 com.dragonblockarcanedba.client.render.model.DbaHairRenderer.renderHair(
                         stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY,
                         finalRace, finalActiveFormId, finalHairColor, state, finalDbaState
@@ -161,7 +174,7 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
 
     private static void renderLimb(
             ObjMesh.LimbGroup limb,
-            net.minecraft.client.model.geom.ModelPart bone,
+            LimbPose bone,
             PoseStack stack,
             com.mojang.blaze3d.vertex.VertexConsumer buffer,
             int packedLight,
@@ -172,7 +185,7 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
 
     private static void renderLimb(
             ObjMesh.LimbGroup limb,
-            net.minecraft.client.model.geom.ModelPart bone,
+            LimbPose bone,
             PoseStack stack,
             com.mojang.blaze3d.vertex.VertexConsumer buffer,
             int packedLight,
@@ -181,10 +194,43 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
     ) {
         if (limb != null && bone != null) {
             stack.pushPose();
-            bone.translateAndRotate(stack);
+            bone.apply(stack);
             if (extraZRot != 0.0f) stack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.ZP.rotation(extraZRot)));
             limb.render(stack.last().pose(), buffer, packedLight, OverlayTexture.NO_OVERLAY, r, g, b, a);
             stack.popPose();
+        }
+    }
+
+    /**
+     * Copy of a humanoid part's transform, taken while the movement clip is
+     * still on the model. Matches ModelPart.translateAndRotate.
+     */
+    private static final class LimbPose {
+        final float x;
+        final float y;
+        final float z;
+        final float xRot;
+        final float yRot;
+        final float zRot;
+
+        private LimbPose(float x, float y, float z, float xRot, float yRot, float zRot) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.xRot = xRot;
+            this.yRot = yRot;
+            this.zRot = zRot;
+        }
+
+        static LimbPose capture(net.minecraft.client.model.geom.ModelPart part) {
+            return new LimbPose(part.x, part.y, part.z, part.xRot, part.yRot, part.zRot);
+        }
+
+        void apply(PoseStack stack) {
+            stack.translate(this.x / 16.0f, this.y / 16.0f, this.z / 16.0f);
+            if (this.xRot != 0.0f || this.yRot != 0.0f || this.zRot != 0.0f) {
+                stack.mulPose(new org.joml.Quaternionf().rotationZYX(this.zRot, this.yRot, this.xRot));
+            }
         }
     }
 }

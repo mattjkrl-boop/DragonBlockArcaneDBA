@@ -9,11 +9,9 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.util.Mth;
 
 /**
- * Renders a Ki Beam as a long colored cylinder of light.
- * Inner core beam + outer translucent glow, oriented along look direction.
+ * A ki beam is one cylinder: a white core inside a colored sheath, aimed down the look direction.
  */
 public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.BeamRenderState> {
 
@@ -42,33 +40,16 @@ public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.
         float g = KiRenderHelper.green(state.color);
         float b = KiRenderHelper.blue(state.color);
         RenderType renderType = KiRenderHelper.kiRenderType();
-
         float beamLength = state.length;
-        float pulse = 1.0f + 0.08f * Mth.sin(state.ageInTicks * 1.2f);
+        float life = Math.min(1f, state.ageInTicks / 20f);
+        float alpha = 1f - life * life;
 
-        // Inner core beam
-        float coreRadius = 0.15f * pulse;
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -coreRadius, -coreRadius, 0,
-                    coreRadius, coreRadius, beamLength,
-                    r, g, b, 0.9f);
-        });
-        poseStack.popPose();
-
-        // Outer glow
-        float glowRadius = 0.3f * pulse;
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -glowRadius, -glowRadius, -0.1f,
-                    glowRadius, glowRadius, beamLength + 0.2f,
-                    r, g, b, 0.3f);
+            KiRenderHelper.drawCylinder(pose, buffer, 0.22f, 0f, beamLength, 12, r, g, b, 0.45f * alpha);
+            KiRenderHelper.drawCylinder(pose, buffer, 0.07f, 0f, beamLength, 8, 1f, 1f, 1f, 0.95f * alpha);
         });
         poseStack.popPose();
 

@@ -69,13 +69,15 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
             // 1. 12-Block Battlefield Denial Repulsion Boundary Disc on the Ground
             float auraR = 12.0f;
             int groundSegments = 48;
-            float repulseWave = (age * 0.35f) % auraR;
+            float cycle = (age * 0.18f) % 1.0f;
+            float eased = cycle * cycle * (3.0f - 2.0f * cycle);
+            float repulseWave = eased * auraR;
 
-            // Outer Boundary Perimeter Teeth & Runic Ring
-            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, auraR * 1.02f, auraR * 0.96f, groundSegments, age * 6.0f,
-                1.0f, isPeak ? 0.85f : 0.45f, 0.05f, isPeak ? 0.95f : alpha * 0.75f);
-            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, auraR * 0.96f, auraR * 0.90f, groundSegments, age * -8.0f,
-                0.90f, isPeak ? 0.50f : 0.20f, 0.02f, alpha * 0.65f);
+            // One boundary ring: bright gold lip, darker molten inner edge of the same band.
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, auraR * 1.02f, auraR * 0.94f, groundSegments, age * 4.0f,
+                0.72f, isPeak ? 0.28f : 0.16f, 0.02f, alpha * 0.80f);
+            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, auraR * 0.99f, auraR * 0.96f, groundSegments, age * 4.0f,
+                1.0f, isPeak ? 0.90f : 0.62f, isPeak ? 0.30f : 0.08f, isPeak ? 0.95f : alpha * 0.90f);
 
             // 12 Radial Pressure Nodes
             for (int i = 0; i < 12; i++) {
@@ -84,14 +86,22 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
                 float nz1 = (float) Math.sin(nodeAng) * (auraR * 0.85f);
                 float nx2 = (float) Math.cos(nodeAng) * (auraR * 1.02f);
                 float nz2 = (float) Math.sin(nodeAng) * (auraR * 1.02f);
-                drawSegment(matrix, buffer, nx1, nz1, nx2, nz2, 0.18f, 1.0f, 0.60f, 0.05f, alpha * 0.85f);
+                drawLash(matrix, buffer,
+                    nx1, 0.05f, nz1,
+                    (nx1 + nx2) * 0.5f, 0.28f, (nz1 + nz2) * 0.5f,
+                    nx2, 0.08f, nz2,
+                    0.10f, 5,
+                    0.85f, 0.35f, 0.04f,
+                    1.0f, 0.86f, 0.30f,
+                    alpha * 0.90f
+                );
             }
 
             // Expanding concentric repulsion shock ripples
-            if (repulseWave > 0.5f) {
-                float rippleFade = (1.0f - (repulseWave / auraR)) * alpha * 0.60f;
-                drawRotatingRing(matrix, buffer, 0, 0.05f, 0, repulseWave, Math.max(0.1f, repulseWave - 0.6f), groundSegments, 0,
-                    1.0f, 0.45f, 0.02f, rippleFade);
+            if (eased > 0.08f && eased < 0.96f) {
+                float rippleFade = (1.0f - eased) * (1.0f - eased) * alpha * 0.70f;
+                drawRotatingRing(matrix, buffer, 0, 0.05f, 0, repulseWave, Math.max(0.1f, repulseWave - 0.45f), groundSegments, 0,
+                    1.0f, 0.55f, 0.08f, rippleFade);
             }
 
             // 2. Towering Ethereal 3D Titan Aegis / Armor Avatar around Caster
@@ -127,6 +137,8 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
             float domeR = (2.2f + intensity * 0.8f) * pulse;
             drawHeatDome(matrix, buffer, 0, 0.1f, 0, domeR, avatarH * 0.85f, domeSegments, age * 16.0f,
                 rCol, gCol, bCol, alpha * 0.40f);
+            drawHeatDome(matrix, buffer, 0, 0.15f, 0, domeR * 0.58f, avatarH * 0.55f, domeSegments, -age * 11.0f,
+                1.0f, Math.min(1.0f, gCol + 0.35f), Math.min(1.0f, bCol + 0.20f), alpha * 0.55f);
 
             // Dual Helical Fiery Energy Ribbons
             int helixSteps = 20;
@@ -152,6 +164,8 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
 
                     drawRibbonSegment(matrix, buffer, x1, y1, z1, x2, y2, z2, 0.16f,
                         rCol, gCol, bCol, alpha * 0.85f * (1.0f - prog1 * 0.3f));
+                    drawRibbonSegment(matrix, buffer, x1, y1, z1, x2, y2, z2, 0.045f,
+                        1.0f, Math.min(1.0f, gCol + 0.40f), Math.min(1.0f, bCol + 0.25f), alpha * 0.95f * (1.0f - prog1 * 0.15f));
                 }
             }
 
@@ -168,28 +182,19 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
                     float sz2 = (float) Math.sin(spkAng) * spkLen;
                     float sy = 1.0f + (float) Math.sin(i * 1.2f) * 0.6f;
 
-                    drawSegment(matrix, buffer, sx1, sz1, sx2, sz2, 0.15f, 1.0f, 1.0f, 0.60f, 1.0f);
+                    float curl = (float) Math.sin(spkAng + 1.4) * 0.35f;
+                    float curlZ = (float) Math.cos(spkAng + 1.4) * 0.35f;
+                    drawLash(matrix, buffer,
+                        sx1, sy, sz1,
+                        (sx1 + sx2) * 0.5f + curl, sy + 0.45f, (sz1 + sz2) * 0.5f + curlZ,
+                        sx2, sy * 0.4f, sz2,
+                        0.12f, 6,
+                        1.0f, 0.72f, 0.18f,
+                        1.0f, 0.98f, 0.70f,
+                        0.95f
+                    );
                 }
             }
-        });
-
-        // Additive glow halo and ground anchor (redesign T1 and T6): the heat
-        // dome and boundary ring bloom, and a soft molten disc glows under
-        // the caster so the stance sits in the world. Peak keeps its hotter
-        // gold through the same color pair as the body.
-        float haloRCol = 1.0f;
-        float haloGCol = isPeak ? 0.92f : 0.48f;
-        float haloBCol = isPeak ? 0.35f : 0.05f;
-        float haloDomeR = (2.2f + intensity * 0.8f) * pulse * 1.08f;
-        float haloDomeH = 3.6f * pulse * 0.85f;
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawHeatDome(matrix, buffer, 0, 0.1f, 0, haloDomeR, haloDomeH, 32, age * 16.0f,
-                haloRCol, haloGCol, haloBCol, alpha * 0.16f);
-            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, 12.24f, 11.52f, 48, age * 6.0f,
-                haloRCol, haloGCol, haloBCol, alpha * 0.14f);
-            drawRotatingRing(matrix, buffer, 0, 0.02f, 0, 2.8f, 0.05f, 48, 0.0f,
-                haloRCol, haloGCol, haloBCol, alpha * 0.10f);
         });
 
         super.submit(state, poseStack, collector, cameraState);
@@ -218,6 +223,71 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
         }
     }
 
+    private static void drawLash(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float xc, float yc, float zc,
+                                 float x1, float y1, float z1,
+                                 float width, int steps,
+                                 float er, float eg, float eb,
+                                 float cr, float cg, float cb,
+                                 float alpha) {
+        int n = Math.max(4, steps);
+        float px = x0;
+        float py = y0;
+        float pz = z0;
+        for (int i = 1; i <= n; i++) {
+            float t = i / (float) n;
+            float u = 1.0f - t;
+            float x = u * u * x0 + 2.0f * u * t * xc + t * t * x1;
+            float y = u * u * y0 + 2.0f * u * t * yc + t * t * y1;
+            float z = u * u * z0 + 2.0f * u * t * zc + t * t * z1;
+            float w = width * (1.0f - t * 0.9f);
+            float a = alpha * (1.0f - t * t);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w, er, eg, eb, a);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.32f, cr, cg, cb, Math.min(1.0f, a * 1.2f));
+            px = x;
+            py = y;
+            pz = z;
+        }
+    }
+
+    private static void lashSpan(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float x1, float y1, float z1,
+                                 float width,
+                                 float r, float g, float b, float a) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float ax = 0.0f;
+        float ay = 1.0f;
+        float az = 0.0f;
+        if (dx * dx + dz * dz < dy * dy) {
+            ax = 1.0f;
+            ay = 0.0f;
+            az = 0.0f;
+        }
+        float px = dy * az - dz * ay;
+        float py = dz * ax - dx * az;
+        float pz = dx * ay - dy * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        if (plen < 0.0001f) {
+            return;
+        }
+        float s = width / plen;
+        px *= s;
+        py *= s;
+        pz *= s;
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+    }
+
     private static void drawSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {
         float dx = x2 - x1, dz = z2 - z1;
         float len = (float) Math.sqrt(dx * dx + dz * dz);
@@ -233,28 +303,61 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
     }
 
     private static void drawShoulderPauldron(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float size, float height, float r, float g, float b, float a) {
-        float half = size * 0.5f;
-        // 3D Pauldron Diamond Box
-        consumer.addVertex(matrix, cx - half, cy, cz - half).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx + half, cy, cz - half).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx + half * 1.3f, cy + height, cz).setColor(r, g, b, a * 0.9f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx - half * 1.3f, cy + height, cz).setColor(r, g, b, a * 0.9f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        int steps = 6;
+        float out = cx >= 0.0f ? 1.0f : -1.0f;
+        for (int i = 0; i < steps; i++) {
+            float u0 = i / (float) steps;
+            float u1 = (i + 1) / (float) steps;
+            float a0 = (u0 - 0.5f) * 1.35f;
+            float a1 = (u1 - 0.5f) * 1.35f;
+            float lift0 = (float) Math.sin(u0 * Math.PI);
+            float lift1 = (float) Math.sin(u1 * Math.PI);
+            float x0 = cx + (float) Math.sin(a0) * size;
+            float x1 = cx + (float) Math.sin(a1) * size;
+            float z0 = cz + out * (float) (1.0 - Math.cos(a0)) * size * 0.45f;
+            float z1 = cz + out * (float) (1.0 - Math.cos(a1)) * size * 0.45f;
+            float yb0 = cy + lift0 * height * 0.12f;
+            float yb1 = cy + lift1 * height * 0.12f;
+            float yt0 = cy + lift0 * height;
+            float yt1 = cy + lift1 * height;
+            consumer.addVertex(matrix, x0, yb0, z0).setColor(r, g, b, a * (0.35f + 0.65f * lift0)).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, yb1, z1).setColor(r, g, b, a * (0.35f + 0.65f * lift1)).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, yt1, z1 + out * 0.04f).setColor(1.0f, Math.min(1.0f, g + 0.25f), Math.min(1.0f, b + 0.15f), a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x0, yt0, z0 + out * 0.04f).setColor(1.0f, Math.min(1.0f, g + 0.25f), Math.min(1.0f, b + 0.15f), a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        }
     }
 
     private static void drawTitanHorn(Matrix4f matrix, VertexConsumer consumer, float bx, float by, float bz, float tx, float ty, float tz, float width, float r, float g, float b, float a) {
-        consumer.addVertex(matrix, bx - width, by, bz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, bx + width, by, bz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tx, ty, tz).setColor(r * 1.1f, g * 1.1f, b * 1.1f, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tx, ty, tz).setColor(r * 1.1f, g * 1.1f, b * 1.1f, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        float out = bx >= 0.0f ? 1.0f : -1.0f;
+        drawLash(matrix, consumer,
+            bx, by, bz,
+            (bx + tx) * 0.5f + out * 0.22f, (by + ty) * 0.55f + 0.18f, (bz + tz) * 0.5f + 0.10f,
+            tx, ty, tz,
+            width, 6,
+            r, g, b,
+            1.0f, Math.min(1.0f, g + 0.28f), Math.min(1.0f, b + 0.16f),
+            a
+        );
     }
 
     private static void drawAegisPlate(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float width, float height, float r, float g, float b, float a) {
-        float halfW = width * 0.5f;
+        int cols = 5;
         float halfH = height * 0.5f;
-        consumer.addVertex(matrix, cx - halfW, cy - halfH, cz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx + halfW, cy - halfH, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx + halfW * 0.7f, cy + halfH, cz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx - halfW * 0.7f, cy + halfH, cz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        float zSign = cz >= 0.0f ? 1.0f : -1.0f;
+        for (int i = 0; i < cols; i++) {
+            float u0 = i / (float) cols;
+            float u1 = (i + 1) / (float) cols;
+            float bow0 = (float) Math.sin(u0 * Math.PI) * width * 0.16f;
+            float bow1 = (float) Math.sin(u1 * Math.PI) * width * 0.16f;
+            float x0 = cx + (u0 - 0.5f) * width;
+            float x1 = cx + (u1 - 0.5f) * width;
+            float xt0 = cx + (u0 - 0.5f) * width * 0.70f;
+            float xt1 = cx + (u1 - 0.5f) * width * 0.70f;
+            consumer.addVertex(matrix, x0, cy - halfH, cz + bow0 * zSign).setColor(r * 0.75f, g * 0.75f, b * 0.75f, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, zSign);
+            consumer.addVertex(matrix, x1, cy - halfH, cz + bow1 * zSign).setColor(r * 0.75f, g * 0.75f, b * 0.75f, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, zSign);
+            consumer.addVertex(matrix, xt1, cy + halfH, cz + bow1 * 1.2f * zSign).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, zSign);
+            consumer.addVertex(matrix, xt0, cy + halfH, cz + bow0 * 1.2f * zSign).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, zSign);
+        }
     }
 
     private static void drawHeatDome(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float radius, float height, int segments, float rotDeg, float r, float g, float b, float a) {

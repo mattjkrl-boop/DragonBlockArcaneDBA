@@ -67,6 +67,11 @@ public class SaberSlashEntity extends Projectile {
     public void tick() {
         super.tick();
 
+        Vec3 movement = this.getDeltaMovement();
+        if (movement.lengthSqr() > 1.0E-4) {
+            this.setPos(this.getX() + movement.x, this.getY() + movement.y, this.getZ() + movement.z);
+        }
+
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel) {
             if (this.tickCount >= getMaxLifetime()) {
                 this.discard();

@@ -60,8 +60,9 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
         float charge = state.chargeRatio;
         float age = state.age;
 
-        float baseRadius = 1.2f + (charge * 2.6f);
-        float baseAlpha = 0.70f + (charge * 0.30f);
+        float chargeEase = charge * charge * (3.0f - 2.0f * charge);
+        float baseRadius = 1.2f + (chargeEase * 2.6f);
+        float baseAlpha = 0.70f + (chargeEase * 0.30f);
         float tremble = (float) Math.sin(age * 2.5f) * (0.02f + charge * 0.06f);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
@@ -90,12 +91,44 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
                 }
             }
 
-            // 2. Inward-Gathering Earthen Compression Rings
+            // One compression ring: dark basalt lip on the outside, molten gold along the inner edge.
             int ringSegments = 40;
-            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.05f, baseRadius * 0.92f, ringSegments, age * 12.0f,
-                0.90f, 0.35f, 0.02f, baseAlpha * 0.80f);
-            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.70f, baseRadius * 0.58f, ringSegments, age * -18.0f,
-                1.0f, 0.65f, 0.05f, baseAlpha * 0.90f);
+            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.04f, baseRadius * 0.90f, ringSegments, age * 8.0f,
+                0.55f, 0.16f, 0.02f, baseAlpha * 0.85f);
+            drawRotatingRing(matrix, buffer, 0, 0.045f, 0, baseRadius * 0.93f, baseRadius * 0.88f, ringSegments, age * 8.0f,
+                1.0f, 0.78f, 0.18f, baseAlpha * 0.95f);
+
+            // Tapered heart of the brace. It rises with the charge and thins out overhead.
+            int colSteps = 6;
+            int colSides = 8;
+            float colH = 0.35f + chargeEase * 2.4f;
+            float colSpin = age * 0.35f;
+            for (int s = 0; s < colSteps; s++) {
+                float p1 = s / (float) colSteps;
+                float p2 = (s + 1) / (float) colSteps;
+                float y1 = 0.04f + p1 * colH;
+                float y2 = 0.04f + p2 * colH;
+                float rad1 = (0.16f + chargeEase * 0.22f) * (1.0f - p1 * 0.88f);
+                float rad2 = (0.16f + chargeEase * 0.22f) * (1.0f - p2 * 0.88f);
+                float a1 = baseAlpha * (0.85f - p1 * 0.75f);
+                float a2 = baseAlpha * (0.85f - p2 * 0.75f);
+                for (int i = 0; i < colSides; i++) {
+                    double ang1 = colSpin + (i / (double) colSides) * Math.PI * 2.0;
+                    double ang2 = colSpin + ((i + 1) / (double) colSides) * Math.PI * 2.0;
+                    float x1 = (float) Math.cos(ang1) * rad1;
+                    float z1 = (float) Math.sin(ang1) * rad1;
+                    float x2 = (float) Math.cos(ang2) * rad1;
+                    float z2 = (float) Math.sin(ang2) * rad1;
+                    float x3 = (float) Math.cos(ang2) * rad2;
+                    float z3 = (float) Math.sin(ang2) * rad2;
+                    float x4 = (float) Math.cos(ang1) * rad2;
+                    float z4 = (float) Math.sin(ang1) * rad2;
+                    buffer.addVertex(matrix, x1, y1, z1).setColor(1.0f, 0.55f, 0.08f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                    buffer.addVertex(matrix, x2, y1, z2).setColor(1.0f, 0.55f, 0.08f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                    buffer.addVertex(matrix, x3, y2, z3).setColor(1.0f, 0.95f, 0.45f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                    buffer.addVertex(matrix, x4, y2, z4).setColor(1.0f, 0.95f, 0.45f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+                }
+            }
 
             // 3. Physical Levitating and Vibrating 3D Rock Debris / Basalt Slabs
             int rockCount = 10 + (int) (charge * 8); // 10 to 18 rocks
@@ -108,7 +141,7 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
 
                 // Floating elevation scaling with charge
                 float floatPhase = age * 0.25f + r * 1.4f;
-                float ry = 0.08f + (charge * 1.4f) * (0.5f + 0.5f * (float) Math.sin(floatPhase)) + (rng.nextFloat() * 0.2f * charge);
+                float ry = 0.08f + (chargeEase * 1.4f) * (0.5f + 0.5f * (float) Math.sin(floatPhase)) + (rng.nextFloat() * 0.2f * chargeEase);
 
                 float slabHeight = 0.25f + rng.nextFloat() * 0.35f + charge * 0.25f;
                 float slabWidth = 0.20f + rng.nextFloat() * 0.25f;
@@ -138,26 +171,90 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
                     float tDist = 0.4f + (float) (rng.nextDouble() * 0.8);
                     float tx1 = (float) Math.cos(tAng) * tDist;
                     float tz1 = (float) Math.sin(tAng) * tDist;
-                    float tHeight = 0.5f + charge * 1.5f;
-
-                    drawAscendingTendril(matrix, buffer, tx1, 0.05f, tz1, tx1 * 0.3f, tHeight, tz1 * 0.3f,
-                        0.06f, 1.0f, 0.55f, 0.05f, baseAlpha * 0.75f);
+                    float tHeight = 0.5f + chargeEase * 1.5f;
+                    float bow = 0.28f + chargeEase * 0.20f;
+                    float mx = tx1 * 0.62f + (float) Math.cos(tAng + 1.15) * bow;
+                    float mz = tz1 * 0.62f + (float) Math.sin(tAng + 1.15) * bow;
+                    float my = tHeight * 0.48f;
+                    drawLash(matrix, buffer,
+                        tx1, 0.05f, tz1,
+                        mx, my, mz,
+                        tx1 * 0.22f, tHeight, tz1 * 0.22f,
+                        0.07f, 6,
+                        1.0f, 0.42f, 0.05f,
+                        1.0f, 0.92f, 0.40f,
+                        baseAlpha * 0.80f
+                    );
                 }
             }
         });
 
-        // Additive glow halo and ground anchor (redesign T1 and T6): the
-        // compression rings bloom and a soft molten disc glows under the
-        // caster so the charge sits in the world instead of floating on it.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.70f, baseRadius * 0.58f, 40, age * -18.0f,
-                1.0f, 0.65f, 0.05f, baseAlpha * 0.20f);
-            drawRotatingRing(matrix, buffer, 0, 0.02f, 0, baseRadius * 0.55f, 0.05f, 40, 0.0f,
-                1.0f, 0.55f, 0.05f, baseAlpha * 0.10f);
-        });
-
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void drawLash(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float xc, float yc, float zc,
+                                 float x1, float y1, float z1,
+                                 float width, int steps,
+                                 float er, float eg, float eb,
+                                 float cr, float cg, float cb,
+                                 float alpha) {
+        int n = Math.max(4, steps);
+        float px = x0;
+        float py = y0;
+        float pz = z0;
+        for (int i = 1; i <= n; i++) {
+            float t = i / (float) n;
+            float u = 1.0f - t;
+            float x = u * u * x0 + 2.0f * u * t * xc + t * t * x1;
+            float y = u * u * y0 + 2.0f * u * t * yc + t * t * y1;
+            float z = u * u * z0 + 2.0f * u * t * zc + t * t * z1;
+            float w = width * (1.0f - t * 0.9f);
+            float a = alpha * (1.0f - t * t);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w, er, eg, eb, a);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.32f, cr, cg, cb, Math.min(1.0f, a * 1.2f));
+            px = x;
+            py = y;
+            pz = z;
+        }
+    }
+
+    private static void lashSpan(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float x1, float y1, float z1,
+                                 float width,
+                                 float r, float g, float b, float a) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float ax = 0.0f;
+        float ay = 1.0f;
+        float az = 0.0f;
+        if (dx * dx + dz * dz < dy * dy) {
+            ax = 1.0f;
+            ay = 0.0f;
+            az = 0.0f;
+        }
+        float px = dy * az - dz * ay;
+        float py = dz * ax - dx * az;
+        float pz = dx * ay - dy * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        if (plen < 0.0001f) {
+            return;
+        }
+        float s = width / plen;
+        px *= s;
+        py *= s;
+        pz *= s;
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
     }
 
     private static void drawTrenchSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {
@@ -219,7 +316,7 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
     private static void drawAscendingTendril(Matrix4f matrix, VertexConsumer consumer,
                                              float x1, float y1, float z1,
                                              float x2, float y2, float z2,
-                                             float width, float r, float g, float b, float a) {
+                                             float width, float r, float g, float b, float a, float aEnd) {
         float dx = x2 - x1, dz = z2 - z1;
         float len = (float) Math.sqrt(dx * dx + dz * dz);
         if (len < 0.001f) {
@@ -230,7 +327,7 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
 
         consumer.addVertex(matrix, x1 - nx, y1, z1 - nz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x1 + nx, y1, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx * 0.2f, y2, z2 + nz * 0.2f).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx * 0.2f, y2, z2 - nz * 0.2f).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * 0.2f, y2, z2 + nz * 0.2f).setColor(r, g, b, aEnd).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * 0.2f, y2, z2 - nz * 0.2f).setColor(r, g, b, aEnd).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 }

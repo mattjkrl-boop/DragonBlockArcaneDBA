@@ -9,9 +9,7 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
 
 import java.util.Random;
@@ -26,8 +24,6 @@ import java.util.Random;
  * - Expanding ground shockwave rings and corrupted hex detonation seals
  */
 public class CurseLightningRenderer extends EntityRenderer<CurseLightningEntity, CurseLightningRenderer.CurseLightningRenderState> {
-    private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/curse_lightning.png");
-    private static final Identifier RED_TEXTURE = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/curse_lightning_red.png");
 
     public CurseLightningRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -67,140 +63,132 @@ public class CurseLightningRenderer extends EntityRenderer<CurseLightningEntity,
         super.submit(state, poseStack, collector, cameraState);
 
         float flashTime = state.age;
-        if (flashTime > 18.0f) return;
+        if (flashTime > 12.0f) return;
 
-        // Flash curve: intense flash at tick 0-4, then crackling flicker & fade out
-        float flashAlpha = 1.0f;
-        if (flashTime > 3.0f) {
-            flashAlpha = Math.max(0.0f, 1.0f - ((flashTime - 3.0f) / 15.0f));
-            if (((int) (flashTime * 5)) % 2 == 0) {
-                flashAlpha *= 0.65f;
-            }
-        }
+        float strike = ease(Math.min(1.0f, flashTime / 2.5f));
+        float fadeT = flashTime <= 2.5f ? 1.0f : Math.max(0.0f, 1.0f - (flashTime - 2.5f) / 7.0f);
+        float flashAlpha = ease(fadeT);
+        if (flashAlpha <= 0.02f) return;
 
-        final float finalAlpha = flashAlpha;
-        Identifier tex = state.isRare ? TEXTURE : RED_TEXTURE;
-        RenderType texturedType = RenderTypes.entityTranslucentEmissive(tex);
+        boolean rare = state.isRare;
+        float sheathR = rare ? 0.55f : 0.80f;
+        float sheathG = 0.04f;
+        float sheathB = rare ? 0.95f : 0.40f;
         RenderType glowType = KiRenderHelper.kiRenderType();
+        float cloud = 16.0f;
+        long boltSeed = state.seed;
 
-        float outerR = state.isRare ? 0.85f : 1.0f;
-        float outerG = state.isRare ? 0.05f : 0.02f;
-        float outerB = state.isRare ? 1.0f : 0.15f;
-
-        // Pass 1: Textured 3D Volumetric Branching Lightning (Using High-Res Electric Texture)
-        collector.submitCustomGeometry(poseStack, texturedType, (pose, buffer) -> {
+        collector.submitCustomGeometry(poseStack, glowType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
+            Random rng = new Random(boltSeed);
 
-            // 1. Procedural Jagged Main Trunk
-            int trunkSegments = 24;
-            float totalHeight = 46.0f;
+            int trunkSegments = 16;
             float[] nodeX = new float[trunkSegments + 1];
             float[] nodeY = new float[trunkSegments + 1];
             float[] nodeZ = new float[trunkSegments + 1];
-
-            nodeX[0] = 0; nodeY[0] = 0; nodeZ[0] = 0;
+            nodeX[0] = 0.0f;
+            nodeY[0] = cloud;
+            nodeZ[0] = 0.0f;
 
             for (int i = 1; i <= trunkSegments; i++) {
                 float progress = i / (float) trunkSegments;
-                nodeY[i] = progress * totalHeight;
-
-                float variance = (float) Math.sin(progress * Math.PI) * 2.8f + (progress * 1.2f);
+                nodeY[i] = cloud * (1.0f - progress);
+                float variance = (float) Math.sin(progress * Math.PI) * 1.35f;
                 nodeX[i] = nodeX[i - 1] + (rng.nextFloat() - 0.5f) * variance;
                 nodeZ[i] = nodeZ[i - 1] + (rng.nextFloat() - 0.5f) * variance;
             }
 
-            // Draw Main Trunk (Textured 3D volumetric cross ribbons)
-            for (int i = 0; i < trunkSegments; i++) {
-                float x1 = nodeX[i], y1 = nodeY[i], z1 = nodeZ[i];
-                float x2 = nodeX[i + 1], y2 = nodeY[i + 1], z2 = nodeZ[i + 1];
-                float v1 = i / (float) trunkSegments;
-                float v2 = (i + 1) / (float) trunkSegments;
-
-                renderBoltSegmentTextured(matrix, buffer, x1, y1, z1, x2, y2, z2, 0.95f, 1.0f, 1.0f, 1.0f, finalAlpha, v1, v2);
+            int drawn = Math.max(1, Math.min(trunkSegments, Math.round(strike * trunkSegments)));
+            for (int i = 0; i < drawn; i++) {
+                float u = i / (float) trunkSegments;
+                float pinch = 0.25f + 0.75f * (float) Math.sin(Math.max(0.08f, u) * Math.PI);
+                float width = 0.13f * pinch;
+                renderJaggedBolt(matrix, buffer, nodeX[i], nodeY[i], nodeZ[i], nodeX[i + 1], nodeY[i + 1], nodeZ[i + 1], width, sheathR, sheathG, sheathB, flashAlpha);
             }
 
-            // 2. Procedural Secondary & Tertiary Branching Forks
-            int forkCount = 6 + rng.nextInt(4);
+            int forkCount = 4;
             for (int f = 0; f < forkCount; f++) {
-                int startNode = 3 + rng.nextInt(trunkSegments - 5);
+                int span = Math.max(1, drawn - 3);
+                int startNode = 2 + rng.nextInt(span);
+                if (startNode >= drawn) {
+                    continue;
+                }
                 float curX = nodeX[startNode];
                 float curY = nodeY[startNode];
                 float curZ = nodeZ[startNode];
-
-                float forkDirX = (rng.nextFloat() - 0.5f) * 2.4f;
-                float forkDirZ = (rng.nextFloat() - 0.5f) * 2.4f;
-                int forkLen = 4 + rng.nextInt(4);
-
+                float forkDirX = (rng.nextFloat() - 0.5f) * 1.4f;
+                float forkDirZ = (rng.nextFloat() - 0.5f) * 1.4f;
+                int forkLen = 3;
                 for (int s = 0; s < forkLen; s++) {
-                    float nxtX = curX + forkDirX + (rng.nextFloat() - 0.5f) * 1.4f;
-                    float nxtY = curY - (1.6f + rng.nextFloat() * 1.6f);
-                    float nxtZ = curZ + forkDirZ + (rng.nextFloat() - 0.5f) * 1.4f;
-
-                    float width = 0.65f * (1.0f - (s / (float) forkLen));
-                    float v1 = s / (float) forkLen;
-                    float v2 = (s + 1) / (float) forkLen;
-                    renderBoltSegmentTextured(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, width, 1.0f, 1.0f, 1.0f, finalAlpha * 0.90f, v1, v2);
-
-                    // Tertiary mini-branch
-                    if (s == 2 && rng.nextFloat() < 0.5f) {
-                        float subX = curX + (rng.nextFloat() - 0.5f) * 2.0f;
-                        float subY = curY - 1.8f;
-                        float subZ = curZ + (rng.nextFloat() - 0.5f) * 2.0f;
-                        renderBoltSegmentTextured(matrix, buffer, curX, curY, curZ, subX, subY, subZ, 0.35f, 1.0f, 1.0f, 1.0f, finalAlpha * 0.75f, 0, 1);
-                    }
-
-                    curX = nxtX; curY = nxtY; curZ = nxtZ;
+                    float nxtX = curX + forkDirX + (rng.nextFloat() - 0.5f) * 0.55f;
+                    float nxtY = curY - (0.85f + rng.nextFloat() * 0.65f);
+                    float nxtZ = curZ + forkDirZ + (rng.nextFloat() - 0.5f) * 0.55f;
+                    float width = 0.08f * (1.0f - s / (float) forkLen);
+                    renderJaggedBolt(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, width, sheathR, sheathG, sheathB, flashAlpha * 0.85f);
+                    curX = nxtX;
+                    curY = nxtY;
+                    curZ = nxtZ;
                 }
             }
-        });
 
-        // Pass 2: White-Hot Plasma Core, Ground Crawling Fracture Arcs, and Detonation Rings
-        collector.submitCustomGeometry(poseStack, glowType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
-
-            // Ground Impact Detonation Shockwave Rings
-            float groundRingRadius = Math.min(4.5f, flashTime * 0.85f);
-            float ringAlpha = finalAlpha * Math.max(0.0f, 1.0f - (flashTime / 12.0f));
+            float groundRingRadius = 3.2f * ease(Math.min(1.0f, flashTime / 6.0f));
+            float ringAlpha = flashAlpha * Math.max(0.0f, 1.0f - flashTime / 9.0f);
             if (ringAlpha > 0.01f) {
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, groundRingRadius, groundRingRadius * 0.78f, 28, outerR, outerG, outerB, ringAlpha * 0.85f);
-                drawGroundRing(matrix, buffer, 0, 0.06f, 0, groundRingRadius * 0.55f, 0.0f, 24, 1.0f, 0.95f, 0.95f, ringAlpha * 0.95f);
-            }
-
-            // Ground Crawling Jagged Electrical Arc Fissures (8 radiating crawler lines)
-            int arcCount = 8;
-            for (int a = 0; a < arcCount; a++) {
-                double baseAngle = (a / (double) arcCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.3);
-                float curX = 0, curZ = 0;
-                int crawlerSteps = 5;
-                float stepDist = 0.8f + rng.nextFloat() * 0.5f;
-
-                for (int s = 0; s < crawlerSteps; s++) {
-                    float nxtX = curX + (float) Math.cos(baseAngle) * stepDist + (rng.nextFloat() - 0.5f) * 0.6f;
-                    float nxtZ = curZ + (float) Math.sin(baseAngle) * stepDist + (rng.nextFloat() - 0.5f) * 0.6f;
-
-                    float beamW = 0.12f * (1.0f - (s / (float) crawlerSteps));
-                    renderBeam(matrix, buffer, curX, 0.06f, curZ, nxtX, 0.06f, nxtZ, beamW, outerR, outerG, outerB, finalAlpha * 0.85f);
-                    renderBeam(matrix, buffer, curX, 0.07f, curZ, nxtX, 0.07f, nxtZ, beamW * 0.4f, 1.0f, 1.0f, 1.0f, finalAlpha);
-
-                    curX = nxtX; curZ = nxtZ;
-                }
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, groundRingRadius, groundRingRadius * 0.78f, 28, sheathR, sheathG, sheathB, ringAlpha * 0.80f);
+                drawGroundRing(matrix, buffer, 0, 0.06f, 0, groundRingRadius * 0.42f, groundRingRadius * 0.24f, 20, 1.0f, 0.95f, 0.96f, ringAlpha);
             }
         });
 
-        // Pass 3 (T1): additive impact flare echoing the detonation rings
-        // slightly wider, so the strike point blooms. The bolt texture itself
-        // is the identity of this effect and is left untouched.
-        float flareRadius = Math.min(4.5f, flashTime * 0.85f) * 1.12f;
-        float flareAlpha = finalAlpha * Math.max(0.0f, 1.0f - (flashTime / 12.0f));
-        if (flareAlpha > 0.01f) {
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                Matrix4f matrix = pose.pose();
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, flareRadius, flareRadius * 0.78f, 28, outerR * 0.6f, outerG * 0.6f, outerB * 0.6f, flareAlpha * 0.45f);
-                drawGroundRing(matrix, buffer, 0, 0.07f, 0, flareRadius * 0.42f, 0.0f, 24, 0.60f, 0.57f, 0.57f, flareAlpha * 0.40f);
-            });
+    }
+
+    private static float ease(float t) {
+        float c = Math.max(0.0f, Math.min(1.0f, t));
+        return c * c * (3.0f - 2.0f * c);
+    }
+
+    /** One kink of the bolt: a bowed sheath, a white core, and a wake that dies. */
+    private static void renderJaggedBolt(Matrix4f matrix, VertexConsumer consumer,
+                                         float x1, float y1, float z1, float x2, float y2, float z2,
+                                         float radius, float r, float g, float b, float a) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001f || a < 0.02f) {
+            return;
         }
+        float px = -dz / len;
+        float pz = dx / len;
+        float bow = radius * 2.4f;
+        float mx = (x1 + x2) * 0.5f + px * bow;
+        float my = (y1 + y2) * 0.5f + radius * 0.55f;
+        float mz = (z1 + z2) * 0.5f + pz * bow;
+        boltHalf(matrix, consumer, x1, y1, z1, mx, my, mz, radius, radius * 0.62f, r, g, b, a, a * 0.9f);
+        boltHalf(matrix, consumer, mx, my, mz, x2, y2, z2, radius * 0.62f, radius * 0.28f, r, g, b, a * 0.9f, a * 0.55f);
+        boltHalf(matrix, consumer, x1, y1, z1, mx, my, mz, radius * 0.28f, radius * 0.16f, 1.0f, 0.94f, 0.98f, a, a);
+        boltHalf(matrix, consumer, mx, my, mz, x2, y2, z2, radius * 0.16f, radius * 0.06f, 1.0f, 0.94f, 0.98f, a, a * 0.7f);
+        boltHalf(matrix, consumer, mx, my, mz, mx - px * bow * 1.5f, my - radius * 0.3f, mz - pz * bow * 1.5f, radius * 0.45f, 0.01f, r, g, b, a * 0.5f, 0.0f);
+    }
+
+    private static void boltHalf(Matrix4f matrix, VertexConsumer consumer,
+                                 float x1, float y1, float z1, float x2, float y2, float z2,
+                                 float w1, float w2, float r, float g, float b, float a1, float a2) {
+        float dx = x2 - x1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + (y2 - y1) * (y2 - y1) + dz * dz);
+        if (len < 0.001f) {
+            return;
+        }
+        float nx = -dz / len;
+        float nz = dx / len;
+        consumer.addVertex(matrix, x1 - nx * w1, y1, z1 - nz * w1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 + nx * w1, y1, z1 + nz * w1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * w2, y2, z2 + nz * w2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * w2, y2, z2 - nz * w2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1, y1 - w1, z1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, x1, y1 + w1, z1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, x2, y2 + w2, z2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, x2, y2 - w2, z2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
     }
 
     private static void renderBoltSegmentTextured(Matrix4f matrix, VertexConsumer consumer,

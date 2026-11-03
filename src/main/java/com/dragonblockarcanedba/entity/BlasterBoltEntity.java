@@ -28,6 +28,7 @@ public class BlasterBoltEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> IS_OVERCHARGED = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Float> HEAT_RATIO = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> IMPACT_AGE = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.INT);
 
     private float damage = 250.0f;
     private final Set<Integer> hitEntityIds = new HashSet<>();
@@ -70,6 +71,11 @@ public class BlasterBoltEntity extends Projectile {
         builder.define(IS_OVERCHARGED, false);
         builder.define(HEAT_RATIO, 0.0f);
         builder.define(CASTER_ID, -1);
+        builder.define(IMPACT_AGE, -1);
+    }
+
+    public int getImpactAge() {
+        return this.entityData.get(IMPACT_AGE);
     }
 
     public int getCasterId() {
@@ -88,6 +94,19 @@ public class BlasterBoltEntity extends Projectile {
     public void tick() {
         super.tick();
 
+        int impactAge = this.getImpactAge();
+        if (impactAge >= 0) {
+            this.setDeltaMovement(Vec3.ZERO);
+            if (!this.level().isClientSide()) {
+                if (impactAge >= 5) {
+                    this.discard();
+                } else {
+                    this.entityData.set(IMPACT_AGE, impactAge + 1);
+                }
+            }
+            return;
+        }
+
         Vec3 movement = this.getDeltaMovement();
         double nextX = this.getX() + movement.x;
         double nextY = this.getY() + movement.y;
@@ -101,30 +120,20 @@ public class BlasterBoltEntity extends Projectile {
             net.minecraft.world.phys.HitResult blockHit = this.level().clip(new net.minecraft.world.level.ClipContext(
                 startPos, endPos, net.minecraft.world.level.ClipContext.Block.COLLIDER, net.minecraft.world.level.ClipContext.Fluid.NONE, this));
             if (blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+                Vec3 hitPoint = blockHit.getLocation();
+                this.setPos(hitPoint.x, hitPoint.y, hitPoint.z);
+                this.setDeltaMovement(Vec3.ZERO);
                 if (!this.level().isClientSide() && this.level() instanceof ServerLevel impactLevel) {
-                    Vec3 hitPoint = blockHit.getLocation();
-                    impactLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
-                        hitPoint.x, hitPoint.y, hitPoint.z, 8, 0.2, 0.2, 0.2, 0.03);
                     impactLevel.playSound(null, hitPoint.x, hitPoint.y, hitPoint.z,
                         SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 0.7f, 1.6f);
+                    this.entityData.set(IMPACT_AGE, 0);
                 }
-                this.discard();
                 return;
             }
         }
         this.setPos(nextX, nextY, nextZ);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
-            // Theme particles (T5): a sparse spark trail in flight, building on
-            // the bolt's existing hit bursts rather than replacing them.
-            float trailDensity = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-            if (trailDensity > 0f) {
-                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
-                    this.getX(), this.getY(), this.getZ(),
-                    Math.max(1, Math.round(2f * trailDensity)),
-                    0.08, 0.08, 0.08, 0.02);
-            }
-
             Entity owner = this.getOwner();
             DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
                 ? serverLevel.damageSources().playerAttack(playerOwner)

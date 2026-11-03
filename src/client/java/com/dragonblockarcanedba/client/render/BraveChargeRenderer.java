@@ -123,9 +123,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
             float coreSize = (0.70f - charge * 0.20f) * pulse;
             drawOctahedron(matrix, buffer, coreSize, 0.85f, age * 22.0f, 1.0f, 0.84f, 0.0f, baseAlpha * 0.80f);
             drawOctahedron(matrix, buffer, coreSize * 0.58f, 0.85f, -age * 32.0f, 0.0f, 0.95f, 1.0f, baseAlpha * 0.95f);
-            if (charge >= 0.4f) {
-                drawOctahedron(matrix, buffer, coreSize * 0.28f, 0.85f, age * 55.0f, 1.0f, 1.0f, 1.0f, 1.0f);
-            }
+            drawOctahedron(matrix, buffer, coreSize * 0.22f, 0.85f, age * 55.0f, 1.0f, 1.0f, 1.0f, baseAlpha);
 
             // 4. Twin Helical Valor Light Ribbons (Ascending golden-cyan ribbons)
             int ribbonSteps = 12;
@@ -162,6 +160,14 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
                         x2 + rw, y2, z2 + rw,
                         x2 - rw, y2, z2 - rw,
                         sr, sg, sb, baseAlpha * (1.0f - t1 * 0.4f)
+                    );
+                    float cw = rw * 0.28f;
+                    drawQuad(matrix, buffer,
+                        x1 - cw, y1, z1,
+                        x1 + cw, y1, z1,
+                        x2 + cw, y2, z2,
+                        x2 - cw, y2, z2,
+                        1.0f, 1.0f, 1.0f, baseAlpha * (1.0f - t1 * 0.25f)
                     );
                 }
             }
@@ -206,17 +212,58 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
                                    float tipX, float tipY, float tipZ,
                                    float rBase, float gBase, float bBase, float aBase,
                                    float rTip, float gTip, float bTip, float aTip) {
-        // Front Face
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Back Face
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        float mx = (x1 + x2) * 0.5f;
+        float my = (y1 + y2) * 0.5f;
+        float mz = (z1 + z2) * 0.5f;
+        float hx = (x2 - x1) * 0.5f;
+        float hy = (y2 - y1) * 0.5f;
+        float hz = (z2 - z1) * 0.5f;
+        float dx = tipX - mx;
+        float dy = tipY - my;
+        float dz = tipZ - mz;
+        float bx = hy * dz - hz * dy;
+        float by = hz * dx - hx * dz;
+        float bz = hx * dy - hy * dx;
+        float bl = (float) Math.sqrt(bx * bx + by * by + bz * bz);
+        if (bl > 0.001f) {
+            bx /= bl;
+            by /= bl;
+            bz /= bl;
+        }
+        float bowAmp = (float) Math.sqrt(hx * hx + hy * hy + hz * hz) * 1.1f;
+        int steps = 5;
+        for (int i = 0; i < steps; i++) {
+            float t1 = i / (float) steps;
+            float t2 = (i + 1) / (float) steps;
+            float bow1 = (float) Math.sin(t1 * Math.PI) * bowAmp;
+            float bow2 = (float) Math.sin(t2 * Math.PI) * bowAmp;
+            float w1 = 1.0f - t1;
+            float w2 = 1.0f - t2;
+            float ax = mx + dx * t1 + bx * bow1;
+            float ay = my + dy * t1 + by * bow1;
+            float az = mz + dz * t1 + bz * bow1;
+            float cx = mx + dx * t2 + bx * bow2;
+            float cy = my + dy * t2 + by * bow2;
+            float cz = mz + dz * t2 + bz * bow2;
+            float ar = rBase + (rTip - rBase) * t1;
+            float ag = gBase + (gTip - gBase) * t1;
+            float ab = bBase + (bTip - bBase) * t1;
+            float aa = aBase + (aTip - aBase) * t1;
+            float br = rBase + (rTip - rBase) * t2;
+            float bg = gBase + (gTip - gBase) * t2;
+            float bb = bBase + (bTip - bBase) * t2;
+            float ba = aBase + (aTip - aBase) * t2;
+            consumer.addVertex(matrix, ax - hx * w1, ay - hy * w1, az - hz * w1).setColor(ar, ag, ab, aa).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, ax + hx * w1, ay + hy * w1, az + hz * w1).setColor(ar, ag, ab, aa).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx + hx * w2, cy + hy * w2, cz + hz * w2).setColor(br, bg, bb, ba * 0.15f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx - hx * w2, cy - hy * w2, cz - hz * w2).setColor(br, bg, bb, ba * 0.15f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            float k1 = w1 * 0.26f;
+            float k2 = w2 * 0.26f;
+            consumer.addVertex(matrix, ax - hx * k1, ay - hy * k1, az - hz * k1).setColor(1.0f, 1.0f, 1.0f, aa).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, ax + hx * k1, ay + hy * k1, az + hz * k1).setColor(1.0f, 1.0f, 1.0f, aa).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx + hx * k2, cy + hy * k2, cz + hz * k2).setColor(0.7f, 0.98f, 1.0f, ba * 0.2f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx - hx * k2, cy - hy * k2, cz - hz * k2).setColor(0.7f, 0.98f, 1.0f, ba * 0.2f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        }
     }
 
     private static void drawOctahedron(Matrix4f matrix, VertexConsumer consumer, float s, float centerY, float rotDeg, float r, float g, float b, float a) {

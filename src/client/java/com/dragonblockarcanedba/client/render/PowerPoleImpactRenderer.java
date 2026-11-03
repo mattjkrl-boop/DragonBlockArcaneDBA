@@ -70,7 +70,8 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
 
         float age = state.age;
         float maxLife = (float) state.maxLifetime;
-        float fade = Math.max(0.0f, 1.0f - (age / maxLife));
+        float lifeT = maxLife <= 0.0f ? 1.0f : Math.min(1.0f, age / maxLife);
+        float fade = 1.0f - lifeT * lifeT * (3.0f - 2.0f * lifeT);
         if (fade <= 0.01f) return;
 
         float scale = state.scale;
@@ -96,6 +97,9 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
             drawShockRingGradient(matrix, buffer, 0, innerR, outerR, 36,
                 1.0f, 0.97f, 0.75f, fade * 0.85f,
                 1.0f, 0.85f, 0.15f, fade * 0.85f);
+            drawShockRingGradient(matrix, buffer, 0.03f, outerR * 0.96f, outerR * 1.08f, 36,
+                1.0f, 1.0f, 0.92f, fade * 0.7f,
+                1.0f, 0.78f, 0.25f, fade * 0.15f);
 
             // Inner Crimson Compression Ring
             float crimsonR = outerR * 0.55f;
@@ -110,13 +114,7 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
                 float px = (float) Math.cos(ang) * starR;
                 float py = (float) Math.sin(ang) * starR;
 
-                drawQuad(matrix, buffer,
-                    -px * 0.1f, -py * 0.1f, 0.02f,
-                    px * 0.1f, py * 0.1f, 0.02f,
-                    px, py, 0.08f,
-                    0, 0, 0.15f,
-                    1.0f, 0.90f, 0.30f, fade * 0.85f
-                );
+                drawBurstNeedle(matrix, buffer, px, py, 0.14f, 1.0f, 0.90f, 0.30f, fade * 0.85f);
             }
         };
 
@@ -175,7 +173,9 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
                 float dirY = (float) (Math.sin(yawS) * Math.cos(pitchS));
                 float dirZ = (float) (Math.sin(pitchS) * 0.5 + 0.3f);
 
-                float shardDist = speed * age * scale;
+                float flyT = Math.min(1.0f, age / 8.0f);
+                float fly = 1.0f - (1.0f - flyT) * (1.0f - flyT) * (1.0f - flyT);
+                float shardDist = speed * fly * 8.0f * scale;
                 float sx = dirX * shardDist;
                 float sy = dirY * shardDist;
                 float sz = dirZ * shardDist;
@@ -193,44 +193,11 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
 
         collector.submitCustomGeometry(poseStack, renderType, geometryVolume);
         collector.submitCustomGeometry(poseStack, renderType, geometryPlanar);
-        // Crossed plane: the rings and starburst used to live on the single
-        // plane facing the poker, so the burst read thin from behind or the
-        // side. The planar set is submitted again rotated 90 degrees around
-        // the burst's up axis for volume from any viewpoint.
+        // The same rings and needles, turned, so the burst has volume from the side.
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotationY((float) Math.PI / 2.0f));
         collector.submitCustomGeometry(poseStack, renderType, geometryPlanar);
         poseStack.popPose();
-
-        // Additive glow halo (T1): a soft gold bloom ring and star behind the
-        // matte burst, on the facing plane only.
-        SubmitNodeCollector.CustomGeometryRenderer geometryGlow = (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float rawProgress = Math.min(1.0f, age / 8.0f);
-            float shockProgress = 1.0f - (1.0f - rawProgress) * (1.0f - rawProgress) * (1.0f - rawProgress);
-            float outerR = scale * (0.3f + shockProgress * 1.5f) * 1.12f;
-            float innerR = outerR * 0.66f;
-
-            drawShockRing(matrix, buffer, -0.02f, innerR, outerR, 36,
-                1.0f, 0.80f, 0.30f, fade * 0.26f);
-
-            float starR = scale * (0.8f * (1.0f - shockProgress * 0.4f)) * 1.15f;
-            int points = 8;
-            for (int p = 0; p < points; p++) {
-                double ang = (p / (double) points) * Math.PI * 2.0 + (age * 0.1);
-                float px = (float) Math.cos(ang) * starR;
-                float py = (float) Math.sin(ang) * starR;
-
-                drawQuad(matrix, buffer,
-                    -px * 0.1f, -py * 0.1f, 0.0f,
-                    px * 0.1f, py * 0.1f, 0.0f,
-                    px, py, 0.06f,
-                    0, 0, 0.12f,
-                    1.0f, 0.88f, 0.35f, fade * 0.28f
-                );
-            }
-        };
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), geometryGlow);
 
         poseStack.popPose();
     }
@@ -281,23 +248,56 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
     }
 
     private static void drawDiamondShard(Matrix4f matrix, VertexConsumer buffer, float x, float y, float z, float size, float r, float g, float b, float a) {
-        float h = size * 1.5f;
-        float w = size * 0.6f;
+        float h = size * 1.55f;
+        float w = size * 0.42f;
+        float tipZ = z + w;
+        float tailZ = z - w * 0.7f;
+        drawTriangle(matrix, buffer, x - w, y, z, x, y + w * 0.7f, z, x, y, tipZ, r, g, b, a);
+        drawTriangle(matrix, buffer, x, y + w * 0.7f, z, x + w, y, z, x, y, tipZ, r, g, b, a);
+        drawTriangle(matrix, buffer, x + w, y, z, x, y - w * 0.7f, z, x, y, tipZ, r * 0.7f, g * 0.7f, b * 0.7f, a);
+        drawTriangle(matrix, buffer, x, y - w * 0.7f, z, x - w, y, z, x, y, tipZ, r * 0.7f, g * 0.7f, b * 0.7f, a);
+        drawTriangle(matrix, buffer, x - w * 0.35f, y, z, x, y, z + h * 0.15f, x, y + h, z, 1.0f, 0.97f, 0.8f, a);
+        drawTriangle(matrix, buffer, x, y - w * 0.55f, z, x + w * 0.35f, y, z, x, y, tailZ, r * 0.5f, g * 0.5f, b * 0.5f, a * 0.35f);
+    }
 
-        // Front Face
-        drawTriangle(matrix, buffer,
-            x - w, y, z,
-            x + w, y, z,
-            x, y + h, z + w,
-            r, g, b, a
-        );
-        // Back Face
-        drawTriangle(matrix, buffer,
-            x + w, y, z,
-            x - w, y, z,
-            x, y - h, z - w,
-            r * 0.8f, g * 0.8f, b * 0.8f, a
-        );
+    /** Tapered ray: gold edge, white core, and a tail that dies back at the burst. */
+    private static void drawBurstNeedle(Matrix4f matrix, VertexConsumer buffer, float tipX, float tipY, float tipZ, float r, float g, float b, float a) {
+        float len = (float) Math.sqrt(tipX * tipX + tipY * tipY + tipZ * tipZ);
+        if (len < 1.0e-4f) return;
+        float dx = tipX / len;
+        float dy = tipY / len;
+        float dz = tipZ / len;
+        float px = -dy;
+        float py = dx;
+        float plen = (float) Math.sqrt(px * px + py * py);
+        if (plen < 1.0e-4f) {
+            px = 1.0f;
+            py = 0.0f;
+            plen = 1.0f;
+        }
+        px /= plen;
+        py /= plen;
+        float qx = dy * 0.0f - dz * py;
+        float qy = dz * px - dx * 0.0f;
+        float qz = dx * py - dy * px;
+        float base = len * 0.28f;
+        float thick = len * 0.09f;
+        float bx = dx * base;
+        float by = dy * base;
+        float bz = dz * base;
+        float[] xs = { bx + px * thick, bx + qx * thick, bx - px * thick, bx - qx * thick };
+        float[] ys = { by + py * thick, by + qy * thick, by - py * thick, by - qy * thick };
+        float[] zs = { bz, bz + qz * thick, bz, bz - qz * thick };
+        for (int i = 0; i < 4; i++) {
+            int n = (i + 1) % 4;
+            drawTriangle(matrix, buffer, xs[i], ys[i], zs[i], xs[n], ys[n], zs[n], tipX, tipY, tipZ, r, g, b, a);
+            drawTriangle(matrix, buffer,
+                bx + (xs[i] - bx) * 0.32f, by + (ys[i] - by) * 0.32f, bz + (zs[i] - bz) * 0.32f,
+                bx + (xs[n] - bx) * 0.32f, by + (ys[n] - by) * 0.32f, bz + (zs[n] - bz) * 0.32f,
+                dx * len * 0.88f, dy * len * 0.88f, dz * len * 0.88f,
+                1.0f, 0.98f, 0.9f, a);
+        }
+        drawTriangle(matrix, buffer, xs[0], ys[0], zs[0], xs[2], ys[2], zs[2], 0, 0, 0, r, g, b, a * 0.2f);
     }
 
     private static void drawQuad(Matrix4f matrix, VertexConsumer buffer,

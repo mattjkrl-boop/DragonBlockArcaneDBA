@@ -83,19 +83,19 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
 
         float age = state.age;
 
-        // Dynamic extension: Shoots forward at hypersonic speed in first 2.0 ticks, then holds and retracts
+        // The staff eases out to the poke, holds, then eases back in.
         float extendProgress;
-        if (age < 2.0f) {
-            float t = age / 2.0f;
-            extendProgress = 1.0f - (float) Math.pow(1.0f - t, 3); // Fast ease-out thrust
+        float alphaMult = 1.0f;
+        if (age < 3.0f) {
+            float t = age / 3.0f;
+            extendProgress = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+        } else if (age > 9.0f) {
+            float t = Math.min(1.0f, (age - 9.0f) / 3.0f);
+            float back = t * t * (3.0f - 2.0f * t);
+            extendProgress = 1.0f - back;
+            alphaMult = 1.0f - back * 0.35f;
         } else {
             extendProgress = 1.0f;
-        }
-
-        // Dissolve / retract fade over last 3 ticks of 12-tick lifespan
-        float alphaMult = 1.0f;
-        if (age > 9.0f) {
-            alphaMult = Math.max(0.0f, (12.0f - age) / 3.0f);
         }
 
         float currentLength = Math.max(0.8f, maxLength * extendProgress);
@@ -151,8 +151,9 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
                 draw12SidedShaft(matrix, buffer, capRadius, tipCapStart, currentLength, 1.0f, 0.82f, 0.12f, finalAlpha);
                 drawBevelRing(matrix, buffer, capRadius * 1.15f, tipCapStart, 1.0f, 0.92f, 0.25f, finalAlpha);
 
-                // Rounded/Faceted Gold Dome Tip at Leading Edge
+                // Rounded/Faceted Gold Dome Tip at Leading Edge, with a thin bright lip.
                 drawDomeTip(matrix, buffer, capRadius, currentLength, 1.0f, 0.90f, 0.20f, finalAlpha);
+                drawBevelRing(matrix, buffer, capRadius * 1.45f, currentLength, 1.0f, 0.98f, 0.62f, finalAlpha * 0.8f);
             }
 
             // 3. Golden Dragon Bands / Helical Coils wrapped along pole
@@ -188,41 +189,28 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
                 }
             }
 
-            // 4. Supersonic Mach Shock Cones (Sliding along pole during thrust)
-            if (extendProgress > 0.3f) {
+            // Mach cones slide the length of the poke and thin out as they go.
+            if (currentLength > 1.6f) {
                 int shockCount = 3;
                 for (int s = 0; s < shockCount; s++) {
                     float shockProgress = ((age * 0.45f) + (s / (float) shockCount)) % 1.0f;
-                    float shockZ = shockProgress * currentLength;
-                    if (shockZ > 0.5f && shockZ < currentLength - 0.5f) {
-                        float shockRadius = 0.65f * (1.0f - (shockZ / currentLength) * 0.3f) * fpScale;
-                        float coneLen = 0.75f * fpScale;
-                        float shockAlpha = (1.0f - shockProgress) * 0.65f * finalAlpha;
-
+                    float shockEase = shockProgress * shockProgress * (3.0f - 2.0f * shockProgress);
+                    float shockZ = 0.7f + shockEase * (currentLength - 1.4f);
+                    if (shockZ > 0.8f && shockZ < currentLength - 0.35f) {
+                        float shockRadius = 0.52f * (1.0f - shockEase * 0.4f) * fpScale;
+                        float coneLen = 0.68f * fpScale;
+                        float shockAlpha = (float) Math.sin(shockProgress * (float) Math.PI) * 0.7f * finalAlpha;
                         drawMachCone(matrix, buffer, shockZ, shockZ - coneLen, shockRadius,
                             1.0f, 0.92f, 0.50f, shockAlpha);
                     }
                 }
             }
 
-            // 5. Leading-Edge Thrust Starburst Corona
+            // Gold strike glint on the tip. The impact entity is the hit itself.
             if (currentLength > 1.0f) {
                 float tipZ = currentLength;
                 float starR = 0.55f * (1.0f + 0.15f * (float) Math.sin(age * 3.0f)) * fpScale;
                 drawStarburst(matrix, buffer, tipZ, starR, 1.0f, 0.95f, 0.4f, 0.90f * finalAlpha);
-            }
-        });
-
-        // Additive glow halo (T1): a soft crimson aura sheath around the shaft
-        // and a bloomed tip star, so the pole reads as charged energy.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float shaftRadius = 0.13f * fpScale;
-            draw12SidedShaft(matrix, buffer, shaftRadius * 1.9f, Math.max(baseZStart, 0.3f), currentLength - 0.3f,
-                0.90f, 0.15f, 0.05f, 0.16f * finalAlpha);
-            if (currentLength > 1.0f) {
-                float starR = 0.55f * (1.0f + 0.15f * (float) Math.sin(age * 3.0f)) * fpScale;
-                drawStarburst(matrix, buffer, currentLength, starR * 1.5f, 1.0f, 0.85f, 0.30f, 0.25f * finalAlpha);
             }
         });
 
@@ -312,13 +300,33 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             float x = (float) Math.cos(ang) * radius;
             float y = (float) Math.sin(ang) * radius;
 
-            drawQuad(matrix, buffer,
-                -x * 0.15f, -y * 0.15f, z,
-                x * 0.15f, y * 0.15f, z,
-                x, y, z + 0.05f,
-                0, 0, z + 0.12f,
-                r, g, b, a
-            );
+            float px = (float) -Math.sin(ang);
+            float py = (float) Math.cos(ang);
+            float reach = 1.0f;
+            for (int s = 0; s < 4; s++) {
+                float u1 = s / 4.0f;
+                float u2 = (s + 1) / 4.0f;
+                float bow1 = (float) Math.sin(u1 * Math.PI);
+                float bow2 = (float) Math.sin(u2 * Math.PI);
+                float w1 = radius * 0.11f * (1.0f - u1) * (0.4f + bow1);
+                float w2 = radius * 0.11f * (1.0f - u2) * (0.4f + bow2);
+                float x1 = x * u1;
+                float y1 = y * u1;
+                float x2 = x * u2;
+                float y2 = y * u2;
+                drawQuad(matrix, buffer,
+                    x1 - px * w1, y1 - py * w1, z,
+                    x1 + px * w1, y1 + py * w1, z,
+                    x2 + px * w2, y2 + py * w2, z + 0.04f * u2,
+                    x2 - px * w2, y2 - py * w2, z + 0.04f * u1,
+                    r * 0.7f, g * 0.7f, b * 0.55f, a * (0.25f + 0.75f * (1.0f - u1)));
+                drawQuad(matrix, buffer,
+                    x1 - px * w1 * 0.28f, y1 - py * w1 * 0.28f, z + 0.01f,
+                    x1 + px * w1 * 0.28f, y1 + py * w1 * 0.28f, z + 0.01f,
+                    x2 + px * w2 * 0.28f, y2 + py * w2 * 0.28f, z + 0.05f,
+                    x2 - px * w2 * 0.28f, y2 - py * w2 * 0.28f, z + 0.05f,
+                    1.0f, 0.98f, 0.85f, a * (0.3f + 0.7f * u2) * reach);
+            }
         }
     }
 

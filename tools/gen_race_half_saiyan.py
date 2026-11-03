@@ -7,7 +7,7 @@ in the bbmodel only; the runtime tail is the segmented TrailingTailLayer.
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint, skin_lid
 
 SKIN_V = 214; HAIR_V = 210
 PURPLE = (92, 62, 172); PURPLE_D = (60, 40, 122); PANTS = (80, 54, 152)
@@ -103,23 +103,27 @@ for i in range(len(pts) - 1):
            [a[0] - w / 2, a[1], a[2] - w / 2], [a[0] + w / 2, a[1] + L + 0.3, a[2] + w / 2], list(a), (ang, 0, 0), export=False)
 
 # ------------------------------------------------------------------ painting
-def paint_face(i, j, W, H):
-    """16x16 Gohan face: steep angry brows, tall eyes. Row 0 is the top of the head front."""
+def paint_face(i, j, W, H, closed=False):
+    """16x16 Gohan face: steep angry brows, tall three-row eyes. Row 0 is the top of the head front."""
     sx = i - W // 2
     k = SKIN_V
     for side in (-1, 1):
-        ex = side * 3
         a = sx if side > 0 else -sx - 1
         if 1 <= a <= 6:
             by = 8 - (1 if a >= 3 else 0) - (1 if a >= 5 else 0)   # steeper brow slope than Goku
             if j == by or (j == by + 1 and a <= 2): return (110, 110, 110), 'G'
             if j == 9 and 2 <= a <= 6: return (24, 20, 20), None
             if j in (10, 11, 12):
+                # Three-row eye. The middle row becomes the shut line; the other two are the lid.
+                if closed:
+                    if j == 11:
+                        return eye_tint(140 if a in (2, 6) else 210)
+                    return skin_lid(k)
                 if a == 6: return (24, 20, 20), None
                 if a == 2 and j <= 11: return (24, 20, 20), None
                 if a == 2: return (k * 0.75,) * 3, 'R'
-                if a == 3: return (20, 20, 24), None
-                if a == 4: return (90, 90, 90), 'B'
+                if a == 3: return eye_tint(80)
+                if a == 4: return eye_tint(235)
                 return (246, 246, 246), None
             if j == 13 and 3 <= a <= 5: return (k * 0.86,) * 3, 'R'
     if j == 14 and sx in (-1, 0): return (k * 0.8,) * 3, 'R'
@@ -188,7 +192,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
             if fn == 'north' and 0.3 < t < 0.42 and i % 2 == 0: v *= 0.8
             if fn == 'down' or t > 0.85: v *= 0.86
         if mt == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if mt == 'head' and fn == 'down': v *= 0.75
         if edge and mt != 'head': v *= 0.88

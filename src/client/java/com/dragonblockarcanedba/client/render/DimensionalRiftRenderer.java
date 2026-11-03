@@ -56,8 +56,17 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         float maxLife = (float) DimensionalRiftEntity.MAX_LIFETIME;
-        float progress = Math.min(1.0f, state.age / maxLife);
-        float fade = state.isCollapsing ? Math.max(0.0f, (maxLife - state.age) / 10.0f) : Math.min(1.0f, state.age / 5.0f);
+        float lifeT = Math.min(1.0f, state.age / maxLife);
+        float pull = lifeT * lifeT * (3.0f - 2.0f * lifeT);
+        if (state.isCollapsing) {
+            pull = Math.min(1.0f, pull + 0.40f);
+        }
+        final float pullIn = pull;
+        float fadeInRaw = Math.min(1.0f, state.age / 6.0f);
+        float fadeInEased = fadeInRaw * fadeInRaw * (3.0f - 2.0f * fadeInRaw);
+        float collapseRaw = Math.max(0.0f, Math.min(1.0f, (maxLife - state.age) / 10.0f));
+        float collapseEased = collapseRaw * collapseRaw * (3.0f - 2.0f * collapseRaw);
+        final float fade = state.isCollapsing ? collapseEased : fadeInEased;
         float radius = state.radius;
 
         float rot = state.age * (state.isCollapsing ? 25.0f : 8.0f);
@@ -77,6 +86,10 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
                 0.05f, 0.0f, 0.12f, 0.0f,
                 0.60f, 0.0f, 0.90f, 0.90f * fade,
                 1.0f, 0.05f, 0.80f, 0.95f * fade
+            );
+            // Thin bright lip on the outer ring, so the rift edge cuts instead of sitting flat.
+            drawRotatingFlatRing(matrix, buffer, rot * 0.55f, radius * 1.04f, radius * 0.94f, 48,
+                1.0f, 0.72f, 0.95f, 0.5f * fade
             );
 
             // Middle Accretion Shockwave (Counter-rotating at 65% radius)
@@ -104,7 +117,8 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
 
             // 3. Orbital Gravitational Void Spikes / Soul Shards (18 3D crystalline spikes orbiting)
             int shardCount = 18;
-            float shardOrbitRadius = radius * 0.80f;
+            // The ring eases into the hole over the rift's life.
+            float shardOrbitRadius = radius * (0.90f - 0.58f * pullIn);
             float shardHeight = 1.4f * pulse;
 
             for (int i = 0; i < shardCount; i++) {
@@ -133,23 +147,12 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
                 );
             }
 
-            // 4. Central Singularity Black Hole Core (Pulsating 3D nested polyhedrons)
-            float coreSize = Math.max(0.6f, 1.2f * pulse);
+            // 4. Black hole: dark body, a thin bright horizon, and a small white heart.
+            float coreSize = Math.max(0.55f, 1.15f * pulse) * (1.0f - pullIn * 0.22f);
             drawSingularityOctahedron(matrix, buffer, coreSize, 0.02f, 0.0f, 0.05f, 0.98f * fade);
-            drawSingularityOctahedron(matrix, buffer, coreSize * 0.55f, 0.95f, 0.90f, 1.0f, 1.0f * fade);
-        });
-
-        // Additive glow halo (redesign T1): the white singularity heart and
-        // the magenta accretion ring bloom so the rift glows against the void.
-        float haloCore = Math.max(0.6f, 1.2f * pulse) * 0.85f;
-        float haloMidRadius = radius * 0.65f;
-        float haloMidWidth = Math.min(1.6f, haloMidRadius * 0.28f);
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawSingularityOctahedron(matrix, buffer, haloCore, 0.95f, 0.90f, 1.0f, 0.35f * fade);
-            drawRotatingFlatRing(matrix, buffer, -rot * 1.4f, haloMidRadius, haloMidRadius - haloMidWidth, 32,
-                0.85f, 0.05f, 0.95f, 0.16f * fade
-            );
+            drawRotatingFlatRing(matrix, buffer, rot * 2.2f, coreSize * 1.35f, coreSize * 1.12f, 20,
+                0.85f, 0.90f, 1.0f, 0.75f * fade);
+            drawSingularityOctahedron(matrix, buffer, coreSize * 0.28f, 0.95f, 0.90f, 1.0f, 1.0f * fade);
         });
 
         poseStack.popPose();
@@ -219,22 +222,45 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
         float cos = (float) Math.cos(rad);
         float sin = (float) Math.sin(rad);
 
-        float x1 = -halfWidth * cos;
-        float z1 = -halfWidth * sin;
-        float x2 = halfWidth * cos;
-        float z2 = halfWidth * sin;
+        // A vertical lens: wide through the middle, pinched at the ground and the crown.
+        int segments = 12;
+        for (int i = 0; i < segments; i++) {
+            float t1 = i / (float) segments;
+            float t2 = (i + 1) / (float) segments;
+            float y1 = 0.1f + t1 * height;
+            float y2 = 0.1f + t2 * height;
+            float w1 = (float) Math.sin(t1 * Math.PI) * halfWidth;
+            float w2 = (float) Math.sin(t2 * Math.PI) * halfWidth;
+            float edgeFade1 = 0.35f + 0.65f * (float) Math.sin(t1 * Math.PI);
+            float edgeFade2 = 0.35f + 0.65f * (float) Math.sin(t2 * Math.PI);
 
-        // Bottom to Top diamond tear
-        consumer.addVertex(matrix, x1, 0.1f, z1).setColor(rEdge, gEdge, bEdge, aEdge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, 0.1f, z2).setColor(rEdge, gEdge, bEdge, aEdge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, 0, height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, 0, height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            float lx1 = -w1 * cos;
+            float lz1 = -w1 * sin;
+            float rx1 = w1 * cos;
+            float rz1 = w1 * sin;
+            float lx2 = -w2 * cos;
+            float lz2 = -w2 * sin;
+            float rx2 = w2 * cos;
+            float rz2 = w2 * sin;
 
-        // Reverse face
-        consumer.addVertex(matrix, 0, height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, 0, height, 0).setColor(rCore, gCore, bCore, aCore).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, 0.1f, z2).setColor(rEdge, gEdge, bEdge, aEdge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, 0.1f, z1).setColor(rEdge, gEdge, bEdge, aEdge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, lx1, y1, lz1).setColor(rEdge, gEdge, bEdge, aEdge * edgeFade1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, 0, y1, 0).setColor(rCore, gCore, bCore, aCore * edgeFade1).setUv(0.5f, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, 0, y2, 0).setColor(rCore, gCore, bCore, aCore * edgeFade2).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, lx2, y2, lz2).setColor(rEdge, gEdge, bEdge, aEdge * edgeFade2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, lx2, y2, lz2).setColor(rEdge, gEdge, bEdge, aEdge * edgeFade2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, 0, y2, 0).setColor(rCore, gCore, bCore, aCore * edgeFade2).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, 0, y1, 0).setColor(rCore, gCore, bCore, aCore * edgeFade1).setUv(0.5f, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, lx1, y1, lz1).setColor(rEdge, gEdge, bEdge, aEdge * edgeFade1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+
+            consumer.addVertex(matrix, 0, y1, 0).setColor(rCore, gCore, bCore, aCore * edgeFade1).setUv(0.5f, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, rx1, y1, rz1).setColor(rEdge, gEdge, bEdge, aEdge * edgeFade1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, rx2, y2, rz2).setColor(rEdge, gEdge, bEdge, aEdge * edgeFade2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, 0, y2, 0).setColor(rCore, gCore, bCore, aCore * edgeFade2).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, 0, y2, 0).setColor(rCore, gCore, bCore, aCore * edgeFade2).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, rx2, y2, rz2).setColor(rEdge, gEdge, bEdge, aEdge * edgeFade2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, rx1, y1, rz1).setColor(rEdge, gEdge, bEdge, aEdge * edgeFade1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, 0, y1, 0).setColor(rCore, gCore, bCore, aCore * edgeFade1).setUv(0.5f, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        }
     }
 
     private static void draw3DShardPyramid(Matrix4f matrix, VertexConsumer consumer,
@@ -243,17 +269,56 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
                                           float tipX, float tipY, float tipZ,
                                           float rBase, float gBase, float bBase, float aBase,
                                           float rTip, float gTip, float bTip, float aTip) {
-        // Front Face
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Back Face
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        float mx = (x1 + x2) * 0.5f;
+        float my = (y1 + y2) * 0.5f;
+        float mz = (z1 + z2) * 0.5f;
+        float ex = x2 - mx;
+        float ey = y2 - my;
+        float ez = z2 - mz;
+        float ax = tipX - mx;
+        float ay = tipY - my;
+        float az = tipZ - mz;
+        float px = ey * az - ez * ay;
+        float py = ez * ax - ex * az;
+        float pz = ex * ay - ey * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        float elen = (float) Math.sqrt(ex * ex + ey * ey + ez * ez);
+        if (plen < 1.0e-4f) {
+            px = 0.0f;
+            py = Math.max(elen, 0.05f);
+            pz = 0.0f;
+            plen = py;
+        }
+        float thick = Math.max(elen, 0.04f) * 0.85f;
+        px = px / plen * thick;
+        py = py / plen * thick;
+        pz = pz / plen * thick;
+        float[] bx = { mx - ex, mx + px, mx + ex, mx - px };
+        float[] by = { my - ey, my + py, my + ey, my - py };
+        float[] bz = { mz - ez, mz + pz, mz + ez, mz - pz };
+        for (int i = 0; i < 4; i++) {
+            int n = (i + 1) % 4;
+            consumer.addVertex(matrix, bx[i], by[i], bz[i]).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, bx[n], by[n], bz[n]).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            float ix = mx + (bx[i] - mx) * 0.32f + ax * 0.18f;
+            float iy = my + (by[i] - my) * 0.32f + ay * 0.18f;
+            float iz = mz + (bz[i] - mz) * 0.32f + az * 0.18f;
+            float jx = mx + (bx[n] - mx) * 0.32f + ax * 0.18f;
+            float jy = my + (by[n] - my) * 0.32f + ay * 0.18f;
+            float jz = mz + (bz[n] - mz) * 0.32f + az * 0.18f;
+            consumer.addVertex(matrix, ix, iy, iz).setColor(0.9f, 0.75f, 1.0f, aTip).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, jx, jy, jz).setColor(0.9f, 0.75f, 1.0f, aTip).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, mx + ax * 0.84f, my + ay * 0.84f, mz + az * 0.84f).setColor(1.0f, 0.95f, 1.0f, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, mx + ax * 0.84f, my + ay * 0.84f, mz + az * 0.84f).setColor(1.0f, 0.95f, 1.0f, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        }
+        float alen = (float) Math.sqrt(ax * ax + ay * ay + az * az);
+        float back = alen < 1.0e-4f ? 0.0f : 0.4f / alen;
+        consumer.addVertex(matrix, bx[0], by[0], bz[0]).setColor(rBase, gBase, bBase, aBase * 0.35f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, bx[2], by[2], bz[2]).setColor(rBase, gBase, bBase, aBase * 0.35f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, mx - ax * back, my - ay * back, mz - az * back).setColor(rBase, gBase, bBase, 0.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, mx - ax * back, my - ay * back, mz - az * back).setColor(rBase, gBase, bBase, 0.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawSingularityOctahedron(Matrix4f matrix, VertexConsumer consumer, float s, float r, float g, float b, float a) {

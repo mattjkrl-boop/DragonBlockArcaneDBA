@@ -69,7 +69,9 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
         float tunnelHeight = 3.2f + (charge * 2.4f);
         // Spawn fade-in over the first 5 ticks so the channel column does not
         // pop in at partial alpha the tick the channel starts.
-        float baseAlpha = ((state.isFirstPersonOwner ? 0.35f : 0.55f) + (charge * 0.35f)) * Math.min(1.0f, age / 5.0f);
+        float intro = Math.min(1.0f, age / 5.0f);
+        intro = intro * intro * (3.0f - 2.0f * intro);
+        float baseAlpha = ((state.isFirstPersonOwner ? 0.35f : 0.55f) + (charge * 0.35f)) * intro;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -187,15 +189,6 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
                     }
                 }
             }
-        });
-
-        // T6 plus T1: a soft additive ground glow disc under the caster so the
-        // channel column sits in the scene instead of floating over it.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, tunnelRadius * 0.95f, 0.0f, 32, age * 10.0f,
-                0.0f, 0.45f, 0.50f, baseAlpha * 0.30f);
         });
 
         super.submit(state, poseStack, collector, cameraState);

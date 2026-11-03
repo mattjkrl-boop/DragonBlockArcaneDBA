@@ -7,7 +7,7 @@ pants, navy boots. Compact slim build.
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint, skin_lid
 
 SKIN_V = 206; HAIR_V = 216
 NAVY = (38, 40, 72); NAVY_D = (28, 30, 56); WHITE = (238, 240, 246); WHITE_D = (206, 210, 222)
@@ -21,18 +21,21 @@ for side, bone in ((1, 'right_leg'), (-1, 'left_leg')):
     x = X(0.1, 4.6)
     m.cube('suit_' + bone, bone, 'suit', [x[0], 3.6, -2.4], [x[1], 12, 2.4])
     xb = X(0.0, 5.05)
-    m.cube('pants_' + bone, bone, 'pants', [xb[0], 4.6, -2.8], [xb[1], 11.6, 2.8])
+    m.cube('pants_' + bone, bone, 'pants', [xb[0], 4.6, -2.8], [xb[1], 12.0, 2.8])
     xc = X(0.15, 4.6)
     m.cube('pants_cuff_' + bone, bone, 'pants', [xc[0], 3.4, -2.65], [xc[1], 4.8, 2.55])
     xo = X(0.3, 4.4)
     m.cube('boot_' + bone, bone, 'boot', [xo[0], 0, -2.5], [xo[1], 4.4, 2.3])
     m.cube('boot_toe_' + bone, bone, 'boot', [xo[0], 0, -3.55], [xo[1], 1.9, -2.5])
-# navy front wedge between the legs, below the armor
-m.cube('hip_wedge', 'body', 'suit', [-1.8, 8.4, -3.05], [1.8, 12.4, -2.45])
+# Navy wedge between the legs. It hangs on the legs so the torso bounds stay
+# at the waist; a body cube down to y=8.4 was scaling the gi short of the pants.
+m.cube('hip_wedge_r', 'right_leg', 'suit', [0.0, 8.4, -3.05], [1.8, 12.0, -2.45])
+m.cube('hip_wedge_l', 'left_leg', 'suit', [-1.8, 8.4, -3.05], [0.0, 12.0, -2.45])
+m.cube('hip_wedge_tuck', 'body', 'suit', [-1.8, 12.0, -3.05], [1.8, 12.4, -2.45])
 
 # Torso: navy undersuit, white chest armor with gold trim
 m.cube('torso', 'body', 'suit', [-4.6, 12, -2.85], [4.6, 24, 2.85])
-m.cube('armor', 'body', 'armor', [-5.25, 15.2, -3.4], [5.25, 24.25, 3.25])
+m.cube('armor', 'body', 'armor', [-5.25, 15.2, -3.4], [5.25, 24.0, 3.25])
 m.cube('armor_waist', 'body', 'armor', [-5.0, 13.6, -3.25], [5.0, 15.6, 3.1])
 
 # Arms: navy sleeves, gold shoulder guards, gold wrist guards, pale hands
@@ -57,8 +60,8 @@ m.cube('hair_dip', hb, 'hair', [-1.3, 31.8, -4.6], [1.3, 33.6, -3.85])
 m.mirror('hair_wisp', (hb, hb), 'hair', [3.9, 26.6, -3.1], [4.45, 28.1, -1.6])
 
 # ------------------------------------------------------------------ painting
-def paint_face(i, j, W, H):
-    """Sly Tuffle face: furrowed brow lines, narrow red eye slits, smirk."""
+def paint_face(i, j, W, H, closed=False):
+    """Sly Tuffle face: furrowed brow lines, narrow eye slits, smirk."""
     sx = i - W // 2
     k = SKIN_V
     for side in (-1, 1):
@@ -68,8 +71,12 @@ def paint_face(i, j, W, H):
             if j == 8 and a <= 3: return (k * 0.7,) * 3, 'R'
             if j == 10 and 2 <= a <= 5: return (26, 20, 22), None         # heavy upper lid
             if j == 11:
+                # The slit is already one row. Closed, it is a darker eyelid line of the same width.
+                if closed:
+                    if a in (3, 4): return eye_tint(200)
+                    if a in (2, 5): return skin_lid(k)
                 if a in (2, 5): return (26, 20, 22), None
-                if a in (3, 4): return (206, 34, 34), None                # red iris slit
+                if a in (3, 4): return eye_tint(235)
             if j == 12 and 3 <= a <= 4: return (k * 0.82,) * 3, 'R'
     if j == 13 and sx == -1: return (k * 0.85,) * 3, 'R'                  # nose
     if j == 14 and 0 <= sx <= 2: return (k * 0.5,) * 3, 'R'               # smirk
@@ -124,7 +131,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
             if fn == 'north' and 0.3 < t < 0.42 and i % 2 == 0: v *= 0.82
             if fn == 'down' or t > 0.85: v *= 0.87
         if mt == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if mt == 'head' and fn == 'down': v *= 0.78
         if edge and mt != 'head': v *= 0.89

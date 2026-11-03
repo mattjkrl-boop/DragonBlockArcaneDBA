@@ -285,6 +285,7 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
         RenderType renderType = RenderTypes.entitySolid(WHITE_TEXTURE);
 
         final int renderLight = Math.max(packedLight, 0x00D000D0);
+        final int tailColor = baseTailColor;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             PoseStack stack = new PoseStack();
@@ -396,7 +397,7 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                 }
 
                 // Subtle shading / tip coloring per segment
-                int segmentColor = baseTailColor;
+                int segmentColor = tailColor;
                 if (race.contains("bio_android") || race.contains("cell")) {
                     if (i == segmentCount - 1) {
                         segmentColor = 0xFFFF7700; // Iconic Cell Orange stinger cone
@@ -429,7 +430,7 @@ public class TrailingTailLayer extends RenderLayer<AvatarRenderState, EntityMode
                         segmentColor = scaleRgb(segmentColor, 0.82F);
                     }
                     if (i == segmentCount - 1) {
-                        segmentColor = scaleRgb(baseTailColor, 0.78F); // darker tuft tip in the tail's own fur
+                        segmentColor = scaleRgb(tailColor, 0.78F); // darker tuft tip in the tail's own fur
                     }
                 }
 

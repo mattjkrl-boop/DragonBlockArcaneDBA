@@ -100,10 +100,10 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                 float r1 = radius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
                 float r2 = radius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
 
-                float domeAlpha = 0.35f + (latProgress1 * 0.35f);
-                float red = 0.10f + (latProgress1 * 0.50f);
-                float green = 0.01f;
-                float blue = 0.25f + (latProgress1 * 0.70f);
+                float domeAlpha = 0.28f + (latProgress1 * 0.40f);
+                float red = 0.02f + (latProgress1 * 0.22f);
+                float green = 0.0f;
+                float blue = 0.04f + (latProgress1 * 0.32f);
 
                 for (int lon = 0; lon < domeLongitudes; lon++) {
                     double angleOffset = (age * (3.5f + lat * 1.2f)) * (Math.PI / 180.0);
@@ -234,6 +234,9 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                 }
             }
 
+            drawRotatingRing(matrix, buffer, 0, 1.05f, 0, radius * 0.98f, radius * 0.93f, 48, age * 5.0f, 0.72f, 0.05f, 0.95f, 0.50f);
+            drawRotatingRing(matrix, buffer, 0, 0.55f, 0, radius * 0.86f, radius * 0.78f, 40, age * 5.0f - 20.0f, 0.35f, 0.02f, 0.70f, 0.20f);
+
             // 5. Atmospheric 3D Void Lightning Discharges
             Random rng = new Random(state.seed + ((long) (age / 3.0f) * 1000));
             int arcCount = 4;
@@ -251,8 +254,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                     float nxtY = curY - (1.2f + rng.nextFloat() * 1.6f);
                     float nxtZ = curZ + (rng.nextFloat() - 0.5f) * 3.2f;
 
-                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.18f, 0.65f, 0.05f, 0.95f, 0.90f);
-                    renderBeam(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.06f, 0.95f, 0.25f, 0.85f, 1.0f);
+                    drawBoltRibbon(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.16f, 0.65f, 0.05f, 0.95f, 0.90f);
 
                     curX = nxtX; curY = nxtY; curZ = nxtZ;
                 }
@@ -336,6 +338,51 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
         consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+    }
+
+    /** A bowed arc kink with a sheath, a pale core, and a wake. The dome is unchanged. */
+    private static void drawBoltRibbon(Matrix4f matrix, VertexConsumer consumer,
+                                       float x1, float y1, float z1, float x2, float y2, float z2,
+                                       float radius, float r, float g, float b, float a) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001f || a < 0.02f) {
+            return;
+        }
+        float px = -dz / len;
+        float pz = dx / len;
+        float bow = Math.min(radius * 2.6f, len * 0.32f);
+        float mx = (x1 + x2) * 0.5f + px * bow;
+        float my = (y1 + y2) * 0.5f + bow * 0.35f;
+        float mz = (z1 + z2) * 0.5f + pz * bow;
+        boltHalf(matrix, consumer, x1, y1, z1, mx, my, mz, radius, radius * 0.6f, r, g, b, a, a * 0.85f);
+        boltHalf(matrix, consumer, mx, my, mz, x2, y2, z2, radius * 0.6f, radius * 0.25f, r, g, b, a * 0.85f, a * 0.5f);
+        boltHalf(matrix, consumer, x1, y1, z1, mx, my, mz, radius * 0.26f, radius * 0.14f, 0.95f, 0.75f, 1.0f, a, a);
+        boltHalf(matrix, consumer, mx, my, mz, x2, y2, z2, radius * 0.14f, radius * 0.05f, 0.95f, 0.75f, 1.0f, a, a * 0.6f);
+        boltHalf(matrix, consumer, mx, my, mz, mx - px * bow * 1.4f, my - bow * 0.2f, mz - pz * bow * 1.4f, radius * 0.4f, 0.01f, r, g, b, a * 0.35f, 0.0f);
+    }
+
+    private static void boltHalf(Matrix4f matrix, VertexConsumer consumer,
+                                 float x1, float y1, float z1, float x2, float y2, float z2,
+                                 float w1, float w2, float r, float g, float b, float a1, float a2) {
+        float dx = x2 - x1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + (y2 - y1) * (y2 - y1) + dz * dz);
+        if (len < 0.001f) {
+            return;
+        }
+        float nx = -dz / len;
+        float nz = dx / len;
+        consumer.addVertex(matrix, x1 - nx * w1, y1, z1 - nz * w1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1 + nx * w1, y1, z1 + nz * w1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 + nx * w2, y2, z2 + nz * w2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2 - nx * w2, y2, z2 - nz * w2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x1, y1 - w1, z1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, x1, y1 + w1, z1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, x2, y2 + w2, z2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
+        consumer.addVertex(matrix, x2, y2 - w2, z2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
     }
 
     private static void renderBeam(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float radius, float r, float g, float b, float a) {

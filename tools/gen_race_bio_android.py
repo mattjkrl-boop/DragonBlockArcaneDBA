@@ -9,7 +9,7 @@ segmented stinger tail is procedural (TrailingTailLayer), not part of the OBJ.
 """
 import math, zlib, sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from dba_model_lib import RaceModel, clamp, mul, h01
+from dba_model_lib import RaceModel, clamp, mul, h01, eye_tint
 
 FACE_V = 230; SHELL_V = 178
 BLACK = (26, 28, 32); BLACK_D = (17, 19, 24); WING = (20, 22, 29)
@@ -48,10 +48,10 @@ for side, bone in ((1, 'right_leg'), (-1, 'left_leg')):
 
 # Torso: black chest plate, green abdomen, orange hip sections, back wings
 m.cube('chest', 'body', 'plate', [-5.4, 17.4, -3.1], [5.4, 24, 3.1])
-m.cube('abdomen', 'body', 'shell', [-4.9, 12.6, -2.9], [4.9, 17.8, 2.9])
-m.mirror('hip', ('body', 'body'), 'hipmat', [0.35, 11.5, -3.25], [5.05, 13.7, -2.55])
-m.cube('groin', 'body', 'plate', [-1.7, 11.3, -3.2], [1.7, 13.5, -2.6])
-m.mirror('wing', ('body', 'body'), 'wing', [0.35, 13.0, 3.35], [5.0, 25.2, 3.95], [0.4, 19.0, 3.6], (0, -8, 5))
+m.cube('abdomen', 'body', 'shell', [-4.9, 12.0, -2.9], [4.9, 17.8, 2.9])
+m.mirror('hip', ('body', 'body'), 'hipmat', [0.35, 12.0, -3.25], [5.05, 13.7, -2.55])
+m.cube('groin', 'body', 'plate', [-1.7, 12.0, -3.2], [1.7, 13.5, -2.6])
+m.mirror('wing', ('body', 'body'), 'wing', [0.35, 13.0, 3.35], [5.0, 23.2, 3.95], [0.4, 19.0, 3.6], (0, -8, 5))
 
 # Arms: black shoulder pads, segmented green arms, white hands
 m.mirror('pad', ('right_arm', 'left_arm'), 'plate', [4.95, 21.5, -2.95], [10.05, 24.7, 2.95], [5.6, 22.0, 0], (0, 0, 7))
@@ -77,8 +77,8 @@ seg_chain('tailtip', 'tail', 'hipmat', [[0, 3.2, 4.9], [0, 4.2, 3.4], [0, 5.4, 2
 # ------------------------------------------------------------------ painting
 FACE = (226, 240, 214)   # pale, unmasked: Cell's face stays pale on any skin tint
 
-def paint_face(i, j, W, H):
-    """Cell face: purple patches, narrow purple eyes, cheek lines, gold chin."""
+def paint_face(i, j, W, H, closed=False):
+    """Cell face: purple patches, narrow eyes, cheek lines, gold chin."""
     sx = i - W // 2
     k = FACE_V
     for side in (-1, 1):
@@ -89,9 +89,14 @@ def paint_face(i, j, W, H):
                 base = PURPLE if (j + a) % 3 else PURPLE_D
                 if j == 9 and 2 <= a <= 6: return (22, 18, 24), None      # upper lid line
                 if j == 10:
+                    # The eyelid is the purple patch. The shut line stays eye-tinted.
+                    if closed:
+                        if a in (3, 4, 5): return eye_tint(200)
+                        return (22, 18, 24), None
                     if a in (2, 6): return (22, 18, 24), None
-                    if a == 4: return (196, 130, 255), None               # purple iris
-                    return (242, 242, 242), None                          # sclera
+                    if a == 4: return eye_tint(235)
+                    if a in (3, 5): return eye_tint(210)
+                    return (242, 242, 242), None
                 if j == 11 and a in (2, 6): return (22, 18, 24), None
                 return base, None                                         # purple patch
             if 12 <= j <= 15 and a == 3: return (20, 16, 20), None        # cheek line
@@ -139,7 +144,7 @@ def paint(model, c, fn, s, t, W, H, i, j, P):
     if mt == 'face':
         shade = 0.97 + 0.05 * n
         if c['bone'] == 'head' and fn == 'north':
-            r = paint_face(i, j, W, H)
+            r = paint_face(i, j, W, H, model.blink)
             if r: return r
         if fn == 'down': shade *= 0.8
         if c['bone'] != 'head' and fn == 'north' and 0.3 < t < 0.42 and i % 2 == 0: shade *= 0.85   # finger lines

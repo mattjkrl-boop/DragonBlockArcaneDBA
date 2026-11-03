@@ -86,11 +86,13 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         float maxLifetime = ErasureCannonBeamEntity.MAX_LIFETIME;
         float progress = Math.min(1.0f, age / maxLifetime);
 
-        // Rapid initial scale-in followed by steady beam and smooth alpha dissipation
-        float scaleIn = Math.min(1.0f, age / 2.0f);
-        float alpha = Math.max(0.0f, 1.0f - (float) Math.pow(progress, 1.8f));
+        float scaleInT = Math.min(1.0f, age / 3.0f);
+        float scaleIn = 1.0f - (1.0f - scaleInT) * (1.0f - scaleInT) * (1.0f - scaleInT);
+        float exitT = progress <= 0.58f ? 0.0f : Math.min(1.0f, (progress - 0.58f) / 0.42f);
+        float alpha = scaleIn * (1.0f - exitT * exitT * (3.0f - 2.0f * exitT));
 
-        float pulse = (1.0f + 0.06f * (float) Math.sin(age * 1.8f)) * scaleIn;
+        float pulse = (1.0f + 0.04f * (float) Math.sin(age * 1.4f)) * scaleIn;
+        float impactPulse = pulse * (1.12f - exitT * 0.50f);
         // Scaled down smaller in first person
         float baseRadius = (0.35f + charge * 0.45f) * pulse * (state.isFirstPersonOwner ? 0.50f : 1.0f);
 
@@ -111,91 +113,59 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // 1. Multi-Layered Continuous 3D Cylindrical Laser Core
-            // The 3-layer prism identity stays (white core, cyan shroud, hex
-            // sheath), but the tube is no longer uniform: drawFlowBeam runs
-            // traveling brightness bands down the length (T7) and tapers each
-            // layer toward the terminus, the sheath most of all.
-            // Layer A: Superdense White-Hot Inner Core Cylinder (16 sides)
-            float innerRadius = baseRadius * 0.30f;
-            drawFlowBeam(matrix, buffer, innerRadius, zStart, beamLength, 16, age * 6.0f, 1.0f, 1.0f, 1.0f, alpha * 0.98f, 0.15f, 0.0f, age);
+            // One cyan beam. The white rod is its core. A thin darker lip is the edge.
+            // Brightness runs from the muzzle to the terminus, then the impact closes.
+            drawFlowBeam(matrix, buffer, baseRadius * 0.28f, zStart, beamLength, 12, age * 4.0f, 1.0f, 1.0f, 1.0f, alpha, 0.08f, 0.0f, age);
+            drawFlowBeam(matrix, buffer, baseRadius * 0.72f, zStart, beamLength, 12, -age * 6.0f, 0.0f, 0.92f, 1.0f, alpha * 0.78f, 0.22f, 1.6f, age);
+            drawFlowBeam(matrix, buffer, baseRadius * 0.86f, zStart, beamLength, 12, -age * 6.0f, 0.0f, 0.55f, 0.85f, alpha * 0.35f, 0.35f, 1.6f, age);
 
-            // Layer B: Fluted Radiant Cyan Synchrotron Plasma Shroud (16 sides)
-            float midRadius = baseRadius * 0.65f;
-            drawFlowBeam(matrix, buffer, midRadius, zStart, beamLength, 16, -age * 10.0f, 0.0f, 0.95f, 1.0f, alpha * 0.75f, 0.30f, 2.1f, age);
-
-            // Layer C: Hexagonal Outer Synchrotron Containment Sheath (6 sides)
-            float outerRadius = baseRadius * 1.05f;
-            drawFlowBeam(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 4.0f, 0.05f, 0.70f, 1.0f, alpha * 0.35f, 0.45f, 4.2f, age);
-
-            // 2. Quad Helical Synchrotron Energy Drill Ribbons
-            int segments = Math.min((int) (beamLength * 3.5f), 128);
-            float spiralRadius = baseRadius * 1.25f;
-            float ribbonSize = 0.075f * pulse;
+            // Helical drill ribbons riding the tapered beam. They are the curve around the core, not a second tube.
+            int ribbonSegments = Math.min((int) (beamLength * 3.0f), 96);
+            float spiralRadius = baseRadius * 1.15f;
+            float ribbonSize = 0.045f * pulse;
             float spiralSpeed = age * 0.45f;
-
-            for (int h = 0; h < 4; h++) {
-                float phase = h * ((float) Math.PI * 0.5f);
-                boolean isWhite = (h % 2 == 1);
-                float rCol = isWhite ? 1.0f : 0.0f;
-                float gCol = isWhite ? 1.0f : 0.92f;
-                float bCol = isWhite ? 0.95f : 1.0f;
-                float aCol = (isWhite ? 0.85f : 0.70f) * alpha;
-
-                for (int i = 0; i < segments; i++) {
-                    float z1 = (i / (float) segments) * beamLength;
-                    float z2 = ((i + 1) / (float) segments) * beamLength;
-
-                    float p1 = z1 / beamLength;
-                    float p2 = z2 / beamLength;
-
-                    double a1 = (p1 * Math.PI * 10.0) + (spiralSpeed * (isWhite ? -1.0f : 1.0f)) + phase;
-                    double a2 = (p2 * Math.PI * 10.0) + (spiralSpeed * (isWhite ? -1.0f : 1.0f)) + phase;
-
-                    float x1 = (float) Math.cos(a1) * spiralRadius;
-                    float y1 = (float) Math.sin(a1) * spiralRadius;
-                    float x2 = (float) Math.cos(a2) * spiralRadius;
-                    float y2 = (float) Math.sin(a2) * spiralRadius;
-
-                    // Energy flow (T7): brightness bands travel down the ribbons
-                    // toward the terminus instead of a flat alpha per ribbon.
-                    float flowBand = 0.5f + 0.5f * (float) Math.sin(p1 * 18.0 - age * 3.0f + h * 1.7f);
-                    float segAlpha = aCol * (0.72f + 0.28f * flowBand);
-
-                    drawQuad(matrix, buffer,
-                        x1 - ribbonSize, y1 - ribbonSize, z1,
-                        x1 + ribbonSize, y1 + ribbonSize, z1,
-                        x2 + ribbonSize, y2 + ribbonSize, z2,
-                        x2 - ribbonSize, y2 - ribbonSize, z2,
-                        rCol, gCol, bCol, segAlpha
-                    );
+            if (ribbonSegments > 1 && beamLength > zStart) {
+                for (int h = 0; h < 4; h++) {
+                    float phase = h * ((float) Math.PI * 0.5f);
+                    boolean isWhite = (h % 2 == 1);
+                    float rCol = isWhite ? 1.0f : 0.0f;
+                    float gCol = isWhite ? 1.0f : 0.92f;
+                    float bCol = isWhite ? 0.95f : 1.0f;
+                    float aCol = (isWhite ? 0.80f : 0.62f) * alpha;
+                    for (int i = 0; i < ribbonSegments; i++) {
+                        float p1 = i / (float) ribbonSegments;
+                        float p2 = (i + 1) / (float) ribbonSegments;
+                        float z1 = zStart + p1 * (beamLength - zStart);
+                        float z2 = zStart + p2 * (beamLength - zStart);
+                        double a1 = (p1 * Math.PI * 10.0) + (spiralSpeed * (isWhite ? -1.0f : 1.0f)) + phase;
+                        double a2 = (p2 * Math.PI * 10.0) + (spiralSpeed * (isWhite ? -1.0f : 1.0f)) + phase;
+                        float taper1 = 1.0f - 0.28f * p1;
+                        float taper2 = 1.0f - 0.28f * p2;
+                        float x1 = (float) Math.cos(a1) * spiralRadius * taper1;
+                        float y1 = (float) Math.sin(a1) * spiralRadius * taper1;
+                        float x2 = (float) Math.cos(a2) * spiralRadius * taper2;
+                        float y2 = (float) Math.sin(a2) * spiralRadius * taper2;
+                        float flowBand = 0.5f + 0.5f * (float) Math.sin(p1 * 18.0 - age * 3.0f + h * 1.7f);
+                        float segAlpha = aCol * (0.55f + 0.45f * flowBand) * (1.0f - p1 * 0.35f);
+                        float w1 = ribbonSize * taper1;
+                        float w2 = ribbonSize * taper2;
+                        float px1 = (float) -Math.sin(a1) * w1;
+                        float py1 = (float) Math.cos(a1) * w1;
+                        float px2 = (float) -Math.sin(a2) * w2;
+                        float py2 = (float) Math.cos(a2) * w2;
+                        drawQuad(matrix, buffer,
+                            x1 - px1, y1 - py1, z1,
+                            x1 + px1, y1 + py1, z1,
+                            x2 + px2, y2 + py2, z2,
+                            x2 - px2, y2 - py2, z2,
+                            rCol, gCol, bCol, segAlpha
+                        );
+                    }
                 }
             }
 
-            // 3. Stationed Hexagonal Focusing Aperture Rings (along beam length)
-            int ringCount = Math.max(4, (int) (beamLength / 5.0f));
-            for (int k = 1; k <= ringCount; k++) {
-                float z = (k / (float) (ringCount + 1)) * beamLength;
-                float ringPhase = (float) Math.sin(age * 0.5f + k * 1.1f);
-                float ringR = (baseRadius * 1.35f + ringPhase * 0.08f);
-
-                drawPlaneRing(matrix, buffer, 0, 0, z, ringR, ringR * 0.82f, 24, age * (20.0f + k * 6.0f),
-                    0.0f, 0.95f, 1.0f, alpha * 0.80f);
-            }
-
-            // 4. Muzzle Supercharge Emitter Array (at Z=0)
             drawMuzzleEmitter(matrix, buffer, age, pulse, alpha);
-
-            // 5. Terminus Impact Singularity & Vaporization Dome (at Z=beamLength)
-            drawTerminusImpact(matrix, buffer, beamLength, age, pulse, alpha, charge);
-        });
-
-        // Additive glow halo (T1): a wide faint sheath around the whole beam
-        // with the same flow bands and terminus taper, so the beam blooms.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawFlowBeam(matrix, buffer, baseRadius * 1.45f, zStart, beamLength, 12, age * 4.0f,
-                0.10f, 0.75f, 1.0f, alpha * 0.15f, 0.45f, 1.0f, age);
+            drawTerminusImpact(matrix, buffer, beamLength, age, impactPulse, alpha, charge);
         });
 
         poseStack.popPose();
@@ -275,22 +245,20 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
     }
 
     private static void drawMuzzleEmitter(Matrix4f matrix, VertexConsumer consumer, float age, float pulse, float alpha) {
-        // Concentric rotating aperture muzzle seals
-        drawPlaneRing(matrix, consumer, 0, 0, 0.15f, 0.90f * pulse, 0.70f * pulse, 16, age * 35.0f, 0.0f, 0.90f, 1.0f, alpha * 0.90f);
-        drawPlaneRing(matrix, consumer, 0, 0, 0.22f, 0.65f * pulse, 0.45f * pulse, 12, -age * 55.0f, 1.0f, 1.0f, 1.0f, alpha * 0.95f);
+        drawPlaneRing(matrix, consumer, 0, 0, 0.16f, 0.72f * pulse, 0.52f * pulse, 16, age * 24.0f, 0.85f, 0.98f, 1.0f, alpha * 0.95f);
 
-        // 4 Inward compression blades
         for (int s = 0; s < 4; s++) {
             double sAngle = (s / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 22.0f);
-            float sx = (float) Math.cos(sAngle) * 1.10f * pulse;
-            float sy = (float) Math.sin(sAngle) * 1.10f * pulse;
-
-            drawQuad(matrix, consumer,
-                sx - 0.08f, sy - 0.08f, 0.05f,
-                sx + 0.08f, sy + 0.08f, 0.05f,
-                0, 0, 0.60f,
-                0, 0, 0.60f,
-                1.0f, 1.0f, 1.0f, alpha * 0.95f
+            float ox = (float) Math.cos(sAngle);
+            float oy = (float) Math.sin(sAngle);
+            drawLash(matrix, consumer,
+                ox * 1.05f * pulse, oy * 1.05f * pulse, 0.02f,
+                ox * 0.55f * pulse, oy * 0.55f * pulse, 0.24f,
+                ox * 0.06f * pulse, oy * 0.06f * pulse, 0.58f,
+                0.055f * pulse, 5,
+                0.15f, 0.75f, 1.0f,
+                1.0f, 1.0f, 1.0f,
+                alpha
             );
         }
     }
@@ -317,31 +285,101 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
                 0.0f, 0.95f, 1.0f, alpha * 0.85f
             );
 
-            // Center dense white vaporization flash point
+            float ux1 = (float) Math.cos(a1);
+            float uy1 = (float) Math.sin(a1);
+            float ux2 = (float) Math.cos(a2);
+            float uy2 = (float) Math.sin(a2);
+            float coreA = domeRadius * 0.22f;
+            float coreB = domeRadius * 0.04f;
             drawQuad(matrix, consumer,
-                x1 * 0.35f, y1 * 0.35f, beamLength - 0.15f,
-                x2 * 0.35f, y2 * 0.35f, beamLength - 0.15f,
-                x2 * 0.35f, y2 * 0.35f, beamLength + 0.15f,
-                x1 * 0.35f, y1 * 0.35f, beamLength + 0.15f,
-                1.0f, 1.0f, 1.0f, alpha * 0.98f
+                ux1 * coreA, uy1 * coreA, beamLength - 0.08f,
+                ux2 * coreA, uy2 * coreA, beamLength - 0.08f,
+                ux2 * coreB, uy2 * coreB, beamLength + 0.28f,
+                ux1 * coreB, uy1 * coreB, beamLength + 0.28f,
+                1.0f, 1.0f, 1.0f, alpha * 0.75f
             );
         }
 
-        // 6 Radiating impact vaporization splash fins
         int finCount = 6;
         for (int f = 0; f < finCount; f++) {
             double fAngle = (f / (double) finCount) * Math.PI * 2.0 + Math.toRadians(age * 30.0f);
-            float fx = (float) Math.cos(fAngle) * domeRadius * 1.35f;
-            float fy = (float) Math.sin(fAngle) * domeRadius * 1.35f;
-
-            drawQuad(matrix, consumer,
-                0, 0, beamLength,
-                fx * 0.4f, fy * 0.4f, beamLength - 0.3f,
-                fx, fy, beamLength + 0.15f,
-                0, 0, beamLength,
-                1.0f, 1.0f, 1.0f, alpha * 0.88f
+            float ox = (float) Math.cos(fAngle);
+            float oy = (float) Math.sin(fAngle);
+            drawLash(matrix, consumer,
+                ox * domeRadius * 0.22f, oy * domeRadius * 0.22f, beamLength - 0.04f,
+                ox * domeRadius * 0.80f, oy * domeRadius * 0.80f, beamLength + 0.06f,
+                ox * domeRadius * 1.40f, oy * domeRadius * 1.40f, beamLength + 0.32f,
+                0.07f * Math.max(0.2f, domeRadius), 6,
+                0.20f, 0.85f, 1.0f,
+                1.0f, 1.0f, 1.0f,
+                alpha * 0.90f
             );
         }
+    }
+
+    private static void drawLash(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float xc, float yc, float zc,
+                                 float x1, float y1, float z1,
+                                 float width, int steps,
+                                 float er, float eg, float eb,
+                                 float cr, float cg, float cb,
+                                 float alpha) {
+        int n = Math.max(4, steps);
+        float px = x0;
+        float py = y0;
+        float pz = z0;
+        for (int i = 1; i <= n; i++) {
+            float t = i / (float) n;
+            float u = 1.0f - t;
+            float x = u * u * x0 + 2.0f * u * t * xc + t * t * x1;
+            float y = u * u * y0 + 2.0f * u * t * yc + t * t * y1;
+            float z = u * u * z0 + 2.0f * u * t * zc + t * t * z1;
+            float w = width * (1.0f - t * 0.9f);
+            float a = alpha * (1.0f - t * t);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w, er, eg, eb, a);
+            lashSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.32f, cr, cg, cb, Math.min(1.0f, a * 1.2f));
+            px = x;
+            py = y;
+            pz = z;
+        }
+    }
+
+    private static void lashSpan(Matrix4f matrix, VertexConsumer consumer,
+                                 float x0, float y0, float z0,
+                                 float x1, float y1, float z1,
+                                 float width,
+                                 float r, float g, float b, float a) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float ax = 0.0f;
+        float ay = 1.0f;
+        float az = 0.0f;
+        if (dx * dx + dz * dz < dy * dy) {
+            ax = 1.0f;
+            ay = 0.0f;
+            az = 0.0f;
+        }
+        float px = dy * az - dz * ay;
+        float py = dz * ax - dx * az;
+        float pz = dx * ay - dy * ax;
+        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
+        if (plen < 0.0001f) {
+            return;
+        }
+        float s = width / plen;
+        px *= s;
+        py *= s;
+        pz *= s;
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
+        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
+        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
     }
 
     private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,

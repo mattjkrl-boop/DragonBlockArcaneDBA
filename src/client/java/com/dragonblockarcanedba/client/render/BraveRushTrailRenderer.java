@@ -76,9 +76,12 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         float progress = Math.min(1.0f, state.age / maxLife);
         if (progress >= 1.0f) return;
 
-        float alpha = (1.0f - (progress * progress)) * 0.90f;
-        float scale = state.trailScale * (1.0f + progress * 0.4f) * (state.isFirstPersonOwner ? 0.45f : 1.0f);
-        float len = state.trailLength;
+        float open = smooth(Math.min(1.0f, progress / 0.40f));
+        float alpha = (1.0f - smooth(progress)) * 0.90f;
+        float impact = strike(progress);
+        float scale = state.trailScale * (state.isFirstPersonOwner ? 0.45f : 1.0f);
+        float len = state.trailLength * (0.35f + 0.65f * open);
+        float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
@@ -89,99 +92,75 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // 1. Supersonic 3D Heroic Mach Cone (Faceted aerodynamic cone expanding backwards)
             int coneSegments = 24;
-            float coneLength = 3.6f * scale;
-            float coneBaseRadius = (state.isFirstPersonOwner ? 1.45f : 1.2f) * scale;
-            float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
+            float coneLength = len;
+            float coneBase = (state.isFirstPersonOwner ? 1.05f : 0.90f) * scale;
             float baseZ = tipZ - coneLength;
-            float coneAlpha = state.isFirstPersonOwner ? (alpha * 0.35f) : (alpha * 0.75f);
-
+            float coneAlpha = state.isFirstPersonOwner ? (alpha * 0.32f) : (alpha * 0.72f);
             for (int i = 0; i < coneSegments; i++) {
                 double a1 = (i / (double) coneSegments) * Math.PI * 2.0;
                 double a2 = ((i + 1) / (double) coneSegments) * Math.PI * 2.0;
-
-                float x1 = (float) Math.cos(a1) * coneBaseRadius;
-                float y1 = (float) Math.sin(a1) * coneBaseRadius;
-                float x2 = (float) Math.cos(a2) * coneBaseRadius;
-                float y2 = (float) Math.sin(a2) * coneBaseRadius;
-
-                // Outer golden cone face
+                float x1 = (float) Math.cos(a1) * coneBase;
+                float y1 = (float) Math.sin(a1) * coneBase;
+                float x2 = (float) Math.cos(a2) * coneBase;
+                float y2 = (float) Math.sin(a2) * coneBase;
                 drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, 1.0f, 0.84f, 0.0f, coneAlpha);
-                // Inner cyan accent cone face
-                drawTriangle(matrix, buffer, 0, 0, tipZ * 0.8f, x1 * 0.7f, y1 * 0.7f, baseZ * 0.8f, x2 * 0.7f, y2 * 0.7f, baseZ * 0.8f, 0.0f, 0.95f, 1.0f, coneAlpha * 1.1f);
+                drawTriangle(matrix, buffer, 0, 0, tipZ * 0.85f, x1 * 0.42f, y1 * 0.42f, baseZ * 0.85f, x2 * 0.42f, y2 * 0.42f, baseZ * 0.85f, 0.0f, 0.95f, 1.0f, coneAlpha);
+                drawTriangle(matrix, buffer, 0, 0, tipZ, x1 * 0.12f, y1 * 0.12f, tipZ - coneLength * 0.72f, x2 * 0.12f, y2 * 0.12f, tipZ - coneLength * 0.72f, 1.0f, 0.98f, 0.85f, alpha);
             }
 
-            // 2. Twin Helical Golden Valor Streamlines / Wing Vanes
-            int ribbonSteps = 16;
-            for (int strand = 0; strand < 2; strand++) {
-                float strandOffset = strand * (float) Math.PI;
-                boolean isGold = (strand == 0);
-                float sr = isGold ? 1.0f : 0.0f;
-                float sg = isGold ? 0.84f : 0.95f;
-                float sb = isGold ? 0.0f : 1.0f;
-
-                for (int s = 0; s < ribbonSteps; s++) {
-                    float t1 = s / (float) ribbonSteps;
-                    float t2 = (s + 1) / (float) ribbonSteps;
-
-                    float z1 = tipZ - (t1 * len);
-                    float z2 = tipZ - (t2 * len);
-
-                    float r1 = (0.25f + t1 * 1.1f) * scale;
-                    float r2 = (0.25f + t2 * 1.1f) * scale;
-
-                    double ang1 = strandOffset + (t1 * Math.PI * 3.0) + (state.age * 0.22);
-                    double ang2 = strandOffset + (t2 * Math.PI * 3.0) + (state.age * 0.22);
-
-                    float rx1 = (float) Math.cos(ang1) * r1;
-                    float ry1 = (float) Math.sin(ang1) * r1;
-                    float rx2 = (float) Math.cos(ang2) * r2;
-                    float ry2 = (float) Math.sin(ang2) * r2;
-
-                    float rw1 = 0.24f * (1.0f - t1 * 0.35f) * scale;
-                    float rw2 = 0.24f * (1.0f - t2 * 0.35f) * scale;
-
-                    drawQuad(matrix, buffer,
-                        rx1 - rw1, ry1, z1,
-                        rx1 + rw1, ry1, z1,
-                        rx2 + rw2, ry2, z2,
-                        rx2 - rw2, ry2, z2,
-                        sr, sg, sb, alpha * (1.0f - t1 * 0.45f)
-                    );
-                }
+            int ribbonSteps = 14;
+            for (int s = 0; s < ribbonSteps; s++) {
+                float t1 = s / (float) ribbonSteps;
+                float t2 = (s + 1) / (float) ribbonSteps;
+                float z1 = tipZ - (t1 * len);
+                float z2 = tipZ - (t2 * len);
+                float r1 = (0.18f + t1 * 0.85f * open) * scale;
+                float r2 = (0.18f + t2 * 0.85f * open) * scale;
+                double ang1 = (t1 * Math.PI * 2.4) + (state.age * 0.18);
+                double ang2 = (t2 * Math.PI * 2.4) + (state.age * 0.18);
+                float rx1 = (float) Math.cos(ang1) * r1;
+                float ry1 = (float) Math.sin(ang1) * r1;
+                float rx2 = (float) Math.cos(ang2) * r2;
+                float ry2 = (float) Math.sin(ang2) * r2;
+                float rw1 = 0.10f * (1.0f - t1 * 0.4f) * scale;
+                float rw2 = 0.10f * (1.0f - t2 * 0.4f) * scale;
+                drawQuad(matrix, buffer,
+                    rx1 - rw1, ry1, z1,
+                    rx1 + rw1, ry1, z1,
+                    rx2 + rw2, ry2, z2,
+                    rx2 - rw2, ry2, z2,
+                    1.0f, 0.84f, 0.0f, alpha * (1.0f - t1)
+                );
+                float cw1 = rw1 * 0.28f;
+                float cw2 = rw2 * 0.28f;
+                drawQuad(matrix, buffer,
+                    rx1 - cw1, ry1, z1,
+                    rx1 + cw1, ry1, z1,
+                    rx2 + cw2, ry2, z2,
+                    rx2 - cw2, ry2, z2,
+                    1.0f, 0.98f, 0.9f, alpha * (1.0f - t1)
+                );
             }
 
-            // 3. Ultra-Dense Kinetic Thrust Beam Core (Length along entire dash path)
-            drawBeam(matrix, buffer, 0, 0, tipZ + 0.3f, 0, 0, tipZ - len, 0.16f * scale, 1.0f, 0.98f, 0.85f, alpha * 0.95f);
-            drawBeam(matrix, buffer, 0, 0, tipZ + 0.2f, 0, 0, tipZ - len * 0.6f, 0.28f * scale, 1.0f, 0.80f, 0.0f, alpha * 0.60f);
-
-            // 4. Expanding Wake Vortex Rings along path
-            int ringCount = Math.max(2, (int) (len / 6.0f));
-            for (int r = 1; r <= ringCount; r++) {
-                float ringZ = tipZ - (r * (len / (ringCount + 1)));
-                float ringR = (0.9f + progress * 0.8f + r * 0.3f) * scale;
-                drawRing(matrix, buffer, 0, 0, ringZ, ringR, ringR * 0.78f, 24, 0.0f, 0.95f, 1.0f, alpha * 0.60f);
+            if (impact > 0.02f) {
+                float ringR = coneBase * (0.55f + 0.65f * impact);
+                drawRing(matrix, buffer, 0, 0, tipZ, ringR, ringR * 0.62f, 24, 1.0f, 0.96f, 0.7f, impact * 0.85f);
             }
-
-            // 5. Energy flow pulse: one brighter vortex ring travels down the
-            // trail so the wake reads as flowing energy, not a static tube.
-            float flowProg = (state.age * 0.14f) % 1.0f;
-            float flowZ = tipZ - flowProg * len;
-            float flowR = (0.9f + progress * 0.8f + flowProg * 0.9f) * scale;
-            drawRing(matrix, buffer, 0, 0, flowZ, flowR, flowR * 0.80f, 24, 1.0f, 0.98f, 0.85f, alpha * 0.55f * (1.0f - flowProg * 0.4f));
-        });
-
-        // Additive halo pass: a wider faint copy of the thrust beam core so
-        // the dash path blooms along its length.
-        float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawBeam(matrix, buffer, 0, 0, tipZ + 0.2f, 0, 0, tipZ - len, 0.34f * scale, 1.0f, 0.80f, 0.0f, alpha * 0.16f);
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
+    }
+
+    private static float strike(float progress) {
+        if (progress >= 0.34f) return 0.0f;
+        return (float) Math.sin((progress / 0.34f) * Math.PI);
     }
 
     private static void drawTriangle(Matrix4f matrix, VertexConsumer consumer,
@@ -192,10 +171,11 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
 
-        // Reverse
         consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 

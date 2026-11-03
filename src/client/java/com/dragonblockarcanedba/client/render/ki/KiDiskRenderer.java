@@ -11,8 +11,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 
 /**
- * Renders a Ki Disk (Destructo Disk) as a flat, fast-spinning disc
- * with a bright razor edge.
+ * A ki disk is a vertical razor: colored face, white rim, spinning as it flies forward.
  */
 public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.DiskRenderState> {
 
@@ -30,6 +29,8 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
         super.extractRenderState(entity, state, partialTicks);
         state.color = entity.getColor();
         state.ageInTicks = entity.tickCount + partialTicks;
+        state.yRot = entity.getYRot();
+        state.xRot = entity.getXRot();
     }
 
     @Override
@@ -38,31 +39,15 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
         float g = KiRenderHelper.green(state.color);
         float b = KiRenderHelper.blue(state.color);
         RenderType renderType = KiRenderHelper.kiRenderType();
+        float spin = state.ageInTicks * 24f;
 
-        float diskRadius = 0.75f;
-        float diskHalfHeight = 0.03f;
-
-        // Spinning inner disk
         poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(state.ageInTicks * 40.0f)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(spin)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -diskRadius, -diskHalfHeight, -diskRadius,
-                    diskRadius, diskHalfHeight, diskRadius,
-                    r, g, b, 0.85f);
-        });
-        poseStack.popPose();
-
-        // Outer edge ring — white-hot, slightly larger
-        float edgeRadius = 0.85f;
-        float edgeHalf = 0.015f;
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(state.ageInTicks * 40.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                    -edgeRadius, -edgeHalf, -edgeRadius,
-                    edgeRadius, edgeHalf, edgeRadius,
-                    1.0f, 1.0f, 1.0f, 0.9f);
+            KiRenderHelper.drawDisc(pose, buffer, 0.12f, 0.70f, 28, r, g, b, 0.9f);
+            KiRenderHelper.drawDisc(pose, buffer, 0.70f, 0.82f, 28, 1f, 1f, 1f, 1f);
         });
         poseStack.popPose();
 
@@ -72,5 +57,7 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
     public static class DiskRenderState extends EntityRenderState {
         public int color = 0xFFFFFF;
         public float ageInTicks = 0;
+        public float yRot = 0;
+        public float xRot = 0;
     }
 }
