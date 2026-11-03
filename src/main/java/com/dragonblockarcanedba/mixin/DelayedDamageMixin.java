@@ -154,20 +154,27 @@ public abstract class DelayedDamageMixin {
 
             if (dba$damageDelayTicks <= 0 && dba$accumulatedDamage > 0) {
                 // Time to apply the massive accumulated damage!
+                // The barrier flag is only set for this reapply, so the preview hurt
+                // (which this mixin cancels) does not also spend ki.
                 dba$isApplyingDelayedDamage = true;
-                if (self.level() instanceof ServerLevel serverLevel) {
-                    net.minecraft.world.entity.player.Player attacker = dba$lastPlayerUuid != null ? serverLevel.getPlayerByUUID(dba$lastPlayerUuid) : null;
-                    DamageSource source;
-                    if (attacker != null && !attacker.isRemoved() && attacker.isAlive()) {
-                        source = serverLevel.damageSources().playerAttack(attacker);
-                        self.setLastHurtByMob(attacker);
-                    } else {
-                        source = serverLevel.damageSources().generic();
+                com.dragonblockarcanedba.ki.KiBarrier.deliveringDeferredDamage = true;
+                try {
+                    if (self.level() instanceof ServerLevel serverLevel) {
+                        net.minecraft.world.entity.player.Player attacker = dba$lastPlayerUuid != null ? serverLevel.getPlayerByUUID(dba$lastPlayerUuid) : null;
+                        DamageSource source;
+                        if (attacker != null && !attacker.isRemoved() && attacker.isAlive()) {
+                            source = serverLevel.damageSources().playerAttack(attacker);
+                            self.setLastHurtByMob(attacker);
+                        } else {
+                            source = serverLevel.damageSources().generic();
+                        }
+
+                        self.hurtServer(serverLevel, source, dba$accumulatedDamage);
                     }
-                    
-                    self.hurtServer(serverLevel, source, dba$accumulatedDamage);
+                } finally {
+                    dba$isApplyingDelayedDamage = false;
+                    com.dragonblockarcanedba.ki.KiBarrier.deliveringDeferredDamage = false;
                 }
-                dba$isApplyingDelayedDamage = false;
                 
                 // Reset
                 dba$accumulatedDamage = 0.0f;

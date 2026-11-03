@@ -118,6 +118,16 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
                 return 0.0f;
             }
 
+            // Ki Barrier runs only after Whis and the saber dodge have returned.
+            // A stored player combo is priced when it is delivered, not on the preview,
+            // so this does not spend ki for a hit those dodges already cancelled.
+            if (!(source.getEntity() instanceof Player) || com.dragonblockarcanedba.ki.KiBarrier.deliveringDeferredDamage) {
+                amount = com.dragonblockarcanedba.ki.KiBarrier.absorb(player, level, source, amount);
+                if (amount <= 0.0f) {
+                    return 0.0f;
+                }
+            }
+
             // Standard damage mitigation if not dodged (defense-based)
             if (!source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_ARMOR)) {
                 double multiplier = PlayerStats.getDamageMultiplier(player);

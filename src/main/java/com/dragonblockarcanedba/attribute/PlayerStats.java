@@ -3,6 +3,7 @@ package com.dragonblockarcanedba.attribute;
 import com.dragonblockarcanedba.registry.DbaRegistries;
 import com.dragonblockarcanedba.registry.Race;
 import com.dragonblockarcanedba.registry.Form;
+import com.dragonblockarcanedba.skill.SkillDefinitions;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.resources.Identifier;
 
@@ -33,7 +34,7 @@ public class PlayerStats {
             }
         }
         
-        return baseMaxKi * multiplier;
+        return baseMaxKi * multiplier * SkillDefinitions.factor(accessor, SkillDefinitions.Kind.MAX_KI);
     }
 
     public static double getMaxStamina(Player player) {
@@ -46,7 +47,7 @@ public class PlayerStats {
         // Multipliers can be added later if races/forms affect stamina
         double multiplier = 1.0;
         
-        return baseMaxStamina * multiplier;
+        return baseMaxStamina * multiplier * SkillDefinitions.factor(accessor, SkillDefinitions.Kind.STAMINA);
     }
 
     public static double getKiRecovery(Player player) {
@@ -71,13 +72,15 @@ public class PlayerStats {
             }
         }
         
-        return baseRecovery * multiplier;
+        return baseRecovery * multiplier * SkillDefinitions.factor(accessor, SkillDefinitions.Kind.KI_RECOVERY);
     }
 
     public static double getEffectiveStat(Player player, String statName) {
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
         Race race = DbaRegistries.getRace(accessor.dba$getRaceId());
-        if (race == null) return 1.0;
+        if (race == null) {
+            return 1.0 + SkillDefinitions.flat(accessor, statName);
+        }
 
         int allocated = 0;
         int baseVal = 0;
@@ -118,6 +121,7 @@ public class PlayerStats {
         }
 
         double value = (baseVal + allocated) * (1.0 + raceMult);
+        value += SkillDefinitions.flat(accessor, statName);
 
         // Apply Transformation Multiplier if active
         Identifier formId = accessor.dba$getActiveFormId();
@@ -327,6 +331,7 @@ public class PlayerStats {
         // Scale defense without arbitrary limits.
         // E.g. defense * 0.00011 means ~10,000 defense is 110% reduction.
         double reduction = defense * 0.00011;
+        reduction += SkillDefinitions.fraction((PlayerStatsAccessor) player, SkillDefinitions.Kind.DAMAGE_REDUCTION);
         
         // Prevent negative damage by capping reduction at 1.0 (100% mitigation)
         if (reduction > 1.0) {

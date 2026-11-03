@@ -144,10 +144,12 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         ValueOutput kiTechOut = dbaOut.child("kiTechniqueSlots");
         for (int i = 0; i < 3; i++) {
             if (!dbaKiTechniqueSlots[i].isEmpty) {
-                kiTechOut.putString("slot" + i + "_type", dbaKiTechniqueSlots[i].type.name());
+                kiTechOut.putString("slot" + i + "_type", dbaKiTechniqueSlots[i].typeId());
                 kiTechOut.putInt("slot" + i + "_pct", dbaKiTechniqueSlots[i].usedPercent);
                 kiTechOut.putInt("slot" + i + "_color", dbaKiTechniqueSlots[i].color);
                 kiTechOut.putBoolean("slot" + i + "_barrage", dbaKiTechniqueSlots[i].isBarrage);
+                kiTechOut.putInt("slot" + i + "_chargeTicks", dbaKiTechniqueSlots[i].getChargeTicks());
+                kiTechOut.putDouble("slot" + i + "_size", dbaKiTechniqueSlots[i].getSize());
             }
         }
     }
@@ -256,7 +258,9 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
                 int pct = kiTechIn.getIntOr("slot" + i + "_pct", 50);
                 int color = kiTechIn.getIntOr("slot" + i + "_color", 0xFF00AAFF);
                 boolean barrage = kiTechIn.getBooleanOr("slot" + i + "_barrage", false);
-                dbaKiTechniqueSlots[i] = new KiTechnique(KiTechniqueType.fromString(type), pct, color, barrage);
+                int chargeTicks = kiTechIn.getIntOr("slot" + i + "_chargeTicks", KiTechnique.DEFAULT_CHARGE_TICKS);
+                double size = kiTechIn.getDoubleOr("slot" + i + "_size", KiTechnique.DEFAULT_SIZE);
+                dbaKiTechniqueSlots[i] = new KiTechnique(KiTechniqueType.fromString(type), pct, color, barrage, false, chargeTicks, size);
             } else {
                 dbaKiTechniqueSlots[i] = KiTechnique.EMPTY;
             }
@@ -882,10 +886,12 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
         CompoundTag kiTechNbt = new CompoundTag();
         for (int i = 0; i < 3; i++) {
             if (!dbaKiTechniqueSlots[i].isEmpty) {
-                kiTechNbt.putString("slot" + i + "_type", dbaKiTechniqueSlots[i].type.name());
+                kiTechNbt.putString("slot" + i + "_type", dbaKiTechniqueSlots[i].typeId());
                 kiTechNbt.putInt("slot" + i + "_pct", dbaKiTechniqueSlots[i].usedPercent);
                 kiTechNbt.putInt("slot" + i + "_color", dbaKiTechniqueSlots[i].color);
                 kiTechNbt.putBoolean("slot" + i + "_barrage", dbaKiTechniqueSlots[i].isBarrage);
+                kiTechNbt.putInt("slot" + i + "_chargeTicks", dbaKiTechniqueSlots[i].getChargeTicks());
+                kiTechNbt.putDouble("slot" + i + "_size", dbaKiTechniqueSlots[i].getSize());
             } else {
                 kiTechNbt.putBoolean("slot" + i + "_empty", true);
             }

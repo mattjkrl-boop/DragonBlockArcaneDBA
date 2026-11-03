@@ -9,12 +9,15 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 
+/**
+ * Gravity steps flank the reading. The fuel slot and the player inventory stay on the menu grid.
+ */
 public class GravityTrainingScreen extends AbstractContainerScreen<GravityTrainingMenu> {
     private static final int[][] STEPS = {
-            {10, 32, 42, -100},
-            {56, 32, 38, -10},
-            {102, 32, 38, 10},
-            {144, 32, 42, 100}
+            {8, 28, 44, -100},
+            {8, 50, 44, -10},
+            {144, 28, 44, 10},
+            {144, 50, 44, 100}
     };
 
     public GravityTrainingScreen(GravityTrainingMenu menu, Inventory playerInventory, Component title) {
@@ -71,13 +74,13 @@ public class GravityTrainingScreen extends AbstractContainerScreen<GravityTraini
 
         int gravity = this.menu.getGravity();
         String reading = gravity + "G";
-        context.centeredText(this.font, Component.literal(reading), left + this.imageWidth / 2, top + 56, DbaUi.GOLD);
-        int barX = left + 16;
-        int barW = this.imageWidth - 32;
-        context.fill(barX, top + 68, barX + barW, top + 72, DbaUi.INK_DEEP);
+        context.centeredText(this.font, Component.literal(reading), left + this.imageWidth / 2, top + 32, DbaUi.GOLD);
+        int barX = left + 58;
+        int barW = 80;
+        context.fill(barX, top + 56, barX + barW, top + 60, DbaUi.INK_DEEP);
         int fill = Math.round(barW * Math.min(1.0f, gravity / 500.0f));
         if (fill > 0) {
-            context.fill(barX, top + 68, barX + fill, top + 72, gravity >= 300 ? DbaUi.DANGER : DbaUi.GOLD);
+            context.fill(barX, top + 56, barX + fill, top + 60, gravity >= 300 ? DbaUi.DANGER : DbaUi.GOLD);
         }
 
         drawSlot(context, left + 15, top + 79);

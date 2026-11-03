@@ -15,11 +15,13 @@ public enum KiTechniqueType {
     /** Twin rapid-fire eye lasers — spam-castable. */
     LASER,
     /** AoE last-resort explosion. Costs 100% Ki, damages self. */
-    EXPLOSION;
+    EXPLOSION,
+    /** Shell around the caster. Spends its ki share over time. */
+    BARRIER;
 
     public static KiTechniqueType fromString(String s) {
         try {
-            return KiTechniqueType.valueOf(s.toUpperCase());
+            return KiTechniqueType.valueOf(s.toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
             return BLAST;
         }
@@ -33,6 +35,7 @@ public enum KiTechniqueType {
             case BEAM -> "Ki Beam";
             case LASER -> "Ki Laser";
             case EXPLOSION -> "Ki Explosion";
+            case BARRIER -> "Ki Barrier";
         };
     }
 }

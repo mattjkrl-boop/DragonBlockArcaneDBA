@@ -30,8 +30,22 @@ public class KiTechniqueHandler {
 
     /**
      * Fires the Ki technique in the given slot for a player.
+     * A charge of 0 releases on the press. A saved charge waits until the key has been held that long.
      */
     public static void fire(ServerPlayer player, int slot) {
+        fire(player, slot, 0);
+    }
+
+    public static void fire(ServerPlayer player, int slot, int heldTicks) {
+        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+        KiTechnique tech = accessor.dba$getKiTechniqueSlot(slot);
+        if (tech != null && !tech.isEmpty) {
+            int need = tech.getChargeTicks();
+            if (need > 0 && heldTicks < need) {
+                return;
+            }
+        }
+
         long now = player.level().getGameTime();
         long last = LAST_FIRE_TIME.getOrDefault(player.getUUID(), 0L);
         if (now - last < 4) {
@@ -39,10 +53,14 @@ public class KiTechniqueHandler {
         }
         LAST_FIRE_TIME.put(player.getUUID(), now);
 
-        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
-        KiTechnique tech = accessor.dba$getKiTechniqueSlot(slot);
-        if (tech.isEmpty) {
+        if (tech == null || tech.isEmpty) {
             player.sendSystemMessage(Component.literal("§cNo Ki Technique in slot " + (slot + 1)), true);
+            return;
+        }
+
+        // Barrier is not a blast. The barrier move owns the shell.
+        if (tech.type == KiTechniqueType.BARRIER) {
+            KiBarrier.start(player, tech);
             return;
         }
 
@@ -54,10 +72,11 @@ public class KiTechniqueHandler {
 
         int willpower = accessor.dba$getWillpower();
         ServerLevel level = (ServerLevel) player.level();
+        float scale = visualScale(tech);
 
         if (tech.type == KiTechniqueType.EXPLOSION) {
-            // Ki Explosion: always uses 100% Ki
-            fireExplosion(player, accessor, level, currentKi, willpower, tech.color);
+            // Ki Explosion: always uses 100% Ki. Size changes the radius, not the damage.
+            fireExplosion(player, accessor, level, currentKi, willpower, tech.color, scale);
         } else {
             double usedKi = currentKi * (tech.usedPercent / 100.0);
             double damage = usedKi * (1.0 + willpower * 0.002);
@@ -69,15 +88,15 @@ public class KiTechniqueHandler {
             switch (tech.type) {
                 case BLAST -> {
                     if (tech.isBarrage) {
-                        fireBarrage(player, level, damage, tech.color);
+                        fireBarrage(player, level, damage, tech.color, scale);
                     } else {
-                        fireBlast(player, level, damage, tech.color);
+                        fireBlast(player, level, damage, tech.color, scale);
                     }
                 }
-                case SPIRAL_BEAM, BEAM -> fireBeam(player, level, damage, tech.color, tech.type == KiTechniqueType.SPIRAL_BEAM);
-                case DISK -> fireDisk(player, level, damage, tech.color);
-                case LASER -> fireLaser(player, level, damage, tech.color);
-                case EXPLOSION -> {}
+                case SPIRAL_BEAM, BEAM -> fireBeam(player, level, damage, tech.color, tech.type == KiTechniqueType.SPIRAL_BEAM, scale);
+                case DISK -> fireDisk(player, level, damage, tech.color, scale);
+                case LASER -> fireLaser(player, level, damage, tech.color, scale);
+                case EXPLOSION, BARRIER -> {}
             }
 
             player.sendSystemMessage(Component.literal("§b" + tech.type.displayName() + " §7— §a" + (int) damage + " dmg §7(used " + (int) usedKi + " Ki)"), true);
@@ -86,13 +105,23 @@ public class KiTechniqueHandler {
         accessor.dba$syncStats();
     }
 
+    /** 1.0 reproduces every current visual radius and hit radius. */
+    private static float visualScale(KiTechnique tech) {
+        double size = tech.getSize();
+        if (Double.isNaN(size) || size <= 0.0) {
+            return 1.0f;
+        }
+        return (float) size;
+    }
+
     // =========== BLAST: single projectile along look direction ===========
-    private static void fireBlast(ServerPlayer player, ServerLevel level, double damage, int color) {
+    private static void fireBlast(ServerPlayer player, ServerLevel level, double damage, int color, float scale) {
         com.dragonblockarcanedba.entity.KiBlastEntity blast = new com.dragonblockarcanedba.entity.KiBlastEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_BLAST, level);
         blast.setOwner(player);
         blast.setPos(player.getX(), player.getEyeY() - 0.1, player.getZ());
         blast.setColor(color);
         blast.setDamage((float) damage);
+        blast.setScale(scale);
         
         Vec3 look = player.getLookAngle();
         blast.shoot(look.x, look.y, look.z, 2.0f, 0.0f);
@@ -107,7 +136,7 @@ public class KiTechniqueHandler {
     }
 
     // =========== BARRAGE: 8 smaller blasts with spread ===========
-    private static void fireBarrage(ServerPlayer player, ServerLevel level, double damage, int color) {
+    private static void fireBarrage(ServerPlayer player, ServerLevel level, double damage, int color, float scale) {
         double perShot = damage / 8.0;
         Vec3 look = player.getLookAngle();
 
@@ -117,6 +146,7 @@ public class KiTechniqueHandler {
             blast.setPos(player.getX(), player.getEyeY() - 0.1, player.getZ());
             blast.setColor(color);
             blast.setDamage((float) perShot);
+            blast.setScale(scale);
             
             // Add slight random spread
             double spreadX = (level.getRandom().nextDouble() - 0.5) * 0.15;
@@ -137,16 +167,17 @@ public class KiTechniqueHandler {
     }
 
     // =========== BEAM: continuous line of damage along look direction ===========
-    private static void fireBeam(ServerPlayer player, ServerLevel level, double damage, int color, boolean spiral) {
+    private static void fireBeam(ServerPlayer player, ServerLevel level, double damage, int color, boolean spiral, float scale) {
         Vec3 look = player.getLookAngle();
         Vec3 start = player.getEyePosition();
         double range = 60;
+        double hitRadius = 1.5 * scale;
         
-        // Raycast to find true length
+        // Raycast to find true length. The hit radius scales with the beam the player sees.
         double hitLength = range;
         for (int i = 1; i <= (int) range; i++) {
             Vec3 pos = start.add(look.scale(i));
-            List<LivingEntity> hit = getEntitiesAt(level, player, pos, 1.5);
+            List<LivingEntity> hit = getEntitiesAt(level, player, pos, hitRadius);
             if (!hit.isEmpty()) {
                 hitLength = i;
                 for (LivingEntity target : hit) {
@@ -158,9 +189,11 @@ public class KiTechniqueHandler {
 
         if (spiral) {
             com.dragonblockarcanedba.entity.KiSpiralBeamEntity beam = new com.dragonblockarcanedba.entity.KiSpiralBeamEntity(level, player, (float) hitLength, color);
+            beam.setScale(scale);
             level.addFreshEntity(beam);
         } else {
             com.dragonblockarcanedba.entity.KiBeamEntity beam = new com.dragonblockarcanedba.entity.KiBeamEntity(level, player, (float) hitLength, color);
+            beam.setScale(scale);
             level.addFreshEntity(beam);
         }
 
@@ -177,13 +210,14 @@ public class KiTechniqueHandler {
     }
 
     // =========== DISK: horizontal disk that travels forward ===========
-    private static void fireDisk(ServerPlayer player, ServerLevel level, double damage, int color) {
+    private static void fireDisk(ServerPlayer player, ServerLevel level, double damage, int color, float scale) {
         com.dragonblockarcanedba.entity.KiDiskEntity disk = new com.dragonblockarcanedba.entity.KiDiskEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_DISK, level);
         disk.setOwner(player);
         // Start above head
         disk.setPos(player.getX(), player.getY() + player.getBbHeight() + 1.0, player.getZ());
         disk.setColor(color);
         disk.setDamage((float) damage);
+        disk.setScale(scale);
         
         Vec3 look = player.getLookAngle().multiply(1, 0, 1).normalize(); // Horizontal only
         if (look.length() < 0.1) look = new Vec3(1, 0, 0);
@@ -198,14 +232,15 @@ public class KiTechniqueHandler {
     }
 
     // =========== LASER: twin rapid eye beams ===========
-    private static void fireLaser(ServerPlayer player, ServerLevel level, double damage, int color) {
+    private static void fireLaser(ServerPlayer player, ServerLevel level, double damage, int color, float scale) {
         Vec3 look = player.getLookAngle();
         Vec3 eyePos = player.getEyePosition();
-        // Two parallel beams offset slightly from the eyes
-        Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize().scale(0.15);
+        // Two parallel beams offset slightly from the eyes. Scale 1 keeps the current 0.15 gap.
+        Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize().scale(0.15 * scale);
 
         double perBeam = damage / 2.0;
         double range = 45;
+        double hitRadius = 1.0 * scale;
         
         for (Vec3 offset : new Vec3[]{right, right.scale(-1)}) {
             Vec3 start = eyePos.add(offset);
@@ -214,7 +249,7 @@ public class KiTechniqueHandler {
             double hitLength = range;
             for (int i = 1; i <= (int) range; i++) {
                 Vec3 pos = start.add(look.scale(i));
-                List<LivingEntity> hit = getEntitiesAt(level, player, pos, 1.0);
+                List<LivingEntity> hit = getEntitiesAt(level, player, pos, hitRadius);
                 if (!hit.isEmpty()) {
                     hitLength = i;
                     for (LivingEntity target : hit) {
@@ -225,6 +260,7 @@ public class KiTechniqueHandler {
             }
             
             com.dragonblockarcanedba.entity.KiLaserEntity laser = new com.dragonblockarcanedba.entity.KiLaserEntity(level, player, (float) hitLength, color);
+            laser.setScale(scale);
             // Override position since it comes from the eyes offset
             laser.setPos(start.x, start.y, start.z);
             level.addFreshEntity(laser);
@@ -238,12 +274,13 @@ public class KiTechniqueHandler {
 
     // =========== EXPLOSION: AoE last resort ===========
     private static void fireExplosion(ServerPlayer player, PlayerStatsAccessor accessor,
-                                       ServerLevel level, double currentKi, int willpower, int color) {
+                                       ServerLevel level, double currentKi, int willpower, int color, float scale) {
         double kiPower = currentKi; // 100% Ki forced
         double totalDamage = kiPower * 1.5 * (1.0 + willpower * 0.002);
         double selfDamage = kiPower * 0.95 * (1.0 + willpower * 0.002);
         double radius = Math.max(3.0, kiPower / 100.0);
-        if (radius > 50) radius = 50; // Safety cap
+        if (radius > 50) radius = 50; // Safety cap, applied before size so scale 1 stays exactly here
+        radius *= scale;
 
         // Drain ALL Ki & Pause Ki Recovery (like weapons do)
         accessor.dba$setCurrentKi(0);

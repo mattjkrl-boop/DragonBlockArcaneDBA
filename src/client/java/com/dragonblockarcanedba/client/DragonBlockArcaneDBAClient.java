@@ -39,6 +39,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     private static boolean weaponAttackWasDown = false;
     /** The press already sent the click that this swing would have sent. */
     private static boolean weaponClickCoversSwing = false;
+    /** Ticks the ki slot key has been held during the current charge. */
+    private static final int[] kiSlotHold = new int[3];
+    /** The charged shot for this hold was already sent. */
+    private static final boolean[] kiSlotFired = new boolean[3];
 
 
 
@@ -480,15 +484,9 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                     client.setScreenAndShow(new com.dragonblockarcanedba.client.gui.EmoteSelectionScreen());
                 }
             }
-            while (techSlot1Key.consumeClick()) {
-                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(0));
-            }
-            while (techSlot2Key.consumeClick()) {
-                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(1));
-            }
-            while (techSlot3Key.consumeClick()) {
-                if (client.player != null) ClientPlayNetworking.send(new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(2));
-            }
+            tickKiTechniqueSlot(client, techSlot1Key, 0);
+            tickKiTechniqueSlot(client, techSlot2Key, 1);
+            tickKiTechniqueSlot(client, techSlot3Key, 2);
 
             // Otherworld atmospheric layered cloud particles
             com.dragonblockarcanedba.client.particle.OtherworldCloudParticleManager.tick(client);
@@ -979,7 +977,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                                 int pct = kiTechNbt.getIntOr("slot" + i + "_pct", 50);
                                 int color = kiTechNbt.getIntOr("slot" + i + "_color", 0xFF00AAFF);
                                 boolean barrage = kiTechNbt.getBooleanOr("slot" + i + "_barrage", false);
-                                accessor.dba$setKiTechniqueSlot(i, new com.dragonblockarcanedba.ki.KiTechnique(type, pct, color, barrage));
+                                int chargeTicks = kiTechNbt.getIntOr("slot" + i + "_chargeTicks", com.dragonblockarcanedba.ki.KiTechnique.DEFAULT_CHARGE_TICKS);
+                                double size = kiTechNbt.getDoubleOr("slot" + i + "_size", com.dragonblockarcanedba.ki.KiTechnique.DEFAULT_SIZE);
+                                accessor.dba$setKiTechniqueSlot(i, new com.dragonblockarcanedba.ki.KiTechnique(
+                                        type, pct, color, barrage, false, chargeTicks, size));
                             }
                         }
                     }
@@ -1107,5 +1108,57 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 }
             }
         );
+    }
+
+    /**
+     * A saved charge of 0 still fires on the press, including key repeat.
+     * A saved charge holds the slot key until that many ticks have passed, then fires once.
+     */
+    private static void tickKiTechniqueSlot(net.minecraft.client.Minecraft client, KeyMapping key, int slot) {
+        if (slot < 0 || slot > 2) {
+            return;
+        }
+        int need = 0;
+        boolean chargedKi = false;
+        if (client.player instanceof PlayerStatsAccessor accessor) {
+            String equipped = accessor.dba$getEquippedTechnique(slot);
+            if (equipped == null || equipped.isEmpty()) {
+                com.dragonblockarcanedba.ki.KiTechnique tech = accessor.dba$getKiTechniqueSlot(slot);
+                if (tech != null && !tech.isEmpty) {
+                    need = tech.getChargeTicks();
+                    chargedKi = need > 0;
+                }
+            }
+        }
+        if (!chargedKi) {
+            kiSlotHold[slot] = 0;
+            kiSlotFired[slot] = false;
+            while (key.consumeClick()) {
+                if (client.player != null) {
+                    net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                            new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(slot));
+                }
+            }
+            return;
+        }
+        boolean down = key.isDown();
+        while (key.consumeClick()) {
+            // Drop key-repeat clicks so they do not dump out after the charge ends.
+        }
+        if (!down || client.player == null) {
+            kiSlotHold[slot] = 0;
+            kiSlotFired[slot] = false;
+            return;
+        }
+        if (kiSlotFired[slot]) {
+            return;
+        }
+        kiSlotHold[slot]++;
+        if (kiSlotHold[slot] >= need) {
+            int held = kiSlotHold[slot];
+            net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                    new com.dragonblockarcanedba.network.C2SKiTechniqueFirePayload(slot, held));
+            kiSlotFired[slot] = true;
+        }
     }
 }

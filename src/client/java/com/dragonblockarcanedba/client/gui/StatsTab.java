@@ -14,8 +14,7 @@ import net.minecraft.resources.Identifier;
 import java.util.Locale;
 
 /**
- * Character sheet. The left column is the dossier. The right column is six stat rows.
- * Render and clicks share one layout so the slider and upgrade buttons land on the pixels they draw.
+ * One vertical sheet: identity, speed, then a full-width row for each stat.
  */
 public class StatsTab implements MenuTab {
     private static final String[] STATS = {"strength", "dexterity", "defense", "willpower", "spirit", "vitality"};
@@ -42,21 +41,21 @@ public class StatsTab implements MenuTab {
         int y = parent.getContentY();
         int w = parent.getContentWidth();
         int h = parent.getContentHeight();
-        int gap = DbaUi.GAP;
-        int dossierW = Math.min(200, Math.max(148, w * 36 / 100));
-        int gridW = w - dossierW - gap;
-        if (gridW < 170) {
-            dossierW = Math.max(136, w - 170 - gap);
-            gridW = w - dossierW - gap;
-        }
-        int colW = Math.max(40, (gridW - gap) / 2);
-        int rowH = Math.max(1, (h - gap * 2) / 3);
-        int bottom = y + h;
-        int presetH = DbaUi.BUTTON_H;
-        int presetY = bottom - presetH;
-        int sliderY = presetY - 22;
-        int speedY = sliderY - 12;
-        return new Sheet(x, y, dossierW, h, x + dossierW + gap, y, colW, rowH, gap, speedY, sliderY, presetY, presetH);
+        int presetH = Math.min(DbaUi.BUTTON_H, 18);
+        int raceY = y;
+        int levelY = y + 12;
+        int barY = y + 24;
+        int kiY = y + 32;
+        int kiBarY = y + 42;
+        int sliderY = y + 50;
+        int presetY = sliderY + 30;
+        int rowTop = presetY + presetH + 6;
+        int gap = 3;
+        int remain = Math.max(0, y + h - rowTop);
+        int rowBudget = remain - gap * 5;
+        int rowH = rowBudget >= 6 * 16 ? Math.min(28, rowBudget / 6) : Math.max(14, rowBudget / 6);
+        int btnW = Math.min(108, Math.max(72, w / 4));
+        return new Sheet(x, y, w, h, raceY, levelY, barY, kiY, kiBarY, sliderY, presetY, presetH, rowTop, rowH, gap, btnW);
     }
 
     private void sendSpeed(int percent) {
@@ -122,66 +121,39 @@ public class StatsTab implements MenuTab {
         Sheet sheet = sheet();
         var font = client.font;
 
-        DbaUi.panel(context, sheet.dx, sheet.dy, sheet.dw, sheet.dh);
-
-        int cy = sheet.dy + 6;
         String race = accessor.dba$getRaceId() != null
                 ? accessor.dba$getRaceId().getPath().replace('_', ' ').toUpperCase(Locale.ROOT)
                 : "UNCHOSEN";
-        context.text(font, Component.literal(DbaUi.clip(font, race, sheet.dw - 12)), sheet.dx + 6, cy, DbaUi.GOLD);
-        cy += 14;
-
+        context.text(font, Component.literal(DbaUi.clip(font, race, sheet.w / 2)), sheet.x, sheet.raceY, DbaUi.GOLD);
         long total = accessor.dba$getStrength() + accessor.dba$getDexterity() + accessor.dba$getDefense()
                 + accessor.dba$getWillpower() + accessor.dba$getSpirit() + accessor.dba$getVitality();
         long power = total * 250L + accessor.dba$getLevel() * 1000L;
-        if (cy + 22 < sheet.speedY) {
-            context.text(font, Component.literal("Combat power"), sheet.dx + 6, cy, DbaUi.MUTED);
-            String powerText = DbaMenuScreen.formatCompactNumber(power);
-            context.text(font, Component.literal(powerText), sheet.dx + sheet.dw - 6 - font.width(powerText), cy, DbaUi.TEXT);
-            cy += 14;
-        }
+        String powerText = DbaMenuScreen.formatCompactNumber(power);
+        context.text(font, Component.literal(powerText), sheet.x + sheet.w - font.width(powerText), sheet.raceY, DbaUi.TEXT);
 
         int level = accessor.dba$getLevel();
         long xp = accessor.dba$getXp();
         long need = PlayerStats.getXpToNextLevel(level);
         float xpFrac = need > 0 ? Math.min(1.0f, (float) xp / need) : 1.0f;
-        if (cy + 18 < sheet.speedY) {
-            String levelText = "Level " + DbaMenuScreen.formatCompactNumber(level);
-            context.text(font, Component.literal(levelText), sheet.dx + 6, cy, DbaUi.TEXT);
-            String pct = String.format(Locale.US, "%.0f%%", xpFrac * 100.0f);
-            context.text(font, Component.literal(pct), sheet.dx + sheet.dw - 6 - font.width(pct), cy, DbaUi.MUTED);
-            cy += 11;
-            int barW = sheet.dw - 12;
-            context.fill(sheet.dx + 6, cy, sheet.dx + 6 + barW, cy + 4, DbaUi.INK_DEEP);
-            context.fill(sheet.dx + 6, cy, sheet.dx + 6 + Math.round(barW * xpFrac), cy + 4, DbaUi.GOLD);
-            cy += 12;
-        }
+        context.text(font, Component.literal("Level " + DbaMenuScreen.formatCompactNumber(level)), sheet.x, sheet.levelY, DbaUi.TEXT);
+        String pct = String.format(Locale.US, "%.0f%%", xpFrac * 100.0f);
+        context.text(font, Component.literal(pct), sheet.x + sheet.w - font.width(pct), sheet.levelY, DbaUi.MUTED);
+        context.fill(sheet.x, sheet.barY, sheet.x + sheet.w, sheet.barY + 4, DbaUi.INK_DEEP);
+        context.fill(sheet.x, sheet.barY, sheet.x + Math.round(sheet.w * xpFrac), sheet.barY + 4, DbaUi.GOLD);
 
         double maxKi = PlayerStats.getMaxKi(client.player);
         double curKi = accessor.dba$getCurrentKi();
         float kiFrac = maxKi > 0 ? (float) Math.min(1.0, curKi / maxKi) : 1.0f;
-        if (cy + 18 < sheet.speedY) {
-            context.text(font, Component.literal("Ki"), sheet.dx + 6, cy, DbaUi.MUTED);
-            String kiText = DbaMenuScreen.formatCompactNumber((long) curKi) + " / " + DbaMenuScreen.formatCompactNumber((long) maxKi);
-            context.text(font, Component.literal(DbaUi.clip(font, kiText, sheet.dw / 2)),
-                    sheet.dx + sheet.dw - 6 - Math.min(font.width(kiText), sheet.dw / 2), cy, DbaUi.TEXT);
-            cy += 11;
-            int barW = sheet.dw - 12;
-            context.fill(sheet.dx + 6, cy, sheet.dx + 6 + barW, cy + 4, DbaUi.INK_DEEP);
-            context.fill(sheet.dx + 6, cy, sheet.dx + 6 + Math.round(barW * kiFrac), cy + 4, DbaUi.OK);
-        }
+        String kiText = "Ki  " + DbaMenuScreen.formatCompactNumber((long) curKi) + " / " + DbaMenuScreen.formatCompactNumber((long) maxKi);
+        context.text(font, Component.literal(DbaUi.clip(font, kiText, sheet.w)), sheet.x, sheet.kiY, DbaUi.MUTED);
+        context.fill(sheet.x, sheet.kiBarY, sheet.x + sheet.w, sheet.kiBarY + 4, DbaUi.INK_DEEP);
+        context.fill(sheet.x, sheet.kiBarY, sheet.x + Math.round(sheet.w * kiFrac), sheet.kiBarY + 4, DbaUi.OK);
 
         int speed = accessor.dba$getSpeedPercent();
-        context.text(font, Component.literal("Speed"), sheet.dx + 6, sheet.speedY, DbaUi.MUTED);
-        String speedText = speed + "%";
-        context.text(font, Component.literal(speedText), sheet.dx + sheet.dw - 6 - font.width(speedText), sheet.speedY, DbaUi.GOLD);
-        int trackX = sheet.dx + 6;
-        int trackW = sheet.dw - 12;
-        DbaUi.sliderTrack(context, trackX, sheet.sliderY, trackW, 20, speed / 100.0f);
-
-        int presetW = (trackW - 6) / 4;
+        DbaUi.slider(context, font, sheet.x, sheet.sliderY, sheet.w, "Speed", speed + "%", speed / 100.0f);
+        int presetW = (sheet.w - 6) / 4;
         for (int i = 0; i < PRESETS.length; i++) {
-            int px = trackX + i * (presetW + 2);
+            int px = sheet.x + i * (presetW + 2);
             boolean on = speed == PRESETS[i];
             boolean hover = DbaUi.hit(mouseX, mouseY, px, sheet.presetY, presetW, sheet.presetH);
             DbaUi.button(context, font, px, sheet.presetY, presetW, sheet.presetH, PRESETS[i] + "%", hover || on,
@@ -189,10 +161,10 @@ public class StatsTab implements MenuTab {
         }
 
         for (int i = 0; i < STATS.length; i++) {
-            int col = i % 2;
-            int row = i / 2;
-            int cardX = sheet.gx + col * (sheet.colW + sheet.gap);
-            int cardY = sheet.gy + row * (sheet.rowH + sheet.gap);
+            int rowY = sheet.rowTop + i * (sheet.rowH + sheet.gap);
+            if (rowY + sheet.rowH > sheet.y + sheet.h) {
+                break;
+            }
             String stat = STATS[i];
             int value = switch (stat) {
                 case "strength" -> accessor.dba$getStrength();
@@ -207,38 +179,36 @@ public class StatsTab implements MenuTab {
             int cost = PlayerStats.getUpgradeCost(raceId, stat, upgrades);
             int gain = PlayerStats.getStatGain(raceId, stat);
             int requiredLevel = (upgrades / 5) * 5 * 2;
-            boolean levelMet = accessor.dba$getLevel() >= requiredLevel;
-            boolean affordable = accessor.dba$getStatPoints() >= cost;
-            boolean ready = levelMet && affordable;
+            boolean ready = accessor.dba$getLevel() >= requiredLevel && accessor.dba$getStatPoints() >= cost;
 
-            DbaUi.panel(context, cardX, cardY, sheet.colW, sheet.rowH);
-
-            int btnH = DbaUi.BUTTON_H;
-            int btnY = cardY + sheet.rowH - btnH - 4;
-            int textRight = sheet.colW - 10;
-            context.text(font, Component.literal(DbaUi.clip(font, NAMES[i], textRight)), cardX + 6, cardY + 5, DbaUi.TEXT);
+            boolean rowHover = DbaUi.hit(mouseX, mouseY, sheet.x, rowY, sheet.w, sheet.rowH);
+            DbaUi.row(context, sheet.x, rowY, sheet.w, sheet.rowH, rowHover, false);
+            int textY = rowY + Math.max(2, (sheet.rowH - 8) / 2);
+            context.text(font, Component.literal(NAMES[i]), sheet.x + 6, textY, DbaUi.TEXT);
             String valueText = DbaMenuScreen.formatCompactNumber(value) + "  +" + DbaMenuScreen.formatCompactNumber(gain);
-            if (btnY >= cardY + 16) {
-                context.text(font, Component.literal(DbaUi.clip(font, valueText, textRight)), cardX + 6, cardY + 16, DbaUi.MUTED);
-            }
+            int valueX = sheet.x + sheet.w - sheet.btnW - 12 - font.width(valueText);
+            context.text(font, Component.literal(valueText), Math.max(sheet.x + 70, valueX), textY, DbaUi.MUTED);
 
-            if (ready && btnY > cardY + 8) {
-                boolean hover = DbaUi.hit(mouseX, mouseY, cardX + 6, btnY, sheet.colW - 12, btnH);
-                String label = "+ " + DbaMenuScreen.formatCompactNumber(cost) + " AP";
-                DbaUi.button(context, font, cardX + 6, btnY, sheet.colW - 12, btnH, label, hover, DbaUi.Kind.PRIMARY);
-            } else if (btnY > cardY + 8) {
-                String locked = levelMet
+            int btnX = sheet.x + sheet.w - sheet.btnW - 4;
+            int btnH = Math.min(DbaUi.BUTTON_H, sheet.rowH - 2);
+            int btnY = rowY + (sheet.rowH - btnH) / 2;
+            if (ready) {
+                boolean hover = DbaUi.hit(mouseX, mouseY, btnX, btnY, sheet.btnW, btnH);
+                DbaUi.button(context, font, btnX, btnY, sheet.btnW, btnH,
+                        "+ " + DbaMenuScreen.formatCompactNumber(cost) + " AP", hover, DbaUi.Kind.PRIMARY);
+            } else {
+                String locked = accessor.dba$getLevel() >= requiredLevel
                         ? "Need " + DbaMenuScreen.formatCompactNumber(cost) + " AP"
                         : "Need level " + requiredLevel;
-                context.text(font, Component.literal(DbaUi.clip(font, locked, textRight)), cardX + 6, btnY + 4, DbaUi.MUTED);
+                int lockedW = font.width(locked);
+                context.text(font, Component.literal(DbaUi.clip(font, locked, sheet.btnW)),
+                        btnX + sheet.btnW - Math.min(lockedW, sheet.btnW), textY, DbaUi.MUTED);
             }
         }
     }
 
     private void applySpeed(double mouseX, Sheet sheet, PlayerStatsAccessor accessor) {
-        int trackX = sheet.dx + 6;
-        int trackW = sheet.dw - 12;
-        float frac = (float) (mouseX - trackX) / (float) trackW;
+        float frac = (float) (mouseX - sheet.x) / (float) sheet.w;
         int percent = Math.max(1, Math.min(100, Math.round(frac * 100.0f)));
         if (percent != accessor.dba$getSpeedPercent()) {
             accessor.dba$setSpeedPercent(percent);
@@ -258,16 +228,14 @@ public class StatsTab implements MenuTab {
         Sheet sheet = sheet();
         double mx = event.x();
         double my = event.y();
-        int trackX = sheet.dx + 6;
-        int trackW = sheet.dw - 12;
-        if (DbaUi.hit(mx, my, trackX, sheet.sliderY, trackW, 20)) {
+        if (DbaUi.sliderHit(sheet.x, sheet.sliderY, sheet.w, mx, my)) {
             draggingSpeed = true;
             applySpeed(mx, sheet, accessor);
             return true;
         }
-        int presetW = (trackW - 6) / 4;
+        int presetW = (sheet.w - 6) / 4;
         for (int i = 0; i < PRESETS.length; i++) {
-            int px = trackX + i * (presetW + 2);
+            int px = sheet.x + i * (presetW + 2);
             if (DbaUi.hit(mx, my, px, sheet.presetY, presetW, sheet.presetH)) {
                 DbaUi.playClick();
                 accessor.dba$setSpeedPercent(PRESETS[i]);
@@ -275,20 +243,18 @@ public class StatsTab implements MenuTab {
                 return true;
             }
         }
+        int btnH = Math.min(DbaUi.BUTTON_H, sheet.rowH - 2);
         for (int i = 0; i < STATS.length; i++) {
-            int col = i % 2;
-            int row = i / 2;
-            int cardX = sheet.gx + col * (sheet.colW + sheet.gap);
-            int cardY = sheet.gy + row * (sheet.rowH + sheet.gap);
-            int btnH = DbaUi.BUTTON_H;
-            int btnY = cardY + sheet.rowH - btnH - 4;
-            if (btnY <= cardY + 8) {
-                continue;
+            int rowY = sheet.rowTop + i * (sheet.rowH + sheet.gap);
+            if (rowY + sheet.rowH > sheet.y + sheet.h) {
+                break;
             }
             if (!canUpgrade(accessor, STATS[i])) {
                 continue;
             }
-            if (!DbaUi.hit(mx, my, cardX + 6, btnY, sheet.colW - 12, btnH)) {
+            int btnX = sheet.x + sheet.w - sheet.btnW - 4;
+            int btnY = rowY + (sheet.rowH - btnH) / 2;
+            if (!DbaUi.hit(mx, my, btnX, btnY, sheet.btnW, btnH)) {
                 continue;
             }
             DbaUi.playClick();
@@ -324,8 +290,9 @@ public class StatsTab implements MenuTab {
     }
 
     private record Sheet(
-            int dx, int dy, int dw, int dh,
-            int gx, int gy, int colW, int rowH, int gap,
-            int speedY, int sliderY, int presetY, int presetH
+            int x, int y, int w, int h,
+            int raceY, int levelY, int barY, int kiY, int kiBarY,
+            int sliderY, int presetY, int presetH,
+            int rowTop, int rowH, int gap, int btnW
     ) {}
 }

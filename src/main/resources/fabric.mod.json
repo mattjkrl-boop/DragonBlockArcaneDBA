@@ -18,7 +18,11 @@
 			"com.dragonblockarcanedba.DragonBlockArcaneDBA"
 		],
 		"client": [
-			"com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient"
+			"com.dragonblockarcanedba.client.DragonBlockArcaneDBAClient",
+			"com.dragonblockarcanedba.client.hooks.KiBarrierClient",
+			"com.dragonblockarcanedba.client.hooks.WishClient",
+			"com.dragonblockarcanedba.client.hooks.MobClient",
+			"com.dragonblockarcanedba.client.hooks.GearClient"
 		],
 		"modmenu": [
 			"com.dragonblockarcanedba.client.config.ModMenuIntegration"

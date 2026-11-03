@@ -3,8 +3,10 @@ package com.dragonblockarcanedba.entity;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.projectile.ThrowableProjectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
@@ -13,6 +15,7 @@ import net.minecraft.world.phys.EntityHitResult;
 public class KiBlastEntity extends ThrowableProjectile {
     private static final EntityDataAccessor<Integer> COLOR = SynchedEntityData.defineId(KiBlastEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(KiBlastEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> SCALE = SynchedEntityData.defineId(KiBlastEntity.class, EntityDataSerializers.FLOAT);
 
     public KiBlastEntity(EntityType<? extends ThrowableProjectile> entityType, Level level) {
         super(entityType, level);
@@ -22,6 +25,7 @@ public class KiBlastEntity extends ThrowableProjectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(COLOR, 0xFFFFFF);
         builder.define(DAMAGE, 10.0f);
+        builder.define(SCALE, 1.0f);
     }
 
     public void setColor(int color) {
@@ -40,6 +44,36 @@ public class KiBlastEntity extends ThrowableProjectile {
         return this.entityData.get(DAMAGE);
     }
 
+    public void setScale(float scale) {
+        if (scale <= 0f || Float.isNaN(scale)) {
+            scale = 1.0f;
+        }
+        this.entityData.set(SCALE, scale);
+        this.refreshDimensions();
+    }
+
+    public float getScale() {
+        return this.entityData.get(SCALE);
+    }
+
+    @Override
+    public EntityDimensions getDimensions(Pose pose) {
+        EntityDimensions base = super.getDimensions(pose);
+        float scale = this.getScale();
+        if (scale == 1.0f) {
+            return base;
+        }
+        return base.scale(scale);
+    }
+
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        super.onSyncedDataUpdated(key);
+        if (SCALE.equals(key)) {
+            this.refreshDimensions();
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();
@@ -49,11 +83,12 @@ public class KiBlastEntity extends ThrowableProjectile {
         if (!this.level().isClientSide() && this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
             float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
             if (density > 0f) {
+                float scale = this.getScale();
                 serverLevel.sendParticles(
                     com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                     this.getX(), this.getY(), this.getZ(),
                     Math.max(1, Math.round(1f * density)),
-                    0.08, 0.08, 0.08, 0.01);
+                    0.08 * scale, 0.08 * scale, 0.08 * scale, 0.01);
             }
         }
     }
@@ -88,11 +123,12 @@ public class KiBlastEntity extends ThrowableProjectile {
             if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
                 float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
                 if (density > 0f) {
+                    float scale = this.getScale();
                     serverLevel.sendParticles(
                         com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                         this.getX(), this.getY(), this.getZ(),
                         Math.max(2, Math.round(10f * density)),
-                        0.3, 0.3, 0.3, 0.12);
+                        0.3 * scale, 0.3 * scale, 0.3 * scale, 0.12);
                 }
             }
         }

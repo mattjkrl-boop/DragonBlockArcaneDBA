@@ -13,6 +13,7 @@ public class KiBeamEntity extends Projectile {
     private static final EntityDataAccessor<Integer> COLOR = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> LENGTH = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> OWNER_ID = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> SCALE = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.FLOAT);
 
     public KiBeamEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -36,11 +37,23 @@ public class KiBeamEntity extends Projectile {
         builder.define(COLOR, 0xFFFFFF);
         builder.define(LENGTH, 50.0f);
         builder.define(OWNER_ID, -1);
+        builder.define(SCALE, 1.0f);
     }
 
     public int getColor() { return this.entityData.get(COLOR); }
     public float getLength() { return this.entityData.get(LENGTH); }
     public int getOwnerId() { return this.entityData.get(OWNER_ID); }
+
+    public void setScale(float scale) {
+        if (scale <= 0f || Float.isNaN(scale)) {
+            scale = 1.0f;
+        }
+        this.entityData.set(SCALE, scale);
+    }
+
+    public float getScale() {
+        return this.entityData.get(SCALE);
+    }
 
     @Override
     public void tick() {

@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.entity;
 
+import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.projectile.ThrowableProjectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
@@ -14,6 +16,7 @@ import net.minecraft.core.particles.DustParticleOptions;
 public class KiDiskEntity extends ThrowableProjectile {
     private static final EntityDataAccessor<Integer> COLOR = SynchedEntityData.defineId(KiDiskEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(KiDiskEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> SCALE = SynchedEntityData.defineId(KiDiskEntity.class, EntityDataSerializers.FLOAT);
 
     public KiDiskEntity(EntityType<? extends ThrowableProjectile> entityType, Level level) {
         super(entityType, level);
@@ -23,6 +26,7 @@ public class KiDiskEntity extends ThrowableProjectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(COLOR, 0xFFFFFF);
         builder.define(DAMAGE, 10.0f);
+        builder.define(SCALE, 1.0f);
     }
 
     public void setColor(int color) { this.entityData.set(COLOR, color); }
@@ -30,6 +34,36 @@ public class KiDiskEntity extends ThrowableProjectile {
 
     public void setDamage(float damage) { this.entityData.set(DAMAGE, damage); }
     public float getDamage() { return this.entityData.get(DAMAGE); }
+
+    public void setScale(float scale) {
+        if (scale <= 0f || Float.isNaN(scale)) {
+            scale = 1.0f;
+        }
+        this.entityData.set(SCALE, scale);
+        this.refreshDimensions();
+    }
+
+    public float getScale() {
+        return this.entityData.get(SCALE);
+    }
+
+    @Override
+    public EntityDimensions getDimensions(Pose pose) {
+        EntityDimensions base = super.getDimensions(pose);
+        float scale = this.getScale();
+        if (scale == 1.0f) {
+            return base;
+        }
+        return base.scale(scale);
+    }
+
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        super.onSyncedDataUpdated(key);
+        if (SCALE.equals(key)) {
+            this.refreshDimensions();
+        }
+    }
 
     @Override
     public void tick() {

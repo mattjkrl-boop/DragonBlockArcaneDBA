@@ -81,10 +81,12 @@ public class DragonBlockArcaneDBA implements ModInitializer {
 
         // Register Entities
         com.dragonblockarcanedba.entity.DbaEntities.register();
+        com.dragonblockarcanedba.ki.KiBarrier.register();
 
         // Register Networking
         DbaNetwork.registerCommon();
         DbaNetwork.registerServer();
+        com.dragonblockarcanedba.wish.DragonWishRitual.register();
         com.dragonblockarcanedba.movement.MovementPhysics.register();
         com.dragonblockarcanedba.movement.MobPhysics.register();
 
@@ -366,6 +368,7 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             com.dragonblockarcanedba.item.OxKingsAxeItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.item.ZSwordItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.ki.KiTechniqueHandler.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.ki.KiBarrier.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.util.DbaPhysicsAttributes.onPlayerDisconnect(playerUuid);
         });
 

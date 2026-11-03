@@ -8,7 +8,12 @@ import net.minecraft.resources.Identifier;
 /**
  * C2S payload: saves a Ki technique configuration to a player slot (0–2).
  */
-public record C2SKiTechniqueSavePayload(int slot, String techType, int usedPercent, int color, boolean isBarrage) implements CustomPacketPayload {
+public record C2SKiTechniqueSavePayload(int slot, String techType, int usedPercent, int color, boolean isBarrage, int chargeTicks, double size) implements CustomPacketPayload {
+    /** Craft saves that have not chosen a charge or a size keep the live attack unchanged. */
+    public C2SKiTechniqueSavePayload(int slot, String techType, int usedPercent, int color, boolean isBarrage) {
+        this(slot, techType, usedPercent, color, isBarrage, 0, 1.0);
+    }
+
     public static final CustomPacketPayload.Type<C2SKiTechniqueSavePayload> ID =
         new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath("dragonblockarcanedba", "ki_tech_save"));
 
@@ -21,6 +26,8 @@ public record C2SKiTechniqueSavePayload(int slot, String techType, int usedPerce
         buf.writeVarInt(payload.usedPercent);
         buf.writeInt(payload.color);
         buf.writeBoolean(payload.isBarrage);
+        buf.writeVarInt(payload.chargeTicks);
+        buf.writeDouble(payload.size);
     }
 
     private static C2SKiTechniqueSavePayload read(FriendlyByteBuf buf) {
@@ -29,7 +36,9 @@ public record C2SKiTechniqueSavePayload(int slot, String techType, int usedPerce
             buf.readUtf(),
             buf.readVarInt(),
             buf.readInt(),
-            buf.readBoolean()
+            buf.readBoolean(),
+            buf.readVarInt(),
+            buf.readDouble()
         );
     }
 

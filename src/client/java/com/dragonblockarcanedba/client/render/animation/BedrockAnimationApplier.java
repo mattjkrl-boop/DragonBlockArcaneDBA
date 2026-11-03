@@ -5,10 +5,15 @@ import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.ItemStack;
+
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Universal Bedrock animation engine for Dragon Block Arcane.
@@ -31,6 +36,13 @@ public final class BedrockAnimationApplier {
 
     private BedrockAnimationApplier() {}
 
+    /** Last form path seen per player. An empty string is the base form. */
+    private static final Map<Integer, String> LAST_FORM = new ConcurrentHashMap<>();
+    /** Clip selected when that player's existing form id changed. */
+    private static final Map<Integer, String> TRANSFORM_CLIP = new ConcurrentHashMap<>();
+    /** Age, in seconds, when the transform clip started. */
+    private static final Map<Integer, Float> TRANSFORM_START = new ConcurrentHashMap<>();
+
     public static boolean apply(
             HumanoidModel<?> model,
             AvatarRenderState state,
@@ -47,10 +59,12 @@ public final class BedrockAnimationApplier {
         ItemStack mainItem = state.getMainHandItemStack();
         boolean hasSword = isSword(mainItem);
         boolean hasAxe = isAxe(mainItem);
+        final String race = raceKey(dbaState);
+        watchForm(state, dbaState, race);
 
         // ==================== 1. DEATH ====================
         if (state.deathTime > 0.0f) {
-            BedrockAnimationRegistry.BedrockAnimation deathAnim = getAnim("death");
+            BedrockAnimationRegistry.BedrockAnimation deathAnim = getAnim(race, "death");
             if (deathAnim != null) {
                 float time = Math.min((state.deathTime / 20.0f), deathAnim.length);
                 applyTrackedBones(model, deathAnim, time, 1.0f, true);
@@ -60,8 +74,8 @@ public final class BedrockAnimationApplier {
 
         // ==================== 2. SLEEPING ====================
         if (state.hasPose(Pose.SLEEPING) || state.bedOrientation != null) {
-            BedrockAnimationRegistry.BedrockAnimation sleepAnim = getAnim("sleep_idle");
-            if (sleepAnim == null) sleepAnim = getAnim("sleep");
+            BedrockAnimationRegistry.BedrockAnimation sleepAnim = getAnim(race, "sleep_idle");
+            if (sleepAnim == null) sleepAnim = getAnim(race, "sleep");
             if (sleepAnim != null) {
                 float time = sleepAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, sleepAnim, time, 1.0f, true);
@@ -69,9 +83,27 @@ public final class BedrockAnimationApplier {
             }
         }
 
+        // The rush forces fall-flying. A fly or transform clip would lean the
+        // bones again on top of that pose, so the rush returns first.
+        if (state.isFallFlying && holdsAzureDragon(state)) {
+            applyAzureRushPose(model, dbaState);
+            return true;
+        }
+
+        // Form id already changed on this render state. Play that clip before
+        // emotes and locomotion so the power-up is the pose you see.
+        if (applyActiveTransform(model, state, dbaState)) {
+            if (state.isFallFlying || dbaState.dba$isFlying()) {
+                float transformBank = (float) Math.toRadians(dbaState.dba$getFlightBank());
+                model.body.zRot += transformBank;
+                model.head.zRot -= transformBank * 0.35f;
+            }
+            return true;
+        }
+
         // ==================== 3. EMOTES & DBZ STANCES ====================
         if (activeEmote != null && !activeEmote.isEmpty()) {
-            BedrockAnimationRegistry.BedrockAnimation emoteAnim = getAnim(activeEmote);
+            BedrockAnimationRegistry.BedrockAnimation emoteAnim = getAnim(race, activeEmote);
             if (emoteAnim != null) {
                 float time = emoteAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, emoteAnim, time, 1.0f);
@@ -84,7 +116,7 @@ public final class BedrockAnimationApplier {
 
         // ==================== 4. CRAWLING (1-Block Tunnels) ====================
         if (state.hasPose(Pose.SWIMMING) && !state.isInWater) {
-            BedrockAnimationRegistry.BedrockAnimation crawlAnim = getAnim("crawl");
+            BedrockAnimationRegistry.BedrockAnimation crawlAnim = getAnim(race, "crawl");
             if (crawlAnim != null) {
                 float time = (limbSwing * 0.12f) % crawlAnim.length;
                 applyTrackedBones(model, crawlAnim, time, 1.0f);
@@ -94,7 +126,7 @@ public final class BedrockAnimationApplier {
 
         // ==================== 5. SWIMMING ====================
         if (state.isVisuallySwimming || (state.isInWater && state.swimAmount > 0.1f)) {
-            BedrockAnimationRegistry.BedrockAnimation swimAnim = getAnim("swim");
+            BedrockAnimationRegistry.BedrockAnimation swimAnim = getAnim(race, "swim");
             if (swimAnim != null) {
                 float time = swimAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, swimAnim, time, 1.0f);
@@ -104,7 +136,7 @@ public final class BedrockAnimationApplier {
 
         // ==================== 5.5. CLIMBING (Ladders, Vines, Scaffolding) ====================
         if (dbaState.dba$isOnLadder()) {
-            BedrockAnimationRegistry.BedrockAnimation climbAnim = getAnim("climb");
+            BedrockAnimationRegistry.BedrockAnimation climbAnim = getAnim(race, "climb");
             if (climbAnim != null) {
                 boolean isMovingOnLadder = Math.abs(dbaState.dba$getLocalVelocityY()) > 0.02f || dbaState.dba$getHorizontalSpeed() > 0.02f;
                 float time = isMovingOnLadder ? (limbSwing * 0.15f) % climbAnim.length : 0.25f;
@@ -115,14 +147,7 @@ public final class BedrockAnimationApplier {
 
         // ==================== 6. FLYING (Elytra / Ki Flight) ====================
         if (state.isFallFlying || dbaState.dba$isFlying()) {
-            // The rush forces fall-flying. The shared fly clip leans the bones
-            // again on top of that, so the body stays upright or folds into the
-            // camera. The rush gets its own forward pose instead.
-            if (state.isFallFlying && holdsAzureDragon(state)) {
-                applyAzureRushPose(model, dbaState);
-                return true;
-            }
-            BedrockAnimationRegistry.BedrockAnimation flyAnim = getAnim("fly");
+            BedrockAnimationRegistry.BedrockAnimation flyAnim = getAnim(race, "fly");
             if (flyAnim != null) {
                 float time = flyAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, flyAnim, time, 1.0f);
@@ -138,9 +163,9 @@ public final class BedrockAnimationApplier {
 
         // ==================== 7. RIDING (Horse / Boat / Minecart) ====================
         if (state.isPassenger) {
-            BedrockAnimationRegistry.BedrockAnimation rideAnim = getAnim("riding");
-            if (rideAnim == null) rideAnim = getAnim("ride_idle");
-            if (rideAnim == null) rideAnim = getAnim("sit");
+            BedrockAnimationRegistry.BedrockAnimation rideAnim = getAnim(race, "riding");
+            if (rideAnim == null) rideAnim = getAnim(race, "ride_idle");
+            if (rideAnim == null) rideAnim = getAnim(race, "sit");
             if (rideAnim != null) {
                 float time = rideAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, rideAnim, time, 1.0f);
@@ -156,14 +181,14 @@ public final class BedrockAnimationApplier {
         if (!state.isPassenger && !state.isInWater && !state.isFallFlying && !dbaState.dba$isOnGround()) {
             if (velY > 0.12f) {
                 String jumpId = dbaState.dba$isSprinting() ? "running_jump" : "jump";
-                BedrockAnimationRegistry.BedrockAnimation jumpAnim = getAnim(jumpId);
+                BedrockAnimationRegistry.BedrockAnimation jumpAnim = getAnim(race, jumpId);
                 if (jumpAnim != null) {
                     float time = jumpAnim.calculatePlayTime(ageSeconds);
                     applyTrackedBones(model, jumpAnim, time, 1.0f);
                     return true;
                 }
             }
-            BedrockAnimationRegistry.BedrockAnimation fallAnim = getAnim("fall");
+            BedrockAnimationRegistry.BedrockAnimation fallAnim = getAnim(race, "fall");
             if (fallAnim != null) {
                 float time = fallAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, fallAnim, time, 1.0f);
@@ -174,14 +199,14 @@ public final class BedrockAnimationApplier {
         // ==================== 9. CROUCHING / SNEAKING ====================
         if (state.isCrouching) {
             if (dbaState.dba$getHorizontalSpeed() > 0.05f) {
-                BedrockAnimationRegistry.BedrockAnimation sneakWalkAnim = getAnim("sneak_walk");
+                BedrockAnimationRegistry.BedrockAnimation sneakWalkAnim = getAnim(race, "sneak_walk");
                 if (sneakWalkAnim != null) {
                     float time = (limbSwing * 0.12f) % sneakWalkAnim.length;
                     applyTrackedBones(model, sneakWalkAnim, time, 1.0f);
                     return true;
                 }
             } else {
-                BedrockAnimationRegistry.BedrockAnimation sneakIdleAnim = getAnim("sneak_idle");
+                BedrockAnimationRegistry.BedrockAnimation sneakIdleAnim = getAnim(race, "sneak_idle");
                 if (sneakIdleAnim != null) {
                     float time = sneakIdleAnim.calculatePlayTime(ageSeconds);
                     applyTrackedBones(model, sneakIdleAnim, time, 1.0f);
@@ -193,7 +218,7 @@ public final class BedrockAnimationApplier {
         // ==================== 10. BLOCKING / PARRYING ====================
         if (state.rightArmPose == HumanoidModel.ArmPose.BLOCK || state.leftArmPose == HumanoidModel.ArmPose.BLOCK) {
             String blockId = hasSword ? "sword_parry" : (hasAxe ? "axe_parry" : "block");
-            BedrockAnimationRegistry.BedrockAnimation blockAnim = getAnim(blockId);
+            BedrockAnimationRegistry.BedrockAnimation blockAnim = getAnim(race, blockId);
             if (blockAnim != null) {
                 float time = blockAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, blockAnim, time, 1.0f);
@@ -204,7 +229,7 @@ public final class BedrockAnimationApplier {
         // ==================== 11. USING ITEMS (Eating, Drinking, Tools) ====================
         if (state.isUsingItem) {
             String useId = isConsumable(mainItem) ? "eat" : "use_item";
-            BedrockAnimationRegistry.BedrockAnimation useAnim = getAnim(useId);
+            BedrockAnimationRegistry.BedrockAnimation useAnim = getAnim(race, useId);
             if (useAnim != null) {
                 float time = useAnim.calculatePlayTime(ageSeconds);
                 applyTrackedBones(model, useAnim, time, 1.0f);
@@ -215,7 +240,7 @@ public final class BedrockAnimationApplier {
         // ==================== 12. ATTACK SWINGS / PUNCHES ====================
         if (com.dragonblockarcanedba.util.DbaCompat.swingProgress(state) > 0.0f) {
             String attackId = hasSword ? "attack" : "punch";
-            BedrockAnimationRegistry.BedrockAnimation attackAnim = getAnim(attackId);
+            BedrockAnimationRegistry.BedrockAnimation attackAnim = getAnim(race, attackId);
             if (attackAnim != null) {
                 float time = com.dragonblockarcanedba.util.DbaCompat.swingProgress(state) * attackAnim.length;
                 applyTrackedBones(model, attackAnim, time, 1.0f);
@@ -228,7 +253,7 @@ public final class BedrockAnimationApplier {
             // Local Z is positive when moving the way the body faces. The old
             // test used the opposite sign, so ordinary walking played walk_back.
             if (dbaState.dba$getLocalVelocityZ() < -0.08f) {
-                BedrockAnimationRegistry.BedrockAnimation walkBackAnim = getAnim("walk_back");
+                BedrockAnimationRegistry.BedrockAnimation walkBackAnim = getAnim(race, "walk_back");
                 if (walkBackAnim != null) {
                     float time = (limbSwing * 0.12f) % walkBackAnim.length;
                     applyTrackedBones(model, walkBackAnim, time, 1.0f);
@@ -238,7 +263,7 @@ public final class BedrockAnimationApplier {
 
             if (dbaState.dba$isSprinting()) {
                 // Running / Sprinting
-                BedrockAnimationRegistry.BedrockAnimation runAnim = getAnim("run");
+                BedrockAnimationRegistry.BedrockAnimation runAnim = getAnim(race, "run");
                 if (runAnim != null) {
                     float time = (limbSwing * 0.15f) % runAnim.length;
                     applyTrackedBones(model, runAnim, time, 1.0f);
@@ -248,7 +273,7 @@ public final class BedrockAnimationApplier {
 
             // Normal Walking (Sword walk, Axe walk, Standard walk)
             String walkId = hasSword ? "sword_walk" : (hasAxe ? "axe_walk" : "walk");
-            BedrockAnimationRegistry.BedrockAnimation walkAnim = getAnim(walkId);
+            BedrockAnimationRegistry.BedrockAnimation walkAnim = getAnim(race, walkId);
             if (walkAnim != null) {
                 float time = (limbSwing * 0.12f) % walkAnim.length;
                 applyTrackedBones(model, walkAnim, time, 1.0f);
@@ -258,7 +283,7 @@ public final class BedrockAnimationApplier {
 
         // ==================== 14. IDLE / STANDING ====================
         String idleId = hasSword ? "sword_idle" : (hasAxe ? "axe_idle" : (!mainItem.isEmpty() ? "item_idle" : "idle"));
-        BedrockAnimationRegistry.BedrockAnimation idleAnim = getAnim(idleId);
+        BedrockAnimationRegistry.BedrockAnimation idleAnim = getAnim(race, idleId);
         if (idleAnim != null) {
             float time = idleAnim.calculatePlayTime(ageSeconds);
             applyTrackedBones(model, idleAnim, time, 1.0f);
@@ -310,12 +335,142 @@ public final class BedrockAnimationApplier {
                 && state.leftHandItemStack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem;
     }
 
-    private static BedrockAnimationRegistry.BedrockAnimation getAnim(String id) {
+    private static BedrockAnimationRegistry.BedrockAnimation getAnim(String race, String id) {
+        if (id == null || id.isEmpty()) {
+            return null;
+        }
+        if (isClipToken(race)) {
+            BedrockAnimationRegistry.BedrockAnimation raceAnim =
+                    BedrockAnimationRegistry.getAnimation("animation." + race + "." + id);
+            if (raceAnim != null) {
+                return raceAnim;
+            }
+        }
         BedrockAnimationRegistry.BedrockAnimation anim = BedrockAnimationRegistry.getAnimation(id);
         if (anim == null) {
             anim = BedrockAnimationRegistry.getAnimation("animation.player." + id);
         }
         return anim;
+    }
+
+    /**
+     * The render state already receives the player's form id. When that id
+     * changes, play the matching transform clip. This is the existing form
+     * change, not a second controller.
+     */
+    private static void watchForm(AvatarRenderState state, DbaPlayerState dbaState, String race) {
+        int id = state.id;
+        Identifier form = dbaState.dba$getActiveFormId();
+        String formKey = "";
+        if (form != null && isClipToken(form.getPath().toLowerCase(Locale.ROOT))) {
+            formKey = form.getPath().toLowerCase(Locale.ROOT);
+        }
+        String previous = LAST_FORM.get(id);
+        if (previous == null) {
+            LAST_FORM.put(id, formKey);
+            return;
+        }
+        if (previous.equals(formKey)) {
+            return;
+        }
+        LAST_FORM.put(id, formKey);
+        String clipName = transformClipName(race, formKey);
+        if (clip(clipName) == null) {
+            TRANSFORM_CLIP.remove(id);
+            TRANSFORM_START.remove(id);
+            return;
+        }
+        TRANSFORM_CLIP.put(id, clipName);
+        TRANSFORM_START.put(id, dbaState.dba$getTailAgeInTicks() / 20.0f);
+    }
+
+    private static boolean applyActiveTransform(
+            HumanoidModel<?> model,
+            AvatarRenderState state,
+            DbaPlayerState dbaState
+    ) {
+        int id = state.id;
+        String clipName = TRANSFORM_CLIP.get(id);
+        Float started = TRANSFORM_START.get(id);
+        if (clipName == null || started == null) {
+            return false;
+        }
+        BedrockAnimationRegistry.BedrockAnimation anim = clip(clipName);
+        if (anim == null) {
+            TRANSFORM_CLIP.remove(id);
+            TRANSFORM_START.remove(id);
+            return false;
+        }
+        float elapsed = (dbaState.dba$getTailAgeInTicks() / 20.0f) - started;
+        if (elapsed < 0.0f || elapsed > anim.length) {
+            TRANSFORM_CLIP.remove(id);
+            TRANSFORM_START.remove(id);
+            return false;
+        }
+        applyTrackedBones(model, anim, elapsed, 1.0f, true);
+        return true;
+    }
+
+    private static String transformClipName(String race, String formKey) {
+        if (formKey == null || formKey.isEmpty()) {
+            if (isClipToken(race)) {
+                String baseClip = "animation." + race + ".transform.base";
+                if (clip(baseClip) != null) {
+                    return baseClip;
+                }
+            }
+            if (clip("animation.player.revert") != null) {
+                return "animation.player.revert";
+            }
+            return "animation.player.transform";
+        }
+        if (isClipToken(race)) {
+            String raceClip = "animation." + race + ".transform." + formKey;
+            if (clip(raceClip) != null) {
+                return raceClip;
+            }
+        }
+        String formClip = "animation.form." + formKey;
+        if (clip(formClip) != null) {
+            return formClip;
+        }
+        if (isClipToken(race)) {
+            String raceGeneric = "animation." + race + ".transform";
+            if (clip(raceGeneric) != null) {
+                return raceGeneric;
+            }
+        }
+        return "animation.player.transform";
+    }
+
+    private static BedrockAnimationRegistry.BedrockAnimation clip(String name) {
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        return BedrockAnimationRegistry.getAnimation(name);
+    }
+
+    private static String raceKey(DbaPlayerState dbaState) {
+        Identifier raceId = dbaState.dba$getRaceId();
+        if (raceId == null) {
+            return "";
+        }
+        String path = raceId.getPath().toLowerCase(Locale.ROOT);
+        return isClipToken(path) ? path : "";
+    }
+
+    private static boolean isClipToken(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean isSword(ItemStack stack) {

@@ -30,6 +30,7 @@ public class DbaNetwork {
         PayloadTypeRegistry.clientboundPlay().register(ReviveUiOpenPayload.TYPE, ReviveUiOpenPayload.CODEC);
         // Wish Menu open screen (S2C)
         PayloadTypeRegistry.clientboundPlay().register(WishMenuOpenPayload.TYPE, WishMenuOpenPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(WishRitualStartPayload.TYPE, WishRitualStartPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ScreenShakePayload.TYPE, ScreenShakePayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(DeathTumblePayload.TYPE, DeathTumblePayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(BossStaggerPayload.TYPE, BossStaggerPayload.CODEC);
@@ -282,7 +283,7 @@ public class DbaNetwork {
             context.server().execute(() -> {
                 PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
                 com.dragonblockarcanedba.registry.Technique tech = com.dragonblockarcanedba.registry.TechniqueRegistry.getTechnique(Identifier.tryParse(techniqueId));
-                if (tech != null && !accessor.dba$hasTechnique(techniqueId)) {
+                if (tech != null && !accessor.dba$hasTechnique(techniqueId) && onCurrentRaceTree(accessor, tech.id())) {
                     if (tech.hasPrerequisites()) {
                         for (String prereqId : tech.prerequisiteTechniqueIds()) {
                             if (!accessor.dba$hasTechnique(prereqId)) {
@@ -313,7 +314,7 @@ public class DbaNetwork {
             String techniqueId = payload.techniqueId();
             context.server().execute(() -> {
                 PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
-                if (!accessor.dba$hasTechnique(techniqueId)) return;
+                if (!accessor.dba$hasTechnique(techniqueId) || !onCurrentRaceTree(accessor, techniqueId)) return;
                 int currentLvl = accessor.dba$getTechniqueLevel(techniqueId);
                 int targetLvl = currentLvl + 1;
                 if (targetLvl <= 10) {
@@ -341,7 +342,7 @@ public class DbaNetwork {
             String techniqueId = payload.techniqueId();
             context.server().execute(() -> {
                 PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
-                if (accessor.dba$hasTechnique(techniqueId) || techniqueId.isEmpty()) {
+                if (techniqueId.isEmpty() || (accessor.dba$hasTechnique(techniqueId) && onCurrentRaceTree(accessor, techniqueId))) {
                     accessor.dba$setEquippedTechnique(slot, techniqueId);
                     if (!techniqueId.isEmpty()) {
                         accessor.dba$setKiTechniqueSlot(slot, com.dragonblockarcanedba.ki.KiTechnique.EMPTY);
@@ -382,7 +383,8 @@ public class DbaNetwork {
                     }
                     accessor.dba$setStatPoints(accessor.dba$getStatPoints() - apCost);
                     accessor.dba$setEquippedTechnique(slot, ""); // Clear arcane tech in this slot
-                    KiTechnique kiTech = new KiTechnique(type, pct, payload.color(), payload.isBarrage());
+                    KiTechnique kiTech = new KiTechnique(type, pct, payload.color(), payload.isBarrage(), false,
+                            payload.chargeTicks(), payload.size());
                     accessor.dba$setKiTechniqueSlot(slot, kiTech);
                     accessor.dba$syncStats();
                     player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -403,7 +405,7 @@ public class DbaNetwork {
                 if (tech != null && !tech.isEmpty() && accessor.dba$hasTechnique(tech)) {
                     toggleTechnique(player, accessor, tech);
                 } else {
-                    KiTechniqueHandler.fire(player, payload.slot());
+                    KiTechniqueHandler.fire(player, payload.slot(), payload.heldTicks());
                 }
             });
         });
@@ -628,6 +630,10 @@ public class DbaNetwork {
             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.8f, !isActive ? 1.4f : 0.8f);
             player.sendSystemMessage(net.minecraft.network.chat.Component.literal(!isActive ? "§a✦ Ki Sense Activated" : "§7Ki Sense Deactivated"), true);
+        } else if (com.dragonblockarcanedba.skill.SkillDefinitions.isPassive(tech)) {
+            com.dragonblockarcanedba.registry.Technique known = com.dragonblockarcanedba.registry.TechniqueRegistry.getTechnique(Identifier.tryParse(tech));
+            String name = known != null ? known.name() : tech;
+            player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7" + name + " stays on while it is learned."), true);
         } else {
             boolean isActive = accessor.dba$isTechniqueActive(tech);
             accessor.dba$setTechniqueActive(tech, !isActive);
@@ -644,6 +650,25 @@ public class DbaNetwork {
                 ServerPlayNetworking.send(other, payload);
             }
         }
+    }
+
+    private static boolean onCurrentRaceTree(PlayerStatsAccessor accessor, String techniqueId) {
+        if (accessor == null || techniqueId == null || techniqueId.isEmpty()) {
+            return false;
+        }
+        Identifier raceId = accessor.dba$getRaceId();
+        if (raceId == null) {
+            return false;
+        }
+        String path = techniqueId.contains(":") ? techniqueId.substring(techniqueId.indexOf(':') + 1) : techniqueId;
+        java.util.List<com.dragonblockarcanedba.registry.Technique> tree =
+                com.dragonblockarcanedba.registry.TechniqueRegistry.getTechniquesForRace(raceId);
+        for (int i = 0; i < tree.size(); i++) {
+            if (tree.get(i).id().equals(path)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static void broadcastEmote(ServerPlayer player, String emote) {

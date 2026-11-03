@@ -32,6 +32,7 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.ageInTicks = entity.tickCount + partialTicks;
+        state.scale = entity.getScale();
     }
 
     @Override
@@ -43,14 +44,18 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
         float beamLength = state.length;
         float phase = state.ageInTicks * 0.35f;
         int steps = Math.min(40, Math.max(8, (int) (beamLength * 1.2f)));
+        float scale = state.scale;
+        float core = 0.08f * scale;
+        float helix = 0.28f * scale;
+        float ribbon = 0.045f * scale;
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawCylinder(pose, buffer, 0.08f, 0f, beamLength, 8, 1f, 1f, 1f, 0.95f);
-            KiRenderHelper.drawHelix(pose, buffer, 0.28f, 0f, beamLength, 3.5f, phase, 0.045f, steps, r, g, b, 0.85f);
-            KiRenderHelper.drawHelix(pose, buffer, 0.28f, 0f, beamLength, 3.5f, phase + (float) Math.PI, 0.045f, steps, r, g, b, 0.85f);
+            KiRenderHelper.drawCylinder(pose, buffer, core, 0f, beamLength, 8, 1f, 1f, 1f, 0.95f);
+            KiRenderHelper.drawHelix(pose, buffer, helix, 0f, beamLength, 3.5f, phase, ribbon, steps, r, g, b, 0.85f);
+            KiRenderHelper.drawHelix(pose, buffer, helix, 0f, beamLength, 3.5f, phase + (float) Math.PI, ribbon, steps, r, g, b, 0.85f);
         });
         poseStack.popPose();
 
@@ -63,5 +68,6 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
         public float yRot = 0;
         public float xRot = 0;
         public float ageInTicks = 0;
+        public float scale = 1.0f;
     }
 }

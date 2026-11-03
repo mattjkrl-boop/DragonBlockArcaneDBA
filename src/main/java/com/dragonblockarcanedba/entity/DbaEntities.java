@@ -838,11 +838,52 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("z_gravity_slam")))
     );
 
+    public static final EntityType<SaibamanEntity> SAIBAMAN = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("saibaman"),
+            EntityType.Builder.of(SaibamanEntity::new, MobCategory.MONSTER)
+                    .sized(0.7f, 1.5f)
+                    .clientTrackingRange(8)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("saibaman")))
+    );
+
+    public static final EntityType<FriezaSoldierEntity> FRIEZA_SOLDIER = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("frieza_soldier"),
+            EntityType.Builder.of(FriezaSoldierEntity::new, MobCategory.MONSTER)
+                    .sized(0.6f, 1.95f)
+                    .clientTrackingRange(8)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("frieza_soldier")))
+    );
+
+    public static final EntityType<NamekianWarriorEntity> NAMEKIAN_WARRIOR = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("namekian_warrior"),
+            EntityType.Builder.of(NamekianWarriorEntity::new, MobCategory.MONSTER)
+                    .sized(0.6f, 2.3f)
+                    .clientTrackingRange(8)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("namekian_warrior")))
+    );
+
+    public static final EntityType<PatrolRobotEntity> PATROL_ROBOT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("patrol_robot"),
+            EntityType.Builder.of(PatrolRobotEntity::new, MobCategory.CREATURE)
+                    .sized(0.7f, 1.9f)
+                    .clientTrackingRange(10)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("patrol_robot")))
+    );
+
     public static void register() {
         DragonBlockArcaneDBA.LOGGER.info("Registering Entities for " + DragonBlockArcaneDBA.MOD_ID);
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(OTHERWORLD_GUIDE, OtherworldGuideEntity.createMobAttributes());
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(FLYING_NIMBUS, FlyingNimbusEntity.createAttributes());
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(SHENRON, ShenronEntity.createAttributes());
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(PORUNGA, PorungaEntity.createAttributes());
+        net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(SAIBAMAN, SaibamanEntity.createAttributes());
+        net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(FRIEZA_SOLDIER, FriezaSoldierEntity.createAttributes());
+        net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(NAMEKIAN_WARRIOR, NamekianWarriorEntity.createAttributes());
+        net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(PATROL_ROBOT, PatrolRobotEntity.createAttributes());
+        DbaHostileSpawns.register();
     }
 }

@@ -12,6 +12,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Character menu. A left rail holds the five sections, Settings, and Close.
+ * The sheet itself fills the rest of the window on the pause-menu background.
+ */
 public class DbaMenuScreen extends Screen {
     private static final String[] TAB_LABELS = {"Stats", "Forms", "Skills", "Craft", "Emotes"};
     private static int lastActiveTab = 0;
@@ -22,8 +26,8 @@ public class DbaMenuScreen extends Screen {
 
     private int x;
     private int y;
-    private int bgWidth = 560;
-    private int bgHeight = 360;
+    private int bgWidth = 640;
+    private int bgHeight = 380;
 
     public DbaMenuScreen() {
         this(null);
@@ -44,14 +48,14 @@ public class DbaMenuScreen extends Screen {
 
     @Override
     protected void init() {
-        int margin = 12;
-        this.bgWidth = Math.min(620, Math.max(360, this.width - margin * 2));
-        this.bgHeight = Math.min(400, Math.max(250, this.height - margin * 2));
+        int margin = 8;
+        this.bgWidth = Math.min(680, Math.max(440, this.width - margin * 2));
+        this.bgHeight = Math.min(460, Math.max(300, this.height - margin * 2));
         if (this.bgWidth > this.width - 8) {
-            this.bgWidth = Math.max(200, this.width - 8);
+            this.bgWidth = Math.max(280, this.width - 8);
         }
         if (this.bgHeight > this.height - 8) {
-            this.bgHeight = Math.max(180, this.height - 8);
+            this.bgHeight = Math.max(200, this.height - 8);
         }
         this.x = (this.width - bgWidth) / 2;
         this.y = (this.height - bgHeight) / 2;
@@ -82,10 +86,32 @@ public class DbaMenuScreen extends Screen {
     public int getY() { return y; }
     public int getBgWidth() { return bgWidth; }
     public int getBgHeight() { return bgHeight; }
-    public int getContentX() { return x + DbaUi.PAD; }
-    public int getContentY() { return y + DbaUi.HEADER + DbaUi.TAB + DbaUi.STATUS; }
-    public int getContentWidth() { return bgWidth - DbaUi.PAD * 2; }
-    public int getContentHeight() { return bgHeight - DbaUi.HEADER - DbaUi.TAB - DbaUi.STATUS - DbaUi.PAD; }
+
+    private int railWidth() { return 104; }
+    private int railX() { return x + 6; }
+
+    private int settingsY() { return y + bgHeight - DbaUi.BUTTON_H * 2 - 12; }
+    private int closeButtonY() { return y + bgHeight - DbaUi.BUTTON_H - 6; }
+
+    private int tabTop() { return y + 8; }
+    private int tabBottom() { return settingsY() - 6; }
+
+    private int tabHeight() {
+        int gaps = DbaUi.GAP * (TAB_LABELS.length - 1);
+        int available = tabBottom() - tabTop() - gaps;
+        return Math.max(16, Math.min(26, available / TAB_LABELS.length));
+    }
+
+    private int tabY(int index) {
+        return tabTop() + index * (tabHeight() + DbaUi.GAP);
+    }
+
+    private int railButtonW() { return railWidth() - 8; }
+
+    public int getContentX() { return x + railWidth() + 12; }
+    public int getContentY() { return y + 28; }
+    public int getContentWidth() { return bgWidth - railWidth() - 20; }
+    public int getContentHeight() { return bgHeight - 36; }
 
     public <T extends net.minecraft.client.gui.components.events.GuiEventListener
             & net.minecraft.client.gui.components.Renderable
@@ -112,15 +138,18 @@ public class DbaMenuScreen extends Screen {
         DbaUi.playClick();
     }
 
-    private int tabWidth() {
-        int count = TAB_LABELS.length;
-        int inner = bgWidth - DbaUi.PAD * 2;
-        int gaps = DbaUi.GAP * (count - 1);
-        return Math.max(28, (inner - gaps) / count);
-    }
-
-    private int tabLeft() {
-        return x + DbaUi.PAD;
+    private String statusLine() {
+        Minecraft client = Minecraft.getInstance();
+        if (!(client.player instanceof PlayerStatsAccessor accessor)) {
+            return "Not in a world";
+        }
+        String race = accessor.dba$getRaceId() != null
+                ? accessor.dba$getRaceId().getPath().replace('_', ' ')
+                : "Unchosen";
+        race = race.substring(0, 1).toUpperCase(Locale.ROOT) + race.substring(1);
+        return race
+                + "    Level " + formatCompactNumber(accessor.dba$getLevel())
+                + "    " + formatCompactNumber(accessor.dba$getStatPoints()) + " AP";
     }
 
     @Override
@@ -133,38 +162,24 @@ public class DbaMenuScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         DbaUi.dim(context, this.width, this.height);
         DbaUi.frame(context, x, y, bgWidth, bgHeight);
+        context.fill(x + railWidth() + 6, y + 8, x + railWidth() + 7, y + bgHeight - 8, DbaUi.LINE);
 
-        int settingsW = 72;
-        int settingsX = DbaUi.closeX(x, bgWidth) - settingsW - 4;
-        int settingsY = DbaUi.closeY(y);
-        DbaUi.title(context, this.font, x, y, settingsX - x - 8, "Character");
-        DbaUi.button(context, this.font, settingsX, settingsY, settingsW, DbaUi.BUTTON_H, "Settings",
-                DbaUi.hit(mouseX, mouseY, settingsX, settingsY, settingsW, DbaUi.BUTTON_H), DbaUi.Kind.SECONDARY);
-        DbaUi.closeControl(context, this.font, x, y, bgWidth, mouseX, mouseY);
-
-        int tabY = y + DbaUi.HEADER;
-        int tabW = tabWidth();
-        int tabX = tabLeft();
+        int tabW = railButtonW();
+        int tabH = tabHeight();
         for (int i = 0; i < TAB_LABELS.length; i++) {
-            boolean hover = DbaUi.hit(mouseX, mouseY, tabX, tabY, tabW, DbaUi.TAB);
-            DbaUi.tab(context, this.font, tabX, tabY, tabW, DbaUi.TAB, TAB_LABELS[i], i == activeTab, hover);
-            tabX += tabW + DbaUi.GAP;
+            int ty = tabY(i);
+            boolean hover = DbaUi.hit(mouseX, mouseY, railX(), ty, tabW, tabH);
+            DbaUi.tab(context, this.font, railX(), ty, tabW, tabH, TAB_LABELS[i], i == activeTab, hover);
         }
 
-        int statusY = y + DbaUi.HEADER + DbaUi.TAB;
-        DbaUi.hairline(context, x, statusY + DbaUi.STATUS - 1, bgWidth);
-        Minecraft client = Minecraft.getInstance();
-        String status = "Not in a world";
-        if (client.player instanceof PlayerStatsAccessor accessor) {
-            String race = accessor.dba$getRaceId() != null
-                    ? accessor.dba$getRaceId().getPath().replace('_', ' ')
-                    : "Unchosen";
-            race = race.substring(0, 1).toUpperCase(Locale.ROOT) + race.substring(1);
-            status = race
-                    + "    Level " + formatCompactNumber(accessor.dba$getLevel())
-                    + "    " + formatCompactNumber(accessor.dba$getStatPoints()) + " AP";
-        }
-        context.text(this.font, Component.literal(DbaUi.clip(this.font, status, bgWidth - 24)), x + 12, statusY + 4, DbaUi.MUTED);
+        boolean settingsHover = DbaUi.hit(mouseX, mouseY, railX(), settingsY(), tabW, DbaUi.BUTTON_H);
+        boolean closeHover = DbaUi.hit(mouseX, mouseY, railX(), closeButtonY(), tabW, DbaUi.BUTTON_H);
+        DbaUi.button(context, this.font, railX(), settingsY(), tabW, DbaUi.BUTTON_H, "Settings", settingsHover, DbaUi.Kind.SECONDARY);
+        DbaUi.button(context, this.font, railX(), closeButtonY(), tabW, DbaUi.BUTTON_H, "Close", closeHover, DbaUi.Kind.SECONDARY);
+
+        context.text(this.font, Component.literal("Character"), getContentX(), y + 8, DbaUi.TEXT);
+        context.text(this.font, Component.literal(DbaUi.clip(this.font, statusLine(), getContentWidth())),
+                getContentX(), y + 18, DbaUi.MUTED);
 
         tabs.get(activeTab).render(context, mouseX, mouseY, delta);
         super.extractRenderState(context, mouseX, mouseY, delta);
@@ -177,33 +192,28 @@ public class DbaMenuScreen extends Screen {
         if (event.button() != 0) {
             return super.mouseClicked(event, isRepeat);
         }
-        if (DbaUi.closeHit(x, y, bgWidth, mx, my)) {
+        int tabW = railButtonW();
+        if (DbaUi.hit(mx, my, railX(), closeButtonY(), tabW, DbaUi.BUTTON_H)) {
             DbaUi.playClick();
             this.onClose();
             return true;
         }
-        int settingsW = 72;
-        int settingsX = DbaUi.closeX(x, bgWidth) - settingsW - 4;
-        int settingsY = DbaUi.closeY(y);
-        if (DbaUi.hit(mx, my, settingsX, settingsY, settingsW, DbaUi.BUTTON_H)) {
+        if (DbaUi.hit(mx, my, railX(), settingsY(), tabW, DbaUi.BUTTON_H)) {
             DbaUi.playClick();
             if (this.minecraft != null) {
                 this.minecraft.setScreenAndShow(new DbaSettingsScreen(this));
             }
             return true;
         }
-        int tabY = y + DbaUi.HEADER;
-        int tabW = tabWidth();
-        int tabX = tabLeft();
+        int tabH = tabHeight();
         for (int i = 0; i < TAB_LABELS.length; i++) {
-            if (DbaUi.hit(mx, my, tabX, tabY, tabW, DbaUi.TAB)) {
+            if (DbaUi.hit(mx, my, railX(), tabY(i), tabW, tabH)) {
                 if (i != activeTab) {
                     DbaUi.playClick();
                     selectTab(i);
                 }
                 return true;
             }
-            tabX += tabW + DbaUi.GAP;
         }
         if (tabs.get(activeTab).mouseClicked(event, isRepeat)) {
             return true;

@@ -31,6 +31,7 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
         state.ageInTicks = entity.tickCount + partialTicks;
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
+        state.scale = entity.getScale();
     }
 
     @Override
@@ -40,14 +41,18 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
         float b = KiRenderHelper.blue(state.color);
         RenderType renderType = KiRenderHelper.kiRenderType();
         float spin = state.ageInTicks * 24f;
+        float scale = state.scale;
+        float hole = 0.12f * scale;
+        float face = 0.70f * scale;
+        float rim = 0.82f * scale;
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(spin)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawDisc(pose, buffer, 0.12f, 0.70f, 28, r, g, b, 0.9f);
-            KiRenderHelper.drawDisc(pose, buffer, 0.70f, 0.82f, 28, 1f, 1f, 1f, 1f);
+            KiRenderHelper.drawDisc(pose, buffer, hole, face, 28, r, g, b, 0.9f);
+            KiRenderHelper.drawDisc(pose, buffer, face, rim, 28, 1f, 1f, 1f, 1f);
         });
         poseStack.popPose();
 
@@ -59,5 +64,6 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
         public float ageInTicks = 0;
         public float yRot = 0;
         public float xRot = 0;
+        public float scale = 1.0f;
     }
 }

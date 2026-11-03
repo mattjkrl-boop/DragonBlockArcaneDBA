@@ -17,6 +17,10 @@ import net.minecraft.resources.Identifier;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Race choice is a grid beside the preview. Colors, including eyes, are the second page
+ * and Confirm still saves skin, hair, and eye as #RRGGBB.
+ */
 public class RaceSelectionScreen extends Screen {
     private enum Page { RACE, COLORS }
 
@@ -49,7 +53,7 @@ public class RaceSelectionScreen extends Screen {
     private float previewRotation = 35.0F;
 
     private int frameX, frameY, frameW, frameH;
-    private int previewW, midW;
+    private int previewW;
 
     public RaceSelectionScreen() {
         super(Component.literal("Race"));
@@ -103,17 +107,20 @@ public class RaceSelectionScreen extends Screen {
 
     private void place() {
         this.frameW = Math.min(760, Math.max(480, this.width - 16));
-        this.frameH = Math.min(440, Math.max(260, this.height - 16));
+        this.frameH = Math.min(440, Math.max(280, this.height - 16));
         if (this.frameW > this.width - 8) this.frameW = Math.max(320, this.width - 8);
         if (this.frameH > this.height - 8) this.frameH = Math.max(220, this.height - 8);
         this.frameX = (this.width - frameW) / 2;
         this.frameY = (this.height - frameH) / 2;
-        this.previewW = Math.max(120, Math.min(220, frameW / 3));
-        this.midW = Math.max(120, Math.min(190, (frameW - previewW) / 3));
+        this.previewW = Math.max(140, Math.min(220, frameW * 32 / 100));
     }
 
-    private int detailX() { return frameX + previewW + midW; }
-    private int detailW() { return frameW - previewW - midW; }
+    private int paneX() { return frameX + previewW; }
+    private int paneW() { return frameW - previewW; }
+    private int innerX() { return paneX() + 8; }
+    private int innerW() { return paneW() - 16; }
+    private int listTop() { return frameY + DbaUi.HEADER + 8; }
+    private int footerY() { return frameY + frameH - DbaUi.BUTTON_H - 10; }
 
     private void applyRace(Race race, boolean recolor) {
         selectedRace = race.getId().toString();
@@ -206,10 +213,6 @@ public class RaceSelectionScreen extends Screen {
         applyLiveRecolor();
     }
 
-    private int listTop() { return frameY + DbaUi.HEADER + 8; }
-    private int listBottom() { return frameY + frameH - 8; }
-    private int rowH() { return 22; }
-
     private void confirm() {
         if (selectedRace.isEmpty()) {
             return;
@@ -232,6 +235,24 @@ public class RaceSelectionScreen extends Screen {
         this.onClose();
     }
 
+    private int gridCols() { return 2; }
+    private int cellW() { return Math.max(40, (innerW() - 4) / gridCols()); }
+    private int cellH() { return 22; }
+    private int gridBottom() { return footerY() - 16; }
+
+    private void clampGrid(int count) {
+        int rows = (count + gridCols() - 1) / gridCols();
+        int content = rows * (cellH() + 4);
+        int view = Math.max(1, gridBottom() - listTop());
+        int max = Math.max(0, content - view);
+        if (scroll < 0) scroll = 0;
+        if (scroll > max) scroll = max;
+    }
+
+    private int sliderRowY(int index) {
+        return listTop() + 32 + index * 32;
+    }
+
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         place();
@@ -241,17 +262,16 @@ public class RaceSelectionScreen extends Screen {
         DbaUi.title(context, this.font, frameX, frameY, DbaUi.closeX(frameX, frameW) - frameX - 8, heading);
         DbaUi.closeControl(context, this.font, frameX, frameY, frameW, mouseX, mouseY);
 
-        int previewX = frameX + previewW / 2;
         int previewTop = frameY + DbaUi.HEADER + 8;
-        int previewBottom = frameY + frameH - 28;
+        int previewBottom = frameY + frameH - 22;
         DbaUi.panel(context, frameX + 8, previewTop, previewW - 16, previewBottom - previewTop);
+        int previewX = frameX + previewW / 2;
         drawPreview(context, previewX, (previewTop + previewBottom) / 2, previewTop, previewBottom);
-        context.centeredText(this.font, Component.literal("Drag to turn"), previewX, previewBottom + 6, DbaUi.MUTED);
+        context.centeredText(this.font, Component.literal("Drag to turn"), previewX, previewBottom + 4, DbaUi.MUTED);
 
         if (page == Page.RACE) {
-            drawRaceList(context, mouseX, mouseY);
+            drawRaceGrid(context, mouseX, mouseY);
         } else {
-            drawChannels(context, mouseX, mouseY);
             drawColors(context, mouseX, mouseY);
         }
         super.extractRenderState(context, mouseX, mouseY, delta);
@@ -287,36 +307,33 @@ public class RaceSelectionScreen extends Screen {
         localPlayer.setXRot(savedXRot);
     }
 
-    private void drawRaceList(GuiGraphicsExtractor context, int mouseX, int mouseY) {
+    private void drawRaceGrid(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         List<Race> list = races();
-        int lx = frameX + previewW + 6;
-        int lw = midW - 12;
         if (list.isEmpty()) {
-            DbaUi.empty(context, this.font, lx, listTop(), lw + detailW(), frameH - DbaUi.HEADER - 16, "No races are available.");
+            DbaUi.empty(context, this.font, paneX(), listTop(), paneW(), frameH - DbaUi.HEADER - 20, "No races are available.");
             return;
         }
-        int view = listBottom() - listTop();
-        int stride = rowH() + 3;
-        int max = Math.max(0, list.size() * stride - view);
-        if (scroll < 0) scroll = 0;
-        if (scroll > max) scroll = max;
-        context.enableScissor(lx, listTop(), lx + lw, listBottom());
+        clampGrid(list.size());
+        int cols = gridCols();
+        int cw = cellW();
+        int ch = cellH();
+        context.enableScissor(innerX(), listTop(), innerX() + innerW(), gridBottom());
         for (int i = 0; i < list.size(); i++) {
-            Race race = list.get(i);
-            int ry = listTop() + i * stride - scroll;
-            if (ry + rowH() < listTop() || ry > listBottom()) {
+            int col = i % cols;
+            int row = i / cols;
+            int cx = innerX() + col * (cw + 4);
+            int cy = listTop() + row * (ch + 4) - scroll;
+            if (cy + ch < listTop() || cy > gridBottom()) {
                 continue;
             }
+            Race race = list.get(i);
             boolean on = race.getId().toString().equals(selectedRace);
-            boolean hover = DbaUi.hit(mouseX, mouseY, lx, ry, lw, rowH());
-            DbaUi.row(context, lx, ry, lw, rowH(), hover, on);
-            context.text(this.font, Component.literal(DbaUi.clip(this.font, race.getDisplayName(), lw - 12)), lx + 8, ry + 7, on ? DbaUi.GOLD : DbaUi.TEXT);
+            boolean hover = DbaUi.hit(mouseX, mouseY, cx, cy, cw, ch);
+            DbaUi.row(context, cx, cy, cw, ch, hover, on);
+            context.text(this.font, Component.literal(DbaUi.clip(this.font, race.getDisplayName(), cw - 10)), cx + 6, cy + 7, on ? DbaUi.GOLD : DbaUi.TEXT);
         }
         context.disableScissor();
 
-        int dx = detailX() + 8;
-        int dw = detailW() - 16;
-        context.text(this.font, Component.literal("Selected"), dx, frameY + DbaUi.HEADER + 10, DbaUi.MUTED);
         String name = "None";
         for (Race race : list) {
             if (race.getId().toString().equals(selectedRace)) {
@@ -324,64 +341,50 @@ public class RaceSelectionScreen extends Screen {
                 break;
             }
         }
-        context.text(this.font, Component.literal(DbaUi.clip(this.font, name, dw)), dx, frameY + DbaUi.HEADER + 24, DbaUi.TEXT);
-        context.text(this.font, Component.literal(DbaUi.clip(this.font, "Next you set skin, hair, and eyes.", dw)),
-                dx, frameY + DbaUi.HEADER + 40, DbaUi.MUTED);
-        int by = frameY + frameH - DbaUi.BUTTON_H - 12;
-        boolean hover = DbaUi.hit(mouseX, mouseY, dx, by, dw, DbaUi.BUTTON_H);
-        DbaUi.button(context, this.font, dx, by, dw, DbaUi.BUTTON_H, "Continue", hover, DbaUi.Kind.PRIMARY);
-    }
-
-    private void drawChannels(GuiGraphicsExtractor context, int mouseX, int mouseY) {
-        int lx = frameX + previewW + 6;
-        int lw = midW - 12;
-        for (int i = 0; i < CHANNELS.length; i++) {
-            int ry = listTop() + i * 28;
-            boolean on = i == channel;
-            boolean hover = DbaUi.hit(mouseX, mouseY, lx, ry, lw, 22);
-            DbaUi.button(context, this.font, lx, ry, lw, 22, CHANNELS[i], hover || on, on ? DbaUi.Kind.PRIMARY : DbaUi.Kind.SECONDARY);
-        }
+        context.text(this.font, Component.literal(DbaUi.clip(this.font, name, innerW() / 2)), innerX(), footerY() - 12, DbaUi.MUTED);
+        boolean hover = DbaUi.hit(mouseX, mouseY, innerX(), footerY(), innerW(), DbaUi.BUTTON_H);
+        DbaUi.button(context, this.font, innerX(), footerY(), innerW(), DbaUi.BUTTON_H, "Continue", hover, DbaUi.Kind.PRIMARY);
     }
 
     private void drawColors(GuiGraphicsExtractor context, int mouseX, int mouseY) {
-        int dx = detailX() + 8;
-        int dw = detailW() - 16;
+        int chW = Math.max(36, (innerW() - 8) / 3);
+        for (int i = 0; i < CHANNELS.length; i++) {
+            int bx = innerX() + i * (chW + 4);
+            boolean on = i == channel;
+            boolean hover = DbaUi.hit(mouseX, mouseY, bx, listTop(), chW, 22);
+            DbaUi.button(context, this.font, bx, listTop(), chW, 22, CHANNELS[i], hover || on,
+                    on ? DbaUi.Kind.PRIMARY : DbaUi.Kind.SECONDARY);
+        }
         int[] rgb = channelColor();
         String[] names = {"Red", "Green", "Blue"};
         for (int i = 0; i < 3; i++) {
-            int sy = frameY + DbaUi.HEADER + 12 + i * 32;
-            DbaUi.slider(context, this.font, dx, sy, dw, names[i], Integer.toString(rgb[i]), rgb[i] / 255.0f);
+            DbaUi.slider(context, this.font, innerX(), sliderRowY(i), innerW(), names[i], Integer.toString(rgb[i]), rgb[i] / 255.0f);
         }
         Preset[] presets = channel == 1 ? HAIR : (channel == 0 ? SKIN : null);
-        int py = frameY + DbaUi.HEADER + 112;
+        int py = sliderRowY(2) + 34;
         if (presets == null) {
-            context.text(this.font, Component.literal("Eyes use the sliders."), dx, py, DbaUi.MUTED);
+            context.text(this.font, Component.literal("Eyes use the sliders."), innerX(), py, DbaUi.MUTED);
         } else {
             int cols = 3;
             int gap = 4;
-            int bw = Math.max(28, (dw - gap * (cols - 1)) / cols);
+            int bw = Math.max(28, (innerW() - gap * (cols - 1)) / cols);
             for (int i = 0; i < presets.length; i++) {
                 int col = i % cols;
                 int row = i / cols;
-                int bx = dx + col * (bw + gap);
+                int bx = innerX() + col * (bw + gap);
                 int by = py + row * 22;
-                if (by + 18 > frameY + frameH - 36) {
+                if (by + 18 > footerY() - 4) {
                     break;
                 }
                 boolean hover = DbaUi.hit(mouseX, mouseY, bx, by, bw, 18);
                 DbaUi.button(context, this.font, bx, by, bw, 18, presets[i].name, hover, DbaUi.Kind.SECONDARY);
             }
         }
-        int by = frameY + frameH - DbaUi.BUTTON_H - 12;
-        int half = (dw - DbaUi.GAP) / 2;
-        boolean back = DbaUi.hit(mouseX, mouseY, dx, by, half, DbaUi.BUTTON_H);
-        boolean ok = DbaUi.hit(mouseX, mouseY, dx + half + DbaUi.GAP, by, half, DbaUi.BUTTON_H);
-        DbaUi.button(context, this.font, dx, by, half, DbaUi.BUTTON_H, "Back", back, DbaUi.Kind.SECONDARY);
-        DbaUi.button(context, this.font, dx + half + DbaUi.GAP, by, half, DbaUi.BUTTON_H, "Confirm", ok, DbaUi.Kind.PRIMARY);
-    }
-
-    private int sliderRowY(int index) {
-        return frameY + DbaUi.HEADER + 12 + index * 32;
+        int half = (innerW() - DbaUi.GAP) / 2;
+        boolean back = DbaUi.hit(mouseX, mouseY, innerX(), footerY(), half, DbaUi.BUTTON_H);
+        boolean ok = DbaUi.hit(mouseX, mouseY, innerX() + half + DbaUi.GAP, footerY(), half, DbaUi.BUTTON_H);
+        DbaUi.button(context, this.font, innerX(), footerY(), half, DbaUi.BUTTON_H, "Back", back, DbaUi.Kind.SECONDARY);
+        DbaUi.button(context, this.font, innerX() + half + DbaUi.GAP, footerY(), half, DbaUi.BUTTON_H, "Confirm", ok, DbaUi.Kind.PRIMARY);
     }
 
     @Override
@@ -400,37 +403,34 @@ public class RaceSelectionScreen extends Screen {
         if (page == Page.RACE) {
             return clickRace(mx, my);
         }
-        int lx = frameX + previewW + 6;
-        int lw = midW - 12;
+        int chW = Math.max(36, (innerW() - 8) / 3);
         for (int i = 0; i < CHANNELS.length; i++) {
-            int ry = listTop() + i * 28;
-            if (DbaUi.hit(mx, my, lx, ry, lw, 22)) {
+            int bx = innerX() + i * (chW + 4);
+            if (DbaUi.hit(mx, my, bx, listTop(), chW, 22)) {
                 DbaUi.playClick();
                 channel = i;
                 return true;
             }
         }
-        int dx = detailX() + 8;
-        int dw = detailW() - 16;
         for (int i = 0; i < 3; i++) {
-            if (DbaUi.sliderHit(dx, sliderRowY(i), dw, mx, my)) {
+            if (DbaUi.sliderHit(innerX(), sliderRowY(i), innerW(), mx, my)) {
                 draggingChannel = i;
-                setChannel(i, sliderValue(mx, dx, dw));
+                setChannel(i, sliderValue(mx, innerX(), innerW()));
                 return true;
             }
         }
         Preset[] presets = channel == 1 ? HAIR : (channel == 0 ? SKIN : null);
         if (presets != null) {
-            int py = frameY + DbaUi.HEADER + 112;
+            int py = sliderRowY(2) + 34;
             int cols = 3;
             int gap = 4;
-            int bw = Math.max(28, (dw - gap * (cols - 1)) / cols);
+            int bw = Math.max(28, (innerW() - gap * (cols - 1)) / cols);
             for (int i = 0; i < presets.length; i++) {
                 int col = i % cols;
                 int row = i / cols;
-                int bx = dx + col * (bw + gap);
+                int bx = innerX() + col * (bw + gap);
                 int by = py + row * 22;
-                if (by + 18 > frameY + frameH - 36) {
+                if (by + 18 > footerY() - 4) {
                     break;
                 }
                 if (DbaUi.hit(mx, my, bx, by, bw, 18)) {
@@ -442,14 +442,13 @@ public class RaceSelectionScreen extends Screen {
                 }
             }
         }
-        int by = frameY + frameH - DbaUi.BUTTON_H - 12;
-        int half = (dw - DbaUi.GAP) / 2;
-        if (DbaUi.hit(mx, my, dx, by, half, DbaUi.BUTTON_H)) {
+        int half = (innerW() - DbaUi.GAP) / 2;
+        if (DbaUi.hit(mx, my, innerX(), footerY(), half, DbaUi.BUTTON_H)) {
             DbaUi.playClick();
             page = Page.RACE;
             return true;
         }
-        if (DbaUi.hit(mx, my, dx + half + DbaUi.GAP, by, half, DbaUi.BUTTON_H)) {
+        if (DbaUi.hit(mx, my, innerX() + half + DbaUi.GAP, footerY(), half, DbaUi.BUTTON_H)) {
             DbaUi.playClick();
             confirm();
             return true;
@@ -462,29 +461,27 @@ public class RaceSelectionScreen extends Screen {
         if (list.isEmpty()) {
             return false;
         }
-        int lx = frameX + previewW + 6;
-        int lw = midW - 12;
-        int stride = rowH() + 3;
-        int view = listBottom() - listTop();
-        int max = Math.max(0, list.size() * stride - view);
-        if (scroll > max) scroll = max;
-        if (my >= listTop() && my < listBottom()) {
+        clampGrid(list.size());
+        int cols = gridCols();
+        int cw = cellW();
+        int ch = cellH();
+        if (my >= listTop() && my < gridBottom()) {
             for (int i = 0; i < list.size(); i++) {
-                int ry = listTop() + i * stride - scroll;
-                if (ry + rowH() < listTop() || ry > listBottom()) {
+                int col = i % cols;
+                int row = i / cols;
+                int cx = innerX() + col * (cw + 4);
+                int cy = listTop() + row * (ch + 4) - scroll;
+                if (cy + ch < listTop() || cy > gridBottom()) {
                     continue;
                 }
-                if (DbaUi.hit(mx, my, lx, ry, lw, rowH())) {
+                if (DbaUi.hit(mx, my, cx, cy, cw, ch)) {
                     DbaUi.playClick();
                     applyRace(list.get(i), true);
                     return true;
                 }
             }
         }
-        int dx = detailX() + 8;
-        int dw = detailW() - 16;
-        int by = frameY + frameH - DbaUi.BUTTON_H - 12;
-        if (DbaUi.hit(mx, my, dx, by, dw, DbaUi.BUTTON_H)) {
+        if (DbaUi.hit(mx, my, innerX(), footerY(), innerW(), DbaUi.BUTTON_H)) {
             DbaUi.playClick();
             page = Page.COLORS;
             channel = 0;
@@ -502,9 +499,7 @@ public class RaceSelectionScreen extends Screen {
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
         place();
         if (draggingChannel >= 0 && page == Page.COLORS) {
-            int dx = detailX() + 8;
-            int dw = detailW() - 16;
-            setChannel(draggingChannel, sliderValue(event.x(), dx, dw));
+            setChannel(draggingChannel, sliderValue(event.x(), innerX(), innerW()));
             return true;
         }
         if (event.x() >= frameX && event.x() < frameX + previewW) {
@@ -527,9 +522,8 @@ public class RaceSelectionScreen extends Screen {
         if (page != Page.RACE) {
             return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
-        int lx = frameX + previewW;
-        if (mouseX >= lx && mouseX < lx + midW && mouseY >= listTop() && mouseY < listBottom()) {
-            scroll -= (int) Math.signum(verticalAmount) * (rowH() + 3);
+        if (mouseX >= paneX() && mouseX < frameX + frameW && mouseY >= listTop() && mouseY < gridBottom()) {
+            scroll -= (int) Math.signum(verticalAmount) * (cellH() + 4);
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);

@@ -117,7 +117,27 @@ public final class BedrockAnimationRegistry {
         if (initialized) return;
         initialized = true;
 
+        // Shared humanoid clips. Race files override the states whose silhouette
+        // the shared skeleton can actually change. The copies under
+        // better_player_model are not consulted.
         loadAnimationFile(Identifier.fromNamespaceAndPath("dragonblockarcanedba", "animations/player.animation.json"));
+        String[] races = {
+                "namekian",
+                "majin",
+                "bio_android",
+                "arcosian",
+                "android",
+                "saiyan",
+                "half_saiyan",
+                "yardrat",
+                "tuffle",
+                "neo_tuffle"
+        };
+        for (String race : races) {
+            loadAnimationFile(Identifier.fromNamespaceAndPath(
+                    "dragonblockarcanedba", "animations/races/" + race + ".animation.json"));
+        }
+        loadAnimationFile(Identifier.fromNamespaceAndPath("dragonblockarcanedba", "animations/forms.animation.json"));
     }
 
     public static BedrockAnimation getAnimation(String name) {

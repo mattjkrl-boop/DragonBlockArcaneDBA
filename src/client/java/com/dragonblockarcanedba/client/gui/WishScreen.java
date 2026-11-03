@@ -9,9 +9,10 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
+/**
+ * Three wish cards. Each one still sends the wish id the dragon already grants.
+ */
 public class WishScreen extends Screen {
-    private static final int ROW_H = 40;
-
     private final int shenronId;
     private int wishesMade;
     private int x;
@@ -45,17 +46,40 @@ public class WishScreen extends Screen {
 
     @Override
     protected void init() {
-        this.w = Math.min(420, Math.max(300, this.width - 24));
-        this.h = Math.min(DbaUi.HEADER + 36 + OPTIONS.length * (ROW_H + 6) + 36, Math.max(220, this.height - 24));
-        if (this.w > this.width - 8) this.w = Math.max(240, this.width - 8);
-        if (this.h > this.height - 8) this.h = Math.max(200, this.height - 8);
+        this.w = Math.min(560, Math.max(340, this.width - 24));
+        this.h = Math.min(230, Math.max(200, this.height - 24));
+        if (this.w > this.width - 8) this.w = Math.max(260, this.width - 8);
+        if (this.h > this.height - 8) this.h = Math.max(190, this.height - 8);
         this.x = (this.width - w) / 2;
         this.y = (this.height - h) / 2;
         this.clearWidgets();
     }
 
-    private int rowY(int index) {
-        return y + DbaUi.HEADER + 28 + index * (ROW_H + 6);
+    private boolean across() {
+        return true;
+    }
+
+    private int cardX(int index) {
+        if (!across()) {
+            return x + 10;
+        }
+        int cw = (w - 32) / 3;
+        return x + 8 + index * (cw + 8);
+    }
+
+    private int cardY(int index) {
+        if (across()) {
+            return y + DbaUi.HEADER + 28;
+        }
+        return y + DbaUi.HEADER + 28 + index * 48;
+    }
+
+    private int cardW() {
+        return across() ? (w - 32) / 3 : w - 20;
+    }
+
+    private int cardH() {
+        return across() ? Math.max(72, h - DbaUi.HEADER - 44) : 42;
     }
 
     private void wish(String id) {
@@ -82,15 +106,18 @@ public class WishScreen extends Screen {
                 : "One wish.";
         context.text(this.font, Component.literal(subtitle), x + 12, y + DbaUi.HEADER + 6, DbaUi.MUTED);
 
+        int cw = cardW();
+        int ch = cardH();
         for (int i = 0; i < OPTIONS.length; i++) {
-            int ry = rowY(i);
-            if (ry + ROW_H > y + h - 8) {
+            int cx = cardX(i);
+            int cy = cardY(i);
+            if (cy + ch > y + h - 6) {
                 break;
             }
-            boolean hover = DbaUi.hit(mouseX, mouseY, x + 10, ry, w - 20, ROW_H);
-            DbaUi.row(context, x + 10, ry, w - 20, ROW_H, hover, false);
-            context.text(this.font, Component.literal(OPTIONS[i].title()), x + 20, ry + 6, DbaUi.TEXT);
-            context.text(this.font, Component.literal(DbaUi.clip(this.font, OPTIONS[i].detail(), w - 40)), x + 20, ry + 20, DbaUi.MUTED);
+            boolean hover = DbaUi.hit(mouseX, mouseY, cx, cy, cw, ch);
+            DbaUi.row(context, cx, cy, cw, ch, hover, false);
+            context.text(this.font, Component.literal(OPTIONS[i].title()), cx + 8, cy + 8, DbaUi.TEXT);
+            context.text(this.font, Component.literal(DbaUi.clip(this.font, OPTIONS[i].detail(), cw - 16)), cx + 8, cy + 22, DbaUi.MUTED);
         }
         super.extractRenderState(context, mouseX, mouseY, delta);
     }
@@ -105,12 +132,14 @@ public class WishScreen extends Screen {
             this.onClose();
             return true;
         }
+        int cw = cardW();
+        int ch = cardH();
         for (int i = 0; i < OPTIONS.length; i++) {
-            int ry = rowY(i);
-            if (ry + ROW_H > y + h - 8) {
+            int cy = cardY(i);
+            if (cy + ch > y + h - 6) {
                 break;
             }
-            if (DbaUi.hit(event.x(), event.y(), x + 10, ry, w - 20, ROW_H)) {
+            if (DbaUi.hit(event.x(), event.y(), cardX(i), cy, cw, ch)) {
                 DbaUi.playClick();
                 wish(OPTIONS[i].id());
                 return true;

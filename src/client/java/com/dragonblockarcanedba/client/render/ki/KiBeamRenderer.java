@@ -32,6 +32,7 @@ public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.ageInTicks = entity.tickCount + partialTicks;
+        state.scale = entity.getScale();
     }
 
     @Override
@@ -43,13 +44,16 @@ public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.
         float beamLength = state.length;
         float life = Math.min(1f, state.ageInTicks / 20f);
         float alpha = 1f - life * life;
+        float scale = state.scale;
+        float sheath = 0.22f * scale;
+        float core = 0.07f * scale;
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawCylinder(pose, buffer, 0.22f, 0f, beamLength, 12, r, g, b, 0.45f * alpha);
-            KiRenderHelper.drawCylinder(pose, buffer, 0.07f, 0f, beamLength, 8, 1f, 1f, 1f, 0.95f * alpha);
+            KiRenderHelper.drawCylinder(pose, buffer, sheath, 0f, beamLength, 12, r, g, b, 0.45f * alpha);
+            KiRenderHelper.drawCylinder(pose, buffer, core, 0f, beamLength, 8, 1f, 1f, 1f, 0.95f * alpha);
         });
         poseStack.popPose();
 
@@ -62,5 +66,6 @@ public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.
         public float yRot = 0;
         public float xRot = 0;
         public float ageInTicks = 0;
+        public float scale = 1.0f;
     }
 }

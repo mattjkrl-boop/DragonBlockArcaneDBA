@@ -8,9 +8,10 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
+/**
+ * Destinations in a two-column grid. A launch still sends that destination id.
+ */
 public class SpacePodScreen extends Screen {
-    private static final int ROW_H = 36;
-
     private record Destination(String id, String name, String detail) {}
 
     private static final Destination[] DESTINATIONS = {
@@ -32,11 +33,12 @@ public class SpacePodScreen extends Screen {
 
     @Override
     protected void init() {
-        this.w = Math.min(440, Math.max(300, this.width - 24));
-        int natural = DbaUi.HEADER + 28 + DESTINATIONS.length * (ROW_H + 4) + 16;
-        this.h = Math.min(natural, Math.max(220, this.height - 24));
-        if (this.w > this.width - 8) this.w = Math.max(240, this.width - 8);
-        if (this.h > this.height - 8) this.h = Math.max(180, this.height - 8);
+        this.w = Math.min(520, Math.max(340, this.width - 24));
+        int rows = (DESTINATIONS.length + 1) / 2;
+        int natural = DbaUi.HEADER + 36 + rows * 48 + 12;
+        this.h = Math.min(natural, Math.max(240, this.height - 24));
+        if (this.w > this.width - 8) this.w = Math.max(260, this.width - 8);
+        if (this.h > this.height - 8) this.h = Math.max(200, this.height - 8);
         this.x = (this.width - w) / 2;
         this.y = (this.height - h) / 2;
         this.clearWidgets();
@@ -49,8 +51,14 @@ public class SpacePodScreen extends Screen {
         return id.equals(this.minecraft.level.dimension().identifier().getPath());
     }
 
-    private int rowY(int index) {
-        return y + DbaUi.HEADER + 22 + index * (ROW_H + 4);
+    private int colW() { return (w - 28) / 2; }
+
+    private int cellX(int index) {
+        return x + 10 + (index % 2) * (colW() + 8);
+    }
+
+    private int cellY(int index) {
+        return y + DbaUi.HEADER + 24 + (index / 2) * 48;
     }
 
     @Override
@@ -60,18 +68,20 @@ public class SpacePodScreen extends Screen {
         DbaUi.title(context, this.font, x, y, DbaUi.closeX(x, w) - x - 8, "Space Pod");
         DbaUi.closeControl(context, this.font, x, y, w, mouseX, mouseY);
         context.text(this.font, Component.literal("Choose a destination."), x + 12, y + DbaUi.HEADER + 4, DbaUi.MUTED);
+        int cw = colW();
         for (int i = 0; i < DESTINATIONS.length; i++) {
-            int ry = rowY(i);
-            if (ry + ROW_H > y + h - 8) {
+            int cx = cellX(i);
+            int cy = cellY(i);
+            if (cy + 40 > y + h - 6) {
                 break;
             }
             Destination dest = DESTINATIONS[i];
             boolean current = here(dest.id());
-            boolean hover = !current && DbaUi.hit(mouseX, mouseY, x + 10, ry, w - 20, ROW_H);
-            DbaUi.row(context, x + 10, ry, w - 20, ROW_H, hover, current);
-            context.text(this.font, Component.literal(dest.name()), x + 20, ry + 5, current ? DbaUi.GOLD : DbaUi.TEXT);
+            boolean hover = !current && DbaUi.hit(mouseX, mouseY, cx, cy, cw, 40);
+            DbaUi.row(context, cx, cy, cw, 40, hover, current);
+            context.text(this.font, Component.literal(dest.name()), cx + 8, cy + 6, current ? DbaUi.GOLD : DbaUi.TEXT);
             String detail = current ? "You are here" : dest.detail();
-            context.text(this.font, Component.literal(DbaUi.clip(this.font, detail, w - 40)), x + 20, ry + 18, DbaUi.MUTED);
+            context.text(this.font, Component.literal(DbaUi.clip(this.font, detail, cw - 16)), cx + 8, cy + 20, DbaUi.MUTED);
         }
         super.extractRenderState(context, mouseX, mouseY, delta);
     }
@@ -86,12 +96,13 @@ public class SpacePodScreen extends Screen {
             this.onClose();
             return true;
         }
+        int cw = colW();
         for (int i = 0; i < DESTINATIONS.length; i++) {
-            int ry = rowY(i);
-            if (ry + ROW_H > y + h - 8) {
+            int cy = cellY(i);
+            if (cy + 40 > y + h - 6) {
                 break;
             }
-            if (!DbaUi.hit(event.x(), event.y(), x + 10, ry, w - 20, ROW_H)) {
+            if (!DbaUi.hit(event.x(), event.y(), cellX(i), cy, cw, 40)) {
                 continue;
             }
             if (here(DESTINATIONS[i].id())) {

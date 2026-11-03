@@ -32,6 +32,7 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
         public float ageInTicks = 0;
         public float yRot = 0;
         public float xRot = 0;
+        public float scale = 1.0f;
     }
 
     @Override
@@ -46,6 +47,7 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
         state.ageInTicks = entity.tickCount + partialTicks;
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
+        state.scale = entity.getScale();
     }
 
     @Override
@@ -56,6 +58,7 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         float pulse = 1.0f + 0.12f * Mth.sin(state.ageInTicks * 0.9f);
+        float scale = state.scale;
 
         poseStack.pushPose();
         // Align with projectile trajectory
@@ -67,9 +70,9 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            float radius = 0.20f * pulse;
-            float headLen = 0.75f;
-            float tailLen = 1.6f;
+            float radius = 0.20f * pulse * scale;
+            float headLen = 0.75f * scale;
+            float tailLen = 1.6f * scale;
 
             // 1. Outer Aerodynamic Plasma Sheath (12-sided tapered cylinder with nose cone and wake tail)
             drawLaserBoltBody(matrix, buffer, radius, headLen, tailLen, 12, r, g, b, 0.85f);

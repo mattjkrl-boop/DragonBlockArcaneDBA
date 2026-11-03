@@ -31,6 +31,7 @@ public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRender
         state.length = entity.getLength();
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
+        state.scale = entity.getScale();
     }
 
     @Override
@@ -40,13 +41,16 @@ public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRender
         float b = KiRenderHelper.blue(state.color);
         RenderType renderType = KiRenderHelper.kiRenderType();
         float laserLength = state.length;
+        float scale = state.scale;
+        float sheath = 0.06f * scale;
+        float core = 0.02f * scale;
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawCylinder(pose, buffer, 0.06f, 0f, laserLength, 8, r, g, b, 0.4f);
-            KiRenderHelper.drawCylinder(pose, buffer, 0.02f, 0f, laserLength, 6, 1f, 1f, 1f, 1f);
+            KiRenderHelper.drawCylinder(pose, buffer, sheath, 0f, laserLength, 8, r, g, b, 0.4f);
+            KiRenderHelper.drawCylinder(pose, buffer, core, 0f, laserLength, 6, 1f, 1f, 1f, 1f);
         });
         poseStack.popPose();
 
@@ -58,5 +62,6 @@ public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRender
         public float length = 45.0f;
         public float yRot = 0;
         public float xRot = 0;
+        public float scale = 1.0f;
     }
 }
