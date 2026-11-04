@@ -128,6 +128,22 @@ public final class ComplexGeometry {
         collector.submitCustomGeometry(poseStack, type, piece::draw);
     }
 
+    /**
+     * Solid piece for a PHYSICAL object (a real entity shard or fragment
+     * that flies, lands, and rests in the world): same builders, same
+     * faceted vertex shading, but drawn on the world-lit ki type with the
+     * entity's packed light coords, so the piece is lit like everything
+     * else in the world instead of glowing at full brightness. Energy
+     * pieces keep submitSolid; physical matter uses this one. The light
+     * is applied inside the draw callback (see KiRenderHelper.withLight),
+     * so it is correct whenever the submit is consumed.
+     */
+    public static void submitSolidLit(SubmitNodeCollector collector, PoseStack poseStack, int lightCoords, Piece piece) {
+        RenderType type = KiRenderHelper.kiLitType();
+        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
+            KiRenderHelper.withLight(lightCoords, () -> piece.draw(pose, buffer)));
+    }
+
     // ---------------------------------------------------------------- shared math
 
     /** Shader life remap: bodies stay intact through build and hold, dissolve in the tail. */

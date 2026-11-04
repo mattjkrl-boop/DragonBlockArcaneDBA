@@ -22,7 +22,8 @@ import java.util.Map;
 /**
  * Entity Renderer for Grand Blade Shard in Minecraft 26.2.
  * Complex effects redo: layered composition. The shard body is an
- * irregular ComplexGeometry shard mesh in a steel gradient (submitSolid),
+ * irregular ComplexGeometry shard mesh in a steel gradient (submitSolidLit:
+ * the shard is physical steel, so the world lights it, not the effect),
  * with a torn tendril wake behind it in flight (submitEnergy, tendril
  * canvas). Around the pieces, the existing material emission stays as
  * filler: valor plasma, steel sparks, and stone dust along the flight
@@ -119,7 +120,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                 Vec3 embedDir = directionFromRot(state.yRot, state.xRot);
                 float embedLife = pulse;
                 if (embedLife > 0.01f) {
-                    ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) ->
                         ComplexGeometry.shard(pose, buffer, state.seed ^ 0x5AA2DL,
                             embedDir.scale(-0.60), embedDir, 1.7f, 0.30f,
                             0x767F8C, 0xE9EDF3, 0.95f, embedLife));
@@ -192,7 +193,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                     Vec3 wakeFrom = dir.scale(-0.80);
                     Vec3 wakeControl = dir.scale(-1.55).add(side.scale(0.28 + sway));
                     Vec3 wakeTo = dir.scale(-2.35).add(side.scale(-0.18 + sway * 0.5));
-                    ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) ->
                         ComplexGeometry.shard(pose, buffer, state.seed ^ 0x5AA2DL,
                             Vec3.ZERO, dir, 1.7f, 0.30f,
                             0x767F8C, 0xE9EDF3, 0.95f, flightLife));

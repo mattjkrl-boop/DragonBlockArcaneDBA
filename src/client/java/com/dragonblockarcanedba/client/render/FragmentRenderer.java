@@ -13,9 +13,12 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Draws one FragmentEntity as a single ComplexGeometry shard through
- * submitSolid, seeded from the synced seed with the host's exact theme
+ * submitSolidLit, seeded from the synced seed with the host's exact theme
  * gradient, so the entity piece is the same silhouette the renderer
- * pieces layer drew (ENTITY-STANDARD renderer rules). Alpha is 0.95 at
+ * pieces layer drew (ENTITY-STANDARD renderer rules). Fragments are
+ * physical matter: they fly, land, and rest in the world, so they are
+ * drawn with the entity's packed world light, never full bright. Their
+ * theme colors stay; the world decides how bright they read. Alpha is 0.95 at
  * peak, matching the converted hosts; the fade envelope comes from the
  * synced FADE_START; FROZEN fragments grow on the TimeShatter travel
  * curve while they hang, keyed to the growth window preset at spawn
@@ -125,7 +128,8 @@ public class FragmentRenderer extends EntityRenderer<FragmentEntity, FragmentRen
         final float len = drawLength;
         final float girth = drawGirth;
         final float env = envelope;
-        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+        final int lightCoords = state.lightCoords;
+        ComplexGeometry.submitSolidLit(collector, poseStack, lightCoords, (pose, buffer) ->
             ComplexGeometry.shard(pose, buffer, seed, origin, dir, len, girth,
                 root, tip, 0.95f, env));
     }

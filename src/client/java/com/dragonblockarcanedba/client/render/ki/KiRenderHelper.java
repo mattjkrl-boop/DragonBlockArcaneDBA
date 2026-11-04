@@ -33,10 +33,45 @@ public final class KiRenderHelper {
         return RenderTypes.entityTranslucentEmissive(WHITE_TEXTURE);
     }
 
+    /**
+     * World-lit translucent render type for physical pieces (real shards
+     * and fragments that fly, land, and rest in the world). Same canvas
+     * and vertex colors as the emissive type, but the pipeline honors the
+     * per-vertex light instead of ignoring it, so a physical piece is lit
+     * by the world: bright in daylight, dark at night, shaded in caves.
+     * Pair with ComplexGeometry.submitSolidLit, which supplies the light.
+     */
+    public static RenderType kiLitType() {
+        return RenderTypes.entityTranslucent(WHITE_TEXTURE);
+    }
+
     /** Full brightness light value. */
     public static final int FULL_BRIGHT = 0xF000F0;
     /** No overlay. */
     public static final int NO_OVERLAY = 655360; // OverlayTexture.NO_OVERLAY = 10 << 16
+
+    /**
+     * The light vertex() stamps while a piece draws. FULL_BRIGHT for every
+     * energy submit; a lit submit (submitSolidLit) swaps in the entity's
+     * packed world light for the duration of its draw call only. The draw
+     * callback runs synchronously when the feature renderer consumes the
+     * submit, on the render thread, so a thread-local hand-off is exact:
+     * the value is set inside the wrapped callback, never at submit time.
+     * Declared after FULL_BRIGHT: the initializer lambda reads it, and a
+     * forward reference there does not compile.
+     */
+    private static final ThreadLocal<Integer> DRAW_LIGHT = ThreadLocal.withInitial(() -> FULL_BRIGHT);
+
+    /** Runs draw with vertex() stamping lightCoords instead of FULL_BRIGHT. */
+    public static void withLight(int lightCoords, Runnable draw) {
+        int previous = DRAW_LIGHT.get();
+        DRAW_LIGHT.set(lightCoords);
+        try {
+            draw.run();
+        } finally {
+            DRAW_LIGHT.set(previous);
+        }
+    }
 
     public static float red(int color)   { return ((color >> 16) & 0xFF) / 255.0f; }
     public static float green(int color) { return ((color >> 8) & 0xFF) / 255.0f; }
@@ -98,7 +133,7 @@ public final class KiRenderHelper {
               .setColor(r, g, b, a)
               .setUv(u, v)
               .setOverlay(NO_OVERLAY)
-              .setLight(FULL_BRIGHT)
+              .setLight(DRAW_LIGHT.get())
               .setNormal(pose, nx, ny, nz);
     }
 
