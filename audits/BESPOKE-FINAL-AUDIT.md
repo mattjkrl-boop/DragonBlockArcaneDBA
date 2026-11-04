@@ -311,3 +311,21 @@ Hollow's Edge afterimage (limbs to plume column), the Z Sword and
 stance monoliths (solids to flat ribbons), the Azure rush wake (tube
 to braided strands), and the Dabura wave (narrower crescent). Carter's
 PC build and look are the first real check, as with prior passes.
+
+## Addendum (Nov 3, 2026): damage type tags added
+
+Item 5 above is now closed. Carter approved the tag files, and
+they are in: six JSONs under data/minecraft/tags/damage_type/
+(bypasses_armor, no_knockback, witch_resistant_to,
+bypasses_wolf_armor, avoids_guardian_thorns, is_fire), each with
+"replace": false. Void, spirit, and temporal carry the vanilla
+magic combat profile; tempest carries the storm magic profile
+(without is_lightning); hellfire is fire-typed with armor bypass
+and no knockback. Ki, valor, crush, lava, darkness, curse, and
+gravity received no tags: their replaced sources were
+player-attack class or physical, and the audit says so per family
+rather than forcing membership. Full archaeology (site and token
+counts per family from the 57902e1..dc2cd1f diff, vanilla
+memberships read from the 26.2 jar), every compromise, and the
+list of tags considered and excluded are in
+audits/bespoke-damage-tags.md. Data only; no Java changed.
