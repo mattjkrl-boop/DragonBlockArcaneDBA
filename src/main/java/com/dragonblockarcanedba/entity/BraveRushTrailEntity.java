@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import com.dragonblockarcanedba.util.VortexPhysics;
@@ -9,7 +10,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -164,10 +164,10 @@ public class BraveRushTrailEntity extends Projectile {
                 ), livingOwner);
             }
             if (owner instanceof net.minecraft.world.entity.player.Player playerOwner) {
-                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(playerOwner),
+                t.hurtServer(serverLevel, DbaDamage.valor(this, playerOwner),
                     DbaEffectsConfig.capDamage(this.damage));
             } else if (owner instanceof LivingEntity livingOwner) {
-                t.hurtServer(serverLevel, serverLevel.damageSources().mobAttack(livingOwner),
+                t.hurtServer(serverLevel, DbaDamage.valor(this, livingOwner),
                     DbaEffectsConfig.capDamage(this.damage));
             }
 
@@ -209,7 +209,7 @@ public class BraveRushTrailEntity extends Projectile {
             serverLevel.addFreshEntity(shockwave);
 
             serverLevel.playSound(null, end.x, end.y, end.z,
-                SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.9f);
+                com.dragonblockarcanedba.sound.DbaSounds.BOOM_HOLY, SoundSource.PLAYERS, 2.0f, 0.9f);
             com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, end.x, end.y, end.z);
         }
     }

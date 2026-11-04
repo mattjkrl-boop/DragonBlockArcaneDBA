@@ -1,11 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.BraveRushTrailEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -17,8 +17,14 @@ import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Brave Sword Piercing Heroic Dash Flight Trail in Minecraft 26.2.
- * Renders physical 3D supersonic golden-cyan Mach shock cones, twin helical valor streamlines,
- * volumetric kinetic thrust core beam, and expanding wake vortex rings.
+ * Bespoke pass: the hand-built Mach cones, helical streamline quads, and
+ * wake ring are rebuilt as BespokeGeometry torn ribbons. Crossed ribbon
+ * sheets (horizontal, vertical, and two diagonal) carry the old cone
+ * layers (gold body, cyan inner, white-gold core beam) and the twin
+ * streamline strands with their white cores, and a broken vortex band
+ * replaces the expanding wake ring in the strike window. The seed comes
+ * from the entity UUID, which is synced state, so every client draws the
+ * same trail.
  */
 public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity, BraveRushTrailRenderer.TrailRenderState> {
 
@@ -34,6 +40,7 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         public float xRot = 0;
         public int maxLifetime = 30;
         public boolean isFirstPersonOwner = false;
+        public long seed = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -60,6 +67,7 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.maxLifetime = entity.getMaxLifetime();
+        state.seed = entity.getUUID().getMostSignificantBits() ^ entity.getUUID().getLeastSignificantBits();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null &&
@@ -81,142 +89,93 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         float scale = state.trailScale * (state.isFirstPersonOwner ? 0.45f : 1.0f);
         float len = state.trailLength * (0.35f + 0.65f * open);
         float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
+        float coneBase = (state.isFirstPersonOwner ? 1.05f : 0.90f) * scale;
+        // The old cones drew at this fraction of the lifecycle alpha.
+        float coneRatio = state.isFirstPersonOwner ? 0.32f : 0.72f;
+        float age = state.age;
+        long seed = state.seed;
 
         RenderType renderType = KiRenderHelper.kiRenderType();
+        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
-        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            int coneSegments = FxEnvelope.segments(24, distScale, 10);
-            float coneLength = len;
-            float coneBase = (state.isFirstPersonOwner ? 1.05f : 0.90f) * scale;
-            float baseZ = tipZ - coneLength;
-            float coneAlpha = state.isFirstPersonOwner ? (alpha * 0.32f) : (alpha * 0.72f);
-            for (int i = 0; i < coneSegments; i++) {
-                double a1 = (i / (double) coneSegments) * Math.PI * 2.0;
-                double a2 = ((i + 1) / (double) coneSegments) * Math.PI * 2.0;
-                float x1 = (float) Math.cos(a1) * coneBase;
-                float y1 = (float) Math.sin(a1) * coneBase;
-                float x2 = (float) Math.cos(a2) * coneBase;
-                float y2 = (float) Math.sin(a2) * coneBase;
-                drawTriangle(matrix, buffer, 0, 0, tipZ, x1, y1, baseZ, x2, y2, baseZ, 1.0f, 0.84f, 0.0f, coneAlpha);
-                drawTriangle(matrix, buffer, 0, 0, tipZ * 0.85f, x1 * 0.42f, y1 * 0.42f, baseZ * 0.85f, x2 * 0.42f, y2 * 0.42f, baseZ * 0.85f, 0.0f, 0.95f, 1.0f, coneAlpha);
-                drawTriangle(matrix, buffer, 0, 0, tipZ, x1 * 0.12f, y1 * 0.12f, tipZ - coneLength * 0.72f, x2 * 0.12f, y2 * 0.12f, tipZ - coneLength * 0.72f, 1.0f, 0.98f, 0.85f, alpha);
-            }
-
-            // Twin helical valor streamlines, as the header promises: two
-            // strands half a turn apart, gold and cyan, each with a white
-            // core. Before this pass the loop drew a single gold strand.
-            int ribbonSteps = 14;
-            for (int strand = 0; strand < 2; strand++) {
-                double phase = strand * Math.PI;
-                float sr = strand == 0 ? 1.0f : 0.0f;
-                float sg = strand == 0 ? 0.84f : 0.95f;
-                float sb = strand == 0 ? 0.0f : 1.0f;
-                for (int s = 0; s < ribbonSteps; s++) {
-                    float t1 = s / (float) ribbonSteps;
-                    float t2 = (s + 1) / (float) ribbonSteps;
-                    float z1 = tipZ - (t1 * len);
-                    float z2 = tipZ - (t2 * len);
-                    float r1 = (0.18f + t1 * 0.85f * open) * scale;
-                    float r2 = (0.18f + t2 * 0.85f * open) * scale;
-                    double ang1 = phase + (t1 * Math.PI * 2.4) + (state.age * 0.18);
-                    double ang2 = phase + (t2 * Math.PI * 2.4) + (state.age * 0.18);
-                    float rx1 = (float) Math.cos(ang1) * r1;
-                    float ry1 = (float) Math.sin(ang1) * r1;
-                    float rx2 = (float) Math.cos(ang2) * r2;
-                    float ry2 = (float) Math.sin(ang2) * r2;
-                    float rw1 = 0.10f * (1.0f - t1 * 0.4f) * scale;
-                    float rw2 = 0.10f * (1.0f - t2 * 0.4f) * scale;
-                    drawQuad(matrix, buffer,
-                        rx1 - rw1, ry1, z1,
-                        rx1 + rw1, ry1, z1,
-                        rx2 + rw2, ry2, z2,
-                        rx2 - rw2, ry2, z2,
-                        sr, sg, sb, alpha * (1.0f - t1)
-                    );
-                    float cw1 = rw1 * 0.28f;
-                    float cw2 = rw2 * 0.28f;
-                    drawQuad(matrix, buffer,
-                        rx1 - cw1, ry1, z1,
-                        rx1 + cw1, ry1, z1,
-                        rx2 + cw2, ry2, z2,
-                        rx2 - cw2, ry2, z2,
-                        1.0f, 0.98f, 0.9f, alpha * (1.0f - t1)
-                    );
-                }
-            }
-
-            if (impact > 0.02f) {
-                float ringR = coneBase * (0.55f + 0.65f * impact);
-                drawRing(matrix, buffer, 0, 0, tipZ, ringR, ringR * 0.62f, 24, 1.0f, 0.96f, 0.7f, impact * 0.85f);
-            }
+        // Cone body sheets. A torn ribbon runs along +X in its own frame;
+        // a quarter turn about Y lays it back along the flight line from
+        // the tip, and rolls about Z cross the sheets into the old cone's
+        // horizontal, vertical, and diagonal planes.
+        // Horizontal sheet: gold body with the white-gold core beam.
+        sheet(poseStack, collector, renderType, 0.0f, tipZ, (pose, buffer) -> {
+            BespokeGeometry.tornRibbon(pose, buffer, seed, len, coneBase * 1.9f, 0.30f * scale,
+                1.0f, 0.84f, 0.0f, coneRatio, alpha, distScale);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x2B992DDFL, len * 0.72f, coneBase * 0.24f, 0.12f * scale,
+                1.0f, 0.98f, 0.85f, 1.0f, alpha, distScale);
         });
+        // Vertical sheet: cyan inner cone with the white-gold core beam.
+        sheet(poseStack, collector, renderType, 90.0f, tipZ, (pose, buffer) -> {
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x51ED2701L, len * 0.85f, coneBase * 0.84f, 0.30f * scale,
+                0.0f, 0.95f, 1.0f, coneRatio, alpha, distScale);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x85EBCA6BL, len * 0.72f, coneBase * 0.24f, 0.12f * scale,
+                1.0f, 0.98f, 0.85f, 1.0f, alpha, distScale);
+        });
+        // Diagonal sheets: the twin streamline strands, gold and cyan,
+        // each with its white core, as the header promises.
+        sheet(poseStack, collector, renderType, 45.0f, tipZ, (pose, buffer) -> {
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x27D4EB2FL, len, 0.20f * scale, 0.50f * scale,
+                1.0f, 0.84f, 0.0f, 1.0f, alpha, distScale);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x165667B1L, len, 0.056f * scale, 0.50f * scale,
+                1.0f, 0.98f, 0.9f, 1.0f, alpha, distScale);
+        });
+        sheet(poseStack, collector, renderType, -45.0f, tipZ, (pose, buffer) -> {
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x3C6EF362L, len, 0.20f * scale, 0.50f * scale,
+                0.0f, 0.95f, 1.0f, 1.0f, alpha, distScale);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x1B56C4E9L, len, 0.056f * scale, 0.50f * scale,
+                1.0f, 0.98f, 0.9f, 1.0f, alpha, distScale);
+        });
+
+        // Strike wake: a broken vortex band standing across the flight
+        // line at the tip, expanding with the strike bump, in place of the
+        // old flat wake ring.
+        if (impact > 0.02f) {
+            float ringR = coneBase * (0.55f + 0.65f * impact);
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.0f, tipZ);
+            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x9E3779B9L, ringR,
+                    -0.07f, 0.07f, age * 0.5f, 1.0f, 0.96f, 0.7f, impact * 0.85f, distScale);
+            });
+            poseStack.popPose();
+        }
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
+    /**
+     * Submits one ribbon sheet: positioned at the trail tip, run laid back
+     * along the flight line, rolled rollDeg about the flight axis. The
+     * roll is composed outside the quarter turn so it acts on the flight
+     * axis itself. The geometry is supplied by the caller from
+     * BespokeGeometry builders only.
+     */
+    private static void sheet(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
+                              float rollDeg, float tipZ,
+                              net.minecraft.client.renderer.SubmitNodeCollector.CustomGeometryRenderer geometry) {
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, tipZ);
+        if (rollDeg != 0.0f) {
+            poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(rollDeg)));
+        }
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, geometry);
+        poseStack.popPose();
+    }
+
     private static float strike(float progress) {
         if (progress >= 0.34f) return 0.0f;
         return (float) Math.sin((progress / 0.34f) * Math.PI);
-    }
-
-    private static void drawTriangle(Matrix4f matrix, VertexConsumer consumer,
-                                     float x1, float y1, float z1,
-                                     float x2, float y2, float z2,
-                                     float x3, float y3, float z3,
-                                     float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-    }
-
-    private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,
-                                 float x1, float y1, float z1,
-                                 float x2, float y2, float z2,
-                                 float x3, float y3, float z3,
-                                 float x4, float y4, float z4,
-                                 float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Reverse
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-    }
-
-    private static void drawRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-
-            float x1Out = cx + (float) Math.cos(a1) * rOuter;
-            float y1Out = cy + (float) Math.sin(a1) * rOuter;
-            float x2Out = cx + (float) Math.cos(a2) * rOuter;
-            float y2Out = cy + (float) Math.sin(a2) * rOuter;
-
-            float x1In = cx + (float) Math.cos(a1) * rInner;
-            float y1In = cy + (float) Math.sin(a1) * rInner;
-            float x2In = cx + (float) Math.cos(a2) * rInner;
-            float y2In = cy + (float) Math.sin(a2) * rInner;
-
-            drawQuad(matrix, consumer, x1In, y1In, cz, x2In, y2In, cz, x2Out, y2Out, cz, x1Out, y1Out, cz, r, g, b, a);
-        }
     }
 }

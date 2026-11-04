@@ -10,7 +10,6 @@ import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -35,7 +34,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Azure Dragon Sword — Wind, Flight & Tempest Manipulation Weapon.
+ * Azure Dragon Sword: Wind, Flight & Tempest Manipulation Weapon.
  * 
  * Ki Drain: 20% per minute for normal flight & Right Tempest ability; 40% per minute for Double Rush.
  */
@@ -195,12 +194,12 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
 
             // Damage
             float damage = (isDoubleRushing ? 600.0f : 350.0f) + (float) (accessor.dba$getStrength() * 2.0);
-            enemy.hurtServer(level, level.damageSources().mobAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
+            enemy.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.tempest(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
             // Pass-through hits were silent and weightless. Fresh full hits (invulnerableTime
             // just reset to 20) get a sweep sound and a spark burst at the victim.
             if (com.dragonblockarcanedba.util.DbaCompat.getInvulnerableTime(enemy) >= 20) {
                 level.playSound(null, enemy.getX(), enemy.getY(), enemy.getZ(),
-                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 1.3f);
+                    com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.0f, 1.3f);
                 level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                     enemy.getX(), enemy.getY() + enemy.getBbHeight() * 0.5, enemy.getZ(),
                     6, 0.3, 0.3, 0.3, 0.15);
@@ -232,7 +231,7 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
         // Flying sound hum
         if (player.tickCount % (isDoubleRushing ? 8 : 15) == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, isDoubleRushing ? 1.8f : 1.2f, isDoubleRushing ? 1.5f : 1.1f);
+                com.dragonblockarcanedba.sound.DbaSounds.FLIGHT_WIND, SoundSource.PLAYERS, isDoubleRushing ? 1.8f : 1.2f, isDoubleRushing ? 1.5f : 1.1f);
         }
     }
 
@@ -282,7 +281,7 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
             // A target at 7.9 blocks used to take the same hit as one at zero.
             double distFrac = Math.min(1.0, pos.distanceTo(target.position()) / radius);
             float falloffDamage = quakeDamage * (float) (1.0 - 0.5 * distFrac);
-            target.hurtServer(level, level.damageSources().mobAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (falloffDamage)));
+            target.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.tempest(quake, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (falloffDamage)));
             // Launch high into the air with MC 26.2 elastic bounciness
             target.setDeltaMovement(target.getDeltaMovement().add(0, 1.4, 0));
             com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
@@ -297,7 +296,7 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
         }
 
         level.playSound(null, pos.x, pos.y, pos.z,
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 2.0f, 0.8f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, pos.x, pos.y, pos.z);
     }
 
@@ -355,11 +354,11 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
 
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.5f, 0.5f + chargeRatio * 0.7f);
+                    com.dragonblockarcanedba.sound.DbaSounds.THUNDER_CRACK, SoundSource.WEATHER, 1.5f, 0.5f + chargeRatio * 0.7f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 1.5f, 0.5f + chargeRatio * 0.7f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.0f, 0.8f + chargeRatio * 0.4f);
+                    com.dragonblockarcanedba.sound.DbaSounds.FLIGHT_WIND, SoundSource.PLAYERS, 1.0f, 0.8f + chargeRatio * 0.4f);
             }
         }
     }
@@ -411,7 +410,7 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
 
                 // Sound and summon impact: a 30 block storm domain should land with weight.
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 3.0f, 0.8f);
+                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 3.0f, 0.8f);
                 com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, spawnPos.x, spawnPos.y, spawnPos.z);
 
                 // The cooldown outlives the storm by 100 ticks at every charge

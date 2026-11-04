@@ -5,7 +5,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -32,6 +31,7 @@ import java.util.List;
 public class AzureTornadoEntity extends Projectile {
     private static final EntityDataAccessor<Float> SCALE = SynchedEntityData.defineId(AzureTornadoEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> IS_GIANT = SynchedEntityData.defineId(AzureTornadoEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Long> SEED = SynchedEntityData.defineId(AzureTornadoEntity.class, EntityDataSerializers.LONG);
 
     private int maxLifetime = 60; // 3s default for mini, 200 (10s) for giant
     private boolean debrisSpawned = false;
@@ -49,6 +49,8 @@ public class AzureTornadoEntity extends Projectile {
         this.noPhysics = true;
         this.setScale(scale);
         this.entityData.set(IS_GIANT, isGiant);
+        // Renderer shape seed: fixed at spawn, synced and saved.
+        this.entityData.set(SEED, this.getUUID().getMostSignificantBits() ^ this.getUUID().getLeastSignificantBits());
         this.maxLifetime = isGiant ? 200 : 60;
     }
 
@@ -56,12 +58,14 @@ public class AzureTornadoEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(SCALE, 1.0f);
         builder.define(IS_GIANT, false);
+        builder.define(SEED, 0L);
     }
 
     @Override
     protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
         super.addAdditionalSaveData(output);
         output.putInt("MaxLifetime", this.maxLifetime);
+        output.putLong("RenderSeed", this.getRenderSeed());
         output.putBoolean("DebrisSpawned", this.debrisSpawned);
         output.putBoolean("FlungOut", this.flungOut);
     }
@@ -71,6 +75,7 @@ public class AzureTornadoEntity extends Projectile {
         super.readAdditionalSaveData(input);
         // Fall back to the giant flag for saves written before MaxLifetime existed.
         this.maxLifetime = input.getIntOr("MaxLifetime", this.isGiant() ? 200 : 60);
+        this.entityData.set(SEED, input.getLongOr("RenderSeed", 0L));
         this.debrisSpawned = input.getBooleanOr("DebrisSpawned", false);
         this.flungOut = input.getBooleanOr("FlungOut", false);
     }
@@ -89,6 +94,10 @@ public class AzureTornadoEntity extends Projectile {
 
     public int getMaxLifetime() {
         return this.maxLifetime;
+    }
+
+    public long getRenderSeed() {
+        return this.entityData.get(SEED);
     }
 
     @Override
@@ -157,8 +166,8 @@ public class AzureTornadoEntity extends Projectile {
             List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe,
                 e -> e.isAlive() && e != this.getOwner());
             net.minecraft.world.damagesource.DamageSource tornadoSource = livingOwner != null
-                ? serverLevel.damageSources().indirectMagic(this, livingOwner)
-                : serverLevel.damageSources().magic();
+                ? com.dragonblockarcanedba.util.DbaDamage.tempest(this, livingOwner)
+                : com.dragonblockarcanedba.util.DbaDamage.tempest(this, null);
             for (LivingEntity target : targets) {
                 target.hurtServer(serverLevel, tornadoSource,
                     com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (giant ? 60.0f : 25.0f)));
@@ -172,15 +181,13 @@ public class AzureTornadoEntity extends Projectile {
             scarGround(serverLevel, center, radius);
         }
 
-        // Point 1, layered particles every tick, envelope scaled.
+        // Point 1, layered particles every tick, envelope scaled. No rain
+        // emission from this entity: rain belongs to the AtmosphereClient
+        // system (the giant tornado lives inside its storm's zone, where
+        // that system already renders it).
         com.dragonblockarcanedba.util.LayeredParticles.emitVortex(serverLevel, center,
             (float) (radius * 0.8), (float) height, this.tickCount, this.maxLifetime,
             AzureStormEntity.AZURE_ARGB, com.dragonblockarcanedba.particle.DbaParticles.WIND);
-        if (this.tickCount % 2 == 0 && this.tickCount > this.maxLifetime * 0.7f) {
-            com.dragonblockarcanedba.util.LayeredParticles.emitRain(serverLevel, center,
-                (float) (radius * 0.8), (float) (height * 0.7), this.tickCount, this.maxLifetime,
-                com.dragonblockarcanedba.particle.DbaParticles.WIND);
-        }
 
         // Giant tornado telegraphed lightning at random ground points. The
         // owner cast is guarded now; it used to throw on any non living owner.
@@ -198,7 +205,7 @@ public class AzureTornadoEntity extends Projectile {
         // Howling wind sound
         if (this.tickCount % 20 == 0) {
             serverLevel.playSound(null, center.x, center.y, center.z,
-                SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.5f, 0.8f);
+                com.dragonblockarcanedba.sound.DbaSounds.FLIGHT_WIND, SoundSource.PLAYERS, 1.5f, 0.8f);
         }
 
         if (this.tickCount >= this.maxLifetime) {

@@ -1,8 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -47,7 +46,10 @@ public class DarkFadedEffect extends MobEffect {
         // Void tick damage every 10 ticks
         if (entity.tickCount % 10 == 0) {
             float damage = 35.0f + (amplifier * 15.0f);
-            entity.hurtServer(level, level.damageSources().magic(), damage);
+            // Bespoke: Hollow's Edge void corruption is void family. The
+            // effect stores no attacker, so the source anchors on the
+            // afflicted entity with no attacker.
+            entity.hurtServer(level, DbaDamage.voidDmg(entity, null), damage);
         }
         return true;
     }

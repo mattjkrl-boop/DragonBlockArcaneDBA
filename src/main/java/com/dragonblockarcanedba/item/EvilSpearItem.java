@@ -10,7 +10,6 @@ import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -27,6 +26,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 
 import java.util.ArrayList;
@@ -38,7 +38,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Evil Spear — Cursed Hunter Weapon.
+ * Evil Spear: Cursed Hunter Weapon.
  * 
  * Ki Drain: 45% per minute (smooth).
  */
@@ -123,7 +123,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
 
         if (chargeTicks % 20 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 0.8f, 0.6f + chargeRatio * 0.6f);
+                com.dragonblockarcanedba.sound.DbaSounds.CAST_DARK, SoundSource.PLAYERS, 0.8f, 0.6f + chargeRatio * 0.6f);
         }
     }
 
@@ -157,7 +157,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
         level.addFreshEntity(spear);
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.TRIDENT_THROW.value(), SoundSource.PLAYERS, 1.8f, 0.7f);
+            com.dragonblockarcanedba.sound.DbaSounds.TRIDENT_THROW, SoundSource.PLAYERS, 1.8f, 0.7f);
 
         // Cooldown floor is the projectile's 40 tick visual lifetime
         // (standard numbers guidance), scaling up with the charge.
@@ -200,7 +200,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
                 Vec3 look = serverPlayer.getLookAngle();
                 MovementPhysics.setVelocity(serverPlayer, new Vec3(look.x * 2.0 * ccMult, 0.4 * ccMult, look.z * 2.0 * ccMult));
                 serverLevel.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
-                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 0.5f);
+                    com.dragonblockarcanedba.sound.DbaSounds.SWING_LIGHT, SoundSource.PLAYERS, 1.5f, 0.5f);
                 serverLevel.playSound(null, serverPlayer.getX(), serverPlayer.getY(), serverPlayer.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 0.5f);
                 serverPlayer.getCooldowns().addCooldown(stack, 40);
@@ -345,7 +345,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
                     e -> e.isAlive() && e != player
                 );
                 for (LivingEntity victim : landed) {
-                    victim.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (lungeDamage)));
+                    victim.hurtServer(level, DbaDamage.hellfire(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (lungeDamage)));
                     victim.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER, 120, 0, false, true), player);
                 }
                 if (!landed.isEmpty()) {
@@ -353,7 +353,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
                         level, player, player.position().add(0, 0.05, 0), 2.6f, false
                     );
                     level.addFreshEntity(impact);
-                    level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.6f, 0.5f);
+                    level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.CRIT_HIT, SoundSource.PLAYERS, 1.6f, 0.5f);
                 }
             }
         }
@@ -394,7 +394,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
                 net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
             );
 
-            t.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finalDmg)));
+            t.hurtServer(level, DbaDamage.hellfire(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finalDmg)));
 
             // Spawn Physical 3D Hell Hunt Impact Entity (Tectonic Fissures, Obsidian Spikes, Execution Pillar)
             HellHuntImpactEntity impact = new HellHuntImpactEntity(
@@ -402,7 +402,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
             );
             level.addFreshEntity(impact);
 
-            level.playSound(null, t.getX(), t.getY(), t.getZ(), SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.8f, 0.5f);
+            level.playSound(null, t.getX(), t.getY(), t.getZ(), com.dragonblockarcanedba.sound.DbaSounds.CRIT_HIT, SoundSource.PLAYERS, 1.8f, 0.5f);
             level.playSound(null, t.getX(), t.getY(), t.getZ(), com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.8f, 0.5f);
         }
     }

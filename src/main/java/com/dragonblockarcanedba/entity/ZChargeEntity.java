@@ -22,6 +22,7 @@ public class ZChargeEntity extends Projectile {
     // Ticks since the fade out began, -1 while the charge is live. Synced so the
     // renderer can ease the whole construct out instead of popping on discard.
     private static final EntityDataAccessor<Integer> FADE_TICKS = SynchedEntityData.defineId(ZChargeEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(ZChargeEntity.class, EntityDataSerializers.INT);
     public static final int FADE_LENGTH = 8;
 
     private int idleTicksWithoutUpdate = 0;
@@ -39,6 +40,7 @@ public class ZChargeEntity extends Projectile {
             this.setPos(caster.getX(), caster.getY(), caster.getZ());
             this.entityData.set(CASTER_ID, caster.getId());
         }
+        this.entityData.set(SEED, level.getRandom().nextInt());
         this.noPhysics = true;
     }
 
@@ -47,10 +49,15 @@ public class ZChargeEntity extends Projectile {
         builder.define(CHARGE_RATIO, 0.0f);
         builder.define(CASTER_ID, -1);
         builder.define(FADE_TICKS, -1);
+        builder.define(SEED, 0);
     }
 
     public float getChargeRatio() {
         return this.entityData.get(CHARGE_RATIO);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int getFadeTicks() {

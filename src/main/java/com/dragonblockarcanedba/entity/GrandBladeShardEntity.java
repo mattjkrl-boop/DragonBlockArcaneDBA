@@ -1,12 +1,13 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -111,9 +112,7 @@ public class GrandBladeShardEntity extends Projectile {
 
                 if (!enemies.isEmpty()) {
                     LivingEntity victim = enemies.get(0);
-                    DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                        ? serverLevel.damageSources().playerAttack(playerOwner)
-                        : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().generic());
+                    DamageSource damageSource = valorSource();
 
                     // 1. Stackable damage
                     victim.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
@@ -134,12 +133,12 @@ public class GrandBladeShardEntity extends Projectile {
 
                     // Sound
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 1.6f);
+                        DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 1.0f, 1.6f);
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
-                        SoundEvents.ARMOR_STAND_HIT, SoundSource.PLAYERS, 1.2f, 1.2f);
+                        DbaSounds.HIT_METAL, SoundSource.PLAYERS, 1.2f, 1.2f);
 
                     // Golden shatter burst the class header always promised.
-                    serverLevel.sendParticles(ParticleTypes.CRIT,
+                    serverLevel.sendParticles(DbaParticles.CRIT_SPARK,
                         this.getX(), this.getY() + 0.4, this.getZ(), 14, 0.35, 0.35, 0.35, 0.25);
                     serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                         this.getX(), this.getY() + 0.4, this.getZ(), 8, 0.3, 0.3, 0.3, 0.15);
@@ -174,9 +173,7 @@ public class GrandBladeShardEntity extends Projectile {
 
                 if (!hits.isEmpty()) {
                     LivingEntity victim = hits.get(0);
-                    DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                        ? serverLevel.damageSources().playerAttack(playerOwner)
-                        : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().generic());
+                    DamageSource damageSource = valorSource();
 
                     victim.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
@@ -190,9 +187,9 @@ public class GrandBladeShardEntity extends Projectile {
                         victim.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), livingOwner);
                     }
 
-                    serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 1.4f);
+                    serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 1.0f, 1.4f);
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.0f, 1.4f);
-                    serverLevel.sendParticles(ParticleTypes.CRIT,
+                    serverLevel.sendParticles(DbaParticles.CRIT_SPARK,
                         this.getX(), this.getY() + 0.4, this.getZ(), 12, 0.3, 0.3, 0.3, 0.25);
                     spawnImpactDebris(serverLevel, this.position(), 6);
                     this.discard();
@@ -230,7 +227,7 @@ public class GrandBladeShardEntity extends Projectile {
                 this.embeddedTicks = 0;
 
                 if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
-                    serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z, SoundEvents.ARROW_HIT, SoundSource.PLAYERS, 0.8f, 1.4f);
+                    serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z, DbaSounds.THUNK, SoundSource.PLAYERS, 0.8f, 1.4f);
                     // Impact debris: chunks of the struck ground burst out,
                     // orbit briefly, and rain back down.
                     spawnImpactDebris(serverLevel, hitPos, 8);
@@ -246,6 +243,12 @@ public class GrandBladeShardEntity extends Projectile {
                 this.discard();
             }
         }
+    }
+
+    /** Ability damage source: the mod's valor type, with this shard as the direct entity. */
+    private DamageSource valorSource() {
+        Entity owner = this.getOwner();
+        return DbaDamage.valor(this, owner instanceof LivingEntity living ? living : null);
     }
 
     /** Small debris burst where a shard strikes: pieces sampled from the ground at the impact. */

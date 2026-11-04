@@ -8,7 +8,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
@@ -46,6 +45,7 @@ public class SpiritCleaveEntity extends Projectile {
 
     private static final EntityDataAccessor<Integer> LIFE = SynchedEntityData.defineId(SpiritCleaveEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> DYING = SynchedEntityData.defineId(SpiritCleaveEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Long> SEED = SynchedEntityData.defineId(SpiritCleaveEntity.class, EntityDataSerializers.LONG);
 
     private static final int CYAN = 0x00E5FF;
     private static final int GOLD = 0xFFC83C;
@@ -65,6 +65,7 @@ public class SpiritCleaveEntity extends Projectile {
         this.setOwner(owner);
         this.damage = damage;
         this.noPhysics = true;
+        this.entityData.set(SEED, this.getUUID().getMostSignificantBits());
         if (owner != null) {
             Vec3 look = owner.getLookAngle();
             Vec3 start = owner.getEyePosition().add(look.scale(0.6));
@@ -78,6 +79,12 @@ public class SpiritCleaveEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(LIFE, FLIGHT_TICKS + FADE_TICKS);
         builder.define(DYING, false);
+        builder.define(SEED, 0L);
+    }
+
+    /** Synced geometry seed for the bespoke renderer (bespoke pass rule 1). */
+    public long getSeed() {
+        return this.entityData.get(SEED);
     }
 
     /** Total lifetime in ticks, flight plus dissipation. Set early when a wall ends the flight. */
@@ -148,10 +155,12 @@ public class SpiritCleaveEntity extends Projectile {
                 continue;
             }
             this.hitIds.add(living.getId());
+            // Bespoke pass: the folded hit (flat cleave damage plus the 2%
+            // of max HP percent, summed into one hurtServer exactly as
+            // before) uses the mod's spirit damage type, the cleave as the
+            // direct entity and the owner as the attacker.
             float percent = living.getMaxHealth() * 0.02f;
-            var source = owner instanceof net.minecraft.world.entity.player.Player player
-                ? serverLevel.damageSources().playerAttack(player)
-                : serverLevel.damageSources().magic();
+            var source = com.dragonblockarcanedba.util.DbaDamage.spirit(this, owner);
             living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(this.damage + percent));
             living.addEffect(new MobEffectInstance(DbaEffects.SPIRIT_IMPALE_HOLDER, 120, 0, false, true), owner);
             boolean already = !serverLevel.getEntitiesOfClass(SpiritImpaleEntity.class,
@@ -224,6 +233,6 @@ public class SpiritCleaveEntity extends Projectile {
         DebrisSpawner.spawnField(serverLevel, owner instanceof LivingEntity lo ? lo : null,
             hit, 10, 1.6, 2.4, 16, List.of(struck));
         serverLevel.playSound(null, hit.x, hit.y, hit.z,
-            SoundEvents.GLASS_BREAK, SoundSource.PLAYERS, 0.8f, 1.35f);
+            com.dragonblockarcanedba.sound.DbaSounds.GLASS_CRACK, SoundSource.PLAYERS, 0.8f, 1.35f);
     }
 }

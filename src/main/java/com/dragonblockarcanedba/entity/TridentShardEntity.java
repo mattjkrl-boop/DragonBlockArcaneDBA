@@ -280,9 +280,8 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
 
                 // Damage if close, at most one hit per 6 ticks per shard.
                 if (this.hitCooldown <= 0 && this.distanceToSqr(target) < 4.0) {
-                    net.minecraft.world.damagesource.DamageSource shardSource = this.getOwner() instanceof LivingEntity livingOwner
-                        ? this.level().damageSources().mobProjectile(this, livingOwner)
-                        : this.level().damageSources().magic();
+                    net.minecraft.world.damagesource.DamageSource shardSource =
+                        com.dragonblockarcanedba.util.DbaDamage.hellfire(this, this.getOwner());
                     // Shard damage scales with the owner's Strength (100 + Strength x 0.5).
                     float dealt = this.getOwner() instanceof Player ownerPlayer
                         ? com.dragonblockarcanedba.item.DevilTridentItem.shardDamage(ownerPlayer)
@@ -290,7 +289,7 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
                     target.hurtServer((ServerLevel) this.level(), shardSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(dealt));
                     target.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 60, 0, false, false), this.getOwner());
                     this.level().playSound(null, target.getX(), target.getY(), target.getZ(),
-                        net.minecraft.sounds.SoundEvents.TRIDENT_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 0.7f, 1.1f);
+                        com.dragonblockarcanedba.sound.DbaSounds.TRIDENT_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 0.7f, 1.1f);
 
                     // Hit feedback: a crimson spark burst at the bite point, so a
                     // swarm chewing a target is visible across the arena.

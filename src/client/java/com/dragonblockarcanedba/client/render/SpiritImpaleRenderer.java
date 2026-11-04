@@ -1,25 +1,28 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SpiritImpaleEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
-
-import java.util.Random;
 
 /**
  * Entity Renderer for Spirit Impale in Minecraft 26.2.
- * Renders 6 physical 3D ethereal celestial swords impaling the target, 3 counter-rotating
- * divine judgement ground arrays, an ascending divine pillar, and exploding crystal spikes.
+ * Bespoke pass: every shape comes from BespokeGeometry seeded by the
+ * entity's UUID (a hash of synced state). The judgement array is crack
+ * stars and glow fans counter rotating at the spectacle speeds, the pillar
+ * is broken vortex bands wrapped in torn ribbon strands, the six plunging
+ * swords are crossed torn ribbon blades with shard fan guards and pommels,
+ * and the crystal perimeter is two seeded shard fans. Counts, placement
+ * math, envelope, and colors are unchanged from the spectacle pass.
  */
 public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, SpiritImpaleRenderer.SpiritImpaleRenderState> {
 
@@ -71,39 +74,60 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
         float slam = Math.min(1.0f, age / 4.0f);
         float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.4f);
         float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        int ringSegsOuter = FxEnvelope.segments(32, distScale, 12);
-        int ringSegsMid = FxEnvelope.segments(24, distScale, 10);
-        int ringSegsInner = FxEnvelope.segments(16, distScale, 8);
-        int pillarSides = FxEnvelope.segments(12, distScale, 6);
-        int pillarCoreSides = FxEnvelope.segments(8, distScale, 5);
+        long seed = state.seed;
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
+            BespokeGeometry.Rng rng = new BespokeGeometry.Rng(seed);
 
-            // 1. Concentric Divine Judgement Ground Arrays (3 Counter-Rotating Runic Arrays)
+            // 1. Divine judgement ground array: a crack star script ring, a
+            // gold glow fan, and a white flash heart, counter rotating at
+            // the old ring speeds (22, -30, and 15 degrees per tick across
+            // the three layers).
             float baseRadius = 2.4f * scale * slam;
             if (fade > 0.02f) {
-                // Outer Cyan Script Ring
-                drawGroundRing(matrix, buffer, 0, 0.03f, 0, baseRadius, baseRadius * 0.82f, ringSegsOuter, age * 22.0f, 0.0f, 0.90f, 1.0f, fade * 0.85f);
-                // Middle Golden Lotus Ring
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 0.68f, baseRadius * 0.48f, ringSegsMid, -age * 30.0f, 1.0f, 0.82f, 0.15f, fade * 0.90f);
-                // Inner White Flash Disk
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.35f * pulse, 0.0f, ringSegsInner, age * 15.0f, 1.0f, 1.0f, 1.0f, fade * 0.95f);
+                PoseStack.Pose outer = pose.copy();
+                outer.rotate(Axis.YP.rotationDegrees(age * 22.0f));
+                BespokeGeometry.crackStar(outer, buffer, seed + 11L, baseRadius * 1.02f,
+                    0.0f, 0.90f, 1.0f, 0.85f, fade, distScale);
+                BespokeGeometry.glowFan(pose, buffer, seed + 12L, baseRadius * 0.62f, 0.04f,
+                    1.0f, 0.82f, 0.15f, fade * 0.75f, distScale);
+                PoseStack.Pose inner = pose.copy();
+                inner.rotate(Axis.YP.rotationDegrees(-age * 30.0f));
+                BespokeGeometry.crackStar(inner, buffer, seed + 13L, baseRadius * 0.38f * pulse,
+                    1.0f, 1.0f, 1.0f, 0.80f, fade, distScale);
+                BespokeGeometry.glowFan(pose, buffer, seed + 14L, baseRadius * 0.30f * pulse, 0.05f,
+                    1.0f, 1.0f, 1.0f, fade * 0.55f, distScale);
             }
 
-            // 2. Ascending Vertical Divine Ki Pillar & Helical Aura Ribbons
+            // 2. Ascending divine pillar: broken vortex bands (white core,
+            // two cyan shells) wrapped in four torn ribbon strands that
+            // orbit at the old helix phase speed and alternate cyan and
+            // gold like the two helices did.
             float pillarHeight = 6.0f * slam;
             float pillarRadius = 0.65f * scale * pulse;
-            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius, pillarHeight, pillarSides, 0.0f, 0.92f, 1.0f, fade * 0.60f);
-            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius * 0.42f, pillarHeight * 1.05f, pillarCoreSides, 1.0f, 1.0f, 1.0f, fade * 0.90f);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed + 21L, pillarRadius * 0.42f,
+                0.0f, pillarHeight * 1.05f, age * 0.25f, 1.0f, 1.0f, 1.0f, fade * 0.90f, distScale);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed + 22L, pillarRadius,
+                0.0f, pillarHeight * 0.55f, age * 0.25f, 0.0f, 0.92f, 1.0f, fade * 0.60f, distScale);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed + 23L, pillarRadius * 0.8f,
+                pillarHeight * 0.5f, pillarHeight, age * 0.25f + 0.5f, 0.0f, 0.92f, 1.0f, fade * 0.33f, distScale);
+            for (int k = 0; k < 4; k++) {
+                boolean goldStrand = (k % 2 == 1);
+                PoseStack.Pose strand = pose.copy();
+                strand.rotate(Axis.YP.rotationDegrees(age * 14.3f + k * 90.0f));
+                strand.translate(pillarRadius * 1.25f, 0.0f, 0.0f);
+                strand.rotate(Axis.ZP.rotationDegrees(90.0f));
+                BespokeGeometry.tornRibbon(strand, buffer, seed + 30L + k * 7L, pillarHeight, 0.12f, -0.3f,
+                    goldStrand ? 1.0f : 0.0f, goldStrand ? 0.85f : 0.95f, goldStrand ? 0.30f : 1.0f,
+                    0.70f, fade, distScale);
+            }
 
-            // Helical Aura Ribbons around the pillar
-            drawAscendingHelices(matrix, buffer, age, pillarHeight, pillarRadius * 1.25f, fade);
-
-            // 3. 6 Physical 3D Ethereal Spirit Swords Plunging and Skewering the Target
+            // 3. Six ethereal spirit swords plunging into the target. The
+            // placement math (ring radius, drop, center, tips, vibration)
+            // is the spectacle math verbatim; each sword is built from
+            // bespoke pieces in a pose aligned from hilt to tip.
             int swordCount = 6;
             float swordRingRadius = 1.65f * scale * (1.3f - slam * 0.3f);
             float startDropY = 3.5f * (1.0f - slam);
@@ -115,60 +139,87 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
                 float hz = (float) Math.sin(baseAngle) * swordRingRadius;
                 float hy = targetCenterY + 1.2f + startDropY;
 
-                // Tip aims into center target position
                 float tipX = (float) Math.cos(baseAngle) * (0.25f * scale);
                 float tipZ = (float) Math.sin(baseAngle) * (0.25f * scale);
                 float tipY = targetCenterY - 0.2f * scale;
 
-                // Sword vibration on impact
                 float vibX = (rng.nextFloat() - 0.5f) * 0.04f * (1.0f - slam * 0.5f);
                 float vibZ = (rng.nextFloat() - 0.5f) * 0.04f * (1.0f - slam * 0.5f);
 
-                draw3DSpiritSword(matrix, buffer,
-                    hx + vibX, hy, hz + vibZ,
-                    tipX, tipY, tipZ,
-                    scale, fade, pulse, i
-                );
+                float dx = tipX - hx, dy = tipY - hy, dz = tipZ - hz;
+                float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (len < 0.01f) continue;
+                float hLen = (float) Math.sqrt(dx * dx + dz * dz);
+                float yawDeg = (float) Math.toDegrees(Math.atan2(-dz, dx));
+                float pitchDeg = (float) Math.toDegrees(Math.atan2(dy, hLen));
+                long sSeed = seed + 100L + i * 131L;
+
+                // Local frame: origin at the hilt, +X running hilt to tip.
+                PoseStack.Pose sword = pose.copy();
+                sword.translate(hx + vibX, hy, hz + vibZ);
+                sword.rotate(Axis.YP.rotationDegrees(yawDeg));
+                sword.rotate(Axis.ZP.rotationDegrees(pitchDeg));
+
+                // Grip from hilt to guard.
+                BespokeGeometry.tornRibbon(sword, buffer, sSeed, len * 0.18f, 0.11f * scale, 0.0f,
+                    0.05f, 0.65f, 0.90f, 0.90f, fade, distScale);
+                // Blade: a bright torn ribbon from guard to tip, with a
+                // crossed cyan web for thickness.
+                PoseStack.Pose blade = sword.copy();
+                blade.translate(len * 0.18f, 0.0f, 0.0f);
+                BespokeGeometry.tornRibbon(blade, buffer, sSeed + 7L, len * 0.82f, 0.20f * scale, 0.0f,
+                    0.55f, 0.97f, 1.0f, 0.95f, fade, distScale);
+                PoseStack.Pose bladeCross = blade.copy();
+                bladeCross.rotate(Axis.XP.rotationDegrees(90.0f));
+                BespokeGeometry.tornRibbon(bladeCross, buffer, sSeed + 13L, len * 0.82f, 0.13f * scale, 0.0f,
+                    0.0f, 0.95f, 1.0f, 0.90f, fade, distScale);
+                // Gold shard fan guard across the blade, facing along it.
+                PoseStack.Pose guard = sword.copy();
+                guard.translate(len * 0.18f, 0.0f, 0.0f);
+                guard.rotate(Axis.ZP.rotationDegrees(90.0f));
+                BespokeGeometry.shardFan(guard, buffer, sSeed + 19L, 0.30f * scale,
+                    1.0f, 0.85f, 0.20f, 0.95f, fade, distScale);
+                // Pommel shard star at the hilt end.
+                PoseStack.Pose pommel = sword.copy();
+                pommel.rotate(Axis.ZP.rotationDegrees(90.0f));
+                BespokeGeometry.shardFan(pommel, buffer, sSeed + 29L, 0.17f * scale,
+                    1.0f, 0.95f, 0.40f, 1.0f, fade, distScale);
+                // Energy tendril trailing back into the sky, cyan with a
+                // white core, rising as the old beam tendril did.
+                PoseStack.Pose tendril = sword.copy();
+                tendril.rotate(Axis.YP.rotationDegrees(180.0f));
+                BespokeGeometry.tornRibbon(tendril, buffer, sSeed + 37L, 1.4f * scale, 0.16f * scale, 0.3f,
+                    0.0f, 0.90f, 1.0f, 0.65f, fade, distScale);
+                BespokeGeometry.tornRibbon(tendril, buffer, sSeed + 41L, 1.4f * scale, 0.06f * scale, 0.3f,
+                    1.0f, 1.0f, 1.0f, 0.85f, fade, distScale);
             }
 
-            // 4. 8 Erupting 3D Divine Crystal Impalement Spikes along Ground Perimeter
-            int spikeCount = 8;
-            for (int s = 0; s < spikeCount; s++) {
-                double sAngle = (s / (double) spikeCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.2);
-                float sDist = baseRadius * (0.75f + rng.nextFloat() * 0.35f);
-                float sx = (float) Math.cos(sAngle) * sDist;
-                float sz = (float) Math.sin(sAngle) * sDist;
-
-                float spikeH = (0.8f + rng.nextFloat() * 0.6f) * slam * scale;
-                float spikeW = 0.22f * scale;
-
-                float tx = -(float) Math.sin(sAngle) * spikeW * 0.5f;
-                float tz = (float) Math.cos(sAngle) * spikeW * 0.5f;
-                float tiltX = (float) Math.cos(sAngle) * 0.25f;
-                float tiltZ = (float) Math.sin(sAngle) * 0.25f;
-
-                drawCrystalSpike(matrix, buffer,
-                    sx - tx, 0.04f, sz - tz,
-                    sx + tx, 0.04f, sz + tz,
-                    sx + tiltX, spikeH, sz + tiltZ,
-                    0.0f, 0.70f, 0.95f, fade * 0.85f,
-                    1.0f, 1.0f, 1.0f, fade
-                );
+            // 4. Crystal perimeter: two seeded shard fans where the eight
+            // regular spikes stood, an uneven cyan crystal ring with a
+            // white heart. Radius rides baseRadius, so the fans erupt
+            // with the slam exactly as the spikes grew.
+            if (fade > 0.02f) {
+                BespokeGeometry.shardFan(pose, buffer, seed + 51L, baseRadius * 0.98f,
+                    0.0f, 0.70f, 0.95f, 0.85f, fade, distScale);
+                BespokeGeometry.shardFan(pose, buffer, seed + 52L, baseRadius * 0.55f,
+                    1.0f, 1.0f, 1.0f, 0.55f, fade, distScale);
             }
         });
 
-        // Additive glow halo (redesign T1): the judgement array and pillar get
-        // a soft additive bloom shell so the cyan and gold read as light
-        // instead of matte geometry.
+        // Additive glow halo: the shared vortex bands and anchor glow are
+        // kept verbatim from the spectacle pass, and the array gets a
+        // bespoke bloom echo (crack star plus gold glow) in place of the
+        // old regular ring and cylinder copies.
         if (fade > 0.02f) {
             float haloRadius = 2.4f * scale * slam;
-            float haloPillarRadius = 0.65f * scale * pulse * 1.35f;
             float haloPillarHeight = 6.0f * slam;
             collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                Matrix4f matrix = pose.pose();
-                drawGroundRing(matrix, buffer, 0, 0.03f, 0, haloRadius * 1.06f, haloRadius * 0.80f, ringSegsOuter, age * 22.0f, 0.0f, 0.90f, 1.0f, fade * 0.20f);
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, haloRadius * 0.68f, haloRadius * 0.46f, ringSegsMid, -age * 30.0f, 1.0f, 0.82f, 0.15f, fade * 0.16f);
-                drawCylinderPillar(matrix, buffer, 0, 0, haloPillarRadius, haloPillarHeight, pillarSides, 0.0f, 0.92f, 1.0f, fade * 0.14f);
+                PoseStack.Pose outer = pose.copy();
+                outer.rotate(Axis.YP.rotationDegrees(age * 22.0f));
+                BespokeGeometry.crackStar(outer, buffer, seed + 61L, haloRadius * 1.04f,
+                    0.0f, 0.90f, 1.0f, 0.20f, fade, distScale);
+                BespokeGeometry.glowFan(pose, buffer, seed + 62L, haloRadius * 0.62f, 0.04f,
+                    1.0f, 0.82f, 0.15f, fade * 0.16f, distScale);
                 // Wispy outer layer and ground anchor (point 1): three
                 // counter rotating shared bands wrap the pillar so the
                 // array has a dissolving outer shell, and an anchor glow
@@ -179,231 +230,5 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
                     0.0f, 0.90f, 1.0f, 0.5f * fade, distScale);
             });
         }
-    }
-
-    private static void draw3DSpiritSword(Matrix4f matrix, VertexConsumer consumer,
-                                          float hx, float hy, float hz,
-                                          float tx, float ty, float tz,
-                                          float scale, float fade, float pulse, int index) {
-        float dx = tx - hx, dy = ty - hy, dz = tz - hz;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.01f) return;
-
-        float dirX = dx / len, dirY = dy / len, dirZ = dz / len;
-
-        // Orthogonal vectors
-        float upX = 0, upY = 1, upZ = 0;
-        float rightX = dirY * upZ - dirZ * upY;
-        float rightY = dirZ * upX - dirX * upZ;
-        float rightZ = dirX * upY - dirY * upX;
-        float rLen = (float) Math.sqrt(rightX * rightX + rightY * rightY + rightZ * rightZ);
-        if (rLen < 0.001f) {
-            rightX = 1; rightY = 0; rightZ = 0;
-        } else {
-            rightX /= rLen; rightY /= rLen; rightZ /= rLen;
-        }
-
-        float normX = rightY * dirZ - rightZ * dirY;
-        float normY = rightZ * dirX - rightX * dirZ;
-        float normZ = rightX * dirY - rightY * dirX;
-
-        float bladeWidth = 0.20f * scale;
-        float bladeThickness = 0.07f * scale;
-        float guardWidth = 0.48f * scale;
-        float pommelSize = 0.12f * scale;
-
-        // Hilt base to guard
-        float guardOffset = len * 0.18f;
-        float gx = hx + dirX * guardOffset;
-        float gy = hy + dirY * guardOffset;
-        float gz = hz + dirZ * guardOffset;
-
-        // 1. Blade Body (Faceted 3D Diamond Cross-Section)
-        // Guard to Tip
-        float bx1 = gx - rightX * bladeWidth * 0.5f, by1 = gy - rightY * bladeWidth * 0.5f, bz1 = gz - rightZ * bladeWidth * 0.5f;
-        float bx2 = gx + rightX * bladeWidth * 0.5f, by2 = gy + rightY * bladeWidth * 0.5f, bz2 = gz + rightZ * bladeWidth * 0.5f;
-        float fx1 = gx + normX * bladeThickness, fy1 = gy + normY * bladeThickness, fz1 = gz + normZ * bladeThickness;
-        float fx2 = gx - normX * bladeThickness, fy2 = gy - normY * bladeThickness, fz2 = gz - normZ * bladeThickness;
-
-        // Colors: Radiant Celestial Cyan & Pure White Ridge
-        float rCore = 0.0f, gCore = 0.95f * pulse, bCore = 1.0f;
-        float rEdge = 0.85f, gEdge = 0.98f, bEdge = 1.0f;
-
-        // Face 1 (Top-Left)
-        drawTriangle(matrix, consumer, bx1, by1, bz1, fx1, fy1, fz1, tx, ty, tz, rCore, gCore, bCore, fade * 0.95f);
-        // Face 2 (Top-Right)
-        drawTriangle(matrix, consumer, fx1, fy1, fz1, bx2, by2, bz2, tx, ty, tz, rEdge, gEdge, bEdge, fade * 0.95f);
-        // Face 3 (Bottom-Right)
-        drawTriangle(matrix, consumer, bx2, by2, bz2, fx2, fy2, fz2, tx, ty, tz, rCore, gCore, bCore, fade * 0.95f);
-        // Face 4 (Bottom-Left)
-        drawTriangle(matrix, consumer, fx2, fy2, fz2, bx1, by1, bz1, tx, ty, tz, rEdge, gEdge, bEdge, fade * 0.95f);
-
-        // 2. Winged Celestial Crossguard (Golden / Cyan Wing Flanges)
-        float qx1 = gx - rightX * guardWidth * 0.5f, qy1 = gy - rightY * guardWidth * 0.5f, qz1 = gz - rightZ * guardWidth * 0.5f;
-        float qx2 = gx + rightX * guardWidth * 0.5f, qy2 = gy + rightY * guardWidth * 0.5f, qz2 = gz + rightZ * guardWidth * 0.5f;
-        float gThick = bladeThickness * 1.5f;
-        drawQuad(matrix, consumer,
-            qx1 - normX * gThick, qy1 - normY * gThick, qz1 - normZ * gThick,
-            qx2 - normX * gThick, qy2 - normY * gThick, qz2 - normZ * gThick,
-            qx2 + normX * gThick, qy2 + normY * gThick, qz2 + normZ * gThick,
-            qx1 + normX * gThick, qy1 + normY * gThick, qz1 + normZ * gThick,
-            1.0f, 0.85f, 0.20f, fade * 0.95f
-        );
-
-        // 3. Handle Grip & Diamond Pommel
-        drawBeam(matrix, consumer, hx, hy, hz, gx, gy, gz, bladeThickness * 0.8f, 0.05f, 0.65f, 0.90f, fade * 0.90f);
-
-        // Diamond Pommel Cap
-        float px1 = hx - rightX * pommelSize, py1 = hy - rightY * pommelSize, pz1 = hz - rightZ * pommelSize;
-        float px2 = hx + rightX * pommelSize, py2 = hy + rightY * pommelSize, pz2 = hz + rightZ * pommelSize;
-        drawQuad(matrix, consumer,
-            px1 - normX * pommelSize, py1 - normY * pommelSize, pz1 - normZ * pommelSize,
-            px2 - normX * pommelSize, py2 - normY * pommelSize, pz2 - normZ * pommelSize,
-            px2 + normX * pommelSize, py2 + normY * pommelSize, pz2 + normZ * pommelSize,
-            px1 + normX * pommelSize, py1 + normY * pommelSize, pz1 + normZ * pommelSize,
-            1.0f, 0.95f, 0.40f, fade
-        );
-
-        // 4. Trailing Ethereal Blade Energy Tendril extending backward into sky
-        float trailLen = 1.4f * scale;
-        float ex = hx - dirX * trailLen, ey = hy - dirY * trailLen + 0.3f, ez = hz - dirZ * trailLen;
-        drawBeam(matrix, consumer, hx, hy, hz, ex, ey, ez, 0.08f * scale, 0.0f, 0.90f, 1.0f, fade * 0.65f);
-        drawBeam(matrix, consumer, hx, hy, hz, ex, ey, ez, 0.03f * scale, 1.0f, 1.0f, 1.0f, fade * 0.85f);
-    }
-
-    private static void drawAscendingHelices(Matrix4f matrix, VertexConsumer consumer, float age, float height, float radius, float fade) {
-        int steps = 14;
-        for (int h = 0; h < 2; h++) {
-            float phase = h * (float) Math.PI;
-            for (int s = 0; s < steps; s++) {
-                float p1 = s / (float) steps;
-                float p2 = (s + 1) / (float) steps;
-
-                float y1 = p1 * height;
-                float y2 = p2 * height;
-
-                double a1 = (p1 * Math.PI * 3.0) + (age * 0.25f) + phase;
-                double a2 = (p2 * Math.PI * 3.0) + (age * 0.25f) + phase;
-
-                float x1 = (float) Math.cos(a1) * radius;
-                float z1 = (float) Math.sin(a1) * radius;
-                float x2 = (float) Math.cos(a2) * radius;
-                float z2 = (float) Math.sin(a2) * radius;
-
-                float r = h == 0 ? 0.0f : 1.0f;
-                float g = h == 0 ? 0.95f : 0.85f;
-                float b = h == 0 ? 1.0f : 0.30f;
-
-                drawBeam(matrix, consumer, x1, y1, z1, x2, y2, z2, 0.06f, r, g, b, fade * 0.70f);
-            }
-        }
-    }
-
-    private static void drawCrystalSpike(Matrix4f matrix, VertexConsumer consumer,
-                                         float x1, float y1, float z1,
-                                         float x2, float y2, float z2,
-                                         float tipX, float tipY, float tipZ,
-                                         float rBase, float gBase, float bBase, float aBase,
-                                         float rTip, float gTip, float bTip, float aTip) {
-        // Front
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Back
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-    }
-
-    private static void drawGroundRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
-        double rotRad = Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0 + rotRad;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0 + rotRad;
-
-            float x1 = cx + (float) Math.cos(a1) * rOuter;
-            float z1 = cz + (float) Math.sin(a1) * rOuter;
-            float x2 = cx + (float) Math.cos(a2) * rOuter;
-            float z2 = cz + (float) Math.sin(a2) * rOuter;
-
-            float ix1 = cx + (float) Math.cos(a1) * rInner;
-            float iz1 = cz + (float) Math.sin(a1) * rInner;
-            float ix2 = cx + (float) Math.cos(a2) * rInner;
-            float iz2 = cz + (float) Math.sin(a2) * rInner;
-
-            drawQuad(matrix, consumer, ix1, cy, iz1, ix2, cy, iz2, x2, cy, z2, x1, cy, z1, r, g, b, a);
-        }
-    }
-
-    private static void drawCylinderPillar(Matrix4f matrix, VertexConsumer consumer, float cx, float cz, float radius, float height, int sides, float r, float g, float b, float a) {
-        for (int i = 0; i < sides; i++) {
-            double a1 = (i / (double) sides) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) sides) * Math.PI * 2.0;
-
-            float x1 = cx + (float) Math.cos(a1) * radius;
-            float z1 = cz + (float) Math.sin(a1) * radius;
-            float x2 = cx + (float) Math.cos(a2) * radius;
-            float z2 = cz + (float) Math.sin(a2) * radius;
-
-            consumer.addVertex(matrix, x1, 0.04f, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, 0.04f, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, height, z2).setColor(r, g, b, a * 0.25f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, height, z1).setColor(r, g, b, a * 0.25f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Reverse
-            consumer.addVertex(matrix, x1, height, z1).setColor(r, g, b, a * 0.25f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, height, z2).setColor(r, g, b, a * 0.25f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, 0.04f, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, 0.04f, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        }
-    }
-
-    private static void drawBeam(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float radius, float r, float g, float b, float a) {
-        float dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.001f) return;
-
-        float nx = -dz / len * radius;
-        float nz = dx / len * radius;
-        float ny = radius;
-
-        drawQuad(matrix, consumer, x1 - nx, y1, z1 - nz, x1 + nx, y1, z1 + nz, x2 + nx, y2, z2 + nz, x2 - nx, y2, z2 - nz, r, g, b, a);
-        drawQuad(matrix, consumer, x1, y1 - ny, z1, x1, y1 + ny, z1, x2, y2 + ny, z2, x2, y2 - ny, z2, r, g, b, a);
-    }
-
-    private static void drawTriangle(Matrix4f matrix, VertexConsumer consumer,
-                                     float x1, float y1, float z1,
-                                     float x2, float y2, float z2,
-                                     float x3, float y3, float z3,
-                                     float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Reverse
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-    }
-
-    private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,
-                                 float x1, float y1, float z1,
-                                 float x2, float y2, float z2,
-                                 float x3, float y3, float z3,
-                                 float x4, float y4, float z4,
-                                 float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Reverse
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 }

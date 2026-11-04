@@ -1,6 +1,6 @@
 package com.dragonblockarcanedba.effect;
 
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -28,7 +28,7 @@ public class SilentMarkEffect extends MobEffect {
         double oz = (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth() * 1.2;
 
         level.sendParticles(
-            new DustParticleOptions(0xFFFFFF, 1.5f),
+            new DbaDustOptions(0xFFFFFF, 1.5f),
             entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz,
             1, 0, 0.02, 0, 0.01
         );

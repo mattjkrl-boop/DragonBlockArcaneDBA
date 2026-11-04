@@ -4,11 +4,11 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.LavaCleaveEntity;
 import com.dragonblockarcanedba.entity.LavaEruptionEntity;
 import com.dragonblockarcanedba.entity.LavaSwordGround;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -70,7 +70,7 @@ public class LavaSwordItem extends Item implements com.dragonblockarcanedba.item
         // abilities still pay their own way on top of the melee hit.
         target.setRemainingFireTicks(Math.max(target.getRemainingFireTicks(), 60));
         if (target.level() instanceof ServerLevel server) {
-            server.sendParticles(ParticleTypes.FLAME,
+            server.sendParticles(DbaParticles.FLAME,
                 target.getX(), target.getY() + target.getBbHeight() * 0.6, target.getZ(),
                 6, 0.25, 0.3, 0.25, 0.02);
         }
@@ -99,9 +99,9 @@ public class LavaSwordItem extends Item implements com.dragonblockarcanedba.item
         cleave.setDeltaMovement(look.scale(1.35));
         level.addFreshEntity(cleave);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 0.85f, 0.7f);
+            DbaSounds.FIRE_SHOT, SoundSource.PLAYERS, 0.85f, 0.7f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 0.6f);
+            DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.0f, 0.6f);
     }
 
     @Override
@@ -136,11 +136,11 @@ public class LavaSwordItem extends Item implements com.dragonblockarcanedba.item
         float damage = 880.0f + strength * 2.2f;
         level.addFreshEntity(new LavaEruptionEntity(level, player, damage));
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.LAVA_POP, SoundSource.PLAYERS, 1.1f, 0.6f);
+            DbaSounds.LAVA_BUBBLE, SoundSource.PLAYERS, 1.1f, 0.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.0f, 0.5f);
+            DbaSounds.FIRE_SHOT, SoundSource.PLAYERS, 1.0f, 0.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.FIRECHARGE_USE, SoundSource.PLAYERS, 0.9f, 0.8f);
+            DbaSounds.FIRE_IGNITE, SoundSource.PLAYERS, 0.9f, 0.8f);
     }
 
     public static void onPlayerDisconnect(UUID playerUuid) {

@@ -21,7 +21,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Sickle of Sorrow — The Dimensional Reaper. Endgame legendary weapon.
+ * Sickle of Sorrow: The Dimensional Reaper. Endgame legendary weapon.
  * 
  * Left-click: 750 + (Strength × 3) damage.
  *   - Spawns physical 3D Sorrow Slash geometry on melee hits and air swings.
@@ -29,7 +29,7 @@ import net.minecraft.world.phys.Vec3;
  *   - Soul Rend: Steals 3% of damage dealt as healing (lifesteal).
  *   - Applies Sorrow Rift for 4 seconds (weeping shadow corruption).
  * 
- * Right-click: "Dimensional Rift" — 15-block radius 3D Gravitational Vortex Domain.
+ * Right-click: "Dimensional Rift": 15-block radius 3D Gravitational Vortex Domain.
  *   - Spawns persistent 3D Dimensional Rift entity (replaces particle spam).
  *   - Concentric 3D ground accretion rings, towering vertical spatial tears, 18 orbital void shards, and singularity core.
  *   - Distance-based Melting tiers up to Melting IV at point-blank, 10 seconds.
@@ -115,7 +115,7 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
         // Apply Melting III (amplifier 2) for 15 seconds (300 ticks)
         target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 2, false, true), serverPlayer);
 
-        // Apply Sorrow Rift for 4 seconds (80 ticks) — weeping shadow corruption
+        // Apply Sorrow Rift for 4 seconds (80 ticks), weeping shadow corruption
         target.addEffect(new MobEffectInstance(DbaEffects.SORROW_RIFT_HOLDER, 80, 0, false, true), serverPlayer);
 
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) serverPlayer;
@@ -127,10 +127,12 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
 
         ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
 
-        // Stat-scaled bonus damage: Strength × 3
+        // Stat-scaled bonus damage: Strength × 3. This is an ability hit layered
+        // on the melee swing, so it uses the mod's void damage type (bespoke
+        // rule 4); the plain weapon hit itself stays the vanilla player attack.
         float strengthBonus = (float) (accessor.dba$getStrength() * 3.0);
         if (strengthBonus > 0) {
-            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
+            target.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.voidDmg(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
         }
 
         // Soul Rend: Steal 3% of total damage dealt as healing

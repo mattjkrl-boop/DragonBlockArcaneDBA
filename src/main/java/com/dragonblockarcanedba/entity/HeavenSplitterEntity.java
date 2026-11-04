@@ -12,7 +12,6 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityType;
@@ -186,7 +185,7 @@ public class HeavenSplitterEntity extends Projectile {
                 t.position().subtract(start).dot(dir) / getDashLength()));
             float falloff = (float) (1.0 - 0.30 * alongFrac);
             t.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
-            t.hurtServer(level, level.damageSources().playerAttack(player),
+            t.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.ki(this, player),
                 DbaEffectsConfig.capDamage(getDamage() * falloff));
             if (first) {
                 com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, t.getX(), t.getY(), t.getZ());
@@ -220,7 +219,7 @@ public class HeavenSplitterEntity extends Projectile {
         }
 
         level.playSound(null, mid.x, mid.y, mid.z,
-            SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.0f, 1.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.THUNDER_CRACK, SoundSource.PLAYERS, 2.0f, 1.8f);
         level.playSound(null, mid.x, mid.y, mid.z,
             com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.PLAYERS, 2.0f, 1.8f);
     }

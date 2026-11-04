@@ -8,13 +8,10 @@ import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageSource;
@@ -34,7 +31,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Ox Shockwave Entity — Expanding 360-degree ground shockwave unleashed by Ox King's Axe.
+ * Ox Shockwave Entity: Expanding 360-degree ground shockwave unleashed by Ox King's Axe.
  * 
  * Features:
  * - 360-degree expanding ring radius scaling with charge (up to 24 blocks max - Tweak A).
@@ -137,8 +134,8 @@ public class OxShockwaveEntity extends Projectile {
             // Initial burst sound & explosion at start
             if (this.tickCount == 1 && !subWave) {
                 if (charge >= 0.95f) {
-                    serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, center.x, center.y + 0.5, center.z, 2, 0, 0, 0, 0);
-                    serverLevel.playSound(null, center.x, center.y, center.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.5f, 0.7f);
+                    serverLevel.sendParticles(DbaParticles.BLAST, center.x, center.y + 0.5, center.z, 2, 0, 0, 0, 0);
+                    serverLevel.playSound(null, center.x, center.y, center.z, com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 2.5f, 0.7f);
 
                     // Tweak C: Spawn temporary ground fissures radiating outward
                     for (int f = 0; f < 6; f++) {
@@ -257,9 +254,7 @@ public class OxShockwaveEntity extends Projectile {
                 e -> e.isAlive() && e != owner && !hitEntityIds.contains(e.getId())
             );
 
-            DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                ? serverLevel.damageSources().playerAttack(playerOwner)
-                : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().generic());
+            DamageSource damageSource = com.dragonblockarcanedba.util.DbaDamage.crush(this, owner);
 
             for (LivingEntity target : targets) {
                 double dist = Math.sqrt(target.distanceToSqr(center.x, target.getY(), center.z));
@@ -317,7 +312,7 @@ public class OxShockwaveEntity extends Projectile {
 
                     // Impact particles on target
                     serverLevel.sendParticles(
-                        ParticleTypes.EXPLOSION,
+                        DbaParticles.BLAST,
                         target.getX(), target.getY() + 0.5, target.getZ(),
                         2, 0.2, 0.2, 0.2, 0.0
                     );
@@ -385,7 +380,7 @@ public class OxShockwaveEntity extends Projectile {
         float blastRes = block.getExplosionResistance();
         if (blastRes <= 2.0f && !state.is(Blocks.BEDROCK) && !state.is(Blocks.BARRIER)) {
             level.sendParticles(
-                new BlockParticleOption(ParticleTypes.BLOCK, state),
+                new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, state),
                 pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
                 6, 0.2, 0.2, 0.2, 0.05
             );

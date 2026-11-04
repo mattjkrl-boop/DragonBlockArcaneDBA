@@ -1,5 +1,6 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.LayeredParticles;
@@ -9,7 +10,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -37,6 +37,7 @@ public class TemporalRiftEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(TemporalRiftEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(TemporalRiftEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> MAX_LIFE = SynchedEntityData.defineId(TemporalRiftEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Long> SEED = SynchedEntityData.defineId(TemporalRiftEntity.class, EntityDataSerializers.LONG);
 
     /** Tick at which the envelope peaks (15 percent build of a 100 tick life): the second burst half lands here. */
     public static final int PEAK_TICK = 15;
@@ -71,6 +72,9 @@ public class TemporalRiftEntity extends Projectile {
         this.peakDamage = peakDamage;
         this.entityData.set(CASTER_ID, caster != null ? caster.getId() : -1);
         this.entityData.set(MAX_LIFE, lifetime);
+        // Bespoke geometry seed: rolled once at cast on the server and synced,
+        // so the renderer's procedural shapes are identical on every client.
+        this.entityData.set(SEED, level.getRandom().nextLong());
     }
 
     @Override
@@ -78,6 +82,7 @@ public class TemporalRiftEntity extends Projectile {
         builder.define(RADIUS, 12.0f);
         builder.define(CASTER_ID, -1);
         builder.define(MAX_LIFE, 60);
+        builder.define(SEED, 0L);
     }
 
     public float getRadius() {
@@ -94,6 +99,11 @@ public class TemporalRiftEntity extends Projectile {
 
     public int getMaxLifetime() {
         return this.entityData.get(MAX_LIFE);
+    }
+
+    /** Synced bespoke geometry seed (0 until the cast constructor sets it). */
+    public long getSeed() {
+        return this.entityData.get(SEED);
     }
 
     @Override
@@ -114,12 +124,15 @@ public class TemporalRiftEntity extends Projectile {
             float radius = getRadius();
             Vec3 center = this.position();
             LivingEntity ownerLiving = owner instanceof LivingEntity living ? living : null;
+            // Final alias for the target filters below: owner itself is
+            // reassigned by the re-fetch above, so lambdas cannot capture it.
+            final Entity ownerRef = owner;
 
             // Ambient temporal hum sound
             if (this.tickCount % 20 == 0) {
                 serverLevel.playSound(
                     null, this.getX(), this.getY() + 1.0, this.getZ(),
-                    SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.PLAYERS,
+                    com.dragonblockarcanedba.sound.DbaSounds.RIFT_AMBIENT, SoundSource.PLAYERS,
                     0.8f, 1.2f
                 );
             }
@@ -158,16 +171,16 @@ public class TemporalRiftEntity extends Projectile {
             if (this.tickCount == PEAK_TICK && this.peakDamage > 0f) {
                 AABB aoe = this.getBoundingBox().inflate(radius);
                 List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
-                    LivingEntity.class, aoe, e -> e != owner && e.isAlive());
+                    LivingEntity.class, aoe, e -> e != ownerRef && e.isAlive());
                 for (LivingEntity target : targets) {
                     if (this.distanceTo(target) <= radius) {
-                        target.hurtServer(serverLevel, serverLevel.damageSources().magic(),
+                        target.hurtServer(serverLevel, DbaDamage.temporal(this, owner),
                             com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(this.peakDamage));
                     }
                 }
                 serverLevel.playSound(
                     null, this.getX(), this.getY() + 1.0, this.getZ(),
-                    SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.PLAYERS,
+                    com.dragonblockarcanedba.sound.DbaSounds.CRYSTAL_CHIME, SoundSource.PLAYERS,
                     0.8f, 1.8f
                 );
             }
@@ -178,7 +191,7 @@ public class TemporalRiftEntity extends Projectile {
             if (this.tickCount == REVERSAL_TICK) {
                 AABB aoe = this.getBoundingBox().inflate(radius);
                 List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
-                    LivingEntity.class, aoe, e -> e != owner && e.isAlive());
+                    LivingEntity.class, aoe, e -> e != ownerRef && e.isAlive());
                 for (LivingEntity target : targets) {
                     if (this.distanceTo(target) <= radius && target instanceof TimeTracker tracker) {
                         tracker.dba$startReversing(REVERSAL_TICKS);

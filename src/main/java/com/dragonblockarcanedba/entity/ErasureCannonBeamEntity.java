@@ -1,11 +1,9 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -31,6 +29,7 @@ public class ErasureCannonBeamEntity extends Projectile {
     private static final EntityDataAccessor<Float> BEAM_Y_ROT = SynchedEntityData.defineId(ErasureCannonBeamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> BEAM_X_ROT = SynchedEntityData.defineId(ErasureCannonBeamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> CHARGE_RATIO = SynchedEntityData.defineId(ErasureCannonBeamEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(ErasureCannonBeamEntity.class, EntityDataSerializers.INT);
 
     public static final int MAX_LIFETIME = 24;
     public static final float DEFAULT_MAX_RANGE = 48.0f;
@@ -72,6 +71,7 @@ public class ErasureCannonBeamEntity extends Projectile {
 
         this.entityData.set(CHARGE_RATIO, chargeRatio);
         this.entityData.set(BEAM_LENGTH, length);
+        this.entityData.set(SEED, level.getRandom().nextInt());
     }
 
     @Override
@@ -81,6 +81,12 @@ public class ErasureCannonBeamEntity extends Projectile {
         builder.define(BEAM_Y_ROT, 0.0f);
         builder.define(BEAM_X_ROT, 0.0f);
         builder.define(CHARGE_RATIO, 1.0f);
+        builder.define(SEED, 0);
+    }
+
+    /** Synced seed for the bespoke renderer: same seed, same silhouette, every client. */
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int getCasterId() {
@@ -125,11 +131,13 @@ public class ErasureCannonBeamEntity extends Projectile {
         final Vec3 end = start.add(look.scale(length));
 
         if (age == 1) {
-            // Fire beat: thunder and zap at the muzzle, a dust burst where the
-            // beam lands, and a real branched lightning strike at the terminus
-            // so the thunder sound finally has a visual (point 4).
+            // Fire beat: the beam's own fire boom and zap at the muzzle, a
+            // dust burst where the beam lands, and a real branched lightning
+            // strike at the terminus so the zap finally has a visual
+            // (point 4). Bespoke pass: weapon sounds come from the mod's
+            // bank only; storm thunder belongs to the atmosphere system.
             serverLevel.playSound(null, start.x, start.y, start.z,
-                SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.2f, 0.6f);
+                com.dragonblockarcanedba.sound.DbaSounds.BEAM_FIRE, SoundSource.PLAYERS, 2.2f, 0.6f);
             serverLevel.playSound(null, start.x, start.y, start.z,
                 com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.PLAYERS, 2.2f, 0.6f);
             com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, end, 1.6f, 0xFF37E6FF);
@@ -161,9 +169,10 @@ public class ErasureCannonBeamEntity extends Projectile {
     }
 
     private void applyDamagePulse(ServerLevel serverLevel, Entity finalCaster, Vec3 start, Vec3 look, float length, float charge) {
-        DamageSource damageSource = finalCaster instanceof net.minecraft.world.entity.player.Player playerOwner
-            ? serverLevel.damageSources().playerAttack(playerOwner)
-            : (finalCaster instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+        // Bespoke pass: ability damage uses the mod's own ki damage type
+        // (rule 4), with this beam as the direct entity.
+        DamageSource damageSource = com.dragonblockarcanedba.util.DbaDamage.ki(this,
+            finalCaster instanceof LivingEntity livingOwner ? livingOwner : null);
 
         float pulseDamage = this.totalDamage / PULSE_COUNT;
         AABB beamBox = new AABB(start, start.add(look.scale(length))).inflate(1.5 + charge * 1.5);
@@ -221,13 +230,12 @@ public class ErasureCannonBeamEntity extends Projectile {
     }
 
     private void detonateEndpoint(ServerLevel serverLevel, Entity finalCaster, Vec3 end) {
-        DamageSource damageSource = finalCaster instanceof net.minecraft.world.entity.player.Player playerOwner
-            ? serverLevel.damageSources().playerAttack(playerOwner)
-            : (finalCaster instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+        DamageSource damageSource = com.dragonblockarcanedba.util.DbaDamage.ki(this,
+            finalCaster instanceof LivingEntity livingOwner ? livingOwner : null);
 
-        serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, end.x, end.y, end.z, 3, 0.5, 0.5, 0.5, 0);
+        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.BLAST, end.x, end.y, end.z, 3, 0.5, 0.5, 0.5, 0);
         serverLevel.playSound(null, end.x, end.y, end.z,
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.6f, 0.9f);
+            com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 1.6f, 0.9f);
 
         AABB endAoe = new AABB(end.subtract(4, 4, 4), end.add(4, 4, 4));
         List<LivingEntity> endTargets = serverLevel.getEntitiesOfClass(LivingEntity.class, endAoe, e -> e.isAlive() && e != finalCaster);

@@ -1,22 +1,25 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.CurseGroundShatterEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
-
-import java.util.Random;
 
 /**
  * Entity Renderer for Curse Ground Shatter in Minecraft 26.2.
- * Renders physical 3D tectonic fissure trenches, erupting jagged obsidian slabs, and expanding impact shockwave rings.
+ * The bespoke pass rebuilds the shatter entirely on BespokeGeometry: the
+ * fissure trenches are two crackStars (crimson sheath, pale core), the
+ * shockwave is a brokenVortexBand over a glowFan pool, and the erupting
+ * slabs are tornRibbons stood on end and leaning outward, all seeded from
+ * the entity UUID so every client sees the same shatter.
  */
 public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatterEntity, CurseGroundShatterRenderer.ShatterRenderState> {
 
@@ -65,135 +68,64 @@ public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatte
         // side), so the old age / (lifetime + age) formula stranded the fade at
         // about 0.5 when the entity vanished. Progress over the total reaches 0.
         float fade = Math.max(0.0f, 1.0f - age / (float) state.lifetime);
+        long seed = state.seed;
+        float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
-
-            // 1. Expanding Ground Impact Shockwave Disks
+            // 1. Expanding shockwave: a broken band over a violet glow pool.
             float shockR = Math.min(radius * 1.3f, age * 0.45f);
-            if (fade > 0.05f) {
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.82f, 36, 0.95f, 0.05f, 0.25f, fade * 0.85f);
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, 0.0f, 28, 0.70f, 0.02f, 0.95f, fade * 0.75f);
+            if (fade > 0.05f && shockR > 0.1f) {
+                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x51A1L, shockR, 0.02f, 0.10f,
+                    0.0f, 0.95f, 0.05f, 0.25f, fade * 0.85f, ds);
+                BespokeGeometry.glowFan(pose, buffer, seed ^ 0x51A2L, shockR * 0.65f, 0.04f,
+                    0.70f, 0.02f, 0.95f, fade * 0.75f, ds);
             }
 
-            // 2. 8 Radiating 3D Tectonic Fissure Trenches
-            int trenchCount = 8;
-            for (int t = 0; t < trenchCount; t++) {
-                double tAngle = (t / (double) trenchCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.3);
-                float trenchLen = radius * (0.65f + rng.nextFloat() * 0.45f);
+            // 2. Radiating fissure trenches: crackStar sheath and core.
+            BespokeGeometry.crackStar(pose, buffer, seed ^ 0xF155L, radius,
+                0.95f, 0.05f, 0.20f, 0.95f, fade, ds);
+            BespokeGeometry.crackStar(pose, buffer, seed ^ 0xF156L, radius * 0.85f,
+                1.0f, 0.85f, 0.95f, 1.0f, fade, ds);
 
-                float curX = 0, curZ = 0;
-                int steps = 5;
-                for (int s = 0; s < steps; s++) {
-                    float nxtX = curX + (float) Math.cos(tAngle) * (trenchLen / steps) + (rng.nextFloat() - 0.5f) * 0.45f;
-                    float nxtZ = curZ + (float) Math.sin(tAngle) * (trenchLen / steps) + (rng.nextFloat() - 0.5f) * 0.45f;
-
-                    float width = 0.28f * (1.0f - (s / (float) steps)) * Math.min(1.0f, age * 0.3f);
-                    // Magma Void Trench Base
-                    drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width, 0.95f, 0.05f, 0.20f, fade * 0.95f);
-                    // Inner Corrupted Core
-                    drawTrenchSegment(matrix, buffer, curX, curZ, nxtX, nxtZ, width * 0.4f, 1.0f, 0.85f, 0.95f, fade);
-
-                    curX = nxtX; curZ = nxtZ;
-                }
-            }
-
-            // 3. 12 Erupting 3D Shattered Obsidian / Void Debris Slabs
+            // 3. Erupting slabs: torn ribbons stood on end, leaning outward
+            // from the center, dark sheath with a crimson core.
+            BespokeGeometry.Rng rng = new BespokeGeometry.Rng(seed);
+            float growth = Math.min(1.0f, age * 0.4f);
             int rockCount = 12;
             for (int r = 0; r < rockCount; r++) {
-                double rockAngle = (r / (double) rockCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.4);
-                float rockDist = radius * (0.35f + rng.nextFloat() * 0.55f);
-
+                double rockAngle = (r / (double) rockCount) * Math.PI * 2.0 + rng.range(0.0f, 0.4f);
+                float rockDist = radius * rng.range(0.35f, 0.90f);
                 float rx = (float) Math.cos(rockAngle) * rockDist;
                 float rz = (float) Math.sin(rockAngle) * rockDist;
+                float slabHeight = rng.range(0.5f, 1.3f) * growth;
+                float slabWidth = rng.range(0.35f, 0.65f);
+                if (slabHeight <= 0.02f) continue;
 
-                float slabHeight = (0.5f + rng.nextFloat() * 0.8f) * Math.min(1.0f, age * 0.4f);
-                float slabWidth = 0.35f + rng.nextFloat() * 0.3f;
-
-                // Slab leans outward from center
-                float tiltX = (float) Math.cos(rockAngle) * 0.3f;
-                float tiltZ = (float) Math.sin(rockAngle) * 0.3f;
-
-                float tx = -(float) Math.sin(rockAngle) * slabWidth * 0.5f;
-                float tz = (float) Math.cos(rockAngle) * slabWidth * 0.5f;
-
-                drawRockSlab(matrix, buffer,
-                    rx - tx, 0.05f, rz - tz,
-                    rx + tx, 0.05f, rz + tz,
-                    rx + tiltX, slabHeight, rz + tiltZ,
-                    0.15f, 0.05f, 0.22f, 0.95f * fade,
-                    0.95f, 0.05f, 0.35f, 1.0f * fade
-                );
+                PoseStack.Pose slab = pose.copy();
+                slab.translate(rx, 0.05f, rz);
+                slab.rotate(Axis.YP.rotation((float) -rockAngle));
+                slab.rotate(Axis.ZP.rotation((float) (Math.PI / 2.0 - 0.30)));
+                long slabSeed = seed + r * 269L;
+                BespokeGeometry.tornRibbon(slab, buffer, slabSeed, slabHeight, slabWidth, 0.15f,
+                    0.15f, 0.05f, 0.22f, 0.95f, fade, ds);
+                BespokeGeometry.tornRibbon(slab, buffer, slabSeed, slabHeight, slabWidth * 0.5f, 0.15f,
+                    0.95f, 0.05f, 0.35f, 1.0f, fade, ds);
             }
         });
 
-        // T1: additive glow echo of the expanding shock ring, slightly wider
+        // T1: additive glow echo of the expanding shock band, slightly wider
         // than the main pass, sharing the same corrected fade.
         if (fade > 0.05f) {
             float haloShockR = Math.min(radius * 1.3f, age * 0.45f) * 1.07f;
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                Matrix4f matrix = pose.pose();
-
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, haloShockR, haloShockR * 0.82f, 36, 0.55f, 0.03f, 0.15f, fade * 0.30f);
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, haloShockR * 0.60f, 0.0f, 28, 0.42f, 0.01f, 0.57f, fade * 0.20f);
-            });
-        }
-    }
-
-    private static void drawTrenchSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {
-        float dx = x2 - x1, dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dz * dz);
-        if (len < 0.001f) return;
-
-        float nx = -dz / len * width;
-        float nz = dx / len * width;
-
-        consumer.addVertex(matrix, x1 - nx, 0.04f, z1 - nz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1 + nx, 0.04f, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, 0.04f, z2 + nz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, 0.04f, z2 - nz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-    }
-
-    private static void drawRockSlab(Matrix4f matrix, VertexConsumer consumer,
-                                     float x1, float y1, float z1,
-                                     float x2, float y2, float z2,
-                                     float tipX, float tipY, float tipZ,
-                                     float rBase, float gBase, float bBase, float aBase,
-                                     float rTip, float gTip, float bTip, float aTip) {
-        // Front Face
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Back Face
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-    }
-
-    private static void drawGroundRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2;
-
-            float x1 = cx + (float) Math.cos(a1) * rOuter;
-            float z1 = cz + (float) Math.sin(a1) * rOuter;
-            float x2 = cx + (float) Math.cos(a2) * rOuter;
-            float z2 = cz + (float) Math.sin(a2) * rOuter;
-
-            float ix1 = cx + (float) Math.cos(a1) * rInner;
-            float iz1 = cz + (float) Math.sin(a1) * rInner;
-            float ix2 = cx + (float) Math.cos(a2) * rInner;
-            float iz2 = cz + (float) Math.sin(a2) * rInner;
-
-            consumer.addVertex(matrix, ix1, cy, iz1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, ix2, cy, iz2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, cy, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, cy, z1).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            if (haloShockR > 0.1f) {
+                collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                    BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x51A1L, haloShockR, 0.02f, 0.10f,
+                        0.0f, 0.55f, 0.03f, 0.15f, fade * 0.30f, ds);
+                    BespokeGeometry.glowFan(pose, buffer, seed ^ 0x51A2L, haloShockR * 0.60f, 0.04f,
+                        0.42f, 0.01f, 0.57f, fade * 0.20f, ds);
+                });
+            }
         }
     }
 }

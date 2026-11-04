@@ -1,11 +1,12 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.BraveChargeEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -16,8 +17,14 @@ import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Brave Sword Heroic Focus Charge-up in Minecraft 26.2.
- * Renders physical 3D ground starburst heroic runes, orbiting inward-converging valor prisms,
- * a pulsating heroic octahedron core matrix, and ascending helical valor ribbons.
+ * Bespoke pass: the hand-built ground rings, 3D shards, octahedra, and
+ * ribbon quads are rebuilt on BespokeGeometry. The ground runes are three
+ * layered glow fans with torn rims, the converging valor shards are shard
+ * fans aimed at the core, the octahedron core matrix is a pair of
+ * displaced domes per layer (one flipped for the underside), and the twin
+ * helical ribbons are torn ribbons streaming up off the ground ring. The
+ * seed comes from the entity UUID, which is synced state, so every client
+ * draws the same charge construct.
  */
 public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, BraveChargeRenderer.ChargeRenderState> {
 
@@ -29,6 +36,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
         public float chargeRatio = 0.0f;
         public float age = 0;
         public float fadeFactor = 1.0f;
+        public long seed = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -52,6 +60,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
         state.chargeRatio = entity.getChargeRatio();
         state.age = entity.tickCount + partialTicks;
         state.fadeFactor = entity.getFadeFactor();
+        state.seed = entity.getUUID().getMostSignificantBits() ^ entity.getUUID().getLeastSignificantBits();
     }
 
     @Override
@@ -59,6 +68,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
         RenderType renderType = KiRenderHelper.kiRenderType();
         float charge = state.chargeRatio;
         float age = state.age;
+        long seed = state.seed;
 
         float baseRadius = 1.3f + (charge * 1.5f);
         // Spawn fade-in over the first 4 ticks so the charge construct does not
@@ -69,258 +79,154 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
         float pulse = FxEnvelope.pulse(age, 0.5f, 0.90f, 0.10f);
         float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
+        // 1. Ground heroic runes: three layered glow fans (radiant gold,
+        // heroic cyan, white-gold core) at the old ring heights, their rims
+        // torn and jittered instead of perfect circles.
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            // 1. Planar 3D Ground Heroic Runes (3 counter-rotating ground rings)
-            int groundSegments = FxEnvelope.segments(40, distScale, 16);
-            // Outer Ring: Radiant Gold Starburst Ring
-            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.15f, baseRadius * 0.98f, groundSegments, age * -16.0f,
-                1.0f, 0.84f, 0.0f, baseAlpha * 0.80f);
-            // Middle Ring: Heroic Cyan Plasma Accretion
-            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, baseRadius * 0.82f, baseRadius * 0.68f, groundSegments, age * 26.0f,
-                0.0f, 0.95f, 1.0f, baseAlpha * 0.88f);
-            // Inner Core Disc: Blinding White-Gold Starburst Core
-            drawRotatingRing(matrix, buffer, 0, 0.09f, 0, baseRadius * 0.50f, baseRadius * 0.36f, groundSegments, age * -38.0f,
-                1.0f, 0.98f, 0.80f, baseAlpha * 0.95f);
-
-            // 2. Inward-Converging Gravitational Valor Shards (3D golden-cyan crystalline prisms)
-            int shardCount = 8 + (int) (charge * 6); // 8 to 14 shards
-            float orbitRadius = (2.2f - charge * 0.65f) * pulse;
-            float orbitSpeed = 20.0f + (charge * 55.0f);
-
-            for (int i = 0; i < shardCount; i++) {
-                double shardAngle = (i / (double) shardCount) * Math.PI * 2.0 + Math.toRadians(age * orbitSpeed);
-                float sy = 0.4f + (float) Math.sin(age * 0.35f + i * 1.3f) * 0.5f + (i % 2 == 0 ? 0.3f : 0.0f);
-
-                float sx = (float) Math.cos(shardAngle) * orbitRadius;
-                float sz = (float) Math.sin(shardAngle) * orbitRadius;
-
-                // Angle tip directly inward toward sword core (y = 0.9)
-                float targetY = 0.9f;
-                float toCenterX = -sx;
-                float toCenterZ = -sz;
-                float toCenterY = targetY - sy;
-                float toCenterLen = (float) Math.sqrt(toCenterX * toCenterX + toCenterZ * toCenterZ + toCenterY * toCenterY);
-                if (toCenterLen > 0.001f) {
-                    toCenterX /= toCenterLen;
-                    toCenterY /= toCenterLen;
-                    toCenterZ /= toCenterLen;
-                }
-
-                float shardLen = 0.55f + (charge * 0.25f);
-                float shardTipX = sx + toCenterX * shardLen;
-                float shardTipY = sy + toCenterY * shardLen;
-                float shardTipZ = sz + toCenterZ * shardLen;
-
-                float perpX = -toCenterZ * 0.14f;
-                float perpZ = toCenterX * 0.14f;
-
-                // 3D Shard geometry
-                draw3DShard(matrix, buffer,
-                    sx - perpX, sy, sz - perpZ,
-                    sx + perpX, sy, sz + perpZ,
-                    shardTipX, shardTipY, shardTipZ,
-                    1.0f, 0.80f, 0.0f, baseAlpha * 0.85f,
-                    0.0f, 0.95f, 1.0f, baseAlpha * 0.98f
-                );
-            }
-
-            // 3. Heroic Valorous Octahedron Core Matrix (Pulsating nested 3D octahedrons around caster)
-            float coreSize = (0.70f - charge * 0.20f) * pulse;
-            drawOctahedron(matrix, buffer, coreSize, 0.85f, age * 22.0f, 1.0f, 0.84f, 0.0f, baseAlpha * 0.80f);
-            drawOctahedron(matrix, buffer, coreSize * 0.58f, 0.85f, -age * 32.0f, 0.0f, 0.95f, 1.0f, baseAlpha * 0.95f);
-            drawOctahedron(matrix, buffer, coreSize * 0.22f, 0.85f, age * 55.0f, 1.0f, 1.0f, 1.0f, baseAlpha);
-
-            // 4. Twin Helical Valor Light Ribbons (Ascending golden-cyan ribbons)
-            int ribbonSteps = 12;
-            for (int strand = 0; strand < 2; strand++) {
-                float strandOffset = strand * (float) Math.PI;
-                boolean isGoldStrand = (strand == 0);
-                float sr = isGoldStrand ? 1.0f : 0.0f;
-                float sg = isGoldStrand ? 0.85f : 0.95f;
-                float sb = isGoldStrand ? 0.1f : 1.0f;
-
-                for (int s = 0; s < ribbonSteps; s++) {
-                    float t1 = s / (float) ribbonSteps;
-                    float t2 = (s + 1) / (float) ribbonSteps;
-
-                    float y1 = t1 * 2.3f;
-                    float y2 = t2 * 2.3f;
-
-                    float r1 = (baseRadius * 0.65f) * (0.8f + 0.3f * (float) Math.sin(t1 * Math.PI));
-                    float r2 = (baseRadius * 0.65f) * (0.8f + 0.3f * (float) Math.sin(t2 * Math.PI));
-
-                    double ang1 = strandOffset + (t1 * Math.PI * 2.6) + (age * 0.20);
-                    double ang2 = strandOffset + (t2 * Math.PI * 2.6) + (age * 0.20);
-
-                    float x1 = (float) Math.cos(ang1) * r1;
-                    float z1 = (float) Math.sin(ang1) * r1;
-                    float x2 = (float) Math.cos(ang2) * r2;
-                    float z2 = (float) Math.sin(ang2) * r2;
-
-                    float rw = 0.14f * (1.0f - t1 * 0.4f);
-
-                    drawQuad(matrix, buffer,
-                        x1 - rw, y1, z1 - rw,
-                        x1 + rw, y1, z1 + rw,
-                        x2 + rw, y2, z2 + rw,
-                        x2 - rw, y2, z2 - rw,
-                        sr, sg, sb, baseAlpha * (1.0f - t1 * 0.4f)
-                    );
-                    float cw = rw * 0.28f;
-                    drawQuad(matrix, buffer,
-                        x1 - cw, y1, z1,
-                        x1 + cw, y1, z1,
-                        x2 + cw, y2, z2,
-                        x2 - cw, y2, z2,
-                        1.0f, 1.0f, 1.0f, baseAlpha * (1.0f - t1 * 0.25f)
-                    );
-                }
-            }
+            BespokeGeometry.glowFan(pose, buffer, seed, baseRadius * 1.15f, 0.03f,
+                1.0f, 0.84f, 0.0f, baseAlpha * 0.80f, distScale);
+            BespokeGeometry.glowFan(pose, buffer, seed ^ 0x2B992DDFL, baseRadius * 0.82f, 0.06f,
+                0.0f, 0.95f, 1.0f, baseAlpha * 0.88f, distScale);
+            BespokeGeometry.glowFan(pose, buffer, seed ^ 0x51ED2701L, baseRadius * 0.50f, 0.09f,
+                1.0f, 0.98f, 0.80f, baseAlpha * 0.95f, distScale);
         });
 
-        // Additive halo pass: a wider faint copy of the outer gold ground ring
-        // and the octahedron core so the charge blooms and anchors to the ground.
+        // 2. Inward-converging valor shards: same orbit math as the old
+        // prisms (radius closes and speed rises with charge), each shard a
+        // shard fan aimed at the core point, gold body with a cyan heart.
+        int shardCount = 8 + (int) (charge * 6); // 8 to 14 shards
+        float orbitRadius = (2.2f - charge * 0.65f) * pulse;
+        float orbitSpeed = 20.0f + (charge * 55.0f);
+        float shardLen = 0.55f + (charge * 0.25f);
+
+        for (int i = 0; i < shardCount; i++) {
+            double shardAngle = (i / (double) shardCount) * Math.PI * 2.0 + Math.toRadians(age * orbitSpeed);
+            float sy = 0.4f + (float) Math.sin(age * 0.35f + i * 1.3f) * 0.5f + (i % 2 == 0 ? 0.3f : 0.0f);
+            float sx = (float) Math.cos(shardAngle) * orbitRadius;
+            float sz = (float) Math.sin(shardAngle) * orbitRadius;
+
+            // Aim direction toward the sword core (y = 0.9), as the old
+            // shard tips pointed.
+            float dx = -sx;
+            float dz = -sz;
+            float dy = 0.9f - sy;
+            float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (len < 0.001f) continue;
+            dx /= len;
+            dy /= len;
+            dz /= len;
+            float yawDeg = (float) Math.toDegrees(Math.atan2(-dz, dx));
+            float pitchDeg = (float) Math.toDegrees(Math.asin(Math.max(-1.0f, Math.min(1.0f, dy))));
+            long shardSeed = seed ^ (i * 0x9E3779B9L);
+
+            poseStack.pushPose();
+            poseStack.translate(sx, sy, sz);
+            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(yawDeg)));
+            poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(pitchDeg)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.shardFan(pose, buffer, shardSeed, shardLen * 0.85f,
+                    1.0f, 0.80f, 0.0f, 0.85f, baseAlpha, distScale);
+                BespokeGeometry.shardFan(pose, buffer, shardSeed ^ 0x85EBCA6BL, shardLen * 0.5f,
+                    0.0f, 0.95f, 1.0f, 0.98f, baseAlpha, distScale);
+            });
+            poseStack.popPose();
+        }
+
+        // 3. Core matrix: three nested layers at the old octahedron sizes,
+        // speeds, and colors, each a displaced dome over a flipped twin so
+        // the core reads as a closed, noise-displaced shell around the
+        // caster at y 0.85.
+        float coreSize = (0.70f - charge * 0.20f) * pulse;
+        float[] coreFactors = {1.0f, 0.58f, 0.22f};
+        float[] coreSpeeds = {22.0f, -32.0f, 55.0f};
+        float[][] coreColors = {{1.0f, 0.84f, 0.0f}, {0.0f, 0.95f, 1.0f}, {1.0f, 1.0f, 1.0f}};
+        float[] coreAlphas = {0.80f, 0.95f, 1.0f};
+        for (int layer = 0; layer < 3; layer++) {
+            long layerSeed = seed ^ (0x27D4EB2FL + layer * 131L);
+            float layerSize = coreSize * coreFactors[layer];
+            float layerRot = age * coreSpeeds[layer];
+            float cr = coreColors[layer][0];
+            float cg = coreColors[layer][1];
+            float cb = coreColors[layer][2];
+            float layerAlpha = coreAlphas[layer];
+
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.85f, 0.0f);
+            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(layerRot)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.displacedDome(pose, buffer, layerSeed, layerSize,
+                    cr, cg, cb, layerAlpha, baseAlpha, distScale);
+            });
+            poseStack.popPose();
+
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.85f, 0.0f);
+            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(layerRot)));
+            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(180.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.displacedDome(pose, buffer, layerSeed, layerSize,
+                    cr, cg, cb, layerAlpha, baseAlpha, distScale);
+            });
+            poseStack.popPose();
+        }
+
+        // 4. Twin valor streamers: torn ribbons peeling up off the ground
+        // ring at the old helix base points, spinning at the old helix
+        // rate, gold and cyan with white cores.
+        for (int strand = 0; strand < 2; strand++) {
+            boolean isGoldStrand = (strand == 0);
+            float sr = isGoldStrand ? 1.0f : 0.0f;
+            float sg = isGoldStrand ? 0.85f : 0.95f;
+            float sb = isGoldStrand ? 0.1f : 1.0f;
+            double a0 = strand * Math.PI + age * 0.20;
+            float r0 = baseRadius * 0.65f * 0.8f;
+            float bx = (float) Math.cos(a0) * r0;
+            float bz = (float) Math.sin(a0) * r0;
+            // Yaw so the ribbon's run direction follows the ring tangent.
+            float yawDeg = (float) Math.toDegrees(Math.atan2(-Math.cos(a0), -Math.sin(a0)));
+            long strandSeed = seed ^ (0x165667B1L + strand * 131L);
+
+            poseStack.pushPose();
+            poseStack.translate(bx, 0.05f, bz);
+            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(yawDeg)));
+            poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(55.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.tornRibbon(pose, buffer, strandSeed, 2.6f, 0.28f, 0.35f,
+                    sr, sg, sb, 1.0f, baseAlpha, distScale);
+                BespokeGeometry.tornRibbon(pose, buffer, strandSeed ^ 0x9E3779B9L, 2.6f, 0.08f, 0.35f,
+                    1.0f, 1.0f, 1.0f, 1.0f, baseAlpha, distScale);
+            });
+            poseStack.popPose();
+        }
+
+        // Additive halo pass: a wider faint glow fan and a 1.25x dome shell
+        // so the charge blooms, plus the shared ground anchor glow (standard
+        // point 1), matching the old additive ring, octahedron, and anchor.
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.30f, baseRadius * 1.10f,
-                FxEnvelope.segments(40, distScale, 16), age * -16.0f,
-                1.0f, 0.84f, 0.0f, baseAlpha * 0.15f);
-            float coreSize = (0.70f - charge * 0.20f) * pulse * 1.25f;
-            drawOctahedron(matrix, buffer, coreSize, 0.85f, age * 22.0f, 1.0f, 0.84f, 0.0f, baseAlpha * 0.18f);
-            // Shared ground anchor glow under the caster (standard point 1).
+            BespokeGeometry.glowFan(pose, buffer, seed ^ 0x3C6EF362L, baseRadius * 1.30f, 0.03f,
+                1.0f, 0.84f, 0.0f, baseAlpha * 0.15f, distScale);
             LayeredRender.drawAnchorGlow(pose, buffer, baseRadius * 1.55f, 0.02f,
                 1.0f, 0.84f, 0.0f, baseAlpha * 0.40f, distScale);
         });
+        float haloSize = coreSize * 1.25f;
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.85f, 0.0f);
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(age * 22.0f)));
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0x3C6EF362L, haloSize,
+                1.0f, 0.84f, 0.0f, 0.18f, baseAlpha, distScale);
+        });
+        poseStack.popPose();
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.85f, 0.0f);
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(age * 22.0f)));
+        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(180.0f)));
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0x3C6EF362L, haloSize,
+                1.0f, 0.84f, 0.0f, 0.18f, baseAlpha, distScale);
+        });
+        poseStack.popPose();
 
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static void drawRotatingRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
-        double rotRad = Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = ((i / (double) segments) * Math.PI * 2.0) + rotRad;
-            double a2 = (((i + 1) / (double) segments) * Math.PI * 2.0) + rotRad;
-
-            float x1Out = cx + (float) Math.cos(a1) * rOuter;
-            float z1Out = cz + (float) Math.sin(a1) * rOuter;
-            float x2Out = cx + (float) Math.cos(a2) * rOuter;
-            float z2Out = cz + (float) Math.sin(a2) * rOuter;
-
-            float x1In = cx + (float) Math.cos(a1) * rInner;
-            float z1In = cz + (float) Math.sin(a1) * rInner;
-            float x2In = cx + (float) Math.cos(a2) * rInner;
-            float z2In = cz + (float) Math.sin(a2) * rInner;
-
-            drawQuad(matrix, consumer, x1In, cy, z1In, x2In, cy, z2In, x2Out, cy, z2Out, x1Out, cy, z1Out, r, g, b, a);
-        }
-    }
-
-    private static void draw3DShard(Matrix4f matrix, VertexConsumer consumer,
-                                   float x1, float y1, float z1,
-                                   float x2, float y2, float z2,
-                                   float tipX, float tipY, float tipZ,
-                                   float rBase, float gBase, float bBase, float aBase,
-                                   float rTip, float gTip, float bTip, float aTip) {
-        float mx = (x1 + x2) * 0.5f;
-        float my = (y1 + y2) * 0.5f;
-        float mz = (z1 + z2) * 0.5f;
-        float hx = (x2 - x1) * 0.5f;
-        float hy = (y2 - y1) * 0.5f;
-        float hz = (z2 - z1) * 0.5f;
-        float dx = tipX - mx;
-        float dy = tipY - my;
-        float dz = tipZ - mz;
-        float bx = hy * dz - hz * dy;
-        float by = hz * dx - hx * dz;
-        float bz = hx * dy - hy * dx;
-        float bl = (float) Math.sqrt(bx * bx + by * by + bz * bz);
-        if (bl > 0.001f) {
-            bx /= bl;
-            by /= bl;
-            bz /= bl;
-        }
-        float bowAmp = (float) Math.sqrt(hx * hx + hy * hy + hz * hz) * 1.1f;
-        int steps = 5;
-        for (int i = 0; i < steps; i++) {
-            float t1 = i / (float) steps;
-            float t2 = (i + 1) / (float) steps;
-            float bow1 = (float) Math.sin(t1 * Math.PI) * bowAmp;
-            float bow2 = (float) Math.sin(t2 * Math.PI) * bowAmp;
-            float w1 = 1.0f - t1;
-            float w2 = 1.0f - t2;
-            float ax = mx + dx * t1 + bx * bow1;
-            float ay = my + dy * t1 + by * bow1;
-            float az = mz + dz * t1 + bz * bow1;
-            float cx = mx + dx * t2 + bx * bow2;
-            float cy = my + dy * t2 + by * bow2;
-            float cz = mz + dz * t2 + bz * bow2;
-            float ar = rBase + (rTip - rBase) * t1;
-            float ag = gBase + (gTip - gBase) * t1;
-            float ab = bBase + (bTip - bBase) * t1;
-            float aa = aBase + (aTip - aBase) * t1;
-            float br = rBase + (rTip - rBase) * t2;
-            float bg = gBase + (gTip - gBase) * t2;
-            float bb = bBase + (bTip - bBase) * t2;
-            float ba = aBase + (aTip - aBase) * t2;
-            consumer.addVertex(matrix, ax - hx * w1, ay - hy * w1, az - hz * w1).setColor(ar, ag, ab, aa).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, ax + hx * w1, ay + hy * w1, az + hz * w1).setColor(ar, ag, ab, aa).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx + hx * w2, cy + hy * w2, cz + hz * w2).setColor(br, bg, bb, ba * 0.15f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx - hx * w2, cy - hy * w2, cz - hz * w2).setColor(br, bg, bb, ba * 0.15f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            float k1 = w1 * 0.26f;
-            float k2 = w2 * 0.26f;
-            consumer.addVertex(matrix, ax - hx * k1, ay - hy * k1, az - hz * k1).setColor(1.0f, 1.0f, 1.0f, aa).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, ax + hx * k1, ay + hy * k1, az + hz * k1).setColor(1.0f, 1.0f, 1.0f, aa).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx + hx * k2, cy + hy * k2, cz + hz * k2).setColor(0.7f, 0.98f, 1.0f, ba * 0.2f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx - hx * k2, cy - hy * k2, cz - hz * k2).setColor(0.7f, 0.98f, 1.0f, ba * 0.2f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawOctahedron(Matrix4f matrix, VertexConsumer consumer, float s, float centerY, float rotDeg, float r, float g, float b, float a) {
-        double rad = Math.toRadians(rotDeg);
-        float cos = (float) Math.cos(rad);
-        float sin = (float) Math.sin(rad);
-
-        float[][] local = { {s, 0}, {0, s}, {-s, 0}, {0, -s} };
-        float[][] rotated = new float[4][2];
-        for (int i = 0; i < 4; i++) {
-            rotated[i][0] = local[i][0] * cos - local[i][1] * sin;
-            rotated[i][1] = local[i][0] * sin + local[i][1] * cos;
-        }
-
-        for (int i = 0; i < 4; i++) {
-            int nxt = (i + 1) % 4;
-
-            // Top pyramid
-            consumer.addVertex(matrix, rotated[i][0], centerY, rotated[i][1]).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, rotated[nxt][0], centerY, rotated[nxt][1]).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, 0, centerY + s * 1.3f, 0).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, 0, centerY + s * 1.3f, 0).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Bottom pyramid
-            consumer.addVertex(matrix, rotated[i][0], centerY, rotated[i][1]).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, rotated[nxt][0], centerY, rotated[nxt][1]).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, 0, centerY - s * 1.3f, 0).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, 0, centerY - s * 1.3f, 0).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        }
-    }
-
-    private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,
-                                 float x1, float y1, float z1,
-                                 float x2, float y2, float z2,
-                                 float x3, float y3, float z3,
-                                 float x4, float y4, float z4,
-                                 float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Reverse
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 }

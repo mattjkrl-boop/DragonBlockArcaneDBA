@@ -4,7 +4,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -32,6 +31,7 @@ public class AzureLightningEntity extends Projectile {
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(AzureLightningEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(AzureLightningEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> TELEGRAPH_TICKS = SynchedEntityData.defineId(AzureLightningEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Long> SEED = SynchedEntityData.defineId(AzureLightningEntity.class, EntityDataSerializers.LONG);
 
     /** Ticks the strike glow lingers after the bolt lands. */
     public static final int AFTERGLOW_TICKS = 8;
@@ -51,6 +51,8 @@ public class AzureLightningEntity extends Projectile {
         this.setPos(x, y, z);
         this.noPhysics = true;
         this.entityData.set(DAMAGE, damage);
+        // Renderer shape seed: fixed at spawn, synced and saved.
+        this.entityData.set(SEED, this.getUUID().getMostSignificantBits() ^ this.getUUID().getLeastSignificantBits());
     }
 
     @Override
@@ -59,6 +61,7 @@ public class AzureLightningEntity extends Projectile {
         builder.define(DAMAGE, 400.0f);
         builder.define(RADIUS, 3.5f);
         builder.define(TELEGRAPH_TICKS, 12);
+        builder.define(SEED, 0L);
     }
 
     @Override
@@ -69,6 +72,7 @@ public class AzureLightningEntity extends Projectile {
         output.putInt("TelegraphTicks", getTelegraphTicks());
         output.putBoolean("Rare", isRare());
         output.putBoolean("HasStruck", this.struck);
+        output.putLong("RenderSeed", this.getRenderSeed());
     }
 
     @Override
@@ -79,6 +83,7 @@ public class AzureLightningEntity extends Projectile {
         this.entityData.set(TELEGRAPH_TICKS, input.getIntOr("TelegraphTicks", 12));
         this.entityData.set(IS_RARE, input.getBooleanOr("Rare", false));
         this.struck = input.getBooleanOr("HasStruck", false);
+        this.entityData.set(SEED, input.getLongOr("RenderSeed", 0L));
         this.loadedStruck = this.struck;
     }
 
@@ -113,6 +118,10 @@ public class AzureLightningEntity extends Projectile {
 
     public boolean hasStruck() {
         return this.struck;
+    }
+
+    public long getRenderSeed() {
+        return this.entityData.get(SEED);
     }
 
     @Override
@@ -169,8 +178,8 @@ public class AzureLightningEntity extends Projectile {
             double dz = victim.getZ() - this.getZ();
             if (dx * dx + dz * dz > radius * radius) continue;
             net.minecraft.world.damagesource.DamageSource boltSource = livingOwner != null
-                ? serverLevel.damageSources().indirectMagic(this, livingOwner)
-                : serverLevel.damageSources().lightningBolt();
+                ? com.dragonblockarcanedba.util.DbaDamage.tempest(this, livingOwner)
+                : com.dragonblockarcanedba.util.DbaDamage.tempest(this, null);
             victim.hurtServer(serverLevel, boltSource,
                 com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(dmg));
             victim.setDeltaMovement(victim.getDeltaMovement().add(0, 0.4, 0));
@@ -190,7 +199,7 @@ public class AzureLightningEntity extends Projectile {
 
         // Thunder lands with the bolt, not with the telegraph.
         serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
-            SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 2.5f, 1.0f);
+            com.dragonblockarcanedba.sound.DbaSounds.THUNDER_CRACK, SoundSource.WEATHER, 2.5f, 1.0f);
         serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 2.5f, 1.0f);
     }

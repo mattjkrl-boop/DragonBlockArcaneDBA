@@ -4,7 +4,9 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.item.SpikeFlailItem;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.DbaCompat;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.GroundScar;
@@ -15,7 +17,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
@@ -214,7 +215,7 @@ public class SpikeFlailSpinEntity extends Projectile {
                 continue;
             }
             this.lastHit.put(target.getId(), this.tickCount);
-            target.hurtServer(server, server.damageSources().playerAttack(player), DbaEffectsConfig.capDamage(damage));
+            target.hurtServer(server, DbaDamage.crush(this, player), DbaEffectsConfig.capDamage(damage));
             server.sendParticles(DbaParticles.SPARK, ball.x, ball.y, ball.z, 4, 0.18, 0.18, 0.18, 0.02);
             Vec3 push = target.position().subtract(player.position());
             push = new Vec3(push.x, 0.0, push.z);
@@ -227,6 +228,8 @@ public class SpikeFlailSpinEntity extends Projectile {
     }
 
     private void crack(ServerLevel server, Player player) {
+        server.playSound(null, player.getX(), player.getY(), player.getZ(),
+            DbaSounds.GROUND_CRACK, SoundSource.PLAYERS, 0.9f, 1.0f);
         float strength = player instanceof PlayerStatsAccessor acc ? acc.dba$getStrength() : 0f;
         float charge = this.releaseCharge;
         float damage = 480.0f + 600.0f * charge + strength * (1.0f + 1.0f * charge);
@@ -240,7 +243,7 @@ public class SpikeFlailSpinEntity extends Projectile {
             if (dist > radius || dist < 0.4) {
                 continue;
             }
-            target.hurtServer(server, server.damageSources().playerAttack(player), DbaEffectsConfig.capDamage(damage));
+            target.hurtServer(server, DbaDamage.crush(this, player), DbaEffectsConfig.capDamage(damage));
             double speed = 0.55 + 0.45 * charge;
             double up = 0.30 + 0.16 * charge;
             target.setDeltaMovement(target.getDeltaMovement().add(dx / dist * speed, up, dz / dist * speed));
@@ -257,7 +260,7 @@ public class SpikeFlailSpinEntity extends Projectile {
         DebrisSpawner.spawnField(server, player, new Vec3(player.getX(), player.getY() + 0.2, player.getZ()),
             pieces, this.releaseRadius, 2.4, 16);
         server.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 0.7f, 0.7f);
+            DbaSounds.SLAM_THUD, SoundSource.PLAYERS, 0.7f, 0.7f);
     }
 
     /** Tears the surface inside the crack radius into gravel for a while, then the world restores it. */

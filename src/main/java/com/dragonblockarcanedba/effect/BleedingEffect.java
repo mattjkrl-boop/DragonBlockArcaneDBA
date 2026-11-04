@@ -1,7 +1,8 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -50,7 +51,7 @@ public class BleedingEffect extends MobEffect {
         // Visual dripping effect (every 4 ticks to avoid particle spam)
         if (entity.tickCount % 4 == 0) {
             level.sendParticles(
-                new DustParticleOptions(0x8B0000, 1.2F),
+                new DbaDustOptions(0x8B0000, 1.2F),
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * entity.getBbWidth(), 
                 entity.getY() + level.getRandom().nextFloat() * entity.getBbHeight(), 
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * entity.getBbWidth(),
@@ -60,7 +61,7 @@ public class BleedingEffect extends MobEffect {
             );
             // Secondary splatter particles
             level.sendParticles(
-                new DustParticleOptions(0xCC0000, 0.8F),
+                new DbaDustOptions(0xCC0000, 0.8F),
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * entity.getBbWidth() * 0.8,
                 entity.getY() + 0.1,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * entity.getBbWidth() * 0.8,
@@ -77,7 +78,10 @@ public class BleedingEffect extends MobEffect {
             float percentDamage = entity.getMaxHealth() * 0.005f;
             // Minimum 2.0 damage so it still works on low-HP entities
             float damage = Math.max(2.0f, percentDamage);
-            entity.hurtServer(level, level.damageSources().magic(), damage);
+            // Bespoke: Bansho Fan wind cuts are tempest family. The effect
+            // stores no attacker, so the source anchors on the afflicted
+            // entity with no attacker, the pass's no-attacker shape.
+            entity.hurtServer(level, DbaDamage.tempest(entity, null), damage);
         }
         return true;
     }

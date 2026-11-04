@@ -1,7 +1,8 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -57,7 +58,10 @@ public class DevilsHandsEffect extends MobEffect {
             // Deal substantial damage: base 5.0 + 1% of max health per level
             float percentDamage = entity.getMaxHealth() * 0.01f * (amplifier + 1);
             float damage = Math.max(5.0f, percentDamage);
-            entity.hurtServer(level, level.damageSources().onFire(), damage);
+            // Bespoke: Devil's Hands is the Devil Trident's dark red fire,
+            // so its DoT is hellfire family. The effect stores no attacker,
+            // so the source anchors on the afflicted entity with no attacker.
+            entity.hurtServer(level, DbaDamage.hellfire(entity, null), damage);
         }
 
         // Custom Dark Red Fire Particles
@@ -67,7 +71,7 @@ public class DevilsHandsEffect extends MobEffect {
             
             // Dark red flames
             level.sendParticles(
-                new DustParticleOptions(0x8B0000, 1.5F), // Dark Red
+                new DbaDustOptions(0x8B0000, 1.5F), // Dark Red
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * width * 1.5,
                 entity.getY() + level.getRandom().nextFloat() * height,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width * 1.5,
@@ -78,7 +82,7 @@ public class DevilsHandsEffect extends MobEffect {
             
             // Black ash/smoke
             level.sendParticles(
-                new DustParticleOptions(0x111111, 1.0F), // Near Black
+                new DbaDustOptions(0x111111, 1.0F), // Near Black
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * width,
                 entity.getY() + level.getRandom().nextFloat() * height,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width,

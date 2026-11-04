@@ -120,10 +120,8 @@ public class SpikeFlailSwingEntity extends Projectile {
                 continue;
             }
             this.hitIds.add(target.getId());
-            var source = living instanceof net.minecraft.world.entity.player.Player player
-                ? server.damageSources().playerAttack(player)
-                : server.damageSources().magic();
-            target.hurtServer(server, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
+            target.hurtServer(server, com.dragonblockarcanedba.util.DbaDamage.crush(this, living),
+                com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
             Vec3 push = ball.subtract(living.position()).normalize().scale(0.55);
             target.setDeltaMovement(target.getDeltaMovement().add(push.x, 0.22, push.z));
             com.dragonblockarcanedba.util.DbaCompat.markHurt(target);

@@ -1,11 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SaberSlashEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -13,12 +13,19 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Saber Slash in Minecraft 26.2.
- * Renders a physical volumetric 3D crescent blade with electric-cyan aura, silver-cyan plasma mantle,
- * razor white-hot cutting edge, aerodynamic wake vanes, and dynamic cross-cleave accents.
+ *
+ * <p>Bespoke pass: the hand-rolled parabola crescent, curved tip spurs and
+ * diamond spark are deleted. The crescent is three seeded
+ * {@link BespokeGeometry} blade arcs (wispy outer, cyan mid, white core),
+ * the tip spurs are jagged branch streaks, the strike flash is a crack
+ * star over a shard fan, and the strong variant keeps its second arc on
+ * the opposite bulge. Pose rotations, envelope timing, colors and layer
+ * alphas are unchanged from the spectacle pass; only the silhouette is
+ * now seeded and irregular instead of a perfect parabola.</p>
  */
 public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSlashRenderer.SaberSlashRenderState> {
 
@@ -37,6 +44,7 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
         public double ex = 0;
         public double ey = 0;
         public double ez = 0;
+        public long seed = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -67,6 +75,13 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
         state.ex = entity.getX();
         state.ey = entity.getY();
         state.ez = entity.getZ();
+        // Synced seed: the entity id is assigned by the server and sent in
+        // the spawn packet, and the tilt and scale are synced fields, so
+        // every client derives the same seed and the arc profile is frame
+        // stable for the life of the slash.
+        state.seed = entity.getId() * 0x9E3779B97F4A7C15L
+            ^ Float.floatToIntBits(entity.getTiltAngle()) * 131L
+            ^ Float.floatToIntBits(entity.getSlashScale());
     }
 
     @Override
@@ -74,18 +89,21 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         if (progress >= 1.0f) return;
 
-        float open = smooth(Math.min(1.0f, progress / 0.34f));
-        float fade = 1.0f - smooth(progress);
+        float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.34f));
+        float fade = 1.0f - FxEnvelope.smoothstep(progress);
         float impact = strike(progress);
         float scale = state.scale * (state.isStrong ? 1.28f : 1.0f);
         float span = 2.55f * scale * (0.70f + 0.30f * open);
         float chord = 0.92f * scale * (0.70f + 0.30f * open);
-        float trail = (0.22f + 0.70f * smooth(Math.min(1.0f, progress / 0.7f))) * scale;
         boolean strong = state.isStrong;
-        // Segment count steps down with camera distance (standard point 1):
-        // near views keep the full 28 segment crescent, distant ones cost less.
+        // Distance scaling now feeds the builders, which step their own
+        // segment counts down with range (standard point 1).
         float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-        int segments = FxEnvelope.segments(28, ds, 12);
+        long seed = state.seed;
+        // Blade arc radius chosen so the arc's width tracks the old span.
+        // The arc bulges deeper than the old flat crescent: that deeper
+        // claw is the bespoke slash silhouette.
+        float radius = span * 1.5f;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -93,148 +111,77 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.tiltAngle)));
 
+        // Main crescent. bladeArc bulges along +X, so the frame is rotated
+        // to face the bulge along +Z, the old crescent's chord direction.
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90f)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            // Wispy outer layer at the standard outer band alpha, so the cut
-            // reads core, mid, edge instead of a single flat mesh crescent.
-            drawVolumetricCrescent(matrix, buffer, span * 1.16f, chord * 1.10f, 0.060f, trail * 1.30f, segments, 0.0f, 0.75f, 1.0f, LayeredRender.ALPHA_OUTER * fade);
-            drawVolumetricCrescent(matrix, buffer, span, chord, 0.048f, trail, segments, 0.0f, 0.75f, 1.0f, 0.86f * fade);
-            drawVolumetricCrescent(matrix, buffer, span * 0.80f, chord * 0.80f, 0.016f, trail * 0.22f, segments, 1.0f, 1.0f, 1.0f, fade);
-            drawTipSpurs(matrix, buffer, span, chord, 0.11f * scale, fade);
-            if (strong) {
-                drawVolumetricCrescent(matrix, buffer, span * 0.76f, -chord * 0.76f, 0.032f, trail * 0.35f, segments, 0.0f, 0.90f, 1.0f, 0.90f * fade);
-            }
-            if (impact > 0.02f) {
-                drawDiamondSpark(matrix, buffer, 0.0f, 0.0f, chord * 0.42f, 0.18f * impact, 1.0f, 1.0f, 1.0f, impact);
-            }
+            // Wispy outer layer at the standard outer band alpha, cyan mid,
+            // white core: the same three layer read as the spectacle pass.
+            BespokeGeometry.bladeArc(pose, buffer, seed, radius * 1.16f, 130f,
+                0.0f, 0.75f, 1.0f, LayeredRender.ALPHA_OUTER, fade, ds);
+            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xA11CEL, radius, 130f,
+                0.0f, 0.75f, 1.0f, 0.86f, fade, ds);
+            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xC03EL, radius * 0.78f, 130f,
+                1.0f, 1.0f, 1.0f, 1.0f, fade, ds);
+
+            // Tip spurs: jagged branch streaks off the arc tips. At a 130
+            // degree sweep the builder's tips sit near (0.21R, 0, +/-0.45R)
+            // in this frame, and the spurs trail backward from them.
+            float tipX = radius * 0.21f;
+            float tipZ = radius * 0.45f;
+            float spurW = 0.11f * scale;
+            BespokeGeometry.branch(pose, buffer, seed ^ 0x5901L,
+                new Vec3(tipX, 0, tipZ),
+                new Vec3(tipX - radius * 0.30f, 0, tipZ + radius * 0.12f),
+                spurW, 0.0f, 0.85f, 1.0f, fade, 1.0f, ds);
+            BespokeGeometry.branch(pose, buffer, seed ^ 0x5902L,
+                new Vec3(tipX, 0, tipZ),
+                new Vec3(tipX - radius * 0.30f, 0, tipZ + radius * 0.12f),
+                spurW * 0.35f, 1.0f, 1.0f, 1.0f, fade * 0.8f, 1.0f, ds);
+            BespokeGeometry.branch(pose, buffer, seed ^ 0x5903L,
+                new Vec3(tipX, 0, -tipZ),
+                new Vec3(tipX - radius * 0.30f, 0, -(tipZ + radius * 0.12f)),
+                spurW, 0.0f, 0.85f, 1.0f, fade, 1.0f, ds);
+            BespokeGeometry.branch(pose, buffer, seed ^ 0x5904L,
+                new Vec3(tipX, 0, -tipZ),
+                new Vec3(tipX - radius * 0.30f, 0, -(tipZ + radius * 0.12f)),
+                spurW * 0.35f, 1.0f, 1.0f, 1.0f, fade * 0.8f, 1.0f, ds);
         });
+        poseStack.popPose();
+
+        // Strike flash, seated mid-claw in the same rotated frame (the
+        // translate lands it at z = radius * 0.55 in the slash's own axes).
+        if (impact > 0.02f) {
+            poseStack.pushPose();
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90f)));
+            poseStack.translate(radius * 0.55f, 0, 0);
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.crackStar(pose, buffer, seed ^ 0x57AAL,
+                    chord * 0.66f, 1.0f, 1.0f, 1.0f, impact, 1.0f, ds);
+                BespokeGeometry.shardFan(pose, buffer, seed ^ 0xFA11L,
+                    chord * 0.5f, 1.0f, 1.0f, 1.0f, impact * 0.9f, 1.0f, ds);
+            });
+            poseStack.popPose();
+        }
+
+        // Strong variant: the second arc bulges the opposite way, where the
+        // spectacle pass flipped the crescent's chord sign.
+        if (strong) {
+            poseStack.pushPose();
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+                BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x5709L, radius * 0.76f, 130f,
+                    0.0f, 0.90f, 1.0f, 0.90f, fade, ds));
+            poseStack.popPose();
+        }
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static float smooth(float t) {
-        float x = Math.max(0.0f, Math.min(1.0f, t));
-        return x * x * (3.0f - 2.0f * x);
-    }
-
     private static float strike(float progress) {
         if (progress <= 0.22f || progress >= 0.55f) return 0.0f;
         return (float) Math.sin(((progress - 0.22f) / 0.33f) * Math.PI);
-    }
-
-    private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-
-            float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord;
-            float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord;
-
-            float th1 = thickness * (1.0f - Math.abs(t1) * 0.75f);
-            float th2 = thickness * (1.0f - Math.abs(t2) * 0.75f);
-
-            float z1Trail = z1 - trailLength * (1.0f - Math.abs(t1));
-            float z2Trail = z2 - trailLength * (1.0f - Math.abs(t2));
-
-            // Top Surface
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2 * 0.3f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, th1 * 0.3f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Bottom Surface
-            consumer.addVertex(matrix, x1, -th1 * 0.3f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2 * 0.3f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-            // Front Leading Bevel Edge
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
-    }
-
-    private static void drawTipSpurs(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float spurSize, float fade) {
-        drawCurvedSpur(matrix, consumer, -span, -1.0f, spurSize, chord, fade);
-        drawCurvedSpur(matrix, consumer, span, 1.0f, spurSize, chord, fade);
-    }
-
-    private static void drawCurvedSpur(Matrix4f matrix, VertexConsumer consumer, float tipX, float sign, float spur, float chord, float fade) {
-        int steps = 5;
-        for (int i = 0; i < steps; i++) {
-            float t1 = i / (float) steps;
-            float t2 = (i + 1) / (float) steps;
-            float z1 = -(spur * 2.1f + chord * 0.08f) * t1;
-            float z2 = -(spur * 2.1f + chord * 0.08f) * t2;
-            float bow1 = (float) Math.sin(t1 * Math.PI) * spur * 0.55f;
-            float bow2 = (float) Math.sin(t2 * Math.PI) * spur * 0.55f;
-            float x1 = tipX + sign * (spur * 1.5f * t1 + bow1);
-            float x2 = tipX + sign * (spur * 1.5f * t2 + bow2);
-            float w1 = spur * 0.22f * (1.0f - t1);
-            float w2 = spur * 0.22f * (1.0f - t2);
-            float a1 = fade * (1.0f - t1);
-            float a2 = fade * (1.0f - t2) * 0.15f;
-            consumer.addVertex(matrix, x1, -w1, z1).setColor(0.0f, 0.85f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, w1, z1).setColor(0.0f, 0.85f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, w2, z2).setColor(0.8f, 0.95f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, -w2, z2).setColor(0.8f, 0.95f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, -w1 * 0.28f, z1).setColor(1.0f, 1.0f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, w1 * 0.28f, z1).setColor(1.0f, 1.0f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, w2 * 0.28f, z2).setColor(1.0f, 1.0f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, -w2 * 0.28f, z2).setColor(1.0f, 1.0f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawDiamondSpark(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float size, float r, float g, float b, float a) {
-        float h = size * 1.4f;
-        float w = size * 0.5f;
-
-        consumer.addVertex(matrix, cx - w, cy, cz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx, cy + h, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx + w, cy, cz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        consumer.addVertex(matrix, cx, cy, cz - w).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, cx, cy + h, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, cx, cy, cz + w).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        int arms = 4;
-        int steps = 3;
-        for (int arm = 0; arm < arms; arm++) {
-            float ang = arm * ((float) Math.PI * 0.5f) + 0.35f;
-            float dx = (float) Math.cos(ang);
-            float dz = (float) Math.sin(ang);
-            float px = -dz;
-            float pz = dx;
-            for (int i = 0; i < steps; i++) {
-                float t1 = i / (float) steps;
-                float t2 = (i + 1) / (float) steps;
-                float bow1 = (float) Math.sin(t1 * Math.PI) * size * 0.45f;
-                float bow2 = (float) Math.sin(t2 * Math.PI) * size * 0.45f;
-                float d1 = size * (0.35f + 1.15f * t1);
-                float d2 = size * (0.35f + 1.15f * t2);
-                float w1 = size * 0.28f * (1.0f - t1);
-                float w2 = size * 0.28f * (1.0f - t2);
-                float x1 = cx + dx * d1 + px * bow1;
-                float z1 = cz + dz * d1 + pz * bow1;
-                float x2 = cx + dx * d2 + px * bow2;
-                float z2 = cz + dz * d2 + pz * bow2;
-                float a1 = a * (1.0f - t1 * 0.25f);
-                float a2 = a * (1.0f - t2);
-                consumer.addVertex(matrix, x1 - px * w1, cy, z1 - pz * w1).setColor(r, g, b, a1 * 0.4f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, x1 + px * w1, cy, z1 + pz * w1).setColor(r, g, b, a1 * 0.4f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, x2 + px * w2, cy, z2 + pz * w2).setColor(r, g, b, a2 * 0.08f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, x2 - px * w2, cy, z2 - pz * w2).setColor(r, g, b, a2 * 0.08f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, x1 - px * w1 * 0.3f, cy, z1 - pz * w1 * 0.3f).setColor(1.0f, 1.0f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, x1 + px * w1 * 0.3f, cy, z1 + pz * w1 * 0.3f).setColor(1.0f, 1.0f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, x2 + px * w2 * 0.3f, cy, z2 + pz * w2 * 0.3f).setColor(1.0f, 1.0f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, x2 - px * w2 * 0.3f, cy, z2 - pz * w2 * 0.3f).setColor(1.0f, 1.0f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            }
-        }
     }
 }

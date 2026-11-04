@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -60,7 +60,7 @@ public class TemporalStasisEffect extends MobEffect {
             double pz = entity.getZ() + Math.sin(rad) * r;
 
             level.sendParticles(
-                new DustParticleOptions(0x00BFFF, 1.2f),
+                new DbaDustOptions(0x00BFFF, 1.2f),
                 px, py, pz,
                 1, 0.0, 0.02, 0.0, 0.01
             );

@@ -4,7 +4,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -18,6 +17,7 @@ import net.minecraft.world.phys.Vec3;
 
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import com.dragonblockarcanedba.util.VortexPhysics;
@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Evil Spear Projectile Entity — Fired by Evil Spear (Evil Impale).
+ * Evil Spear Projectile Entity: Fired by Evil Spear (Evil Impale).
  * High-velocity spectral crimson spear that pierces entities, applies Marked by Evil, and pulls targets inward.
  *
  * Spectacle pass: the flight trail is three layered particle strata laid
@@ -108,7 +108,7 @@ public class EvilSpearProjectileEntity extends Projectile {
                 Vec3 hitPos = blockHit.getLocation();
                 this.setPos(hitPos.x, hitPos.y, hitPos.z);
                 this.level().playSound(null, hitPos.x, hitPos.y, hitPos.z,
-                    net.minecraft.sounds.SoundEvents.TRIDENT_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 1.4f, 0.7f);
+                    com.dragonblockarcanedba.sound.DbaSounds.TRIDENT_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 1.4f, 0.7f);
                 if (this.level() instanceof ServerLevel serverLevel) {
                     LayeredParticles.emitGroundBurst(serverLevel, hitPos, 1.2f, HellHuntImpactEntity.THEME_ARGB);
                 }
@@ -132,9 +132,12 @@ public class EvilSpearProjectileEntity extends Projectile {
             emitTrail(serverLevel, start, this.position());
 
             Entity owner = this.getOwner();
-            DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                ? serverLevel.damageSources().playerAttack(playerOwner)
-                : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+            // Bespoke pass (standard rule 4): the pierce is ability damage,
+            // so it rides the mod's hellfire type with this spear as the
+            // direct entity, whoever threw it. Numbers are unchanged.
+            DamageSource damageSource = owner instanceof LivingEntity livingOwner
+                ? DbaDamage.hellfire(this, livingOwner)
+                : DbaDamage.hellfire(this, null);
 
             if (!this.pinned) {
                 AABB hitbox = this.getBoundingBox().inflate(1.2, 1.2, 1.2);
@@ -197,7 +200,7 @@ public class EvilSpearProjectileEntity extends Projectile {
                     );
                     serverLevel.addFreshEntity(impact);
 
-                    serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.TRIDENT_HIT, SoundSource.PLAYERS, 1.8f, 0.6f);
+                    serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(), com.dragonblockarcanedba.sound.DbaSounds.TRIDENT_HIT, SoundSource.PLAYERS, 1.8f, 0.6f);
                 }
             }
 

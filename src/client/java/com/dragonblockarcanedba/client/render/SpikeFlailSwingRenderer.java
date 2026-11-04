@@ -1,9 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SpikeFlailSwingEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -15,8 +17,18 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
-/** Chain and spiked ball at the end of the swing. The entity sits on the ball. */
+/**
+ * Chain and spiked ball at the end of the swing. The entity sits on the ball.
+ * All geometry comes from BespokeGeometry (BESPOKE-STANDARD rule 1): the chain
+ * is torn ribbon spans with alternating link roll, the ball is two displaced
+ * domes with shard fans for spikes, and the swing leaves a torn ribbon trail
+ * along the ball's arc. Seeds derive from the entity id, so every client
+ * draws the same shapes.
+ */
 public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntity, SpikeFlailSwingRenderer.SwingState> {
+    /** Trail samples behind the ball along its arc, oldest first; the last is the ball itself. */
+    private static final int TRAIL_POINTS = 5;
+
     public SpikeFlailSwingRenderer(EntityRendererProvider.Context context) {
         super(context);
     }
@@ -27,6 +39,11 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
         public float handY;
         public float handZ;
         public boolean hasHand;
+        public long seed;
+        public final float[] trailX = new float[TRAIL_POINTS];
+        public final float[] trailY = new float[TRAIL_POINTS];
+        public final float[] trailZ = new float[TRAIL_POINTS];
+        public boolean hasTrail;
     }
 
     public boolean shouldRender(SpikeFlailSwingEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -46,8 +63,10 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
     public void extractRenderState(SpikeFlailSwingEntity entity, SwingState state, float partialTick) {
         super.extractRenderState(entity, state, partialTick);
         state.age = entity.tickCount + partialTick;
+        state.seed = entity.getId() * 2654435761L ^ 0x5F1A11L;
         Entity owner = entity.getOwner();
         state.hasHand = owner != null;
+        state.hasTrail = false;
         if (owner != null) {
             Vec3 ball = entity.getPosition(partialTick);
             float yaw = entity.swingYaw();
@@ -57,6 +76,18 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
             state.handX = (float) rel.x;
             state.handY = (float) rel.y;
             state.handZ = (float) rel.z;
+            // Arc samples behind the ball, relative to the ball's current arc point,
+            // so the trail ends exactly where the ball is drawn.
+            float cur = Mth.clamp((entity.tickCount + partialTick) / (float) SpikeFlailSwingEntity.SWING_TICKS, 0.0f, 1.0f);
+            Vec3 now = SpikeFlailSwingEntity.ballPos(owner, yaw, cur);
+            for (int i = 0; i < TRAIL_POINTS; i++) {
+                float p = Math.max(0.0f, cur - (TRAIL_POINTS - 1 - i) * 0.09f);
+                Vec3 s = SpikeFlailSwingEntity.ballPos(owner, yaw, p);
+                state.trailX[i] = (float) (s.x - now.x);
+                state.trailY[i] = (float) (s.y - now.y);
+                state.trailZ[i] = (float) (s.z - now.z);
+            }
+            state.hasTrail = true;
         }
     }
 
@@ -65,13 +96,23 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
         float fade = ease(Math.max(0.0f, 1.0f - Math.max(0.0f, state.age - 8.0f) / 3.0f));
         float open = ease(Math.min(1.0f, state.age / 2.0f));
         RenderType type = KiRenderHelper.kiRenderType();
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            if (state.hasHand) {
-                drawChain(buffer, matrix, pose, state.handX, state.handY, state.handZ, 0.0f, 0.0f, 0.0f, fade);
+        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        if (state.hasTrail && fade > 0.01f) {
+            float[] widths = {0.20f, 0.28f, 0.36f, 0.44f};
+            for (int i = 0; i < TRAIL_POINTS - 1; i++) {
+                submitSpan(poseStack, collector, type,
+                    state.trailX[i], state.trailY[i], state.trailZ[i],
+                    state.trailX[i + 1], state.trailY[i + 1], state.trailZ[i + 1],
+                    widths[i], 0.0f, 0.92f, 0.90f, 0.82f, fade * (0.10f + 0.07f * i),
+                    state.seed ^ (0x7EA1L + i), distScale);
             }
-            drawBall(pose, buffer, 0.42f * (0.75f + 0.25f * open), fade);
-        });
+        }
+        if (state.hasHand) {
+            submitChain(poseStack, collector, type, state.handX, state.handY, state.handZ,
+                0.0f, 0.0f, 0.0f, fade, state.seed ^ 0xC4A1L, distScale);
+        }
+        submitBall(poseStack, collector, type, 0.42f * (0.75f + 0.25f * open), fade,
+            state.seed ^ 0xBA11L, distScale);
         super.submit(state, poseStack, collector, cameraState);
     }
 
@@ -80,134 +121,98 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
         return c * c * (3.0f - 2.0f * c);
     }
 
-    static void drawChain(VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
-                          float hx, float hy, float hz, float bx, float by, float bz, float fade) {
+    /**
+     * One torn ribbon span from one point to another: the pose is translated to
+     * the start and yawed, pitched, and rolled so the ribbon's length axis lies
+     * along the span. The shared strand for chain links and trail segments.
+     */
+    static void submitSpan(PoseStack poseStack, SubmitNodeCollector collector, RenderType type,
+                           float x0, float y0, float z0, float x1, float y1, float z1,
+                           float width, float rollDeg,
+                           float r, float g, float b, float alpha, long seed, float distScale) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001f || alpha <= 0.01f) {
+            return;
+        }
+        float horiz = (float) Math.sqrt(dx * dx + dz * dz);
+        float yawDeg = (float) Math.toDegrees(Math.atan2(-dz, dx));
+        float pitchDeg = (float) Math.toDegrees(Math.atan2(dy, horiz));
+        poseStack.pushPose();
+        poseStack.translate(x0, y0, z0);
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(yawDeg)));
+        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(pitchDeg)));
+        if (rollDeg != 0.0f) {
+            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(rollDeg)));
+        }
+        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
+            BespokeGeometry.tornRibbon(pose, buffer, seed, len, width, 0.0f, r, g, b, alpha, 1.0f, distScale));
+        poseStack.popPose();
+    }
+
+    /**
+     * The chain between two points: eight ribbon spans along the same sag curve
+     * the old prism links followed, with alternating width and roll so the
+     * links read as alternating chain links instead of a smooth tube.
+     */
+    static void submitChain(PoseStack poseStack, SubmitNodeCollector collector, RenderType type,
+                            float hx, float hy, float hz, float bx, float by, float bz,
+                            float fade, long seed, float distScale) {
         int links = 8;
-        for (int i = 0; i < links; i++) {
-            float t0 = i / (float) links;
-            float t1 = (i + 1) / (float) links;
-            float sag0 = (float) Math.sin(t0 * Math.PI) * 0.45f;
-            float sag1 = (float) Math.sin(t1 * Math.PI) * 0.45f;
-            float x0 = Mth.lerp(t0, hx, bx);
-            float y0 = Mth.lerp(t0, hy, by) - sag0;
-            float z0 = Mth.lerp(t0, hz, bz);
-            float x1 = Mth.lerp(t1, hx, bx);
-            float y1 = Mth.lerp(t1, hy, by) - sag1;
-            float z1 = Mth.lerp(t1, hz, bz);
-            float radius = i % 2 == 0 ? 0.07f : 0.1f;
-            prism(buffer, matrix, pose, x0, y0, z0, x1, y1, z1, radius, 0.72f, 0.74f, 0.78f, fade);
+        float px = hx;
+        float py = hy;
+        float pz = hz;
+        for (int i = 1; i <= links; i++) {
+            float t = i / (float) links;
+            float sag = (float) Math.sin(t * Math.PI) * 0.45f;
+            float x = Mth.lerp(t, hx, bx);
+            float y = Mth.lerp(t, hy, by) - sag;
+            float z = Mth.lerp(t, hz, bz);
+            float width = i % 2 == 0 ? 0.20f : 0.13f;
+            float roll = i % 2 == 0 ? 75.0f : 0.0f;
+            submitSpan(poseStack, collector, type, px, py, pz, x, y, z, width, roll,
+                0.72f, 0.74f, 0.78f, fade, seed + i * 131L, distScale);
+            px = x;
+            py = y;
+            pz = z;
         }
     }
 
-    static void drawBall(PoseStack.Pose pose, VertexConsumer buffer, float radius, float fade) {
-        KiRenderHelper.drawSphere(pose, buffer, radius, 5, 8, 0.78f, 0.8f, 0.84f, fade);
-        KiRenderHelper.drawSphere(pose, buffer, radius * 0.45f, 4, 6, 0.95f, 0.96f, 1.0f, fade);
-        cone(buffer, pose.pose(), pose, 0, radius, 0, 0, radius + 0.34f, 0, 0.11f, fade);
-        cone(buffer, pose.pose(), pose, 0, -radius, 0, 0, -radius - 0.3f, 0, 0.1f, fade);
-        cone(buffer, pose.pose(), pose, radius, 0, 0, radius + 0.32f, 0, 0, 0.1f, fade);
-        cone(buffer, pose.pose(), pose, -radius, 0, 0, -radius - 0.32f, 0, 0, 0.1f, fade);
-        cone(buffer, pose.pose(), pose, 0, 0, radius, 0, 0, radius + 0.32f, 0.1f, fade);
-        cone(buffer, pose.pose(), pose, 0, 0, -radius, 0, 0, -radius - 0.32f, 0.1f, fade);
-    }
-
-    static void prism(VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
-                      float x0, float y0, float z0, float x1, float y1, float z1,
-                      float radius, float r, float g, float b, float a) {
-        float dx = x1 - x0;
-        float dy = y1 - y0;
-        float dz = z1 - z0;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.0001f) {
+    /**
+     * The spiked ball: two noise-displaced domes make the lumpy iron body and
+     * shard fans in three planes make the spikes, all seeded. No spheres, no
+     * cones, no lat-long grids.
+     */
+    static void submitBall(PoseStack poseStack, SubmitNodeCollector collector, RenderType type,
+                           float radius, float fade, long seed, float distScale) {
+        if (fade <= 0.01f) {
             return;
         }
-        float ix = dx / len;
-        float iy = dy / len;
-        float iz = dz / len;
-        float ux = Math.abs(iy) < 0.85f ? 0.0f : 1.0f;
-        float uy = Math.abs(iy) < 0.85f ? 1.0f : 0.0f;
-        float uz = 0.0f;
-        float cx = iy * uz - iz * uy;
-        float cy = iz * ux - ix * uz;
-        float cz = ix * uy - iy * ux;
-        float cl = (float) Math.sqrt(cx * cx + cy * cy + cz * cz);
-        cx /= cl;
-        cy /= cl;
-        cz /= cl;
-        float bx = iy * cz - iz * cy;
-        float by = iz * cx - ix * cz;
-        float bz = ix * cy - iy * cx;
-        int sides = 6;
-        for (int i = 0; i < sides; i++) {
-            double a0 = Math.PI * 2.0 * i / sides;
-            double a1 = Math.PI * 2.0 * (i + 1) / sides;
-            float c0 = (float) Math.cos(a0);
-            float s0 = (float) Math.sin(a0);
-            float c1 = (float) Math.cos(a1);
-            float s1 = (float) Math.sin(a1);
-            float p0x = x0 + (cx * c0 + bx * s0) * radius;
-            float p0y = y0 + (cy * c0 + by * s0) * radius;
-            float p0z = z0 + (cz * c0 + bz * s0) * radius;
-            float p1x = x0 + (cx * c1 + bx * s1) * radius;
-            float p1y = y0 + (cy * c1 + by * s1) * radius;
-            float p1z = z0 + (cz * c1 + bz * s1) * radius;
-            float q0x = x1 + (cx * c0 + bx * s0) * radius;
-            float q0y = y1 + (cy * c0 + by * s0) * radius;
-            float q0z = z1 + (cz * c0 + bz * s0) * radius;
-            float q1x = x1 + (cx * c1 + bx * s1) * radius;
-            float q1y = y1 + (cy * c1 + by * s1) * radius;
-            float q1z = z1 + (cz * c1 + bz * s1) * radius;
-            float nx = cx * (c0 + c1) * 0.5f + bx * (s0 + s1) * 0.5f;
-            float ny = cy * (c0 + c1) * 0.5f + by * (s0 + s1) * 0.5f;
-            float nz = cz * (c0 + c1) * 0.5f + bz * (s0 + s1) * 0.5f;
-            KiRenderHelper.vertex(buffer, matrix, pose, p0x, p0y, p0z, r, g, b, a, 0, 0, nx, ny, nz);
-            KiRenderHelper.vertex(buffer, matrix, pose, p1x, p1y, p1z, r, g, b, a, 1, 0, nx, ny, nz);
-            KiRenderHelper.vertex(buffer, matrix, pose, q1x, q1y, q1z, r, g, b, a, 1, 1, nx, ny, nz);
-            KiRenderHelper.vertex(buffer, matrix, pose, q0x, q0y, q0z, r, g, b, a, 0, 1, nx, ny, nz);
-        }
-    }
-
-    static void cone(VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
-                     float x0, float y0, float z0, float x1, float y1, float z1, float radius, float fade) {
-        float dx = x1 - x0;
-        float dy = y1 - y0;
-        float dz = z1 - z0;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.0001f) {
-            return;
-        }
-        float ix = dx / len;
-        float iy = dy / len;
-        float iz = dz / len;
-        float ux = Math.abs(iy) < 0.85f ? 0.0f : 1.0f;
-        float uy = Math.abs(iy) < 0.85f ? 1.0f : 0.0f;
-        float cx = iy * 0 - iz * uy;
-        float cy = iz * ux - ix * 0;
-        float cz = ix * uy - iy * ux;
-        float cl = (float) Math.sqrt(cx * cx + cy * cy + cz * cz);
-        cx /= cl;
-        cy /= cl;
-        cz /= cl;
-        float bx = iy * cz - iz * cy;
-        float by = iz * cx - ix * cz;
-        float bz = ix * cy - iy * cx;
-        int sides = 5;
-        for (int i = 0; i < sides; i++) {
-            double a0 = Math.PI * 2.0 * i / sides;
-            double a1 = Math.PI * 2.0 * (i + 1) / sides;
-            float c0 = (float) Math.cos(a0);
-            float s0 = (float) Math.sin(a0);
-            float c1 = (float) Math.cos(a1);
-            float s1 = (float) Math.sin(a1);
-            float p0x = x0 + (cx * c0 + bx * s0) * radius;
-            float p0y = y0 + (cy * c0 + by * s0) * radius;
-            float p0z = z0 + (cz * c0 + bz * s0) * radius;
-            float p1x = x0 + (cx * c1 + bx * s1) * radius;
-            float p1y = y0 + (cy * c1 + by * s1) * radius;
-            float p1z = z0 + (cz * c1 + bz * s1) * radius;
-            KiRenderHelper.vertex(buffer, matrix, pose, p0x, p0y, p0z, 0.9f, 0.91f, 0.94f, fade, 0, 0, ix, iy, iz);
-            KiRenderHelper.vertex(buffer, matrix, pose, p1x, p1y, p1z, 0.9f, 0.91f, 0.94f, fade, 1, 0, ix, iy, iz);
-            KiRenderHelper.vertex(buffer, matrix, pose, x1, y1, z1, 1.0f, 0.97f, 0.9f, fade, 0.5f, 1, ix, iy, iz);
-            KiRenderHelper.vertex(buffer, matrix, pose, x1, y1, z1, 1.0f, 0.97f, 0.9f, fade * 0.2f, 0.5f, 1, ix, iy, iz);
-        }
+        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
+            BespokeGeometry.displacedDome(pose, buffer, seed, radius,
+                0.78f, 0.80f, 0.84f, fade * 0.95f, 1.0f, distScale));
+        poseStack.pushPose();
+        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(180.0f)));
+        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD0EL, radius,
+                0.78f, 0.80f, 0.84f, fade * 0.95f, 1.0f, distScale));
+        poseStack.popPose();
+        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
+            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x11L, radius * 1.5f,
+                0.85f, 0.87f, 0.91f, fade * 0.9f, 1.0f, distScale));
+        poseStack.pushPose();
+        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
+        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
+            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x22L, radius * 1.5f,
+                0.85f, 0.87f, 0.91f, fade * 0.9f, 1.0f, distScale));
+        poseStack.popPose();
+        poseStack.pushPose();
+        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
+        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
+            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x33L, radius * 1.5f,
+                0.85f, 0.87f, 0.91f, fade * 0.9f, 1.0f, distScale));
+        poseStack.popPose();
     }
 }

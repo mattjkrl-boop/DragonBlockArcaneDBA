@@ -1,27 +1,40 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.TemporalRiftEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
 /**
- * Entity Renderer for Temporal Rift in Minecraft 26.2.
- * Renders a monumental, high-performance translucent 3D celestial dome and rotating 3D ground astrolabe:
- * - Volumetric 3D Translucent Celestial Dome Shell (12-block radius) with dynamic breathing alpha
- * - Physical 3D Rotating Clock Decal & Multi-Tier Astrolabe with 12 hour steles and reversing 3D clock hands
- * - Dual tilted gyroscopic orbital precession rings
- * - 12 vertical meridian time streams connecting ground hour steles to the zenith apex
- * - Zenith stasis apex octahedron jewel
+ * Entity Renderer for Temporal Rift.
+ *
+ * Bespoke pass: every shape is built by BespokeGeometry from the entity's
+ * synced seed, so the silhouette is identical on every client and holds
+ * frame to frame; only alpha, radius, and band twist breathe. Same
+ * composition and identity as the old hand-rolled astrolabe:
+ * - Two nested noise-displaced dome shells (celestial cyan outside,
+ *   diamond silver inside) in place of the lat/long primitive shells
+ * - Three broken vortex bands inside the shells as the time currents
+ * - A jittered glow fan anchoring the dome to the ground, ringed by an
+ *   uneven shard fan of hour steles
+ * - Two torn-ribbon clock hands sweeping backwards over the ground fan
+ * - Twelve jagged meridian branch streams rising from the rim to the apex
+ * - Two tilted broken orbital rings, and displaced-dome crystal caps at
+ *   the center and the zenith in place of the octahedron jewels
+ * All alpha runs on the shared FxEnvelope (build 15 percent, peak,
+ * dissipate 35 percent), and builder segment counts step down with
+ * camera distance.
  */
 public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, TemporalRiftRenderer.RiftRenderState> {
 
@@ -33,6 +46,7 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
         public float radius = 12.0f;
         public float ageInTicks = 0;
         public int maxLifetime = 60;
+        public long seed = 0;
         public double worldX = 0;
         public double worldY = 0;
         public double worldZ = 0;
@@ -59,6 +73,18 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
         state.radius = entity.getRadius();
         state.ageInTicks = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
+        long seed = entity.getSeed();
+        if (seed == 0L) {
+            // Fallback for the frames before the synced seed lands (or a rift
+            // spawned without the cast constructor): hash the synced position
+            // and caster, which agree on every client, never a local random.
+            seed = (long) entity.getBlockX() * 341873128712L
+                ^ (long) entity.getBlockZ() * 132897987541L
+                ^ (long) entity.getBlockY() * 42317861L
+                ^ (long) entity.getCasterId() * 2654435761L;
+            if (seed == 0L) seed = 0x5EEDL;
+        }
+        state.seed = seed;
         state.worldX = entity.getX();
         state.worldY = entity.getY();
         state.worldZ = entity.getZ();
@@ -83,8 +109,9 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
         float buildT = FxEnvelope.smoothstep(Math.min(1.0f, age / (maxLife * 0.15f)));
         float radiusScale = 0.35f + 0.65f * buildT;
         float radius = state.radius * radiusScale;
+        float domeHeight = radius * 1.05f;
         float pulse = 0.88f + 0.12f * (float) Math.sin(age * 0.20f);
-        float fade = env;
+        long seed = state.seed;
 
         // Point 1: geometry and alpha step down with camera distance.
         float ds = LayeredRender.distScale(cameraState, state.worldX, state.worldY, state.worldZ);
@@ -93,374 +120,106 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
 
         poseStack.pushPose();
 
+        // Base composition in entity space: domes, currents, ground fan,
+        // stele shards, meridian streams, and the center crystal cap.
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
+            // 1. Dome shells: two nested displaced domes. The outer shell
+            // keeps the celestial cyan; the inner keeps the silver core that
+            // gave the clock a hot center under the glass.
+            BespokeGeometry.displacedDome(pose, buffer, seed, radius,
+                0.45f, 0.80f, 1.0f, 0.30f * pulse * alphaScale, env, ds);
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0x1A2B3CL, radius * 0.72f,
+                0.85f, 0.96f, 1.0f, 0.22f * pulse * alphaScale, env, ds);
 
-            // 1. Volumetric 3D Translucent Celestial Dome Shell (Multi-Latitude Mesh)
-            int domeLatitudes = FxEnvelope.segments(14, ds, 6);
-            int domeLongitudes = FxEnvelope.segments(40, ds, 16);
-            float domeHeight = radius * 1.05f;
+            // 2. Time currents: three broken vortex bands counter-rotating
+            // inside the shells, at the standard layer alphas (core, mid,
+            // outer), sized and twisted as the old layered bands were.
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBA0D1L, radius * 0.20f,
+                0.15f, domeHeight * 0.72f, (float) Math.toRadians(age * 2.6f),
+                0.85f, 0.97f, 1.0f, LayeredRender.ALPHA_CORE * 0.85f * env, ds);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBA0D2L, radius * 0.52f,
+                0.10f, domeHeight * 0.72f, (float) Math.toRadians(age * -1.7f),
+                0.55f, 0.85f, 1.0f, LayeredRender.ALPHA_MID * 0.85f * env, ds);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBA0D3L, radius * 0.75f,
+                0.10f, domeHeight * 0.79f, (float) Math.toRadians(age * 0.9f),
+                0.50f, 0.82f, 1.0f, LayeredRender.ALPHA_OUTER * 0.85f * env, ds);
 
-            for (int lat = 0; lat < domeLatitudes; lat++) {
-                float latProgress1 = lat / (float) domeLatitudes;
-                float latProgress2 = (lat + 1) / (float) domeLatitudes;
-
-                float y1 = 0.1f + (float) Math.sin(latProgress1 * (Math.PI / 2.0)) * domeHeight;
-                float y2 = 0.1f + (float) Math.sin(latProgress2 * (Math.PI / 2.0)) * domeHeight;
-
-                float r1 = radius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
-                float r2 = radius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
-
-                float domeAlpha = (0.13f + latProgress1 * 0.15f) * pulse * fade * alphaScale;
-
-                // Color shift from celestial cyan at base to diamond silver at apex.
-                // 3-stop ramp (T2): the base band now starts in a deeper cyan so
-                // the dome has real depth against the silver apex.
-                float cr = 0.38f + latProgress1 * 0.57f;
-                float cg = 0.76f + latProgress1 * 0.22f;
-                float cb = 1.0f;
-
-                for (int lon = 0; lon < domeLongitudes; lon++) {
-                    double angleOffset = (age * (1.0f + lat * 0.25f)) * (Math.PI / 180.0);
-                    double a1 = ((lon / (double) domeLongitudes) * Math.PI * 2.0) + angleOffset;
-                    double a2 = (((lon + 1) / (double) domeLongitudes) * Math.PI * 2.0) + angleOffset;
-
-                    float x1 = (float) Math.cos(a1) * r1;
-                    float z1 = (float) Math.sin(a1) * r1;
-                    float x2 = (float) Math.cos(a2) * r1;
-                    float z2 = (float) Math.sin(a2) * r1;
-
-                    float x3 = (float) Math.cos(a2) * r2;
-                    float z3 = (float) Math.sin(a2) * r2;
-                    float x4 = (float) Math.cos(a1) * r2;
-                    float z4 = (float) Math.sin(a1) * r2;
-
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
-                        cr, cg, cb, domeAlpha);
-                }
-            }
-
-            // Brighter inner shell of the same dome, so the clock has a hot core under the glass.
-            int coreLats = FxEnvelope.segments(8, ds, 4);
-            int coreLons = FxEnvelope.segments(28, ds, 12);
-            float coreRadius = radius * 0.72f;
-            float coreHeight = coreRadius * 1.05f;
-            for (int lat = 0; lat < coreLats; lat++) {
-                float latProgress1 = lat / (float) coreLats;
-                float latProgress2 = (lat + 1) / (float) coreLats;
-                float y1 = 0.12f + (float) Math.sin(latProgress1 * (Math.PI / 2.0)) * coreHeight;
-                float y2 = 0.12f + (float) Math.sin(latProgress2 * (Math.PI / 2.0)) * coreHeight;
-                float r1 = coreRadius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
-                float r2 = coreRadius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
-                float coreAlpha = (0.05f + latProgress1 * 0.16f) * pulse * fade * alphaScale;
-                for (int lon = 0; lon < coreLons; lon++) {
-                    double angleOffset = (-age * 0.6f) * (Math.PI / 180.0);
-                    double a1 = ((lon / (double) coreLons) * Math.PI * 2.0) + angleOffset;
-                    double a2 = (((lon + 1) / (double) coreLons) * Math.PI * 2.0) + angleOffset;
-                    float x1 = (float) Math.cos(a1) * r1;
-                    float z1 = (float) Math.sin(a1) * r1;
-                    float x2 = (float) Math.cos(a2) * r1;
-                    float z2 = (float) Math.sin(a2) * r1;
-                    float x3 = (float) Math.cos(a2) * r2;
-                    float z3 = (float) Math.sin(a2) * r2;
-                    float x4 = (float) Math.cos(a1) * r2;
-                    float z4 = (float) Math.sin(a1) * r2;
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
-                        0.85f, 0.96f, 1.0f, coreAlpha);
-                }
-            }
-
-            // Layered interior (point 1): three counter-rotating time
-            // current bands inside the dome shells, plus the shared ground
-            // anchor glow, so the dome has moving depth instead of two
-            // static glass shells. Both run on the same envelope.
-            LayeredRender.drawVortexBands(pose, buffer, radius * 0.52f, domeHeight * 0.72f, age,
-                0.55f, 0.85f, 1.0f, env * 0.85f, ds);
-            LayeredRender.drawAnchorGlow(pose, buffer, radius * 0.98f, 0.05f,
+            // 3. Ground anchor: the jittered glow fan grounds the dome, and
+            // the uneven shard fan stands in for the twelve hour steles,
+            // bursting around the same rim annulus they occupied.
+            BespokeGeometry.glowFan(pose, buffer, seed ^ 0x610FAL, radius * 0.98f, 0.05f,
                 0.45f, 0.78f, 1.0f, 0.50f * env * pulse, ds);
+            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x57E1EL, radius * 0.88f,
+                0.70f, 0.92f, 1.0f, 0.85f * pulse, env, ds);
 
-            // 2. Physical 3D Rotating Clock Decal & Ground Chronometer Mandala
-            int groundSegments = FxEnvelope.segments(48, ds, 20);
-
-            // Outer Chrono Rim
-            drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius, radius * 0.91f, groundSegments, age * 6.0f,
-                0.70f, 0.92f, 1.0f, 0.80f * pulse * fade);
-
-            // 12 Physical 3D Hour Marker Steles (Placed every 30 degrees)
-            for (int h = 0; h < 12; h++) {
-                double hourAngle = (h / 12.0) * Math.PI * 2.0 + Math.toRadians(age * 6.0f);
-                float hx = (float) Math.cos(hourAngle);
-                float hz = (float) Math.sin(hourAngle);
-
-                float rStart = radius * 0.82f;
-                float rEnd = radius * 0.98f;
-
-                // Major markers (12, 3, 6, 9) are larger and brighter
-                boolean isCardinal = (h % 3 == 0);
-                float markerWidth = isCardinal ? 0.28f : 0.16f;
-
-                float lift = isCardinal ? 0.16f : 0.09f;
-                drawLash(matrix, buffer,
-                    hx * rStart, 0.06f, hz * rStart,
-                    hx * (rStart + rEnd) * 0.5f, lift, hz * (rStart + rEnd) * 0.5f,
-                    hx * rEnd, 0.05f, hz * rEnd,
-                    markerWidth * 0.45f, 5,
-                    isCardinal ? 0.75f : 0.45f, isCardinal ? 0.92f : 0.78f, 1.0f,
-                    1.0f, 1.0f, 1.0f,
-                    0.92f * pulse * fade);
-            }
-
-            // 3. Physical 3D Clock Hands (Reversing in Real-Time)
-            // Hour Hand: sweeping backwards at -age * 15 deg
-            float hourHandAngle = (float) Math.toRadians(-age * 15.0f);
-            drawClockHand(matrix, buffer, hourHandAngle, radius * 0.42f, 0.38f, 0.14f,
-                0.95f, 0.98f, 1.0f, 0.95f * pulse * fade);
-
-            // Minute Hand: sweeping backwards at -age * 45 deg
-            float minuteHandAngle = (float) Math.toRadians(-age * 45.0f);
-            drawClockHand(matrix, buffer, minuteHandAngle, radius * 0.72f, 0.24f, 0.15f,
-                0.60f, 0.90f, 1.0f, 0.95f * pulse * fade);
-
-            // Center Jewel Cap
-            drawOctahedralJewel(matrix, buffer, 0, 0.20f, 0, 0.55f * radiusScale, age * 25.0f,
-                1.0f, 1.0f, 1.0f, 0.95f * fade);
-
-            // 4. Dual Tilted Orbital Precession Chrono-Rings
-            // Orbital Ring A: Tilted +42 degrees
-            drawTiltedOrbitalRing(matrix, buffer, radius * 0.98f, 42.0f, age * 16.0f,
-                0.55f, 0.90f, 1.0f, 0.75f * pulse * fade);
-
-            // Orbital Ring B: Tilted -42 degrees
-            drawTiltedOrbitalRing(matrix, buffer, radius * 0.98f, -42.0f, -age * 16.0f,
-                0.85f, 0.70f, 1.0f, 0.75f * pulse * fade);
-
-            // 5. 12 Vertical Meridian Time Streams Rising to Apex
+            // 4. Meridian streams: twelve jagged branch ribbons rising from
+            // the rim and converging just off the apex, turning with the
+            // ground fan as the old streams did (6 degrees per tick of age).
+            float streamRot = (float) Math.toRadians(age * 6.0f);
             for (int stream = 0; stream < 12; stream++) {
-                double streamAngle = (stream / 12.0) * Math.PI * 2.0 + Math.toRadians(age * 6.0f);
-                drawMeridianStream(matrix, buffer, streamAngle, radius, domeHeight, 16,
-                    0.70f, 0.92f, 1.0f, 0.80f * pulse * fade);
+                double ang = (stream / 12.0) * Math.PI * 2.0 + streamRot;
+                double tipAng = ang + 0.5;
+                Vec3 from = new Vec3(Math.cos(ang) * radius * 0.98f, 0.10f, Math.sin(ang) * radius * 0.98f);
+                Vec3 to = new Vec3(Math.cos(tipAng) * radius * 0.07f, domeHeight + 0.05f, Math.sin(tipAng) * radius * 0.07f);
+                BespokeGeometry.branch(pose, buffer, seed + 7919L * stream, from, to, 0.13f,
+                    0.70f, 0.92f, 1.0f, 0.60f * pulse, env, ds);
             }
 
-            // 6. Zenith Stasis Apex Jewel
-            drawOctahedralJewel(matrix, buffer, 0, domeHeight + 0.1f, 0, 0.85f * radiusScale, age * 30.0f,
-                0.95f, 0.98f, 1.0f, 0.95f * fade);
+            // 5. Center crystal cap, where the old center jewel sat.
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xCE77EL, 0.55f * radiusScale,
+                1.0f, 1.0f, 1.0f, 0.80f * pulse, env, ds);
         });
+
+        // 6. Clock hands: torn ribbons on Y-rotated poses, sweeping backwards
+        // at the old rates (hour hand 15 degrees per tick of age, minute hand
+        // 45). The pose rotation degrees are the negation of the old hand
+        // angles, because a Y rotation carries +X toward negative Z.
+        poseStack.pushPose();
+        poseStack.translate(0, 0.13, 0);
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(age * 15.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x40B1L, radius * 0.42f, 0.34f, 0.10f,
+                0.95f, 0.98f, 1.0f, 0.90f * pulse, env, ds));
+        poseStack.popPose();
+
+        poseStack.pushPose();
+        poseStack.translate(0, 0.15, 0);
+        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(age * 45.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x40B2L, radius * 0.72f, 0.22f, 0.08f,
+                0.60f, 0.90f, 1.0f, 0.90f * pulse, env, ds));
+        poseStack.popPose();
+
+        // 7. Orbital rings: broken bands on X-tilted poses at the old tilt
+        // (plus and minus 42 degrees) around the old ring height, twisting
+        // against each other at the old rate (16 degrees per tick of age).
+        poseStack.pushPose();
+        poseStack.translate(0, 1.0, 0);
+        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(42.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x0B17AL, radius * 0.98f,
+                -0.10f, 0.10f, (float) Math.toRadians(age * 16.0f),
+                0.55f, 0.90f, 1.0f, 0.65f * pulse * env, ds));
+        poseStack.popPose();
+
+        poseStack.pushPose();
+        poseStack.translate(0, 1.0, 0);
+        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-42.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x0B17BL, radius * 0.98f,
+                -0.10f, 0.10f, (float) Math.toRadians(age * -16.0f),
+                0.85f, 0.70f, 1.0f, 0.65f * pulse * env, ds));
+        poseStack.popPose();
+
+        // 8. Zenith crystal cap at the apex, where the old apex jewel hung.
+        poseStack.pushPose();
+        poseStack.translate(0, domeHeight + 0.10f, 0);
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xA9E7L, 0.85f * radiusScale,
+                0.95f, 0.98f, 1.0f, 0.80f * pulse, env, ds));
+        poseStack.popPose();
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static void drawQuad(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float x3, float y3, float z3, float x4, float y4, float z4, float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Reverse side for interior dome visibility
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-    }
-
-    private static void drawRotatingRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
-        float rotRad = (float) Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = ((i / (double) segments) * Math.PI * 2) + rotRad;
-            double a2 = (((i + 1) / (double) segments) * Math.PI * 2) + rotRad;
-
-            float x1 = cx + (float) Math.cos(a1) * rOuter;
-            float z1 = cz + (float) Math.sin(a1) * rOuter;
-            float x2 = cx + (float) Math.cos(a2) * rOuter;
-            float z2 = cz + (float) Math.sin(a2) * rOuter;
-
-            float ix1 = cx + (float) Math.cos(a1) * rInner;
-            float iz1 = cz + (float) Math.sin(a1) * rInner;
-            float ix2 = cx + (float) Math.cos(a2) * rInner;
-            float iz2 = cz + (float) Math.sin(a2) * rInner;
-
-            consumer.addVertex(matrix, ix1, cy, iz1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, ix2, cy, iz2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, cy, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, cy, z1).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawLash(Matrix4f matrix, VertexConsumer consumer,
-                                 float x0, float y0, float z0,
-                                 float xc, float yc, float zc,
-                                 float x1, float y1, float z1,
-                                 float width, int steps,
-                                 float er, float eg, float eb,
-                                 float cr, float cg, float cb,
-                                 float alpha) {
-        int n = Math.max(4, steps);
-        float px = x0;
-        float py = y0;
-        float pz = z0;
-        for (int i = 1; i <= n; i++) {
-            float t = i / (float) n;
-            float u = 1.0f - t;
-            float x = u * u * x0 + 2.0f * u * t * xc + t * t * x1;
-            float y = u * u * y0 + 2.0f * u * t * yc + t * t * y1;
-            float z = u * u * z0 + 2.0f * u * t * zc + t * t * z1;
-            float w = width * (1.0f - t * 0.9f);
-            float a = alpha * (1.0f - t * t);
-            lashSpan(matrix, consumer, px, py, pz, x, y, z, w, er, eg, eb, a);
-            lashSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.32f, cr, cg, cb, Math.min(1.0f, a * 1.2f));
-            px = x;
-            py = y;
-            pz = z;
-        }
-    }
-
-    private static void lashSpan(Matrix4f matrix, VertexConsumer consumer,
-                                 float x0, float y0, float z0,
-                                 float x1, float y1, float z1,
-                                 float width,
-                                 float r, float g, float b, float a) {
-        float dx = x1 - x0;
-        float dy = y1 - y0;
-        float dz = z1 - z0;
-        float ax = 0.0f;
-        float ay = 1.0f;
-        float az = 0.0f;
-        if (dx * dx + dz * dz < dy * dy) {
-            ax = 1.0f;
-            ay = 0.0f;
-            az = 0.0f;
-        }
-        float px = dy * az - dz * ay;
-        float py = dz * ax - dx * az;
-        float pz = dx * ay - dy * ax;
-        float plen = (float) Math.sqrt(px * px + py * py + pz * pz);
-        if (plen < 0.0001f) {
-            return;
-        }
-        float s = width / plen;
-        px *= s;
-        py *= s;
-        pz *= s;
-        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
-        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
-        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
-        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, py, pz);
-        consumer.addVertex(matrix, x1 - px, y1 - py, z1 - pz).setColor(r, g, b, a * 0.65f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
-        consumer.addVertex(matrix, x1 + px, y1 + py, z1 + pz).setColor(r, g, b, a * 0.65f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
-        consumer.addVertex(matrix, x0 + px, y0 + py, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
-        consumer.addVertex(matrix, x0 - px, y0 - py, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-px, -py, -pz);
-    }
-
-    private static void drawClockHand(Matrix4f matrix, VertexConsumer consumer, float angleRad, float length, float baseWidth, float yLevel, float r, float g, float b, float a) {
-        float cosA = (float) Math.cos(angleRad);
-        float sinA = (float) Math.sin(angleRad);
-        float tail = baseWidth * 1.15f;
-        drawLash(matrix, consumer,
-            -cosA * tail, yLevel, -sinA * tail,
-            cosA * length * 0.42f - sinA * baseWidth * 1.4f, yLevel + 0.08f, sinA * length * 0.42f + cosA * baseWidth * 1.4f,
-            cosA * length, yLevel + 0.02f, sinA * length,
-            baseWidth * 0.55f, 6,
-            r * 0.65f, g * 0.75f, b,
-            1.0f, 1.0f, 1.0f,
-            a
-        );
-    }
-
-    private static void drawTiltedOrbitalRing(Matrix4f matrix, VertexConsumer consumer, float radius, float tiltDeg, float rotDeg, float r, float g, float b, float a) {
-        int segments = 40;
-        float width = 0.16f;
-        double tiltRad = Math.toRadians(tiltDeg);
-        double rotRad = Math.toRadians(rotDeg);
-
-        for (int i = 0; i < segments; i++) {
-            double a1 = ((i / (double) segments) * Math.PI * 2) + rotRad;
-            double a2 = (((i + 1) / (double) segments) * Math.PI * 2) + rotRad;
-
-            float x1_flat = (float) Math.cos(a1) * radius;
-            float z1_flat = (float) Math.sin(a1) * radius;
-            float x2_flat = (float) Math.cos(a2) * radius;
-            float z2_flat = (float) Math.sin(a2) * radius;
-
-            float x1 = x1_flat;
-            float y1 = 1.0f + (float) (-z1_flat * Math.sin(tiltRad));
-            float z1 = (float) (z1_flat * Math.cos(tiltRad));
-
-            float x2 = x2_flat;
-            float y2 = 1.0f + (float) (-z2_flat * Math.sin(tiltRad));
-            float z2 = (float) (z2_flat * Math.cos(tiltRad));
-
-            consumer.addVertex(matrix, x1, y1 + width, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, y2 + width, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, y2 - width, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, y1 - width, z1).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawMeridianStream(Matrix4f matrix, VertexConsumer consumer, double angle, float radius, float height, int steps, float r, float g, float b, float a) {
-        float sinA = (float) Math.sin(angle);
-        float cosA = (float) Math.cos(angle);
-        float sideX = -sinA;
-        float sideZ = cosA;
-
-        for (int i = 0; i < steps; i++) {
-            float p1 = i / (float) steps;
-            float p2 = (i + 1) / (float) steps;
-
-            float y1 = 0.1f + (float) Math.sin(p1 * (Math.PI / 2.0)) * height;
-            float y2 = 0.1f + (float) Math.sin(p2 * (Math.PI / 2.0)) * height;
-
-            float r1 = radius * (float) Math.cos(p1 * (Math.PI / 2.0));
-            float r2 = radius * (float) Math.cos(p2 * (Math.PI / 2.0));
-
-            float x1 = cosA * r1;
-            float z1 = sinA * r1;
-            float x2 = cosA * r2;
-            float z2 = sinA * r2;
-
-            float w1 = 0.07f * (1.0f - p1 * 0.75f);
-            float w2 = 0.07f * (1.0f - p2 * 0.75f);
-            float a1 = a * (1.0f - p1 * 0.45f);
-            float a2 = a * (1.0f - p2 * 0.45f);
-
-            consumer.addVertex(matrix, x1 - sideX * w1, y1, z1 - sideZ * w1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
-            consumer.addVertex(matrix, x1 + sideX * w1, y1, z1 + sideZ * w1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
-            consumer.addVertex(matrix, x2 + sideX * w2, y2, z2 + sideZ * w2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
-            consumer.addVertex(matrix, x2 - sideX * w2, y2, z2 - sideZ * w2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
-
-            float c1 = w1 * 0.32f;
-            float c2 = w2 * 0.32f;
-            consumer.addVertex(matrix, x1 - sideX * c1, y1 + 0.02f, z1 - sideZ * c1).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, a1 * 1.15f)).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
-            consumer.addVertex(matrix, x1 + sideX * c1, y1 + 0.02f, z1 + sideZ * c1).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, a1 * 1.15f)).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
-            consumer.addVertex(matrix, x2 + sideX * c2, y2 + 0.02f, z2 + sideZ * c2).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, a2 * 1.15f)).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
-            consumer.addVertex(matrix, x2 - sideX * c2, y2 + 0.02f, z2 - sideZ * c2).setColor(1.0f, 1.0f, 1.0f, Math.min(1.0f, a2 * 1.15f)).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(sideX, 0, sideZ);
-        }
-    }
-
-    private static void drawOctahedralJewel(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float size, float rotDeg, float r, float g, float b, float a) {
-        float rotRad = (float) Math.toRadians(rotDeg);
-        float h = size * 1.2f;
-        float w = size * 0.7f;
-
-        for (int i = 0; i < 4; i++) {
-            double a1 = (i / 4.0) * Math.PI * 2.0 + rotRad;
-            double a2 = ((i + 1) / 4.0) * Math.PI * 2.0 + rotRad;
-
-            float x1 = cx + (float) Math.cos(a1) * w;
-            float z1 = cz + (float) Math.sin(a1) * w;
-            float x2 = cx + (float) Math.cos(a2) * w;
-            float z2 = cz + (float) Math.sin(a2) * w;
-
-            // Top pyramid
-            consumer.addVertex(matrix, x1, cy, z1).setColor(0.6f, 0.9f, 1.0f, a * 0.8f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, cy, z2).setColor(0.6f, 0.9f, 1.0f, a * 0.8f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx, cy + h, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx, cy + h, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Bottom pyramid
-            consumer.addVertex(matrix, x2, cy, z2).setColor(0.6f, 0.9f, 1.0f, a * 0.8f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, cy, z1).setColor(0.6f, 0.9f, 1.0f, a * 0.8f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        }
     }
 }

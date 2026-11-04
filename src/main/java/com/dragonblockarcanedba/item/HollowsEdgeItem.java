@@ -13,7 +13,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -42,7 +41,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Hollow's Edge — Void Assassin Weapon.
+ * Hollow's Edge: Void Assassin Weapon.
  * 
  * Ki Drain: 30% per minute (smooth).
  */
@@ -139,7 +138,7 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
 
         if (chargeTicks % 20 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.ENDERMAN_AMBIENT, SoundSource.PLAYERS, 0.7f, 0.5f + chargeRatio * 0.6f);
+                com.dragonblockarcanedba.sound.DbaSounds.VOID_AMBIENT, SoundSource.PLAYERS, 0.7f, 0.5f + chargeRatio * 0.6f);
         }
     }
 
@@ -161,11 +160,11 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
 
         // Notify player of active sequence
         int seconds = durationTicks / 20;
-        player.sendSystemMessage(Component.literal("§d✦ Hollow Rush Active (" + seconds + "s) — Left-Click to Dash! ✦"), true);
+        player.sendSystemMessage(Component.literal("§d✦ Hollow Rush Active (" + seconds + "s) - Left-Click to Dash! ✦"), true);
 
         // Sound & surge impact
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.WARDEN_HEARTBEAT, SoundSource.PLAYERS, 1.2f, 1.4f);
+            com.dragonblockarcanedba.sound.DbaSounds.HEARTBEAT_DARK, SoundSource.PLAYERS, 1.2f, 1.4f);
     }
 
     @Override
@@ -283,7 +282,9 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
         List<LivingEntity> enemiesPassed = level.getEntitiesOfClass(LivingEntity.class, pathBox, e -> e.isAlive() && e != player);
 
         for (LivingEntity enemy : enemiesPassed) {
-            enemy.hurtServer(level, level.damageSources().mobAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (baseDmg)));
+            // Bespoke pass: the dash path hit is ability damage layered on the
+            // blink, so it uses the mod's own void type, not mob attack.
+            enemy.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.voidDmg(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (baseDmg)));
             enemy.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 80, 0, false, true));
             enemy.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 80, 0, false, false, false), player);
         }
@@ -295,13 +296,13 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
             level.addFreshEntity(slash);
 
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.5f);
+                com.dragonblockarcanedba.sound.DbaSounds.SWING_LIGHT, SoundSource.PLAYERS, 2.0f, 0.5f);
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 2.0f, 0.5f);
         }
 
         level.playSound(null, destination.x, destination.y, destination.z,
-            SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.2f, 1.1f);
+            com.dragonblockarcanedba.sound.DbaSounds.TELEPORT_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.1f);
         level.playSound(null, destination.x, destination.y, destination.z,
             com.dragonblockarcanedba.sound.DbaSounds.DARK_PULSE, SoundSource.PLAYERS, 1.2f, 1.1f);
     }

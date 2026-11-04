@@ -106,7 +106,7 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
                     stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
                     target.addEffect(new MobEffectInstance(DbaEffects.MARKED_BY_EVIL_HOLDER, 60, 0, false, false));
                     player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        net.minecraft.sounds.SoundEvents.ZOMBIE_VILLAGER_CONVERTED, net.minecraft.sounds.SoundSource.PLAYERS, 0.5f, 2.0f);
+                        com.dragonblockarcanedba.sound.DbaSounds.MARK_HIT, net.minecraft.sounds.SoundSource.PLAYERS, 0.5f, 2.0f);
                 }
             } else {
                 fireLasers(player);
@@ -149,7 +149,7 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
             }
             player.getCooldowns().addCooldown(tridentStack, 10);
             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 0.9f);
+                com.dragonblockarcanedba.sound.DbaSounds.TRIDENT_THROW, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 0.9f);
 
             // One trident shot: three barbed prongs in formation, 750 together.
             // The old shot was three copies of the shared ki bolt painted red.
@@ -202,7 +202,7 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
                 serverLevel.addFreshEntity(slamEntity);
 
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(),
+                    com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG,
                     net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.7f);
 
                 com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, pos.x, pos.y, pos.z);

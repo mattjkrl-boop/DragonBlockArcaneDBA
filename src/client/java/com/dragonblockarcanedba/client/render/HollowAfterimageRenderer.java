@@ -1,9 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -11,18 +13,20 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
 
 import java.util.Random;
 
 /**
  * Entity Renderer for Hollow Afterimage in Minecraft 26.2.
- * Renders a premium, dynamic 3D fading cinematic ghost clone:
- * - Dynamic dash/stride athletic iaido posture with swept silhouette
- * - Multi-pass ethereal cyan-violet halo with pulsating spatial distortion ripples
- * - Trailing phantom speed wake ribbons
- * - Holographic displacement scanline planes
- * - Ascending disintegrating phantom polygon motes and diamond sparks as the ghost dissolves.
+ * Bespoke pass: the ghost is no longer a stack of colored boxes. The body
+ * is a BespokeGeometry plume column (halo plume, skin-tinted body plume,
+ * hair plume cap), the eye is a torn ribbon slit, the scanlines are torn
+ * ribbon sheets, the speed wake is two torn ribbons trailing behind, the
+ * footstep ripple is a jittered glow fan, and the disintegrating motes
+ * are small torn ribbon flecks rising on the same seeded layout the old
+ * diamond motes used. The public entity contract is untouched: same
+ * synced skin and hair colors, same seed source (the entity UUID), same
+ * 100 tick fade curve.
  */
 public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEntity, HollowAfterimageRenderer.AfterimageRenderState> {
 
@@ -37,6 +41,7 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
         public int hairColor = 0xFF1EB4FF;
         public float age = 0;
         public long seed = 0;
+        public double ex, ey, ez;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -63,6 +68,9 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
         state.hairColor = entity.getHairColor();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.ex = entity.getX();
+        state.ey = entity.getY();
+        state.ez = entity.getZ();
     }
 
     @Override
@@ -75,172 +83,127 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
 
         float alpha = Math.max(0.05f, 0.90f * (1.0f - (progress * progress)));
         float pulse = 0.85f + 0.15f * (float) Math.sin(state.age * 0.35f);
+        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
+        long seed = state.seed;
         RenderType renderType = KiRenderHelper.kiRenderType();
+
+        // Body colors, unchanged from the box era: the spectral body is
+        // tinted by the caster's synced skin color, the cap by hair color.
+        float skinR = KiRenderHelper.red(state.skinColor);
+        float skinG = KiRenderHelper.green(state.skinColor);
+        float skinB = KiRenderHelper.blue(state.skinColor);
+        float bodyR = 0.10f + skinR * 0.45f;
+        float bodyG = 0.04f + skinG * 0.30f;
+        float bodyB = 0.22f + skinB * 0.45f;
+        float hairR = KiRenderHelper.red(state.hairColor);
+        float hairG = KiRenderHelper.green(state.hairColor);
+        float hairB = KiRenderHelper.blue(state.hairColor);
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
 
+        // Body column at the base pose: outer halo plume, the skin-tinted
+        // body plume inside it, and the footstep ripple as a glow fan
+        // whose radius still breathes with age.
+        float ringR = (0.5f + (state.age * 0.03f) % 0.8f);
+        float ringA = alpha * (1.0f - (ringR / 1.3f));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
-
-            // 1. Outer Ethereal Phantom Halo (Pulsing Cyan-Violet Spatial Aura)
-            renderGhostBody(pose, buffer, 0.06f, 0.10f, 0.85f, 1.0f, alpha * 0.35f * pulse);
-
-            // 2. Main Spectral Void Body, tinted by the caster's synced skin
-            // color (extracted all along but never used, so every afterimage
-            // wore the same fixed colors regardless of the player).
-            float skinR = KiRenderHelper.red(state.skinColor);
-            float skinG = KiRenderHelper.green(state.skinColor);
-            float skinB = KiRenderHelper.blue(state.skinColor);
-            renderGhostBody(pose, buffer, 0.0f,
-                0.10f + skinR * 0.45f, 0.04f + skinG * 0.30f, 0.22f + skinB * 0.45f, alpha * 0.85f);
-
-            // 2b. Hair cap in the caster's synced hair color, over the top of
-            // the head box drawn by renderGhostBody (head spans y 1.4 to 1.82).
-            float hairR = KiRenderHelper.red(state.hairColor);
-            float hairG = KiRenderHelper.green(state.hairColor);
-            float hairB = KiRenderHelper.blue(state.hairColor);
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                -0.21f, 1.64f, -0.29f,
-                0.21f, 1.84f, 0.13f,
-                hairR, hairG, hairB, alpha * 0.9f
-            );
-
-            // 3. Central Spatial Eye Slit & Core Luminescence (White-Cyan)
-            KiRenderHelper.drawColoredBox(pose, buffer,
-                -0.12f, 1.55f, -0.22f,
-                0.12f, 1.65f, -0.18f,
-                0.85f, 0.98f, 1.0f, alpha * 0.95f
-            );
-
-            // 4. Holographic Horizontal Scanline Distortion Slices
-            int sliceCount = 6;
-            for (int s = 0; s < sliceCount; s++) {
-                float sliceY = 0.15f + (s * 0.32f) + (float) Math.sin((state.age * 0.25f) + s) * 0.06f;
-                float sliceOffset = (float) Math.sin((state.age * 0.5f) + s * 1.5f) * 0.06f;
-                KiRenderHelper.drawColoredBox(pose, buffer,
-                    -0.35f + sliceOffset, sliceY, -0.25f,
-                    0.35f + sliceOffset, sliceY + 0.03f, 0.25f,
-                    0.0f, 0.95f, 1.0f, alpha * 0.65f
-                );
-            }
-
-            // 5. Trailing Phantom Speed Ribbons (Extending behind the dash stance)
-            float ribbonAlpha = alpha * 0.45f;
-            drawPhantomRibbon(matrix, buffer, 0.8f, 1.4f, 0.15f, 0.85f, ribbonAlpha);
-            drawPhantomRibbon(matrix, buffer, 0.3f, 0.8f, 0.20f, 0.70f, ribbonAlpha * 0.8f);
-
-            // 6. Spatial Footstep Ripple Ring
-            float ringR = (0.5f + (state.age * 0.03f) % 0.8f);
-            drawRippleRing(matrix, buffer, 0, 0.03f, 0, ringR, ringR * 0.85f, 24,
-                0.0f, 0.85f, 1.0f, alpha * (1.0f - (ringR / 1.3f)));
-
-            // 7. Ascending Disintegrating Phantom Polygon Motes & Diamond Sparks
-            int moteCount = 16;
-            for (int m = 0; m < moteCount; m++) {
-                float moteProg = (progress + (m / (float) moteCount)) % 1.0f;
-                float mx = (rng.nextFloat() - 0.5f) * 0.95f;
-                float my = moteProg * 2.4f;
-                float mz = (rng.nextFloat() - 0.5f) * 0.95f;
-                float mSize = 0.06f * (1.0f - moteProg);
-                float mMoteAlpha = alpha * (1.0f - moteProg);
-
-                drawMoteDiamond(matrix, buffer, mx, my, mz, mSize, 0.1f, 0.85f, 1.0f, mMoteAlpha);
+            BespokeGeometry.plume(pose, buffer, seed ^ 0x11L, 0.46f, 1.95f,
+                0.10f, 0.85f, 1.0f, alpha * 0.35f * pulse, 1.0f, ds);
+            BespokeGeometry.plume(pose, buffer, seed ^ 0x22L, 0.36f, 1.85f,
+                bodyR, bodyG, bodyB, alpha * 0.85f, 1.0f, ds);
+            if (ringA > 0.01f) {
+                BespokeGeometry.glowFan(pose, buffer, seed ^ 0x71L, ringR, 0.03f,
+                    0.0f, 0.85f, 1.0f, ringA, ds);
             }
         });
 
-        // Additive halo pass: a slightly expanded cyan ghost shell so the
-        // afterimage glows at its silhouette instead of only tinting flat.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            renderGhostBody(pose, buffer, 0.13f, 0.10f, 0.80f, 1.0f, alpha * 0.16f * pulse);
-        });
+        // Hair cap: a short plume over the head of the column, in the
+        // caster's synced hair color (the head spans y 1.4 to 1.82).
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 1.56f, -0.04f);
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.plume(pose, buffer, seed ^ 0x33L, 0.27f, 0.34f,
+                hairR, hairG, hairB, alpha * 0.9f, 1.0f, ds));
+        poseStack.popPose();
+
+        // The spatial eye slit: a short torn ribbon standing vertical at
+        // the face, where the bright box used to sit (y 1.55 to 1.65,
+        // front z -0.22 to -0.18).
+        poseStack.pushPose();
+        poseStack.translate(-0.12f, 1.60f, -0.20f);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x44L, 0.24f, 0.10f, 0.0f,
+                0.85f, 0.98f, 1.0f, alpha * 0.95f, 1.0f, ds));
+        poseStack.popPose();
+
+        // Holographic scanline slices: torn ribbon sheets at the same six
+        // heights, swaying with the same age terms as the old slices.
+        int sliceCount = 6;
+        for (int s = 0; s < sliceCount; s++) {
+            float sliceY = 0.15f + (s * 0.32f) + (float) Math.sin((state.age * 0.25f) + s) * 0.06f;
+            float sliceOffset = (float) Math.sin((state.age * 0.5f) + s * 1.5f) * 0.06f;
+            long sliceSeed = seed ^ (0x50L + s);
+            poseStack.pushPose();
+            poseStack.translate(-0.35f + sliceOffset, sliceY, 0.0f);
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+                BespokeGeometry.tornRibbon(pose, buffer, sliceSeed, 0.70f, 0.50f, 0.0f,
+                    0.0f, 0.95f, 1.0f, alpha * 0.65f, 1.0f, ds));
+            poseStack.popPose();
+        }
+
+        // Speed wake: two torn ribbons trailing behind the dash stance.
+        // The Y rotation lays each ribbon's length along +Z (behind the
+        // ghost, which faces -Z in this frame); the bend lifts the tail
+        // to the old ribbons' end heights.
+        float ribbonAlpha = alpha * 0.45f;
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.8f, 0.1f);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x61L, 0.85f, 0.30f, 0.6f,
+                0.1f, 0.85f, 1.0f, ribbonAlpha, 1.0f, ds));
+        poseStack.popPose();
+
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.3f, 0.1f);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x62L, 0.70f, 0.40f, 0.5f,
+                0.1f, 0.85f, 1.0f, ribbonAlpha * 0.8f, 1.0f, ds));
+        poseStack.popPose();
+
+        // Disintegrating motes: the old diamond motes' positions, from the
+        // same seeded Random sequence, now drawn as tiny torn flecks.
+        // Count steps down with camera distance like every other layer.
+        Random rng = new Random(state.seed);
+        int moteCount = FxEnvelope.segments(16, ds, 5);
+        for (int m = 0; m < moteCount; m++) {
+            float moteProg = (progress + (m / 16.0f)) % 1.0f;
+            float mx = (rng.nextFloat() - 0.5f) * 0.95f;
+            float my = moteProg * 2.4f;
+            float mz = (rng.nextFloat() - 0.5f) * 0.95f;
+            float mMoteAlpha = alpha * (1.0f - moteProg);
+            if (mMoteAlpha <= 0.01f) continue;
+            long moteSeed = seed ^ (0x80L + m);
+            float moteYaw = m * 47.0f;
+            poseStack.pushPose();
+            poseStack.translate(mx, my, mz);
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(moteYaw)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+                BespokeGeometry.tornRibbon(pose, buffer, moteSeed, 0.14f, 0.07f, 0.05f,
+                    0.1f, 0.85f, 1.0f, mMoteAlpha, 1.0f, ds));
+            poseStack.popPose();
+        }
+
+        // Additive halo pass: a wider plume shell so the afterimage glows
+        // at its silhouette instead of only tinting flat.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) ->
+            BespokeGeometry.plume(pose, buffer, seed ^ 0x19L, 0.48f, 1.95f,
+                0.10f, 0.80f, 1.0f, alpha * 0.16f * pulse, 1.0f, ds));
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private void renderGhostBody(PoseStack.Pose pose,
-                                 VertexConsumer buffer,
-                                 float expand, float r, float g, float b, float a) {
-        // Torso (Slightly leaned forward for athletic iaido sprint pose)
-        KiRenderHelper.drawColoredBox(pose, buffer,
-            -0.25f - expand, 0.7f - expand, -0.15f - expand - 0.05f,
-            0.25f + expand, 1.4f + expand, 0.15f + expand - 0.05f,
-            r, g, b, a);
-
-        // Head (Facing forward)
-        KiRenderHelper.drawColoredBox(pose, buffer,
-            -0.2f - expand, 1.4f, -0.2f - expand - 0.08f,
-            0.2f + expand, 1.82f + expand * 1.5f, 0.2f + expand - 0.08f,
-            r * 1.2f, g * 1.2f, b * 1.2f, a);
-
-        // Left Arm (Swept back in dash wake)
-        KiRenderHelper.drawColoredBox(pose, buffer,
-            -0.45f - expand, 0.65f - expand, 0.05f,
-            -0.25f, 1.35f + expand, 0.32f + expand,
-            r, g, b, a * 0.85f);
-
-        // Right Arm (Forward iaido slash posture)
-        KiRenderHelper.drawColoredBox(pose, buffer,
-            0.25f, 0.75f - expand, -0.32f - expand,
-            0.45f + expand, 1.45f + expand, -0.05f,
-            r, g, b, a * 0.85f);
-
-        // Left Leg (Forward stride)
-        KiRenderHelper.drawColoredBox(pose, buffer,
-            -0.22f - expand, 0.0f, -0.22f - expand,
-            -0.02f, 0.7f + expand, 0.05f,
-            r * 0.85f, g * 0.85f, b * 0.85f, a * 0.9f);
-
-        // Right Leg (Trailing back stride)
-        KiRenderHelper.drawColoredBox(pose, buffer,
-            0.02f, 0.0f, 0.05f,
-            0.22f + expand, 0.7f + expand, 0.28f + expand,
-            r * 0.85f, g * 0.85f, b * 0.85f, a * 0.9f);
-    }
-
-    private static void drawPhantomRibbon(Matrix4f matrix, VertexConsumer consumer, float y1, float y2, float width, float trailDist, float a) {
-        consumer.addVertex(matrix, -width, y1, 0.1f).setColor(0.1f, 0.85f, 1.0f, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, width, y1, 0.1f).setColor(0.1f, 0.85f, 1.0f, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, width * 0.5f, y2, trailDist).setColor(0.0f, 0.4f, 0.9f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, -width * 0.5f, y2, trailDist).setColor(0.0f, 0.4f, 0.9f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-    }
-
-    private static void drawRippleRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-
-            float x1 = cx + (float) Math.cos(a1) * rOuter;
-            float z1 = cz + (float) Math.sin(a1) * rOuter;
-            float x2 = cx + (float) Math.cos(a2) * rOuter;
-            float z2 = cz + (float) Math.sin(a2) * rOuter;
-
-            float ix1 = cx + (float) Math.cos(a1) * rInner;
-            float iz1 = cz + (float) Math.sin(a1) * rInner;
-            float ix2 = cx + (float) Math.cos(a2) * rInner;
-            float iz2 = cz + (float) Math.sin(a2) * rInner;
-
-            consumer.addVertex(matrix, ix1, cy, iz1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, ix2, cy, iz2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, cy, z2).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, cy, z1).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawMoteDiamond(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float size, float r, float g, float b, float a) {
-        float h = size * 1.4f;
-        float w = size * 0.5f;
-
-        consumer.addVertex(matrix, cx - w, cy, cz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx, cy + h, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx + w, cy, cz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        consumer.addVertex(matrix, cx, cy, cz - w).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, cx, cy + h, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, cx, cy, cz + w).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
     }
 }

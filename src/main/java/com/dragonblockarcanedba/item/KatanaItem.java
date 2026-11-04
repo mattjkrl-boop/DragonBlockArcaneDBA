@@ -11,7 +11,6 @@ import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -139,7 +138,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
 
         if (chargeTicks % 20 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 0.7f, 1.4f + chargeRatio * 0.4f);
+                com.dragonblockarcanedba.sound.DbaSounds.CAST_MAGIC, SoundSource.PLAYERS, 0.7f, 1.4f + chargeRatio * 0.4f);
         }
     }
 
@@ -153,7 +152,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
         FLASHDRAW_KI_CANCELLED.add(player.getUUID());
         player.sendSystemMessage(Component.literal("§cOut of Ki! Flashdraw cancelled."), true);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 0.6f, 0.9f);
+            com.dragonblockarcanedba.sound.DbaSounds.FIZZLE, SoundSource.PLAYERS, 0.6f, 0.9f);
     }
 
     public static void onLeftClickRelease(ServerPlayer player, ItemStack stack, int chargeTicks) {
@@ -302,7 +301,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
 
             MovementPhysics.teleport(player, targetPos);
             level.playSound(null, startPos.x, startPos.y, startPos.z,
-                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.7f);
+                com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.4f, 1.7f);
             com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(level, targetPos, 1.0f, 0x9FE8FF);
             for (int i = 1; i <= 3; i++) {
                 Vec3 trailPos = startPos.add(look.scale(dashDist * i / 4.0)).add(0, player.getBbHeight() * 0.5, 0);
@@ -316,7 +315,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
 
         // Blade sheathing ring sound
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.0f, 1.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.0f, 1.8f);
 
         player.getCooldowns().addCooldown(stack, 60); // 3-second cooldown
     }
@@ -374,7 +373,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
 
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.8f, 1.2f + chargeRatio * 0.6f);
+                    com.dragonblockarcanedba.sound.DbaSounds.CHARGE_RISE, SoundSource.PLAYERS, 0.8f, 1.2f + chargeRatio * 0.6f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 0.8f, 1.2f + chargeRatio * 0.6f);
             }
@@ -442,13 +441,13 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             // sheathing ring. The thunder crack plays in the wall entity at
             // the tick the cut lands.
             serverLevel.playSound(null, start.x, start.y, start.z,
-                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.8f, 1.6f);
+                com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.8f, 1.6f);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 2.0f, 1.4f);
+                com.dragonblockarcanedba.sound.DbaSounds.CRIT_HIT, SoundSource.PLAYERS, 2.0f, 1.4f);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 2.0f, 1.4f);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 0.9f, 1.9f);
+                com.dragonblockarcanedba.sound.DbaSounds.HIT_METAL, SoundSource.PLAYERS, 0.9f, 1.9f);
 
             player.getCooldowns().addCooldown(stack, 120); // 6-second cooldown
         }

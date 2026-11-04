@@ -8,7 +8,6 @@ import com.dragonblockarcanedba.entity.BanshoShockwaveEntity;
 import com.dragonblockarcanedba.entity.BanshoWindProjectileEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -39,7 +38,7 @@ import com.dragonblockarcanedba.util.WeaponDrainHelper;
  *     storm cooldown (120 ticks) is ready and no cyclone of yours is standing.
  *     The cyclone lives 100 ticks (20 build, peak, 35 dissipate), pulls, spins,
  *     and lifts everything in a 4 block radius, throws a 64 piece debris field,
- *     drives real rain, scours soft ground, and ejects what it holds at the
+ *     drives the mod's own rain, scours soft ground, and ejects what it holds at the
  *     end. Its shred figure is 50% of the main hit; it deals 11% of that figure
  *     every 4 ticks inside its active window (16 ticks, 88% of the main hit
  *     over a full stay), plus Bleeding I.
@@ -164,7 +163,7 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) serverPlayer;
             float strengthBonus = (float) (accessor.dba$getStrength() * 1.5);
             if (strengthBonus > 0) {
-                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
+                target.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.tempest(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
             }
 
             // Great Cyclone: a proper cast, not a proc. A landed hit raises the
@@ -187,7 +186,7 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
             serverLevel.addFreshEntity(impactWave);
 
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.2f, 1.2f);
+                com.dragonblockarcanedba.sound.DbaSounds.SWING_FAN, SoundSource.PLAYERS, 1.2f, 1.2f);
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.2f);
         }
@@ -226,7 +225,7 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
             // Cast sounds play server side only, in one source category. They used to
             // play on both logical sides with mixed NEUTRAL and PLAYERS categories.
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.WIND_CHARGE_THROW, SoundSource.PLAYERS,
+                com.dragonblockarcanedba.sound.DbaSounds.SWING_FAN, SoundSource.PLAYERS,
                 1.2F, 0.9F);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS,

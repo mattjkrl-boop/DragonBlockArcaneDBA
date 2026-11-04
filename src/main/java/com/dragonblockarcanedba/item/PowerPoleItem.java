@@ -5,7 +5,6 @@ import com.dragonblockarcanedba.entity.PowerPoleExtensionEntity;
 import com.dragonblockarcanedba.entity.PowerPoleImpactEntity;
 import com.dragonblockarcanedba.entity.PowerPoleWhirlwindEntity;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -114,7 +113,7 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                 serverLevel.addFreshEntity(whirlwind);
 
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.3f);
+                    com.dragonblockarcanedba.sound.DbaSounds.FLIGHT_WIND, SoundSource.PLAYERS, 1.4f, 1.3f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.0f, 1.1f);
             } else {
@@ -154,7 +153,7 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
 
                     // Inverse area damage scaling
                     float damage = 750.0f / (float) Math.max(1.0, distance / 3.0);
-                    t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
+                    t.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.tempest(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
                     
                     // Counter incoming rush velocity and apply overwhelming gale repulsion
                     com.dragonblockarcanedba.util.MovementLimiterHelper.applyPowerPoleGaleForce(t, eyePos, distance);
@@ -229,7 +228,7 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                 hitSomething = true;
 
                 // Damage
-                living.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (750.0f)));
+                living.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.crush(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (750.0f)));
                 
                 // Pole Stun
                 living.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, 100, 0, false, false));
@@ -298,13 +297,13 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                 }
 
                 serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,
-                    SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.2f, 1.6f);
+                    com.dragonblockarcanedba.sound.DbaSounds.SLAM_THUD, SoundSource.PLAYERS, 1.2f, 1.6f);
                 serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,
-                    SoundEvents.HEAVY_CORE_HIT, SoundSource.PLAYERS, 1.3f, 1.2f);
+                    com.dragonblockarcanedba.sound.DbaSounds.HEAVY_IMPACT, SoundSource.PLAYERS, 1.3f, 1.2f);
             }
 
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.TRIDENT_THROW.value(), SoundSource.PLAYERS, 1.4f, 1.4f);
+                com.dragonblockarcanedba.sound.DbaSounds.TRIDENT_THROW, SoundSource.PLAYERS, 1.4f, 1.4f);
             
             player.getCooldowns().addCooldown(stack, 40); // 2 second cooldown
             return InteractionResult.SUCCESS;

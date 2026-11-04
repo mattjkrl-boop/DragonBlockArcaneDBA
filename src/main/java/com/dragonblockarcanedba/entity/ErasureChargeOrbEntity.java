@@ -20,6 +20,7 @@ import net.minecraft.world.phys.Vec3;
 public class ErasureChargeOrbEntity extends Projectile {
     private static final EntityDataAccessor<Float> CHARGE_RATIO = SynchedEntityData.defineId(ErasureChargeOrbEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(ErasureChargeOrbEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(ErasureChargeOrbEntity.class, EntityDataSerializers.INT);
 
     private int idleTicksWithoutUpdate = 0;
 
@@ -32,6 +33,7 @@ public class ErasureChargeOrbEntity extends Projectile {
         super(DbaEntities.ERASURE_CHARGE_ORB, level);
         this.setOwner(caster);
         this.noPhysics = true;
+        this.entityData.set(SEED, level.getRandom().nextInt());
         if (caster != null) {
             this.entityData.set(CASTER_ID, caster.getId());
             Vec3 eye = caster.getEyePosition();
@@ -47,6 +49,12 @@ public class ErasureChargeOrbEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(CHARGE_RATIO, 0.0f);
         builder.define(CASTER_ID, -1);
+        builder.define(SEED, 0);
+    }
+
+    /** Synced seed for the bespoke renderer: same seed, same silhouette, every client. */
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public float getChargeRatio() {

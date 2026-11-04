@@ -219,9 +219,7 @@ public class DevilSlamShockwaveEntity extends Projectile {
             double falloff = dist <= radius * 0.5
                 ? 1.0
                 : Math.max(0.4, 1.0 - (dist - radius * 0.5) / (radius * 0.5) * 0.6);
-            var source = owner != null
-                ? serverLevel.damageSources().playerAttack(owner)
-                : serverLevel.damageSources().magic();
+            var source = com.dragonblockarcanedba.util.DbaDamage.hellfire(this, owner);
             t.hurtServer(serverLevel, source,
                 com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (SLAM_DAMAGE * falloff)));
             t.addEffect(new net.minecraft.world.effect.MobEffectInstance(
@@ -251,7 +249,7 @@ public class DevilSlamShockwaveEntity extends Projectile {
         }
         if (!targets.isEmpty()) {
             serverLevel.playSound(null, center.x, center.y, center.z,
-                net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(),
+                com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG,
                 net.minecraft.sounds.SoundSource.PLAYERS, 0.9f, 0.55f);
         }
     }

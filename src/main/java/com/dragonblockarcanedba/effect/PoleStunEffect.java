@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -52,7 +52,7 @@ public class PoleStunEffect extends MobEffect {
             double pz = entity.getZ() + Math.sin(rad) * r;
 
             level.sendParticles(
-                new DustParticleOptions(0xFFD700, 1.3f), // Gold
+                new DbaDustOptions(0xFFD700, 1.3f), // Gold
                 px, py, pz,
                 1, 0.0, 0.01, 0.0, 0.01
             );

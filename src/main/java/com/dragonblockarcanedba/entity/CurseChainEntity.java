@@ -243,7 +243,7 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
                 // Small magic hit damage. Was 35, which read as nothing next
                 // to the blade's 750 melee and the tempest's strikes; 75 makes
                 // the attach itself felt without making chains the damage.
-                target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, (LivingEntity) owner), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (75.0f)));
+                target.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.curse(this, (LivingEntity) owner), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (75.0f)));
 
                 // Attach burst: sparks off the collar as the chain bites in.
                 float pdensity = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();

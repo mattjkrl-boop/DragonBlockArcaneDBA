@@ -1,11 +1,12 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.BraveShockwaveEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -16,8 +17,14 @@ import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Brave Sword Heroic Impact Shockwave in Minecraft 26.2.
- * Renders physical 3D golden raised beveled crests, cyan harmonic compression rings,
- * vertical crystalline valor blades/spikes, and an epicenter starburst core.
+ * Bespoke pass: the beveled crest ring, flat rings, valor spike triangles,
+ * and starburst core are rebuilt on BespokeGeometry. Broken vortex bands
+ * carry the raised crest (gold) and its cyan harmonic, a wider faint band
+ * runs ahead of the front as the old wisp ring did, crack stars tear the
+ * ground under the front, shard fans ride the ring as the valor spikes,
+ * and a spinning two tone shard fan is the epicenter burst. The seed
+ * comes from the entity UUID, which is synced state, so every client
+ * draws the same shockwave.
  */
 public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity, BraveShockwaveRenderer.ShockwaveRenderState> {
 
@@ -29,6 +36,7 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
         public float maxRadius = 7.5f;
         public float age = 0;
         public int maxLifetime = 44;
+        public long seed = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -52,6 +60,7 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
         state.maxRadius = entity.getMaxRadius();
         state.age = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
+        state.seed = entity.getUUID().getMostSignificantBits() ^ entity.getUUID().getLeastSignificantBits();
     }
 
     @Override
@@ -68,161 +77,89 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
         float alpha = env * 0.92f;
         float crest = 0.85f * env;
         float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        int ringSegments = FxEnvelope.segments(40, distScale, 14);
         float age = state.age;
+        long seed = state.seed;
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
             // Ground anchor glow under the whole effect (standard point 1).
             LayeredRender.drawAnchorGlow(pose, buffer, currentRadius * 0.95f, 0.03f,
                 1.0f, 0.84f, 0.0f, alpha * 0.45f, distScale);
 
-            // Outer layer: a wide, faint gold wisp ring ahead of the front.
-            float wispOuter = currentRadius * 1.14f;
-            drawFlatRing(matrix, buffer, 0, 0.04f, 0, wispOuter, currentRadius * 1.02f,
-                ringSegments, 1.0f, 0.84f, 0.0f, alpha * LayeredRender.ALPHA_OUTER);
+            // Outer layer: a wide, faint gold wisp band ahead of the front,
+            // where the old flat wisp ring ran.
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x3C6EF362L, currentRadius * 1.10f,
+                0.02f, 0.10f, age * 0.045f, 1.0f, 0.84f, 0.0f, alpha * LayeredRender.ALPHA_OUTER, distScale);
 
-            // Mid layer: the beveled crest ring, gold base to cyan top.
+            // Mid layer: the crest front as a broken vortex band, gold at
+            // full crest height with a lower cyan harmonic just inside it,
+            // replacing the beveled ring's gold base and cyan top.
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed, currentRadius,
+                0.05f, 0.05f + crest, age * 0.045f, 1.0f, 0.84f, 0.0f, alpha, distScale);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x2B992DDFL, currentRadius * 0.96f,
+                0.05f, 0.05f + crest * 0.55f, -age * 0.03f, 0.0f, 0.95f, 1.0f, alpha * 0.8f, distScale);
+
+            // Ground work: crack stars tearing outward under the front,
+            // gold at the front radius and a cyan set behind it.
+            BespokeGeometry.crackStar(pose, buffer, seed ^ 0x51ED2701L, currentRadius,
+                1.0f, 0.84f, 0.0f, 0.80f, env, distScale);
+            BespokeGeometry.crackStar(pose, buffer, seed ^ 0x85EBCA6BL, currentRadius * 0.7f,
+                0.0f, 0.95f, 1.0f, 0.45f, env, distScale);
+
+            // Core layer: the bright white epicenter as a low torn band
+            // where the old white flat ring sat.
             float ringWidth = Math.min(0.85f, currentRadius * 0.16f);
-            float rOuter = currentRadius;
             float rInner = Math.max(0.1f, currentRadius - ringWidth);
-            drawBeveledShockRing(matrix, buffer, 0, 0.05f, 0, rOuter, rInner, crest, ringSegments,
-                1.0f, 0.84f, 0.0f, alpha,
-                0.0f, 0.95f, 1.0f, alpha
-            );
-
-            // Vertical crystalline valor spikes riding the ring front, as the
-            // header promises: twelve blades whose heights vary around the
-            // ring and slowly rotate with age.
-            drawValorSpikes(matrix, buffer, currentRadius, 0.05f, crest, age, alpha,
-                FxEnvelope.segments(12, distScale, 6));
-
-            // Core layer: the bright white epicenter ring and starburst core.
             float coreOuter = Math.max(0.12f, rInner * 0.72f);
-            drawFlatRing(matrix, buffer, 0, 0.09f, 0, coreOuter, coreOuter * 0.62f,
-                FxEnvelope.segments(32, distScale, 12), 1.0f, 1.0f, 1.0f, alpha * 0.9f);
-            float burstRadius = state.maxRadius * 0.20f * (0.75f + 0.25f * (float) Math.sin(age * 0.35f));
-            drawStarburstCore(matrix, buffer, 0, 0.10f, 0, burstRadius, age * 14.0f, alpha);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x27D4EB2FL, coreOuter,
+                0.09f, 0.30f, age * 0.06f, 1.0f, 1.0f, 1.0f, alpha * 0.9f, distScale);
         });
 
+        // Epicenter burst: a two tone shard fan spinning at the old
+        // starburst rate, gold over cyan.
+        float burstRadius = state.maxRadius * 0.20f * (0.75f + 0.25f * (float) Math.sin(age * 0.35f));
+        if (burstRadius >= 0.05f && alpha > 0.01f) {
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.08f, 0.0f);
+            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(age * 14.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x165667B1L, burstRadius,
+                    1.0f, 0.88f, 0.20f, 0.85f, env, distScale);
+                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x1B56C4E9L, burstRadius * 0.62f,
+                    0.0f, 0.95f, 1.0f, 0.85f, env, distScale);
+            });
+            poseStack.popPose();
+        }
+
+        // Valor spikes riding the ring front: the old twelve crystalline
+        // blades at the same rotation rate, height formula, and color,
+        // each now a shard fan stood upright in the radial plane with its
+        // center lifted so the fan crests where the old tips did.
+        if (currentRadius >= 0.4f && alpha > 0.01f) {
+            int spikeCount = FxEnvelope.segments(12, distScale, 6);
+            float rot = age * 0.045f;
+            for (int k = 0; k < spikeCount; k++) {
+                double a = rot + (k / (double) spikeCount) * Math.PI * 2.0;
+                float vary = 0.75f + 0.45f * (float) Math.sin(k * 2.7f + age * 0.22f);
+                float height = (0.7f + crest * 1.15f) * vary;
+                double ax = Math.cos(a), az = Math.sin(a);
+                float bx = (float) (ax * currentRadius), bz = (float) (az * currentRadius);
+                float yawDeg = (float) Math.toDegrees(Math.atan2(-az, ax));
+                long spikeSeed = seed ^ (0x9E3779B9L + k * 131L);
+
+                poseStack.pushPose();
+                poseStack.translate(bx, 0.05f + height * 0.45f, bz);
+                poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(yawDeg)));
+                poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
+                collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                    BespokeGeometry.shardFan(pose, buffer, spikeSeed, height * 0.62f,
+                        1.0f, 0.95f, 0.72f, 0.80f, env, distScale);
+                });
+                poseStack.popPose();
+            }
+        }
+
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    /** Twelve crystalline spikes standing on the ring front, tips up. */
-    private static void drawValorSpikes(Matrix4f matrix, VertexConsumer consumer, float radius, float baseY,
-                                        float crest, float age, float alpha, int spikeCount) {
-        if (radius < 0.4f || alpha <= 0.01f) return;
-        float rot = age * 0.045f;
-        for (int k = 0; k < spikeCount; k++) {
-            double a = rot + (k / (double) spikeCount) * Math.PI * 2.0;
-            float vary = 0.75f + 0.45f * (float) Math.sin(k * 2.7f + age * 0.22f);
-            float height = (0.7f + crest * 1.15f) * vary;
-            float halfWidth = 0.16f;
-            double ax = Math.cos(a), az = Math.sin(a);
-            double tx = -az, tz = ax;
-            float bx = (float) (ax * radius), bz = (float) (az * radius);
-            float lx = bx + (float) (tx * halfWidth), lz = bz + (float) (tz * halfWidth);
-            float rx = bx - (float) (tx * halfWidth), rz = bz - (float) (tz * halfWidth);
-            float tipX = bx + (float) (ax * 0.22f), tipZ = bz + (float) (az * 0.22f);
-            // Pale gold crystalline blade, front and back.
-            drawTriangle(matrix, consumer,
-                lx, baseY, lz, rx, baseY, rz, tipX, baseY + height, tipZ,
-                1.0f, 0.95f, 0.72f, alpha * 0.8f);
-        }
-    }
-
-    /** Eight point starburst at the epicenter, gold heart to cyan rim. */
-    private static void drawStarburstCore(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz,
-                                          float radius, float rotDeg, float alpha) {
-        if (radius < 0.05f || alpha <= 0.01f) return;
-        double rot = Math.toRadians(rotDeg);
-        int points = 8;
-        for (int i = 0; i < points * 2; i++) {
-            double a1 = rot + (i / (double) (points * 2)) * Math.PI * 2.0;
-            double a2 = rot + ((i + 1) / (double) (points * 2)) * Math.PI * 2.0;
-            float r1 = (i % 2 == 0) ? radius : radius * 0.38f;
-            float r2 = ((i + 1) % 2 == 0) ? radius : radius * 0.38f;
-            float x1 = cx + (float) Math.cos(a1) * r1, z1 = cz + (float) Math.sin(a1) * r1;
-            float x2 = cx + (float) Math.cos(a2) * r2, z2 = cz + (float) Math.sin(a2) * r2;
-            boolean tip = (i % 2 == 0);
-            float er = tip ? 0.0f : 1.0f, eg = tip ? 0.95f : 0.88f, eb = tip ? 1.0f : 0.2f;
-            drawTriangle(matrix, consumer,
-                cx, cy, cz, x1, cy, z1, x2, cy, z2,
-                er, eg, eb, alpha * 0.85f);
-        }
-    }
-
-    private static void drawBeveledShockRing(Matrix4f matrix, VertexConsumer consumer,
-                                             float cx, float cy, float cz,
-                                             float rOuter, float rInner, float height,
-                                             int segments,
-                                             float rBase, float gBase, float bBase, float aBase,
-                                             float rTop, float gTop, float bTop, float aTop) {
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-
-            float x1Out = cx + (float) Math.cos(a1) * rOuter;
-            float z1Out = cz + (float) Math.sin(a1) * rOuter;
-            float x2Out = cx + (float) Math.cos(a2) * rOuter;
-            float z2Out = cz + (float) Math.sin(a2) * rOuter;
-
-            float x1In = cx + (float) Math.cos(a1) * rInner;
-            float z1In = cz + (float) Math.sin(a1) * rInner;
-            float x2In = cx + (float) Math.cos(a2) * rInner;
-            float z2In = cz + (float) Math.sin(a2) * rInner;
-
-            // Outer rising bevel
-            consumer.addVertex(matrix, x1Out, cy, z1Out).setColor(rBase, gBase, bBase, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2Out, cy, z2Out).setColor(rBase, gBase, bBase, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, aTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, aTop).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Inward slope
-            consumer.addVertex(matrix, x1Out, cy + height, z1Out).setColor(rTop, gTop, bTop, aTop).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2Out, cy + height, z2Out).setColor(rTop, gTop, bTop, aTop).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2In, cy, z2In).setColor(rBase, gBase, bBase, aBase * 0.5f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1In, cy, z1In).setColor(rBase, gBase, bBase, aBase * 0.5f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawFlatRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-
-            float x1Out = cx + (float) Math.cos(a1) * rOuter;
-            float z1Out = cz + (float) Math.sin(a1) * rOuter;
-            float x2Out = cx + (float) Math.cos(a2) * rOuter;
-            float z2Out = cz + (float) Math.sin(a2) * rOuter;
-
-            float x1In = cx + (float) Math.cos(a1) * rInner;
-            float z1In = cz + (float) Math.sin(a1) * rInner;
-            float x2In = cx + (float) Math.cos(a2) * rInner;
-            float z2In = cz + (float) Math.sin(a2) * rInner;
-
-            consumer.addVertex(matrix, x1In, cy, z1In).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2In, cy, z2In).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2Out, cy, z2Out).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1Out, cy, z1Out).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawTriangle(Matrix4f matrix, VertexConsumer consumer,
-                                     float x1, float y1, float z1,
-                                     float x2, float y2, float z2,
-                                     float x3, float y3, float z3,
-                                     float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Reverse
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 }

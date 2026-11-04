@@ -23,6 +23,7 @@ public class ZStanceAuraEntity extends Projectile {
     // Ticks since the fade out began, -1 while the stance is live. Synced so the
     // renderer can ease the field out instead of popping on discard.
     private static final EntityDataAccessor<Integer> FADE_TICKS = SynchedEntityData.defineId(ZStanceAuraEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(ZStanceAuraEntity.class, EntityDataSerializers.INT);
     public static final int FADE_LENGTH = 8;
 
     private int idleTicksWithoutUpdate = 0;
@@ -40,6 +41,7 @@ public class ZStanceAuraEntity extends Projectile {
             this.setPos(caster.getX(), caster.getY(), caster.getZ());
             this.entityData.set(CASTER_ID, caster.getId());
         }
+        this.entityData.set(SEED, level.getRandom().nextInt());
         this.noPhysics = true;
     }
 
@@ -49,6 +51,7 @@ public class ZStanceAuraEntity extends Projectile {
         builder.define(POWER_RATIO, 0.0f);
         builder.define(CASTER_ID, -1);
         builder.define(FADE_TICKS, -1);
+        builder.define(SEED, 0);
     }
 
     public int getFadeTicks() {
@@ -69,6 +72,10 @@ public class ZStanceAuraEntity extends Projectile {
 
     public float getPowerRatio() {
         return this.entityData.get(POWER_RATIO);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public void updateStance(int ticks, float ratio) {

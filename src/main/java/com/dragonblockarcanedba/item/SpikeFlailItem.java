@@ -3,10 +3,10 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.SpikeFlailSpinEntity;
 import com.dragonblockarcanedba.entity.SpikeFlailSwingEntity;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -81,9 +81,9 @@ public class SpikeFlailItem extends Item implements com.dragonblockarcanedba.ite
         float damage = 720.0f + strength * 2.0f;
         level.addFreshEntity(new SpikeFlailSwingEntity(level, player, damage));
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.CHAIN_HIT, SoundSource.PLAYERS, 0.9f, 0.8f);
+            DbaSounds.CHAIN_RATTLE, SoundSource.PLAYERS, 0.9f, 0.8f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 0.7f);
+            DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 1.0f, 0.7f);
     }
 
     @Override
@@ -116,7 +116,7 @@ public class SpikeFlailItem extends Item implements com.dragonblockarcanedba.ite
         if (!already) {
             level.addFreshEntity(new SpikeFlailSpinEntity(level, player));
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.CHAIN_PLACE, SoundSource.PLAYERS, 0.8f, 0.6f);
+                DbaSounds.CHAIN_RATTLE, SoundSource.PLAYERS, 0.8f, 0.6f);
         }
     }
 
@@ -140,7 +140,7 @@ public class SpikeFlailItem extends Item implements com.dragonblockarcanedba.ite
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
             player.getCooldowns().addCooldown(stack, 36);
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.CHAIN_HIT, SoundSource.PLAYERS, 1.2f, 1.15f);
+                DbaSounds.CHAIN_RATTLE, SoundSource.PLAYERS, 1.2f, 1.15f);
         }
         return true;
     }

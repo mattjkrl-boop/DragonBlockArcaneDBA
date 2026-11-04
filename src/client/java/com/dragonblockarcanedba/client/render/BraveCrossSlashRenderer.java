@@ -1,11 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.BraveCrossSlashEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -17,8 +17,13 @@ import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Brave Finisher Cross Slash in Minecraft 26.2.
- * Renders physical 3D dual-intersecting volumetric golden-cyan crescent blades ("X" cruciform),
- * central geometric starburst core flare, and piercing diagonal valor vanes.
+ * Bespoke pass: the two rolled parabola crescents are rebuilt as
+ * BespokeGeometry blade arcs stood upright and rolled to plus and minus
+ * 45 degrees, layered gold, cyan, and white per blade, with shard fans
+ * sparking at the four arm ends and a two tone shard fan starburst in the
+ * strike window where the old geometric starburst sat. The seed comes
+ * from the entity UUID, which is synced state, so every client draws the
+ * same cross.
  */
 public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntity, BraveCrossSlashRenderer.CrossSlashRenderState> {
 
@@ -32,6 +37,7 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         public float xRot = 0;
         public float age = 0;
         public int maxLifetime = 40;
+        public long seed = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -57,6 +63,7 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
+        state.seed = entity.getUUID().getMostSignificantBits() ^ entity.getUUID().getLeastSignificantBits();
     }
 
     @Override
@@ -72,145 +79,99 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         float fade = FxEnvelope.envelope(state.age, life, 0.2f, 0.3f);
         float impact = strike(progress);
         float scale = state.scale;
-        int segments = FxEnvelope.segments(28,
-            LayeredRender.distScale(cameraState, state.x, state.y, state.z), 12);
+        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        // span is the half-width of the old finisher blades; the blade arc
+        // radius is sized off it so the cross keeps its footprint.
+        float span = 4.6f * scale * drawOut;
+        float radius = span * 1.35f;
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float span = 4.6f * scale * drawOut;
-            drawCrossBlade(matrix, buffer, span, fade, 45.0f, segments);
-            drawCrossBlade(matrix, buffer, span, fade, -45.0f, segments);
-            if (impact > 0.02f) {
-                drawGeometricStarburst(matrix, buffer, 0, 0, 0.1f, 1.15f * scale * impact, 8, 0.0f,
-                    1.0f, 0.88f, 0.20f, impact,
-                    0.15f, 0.95f, 1.0f, impact * 0.85f
-                );
-            }
-        });
+        // Main structure pass.
+        drawCross(poseStack, collector, KiRenderHelper.kiRenderType(),
+            state.seed, radius, span, scale, fade, impact, distScale, 1.0f, true);
 
         // Outer layer (standard point 1): a wider, faint copy of both blades
         // so the cross has a wispy rim around its dense core, the mod's
         // layered translucency technique for glow.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float span = 4.6f * scale * drawOut * 1.16f;
-            drawCrossBlade(matrix, buffer, span, fade * LayeredRender.ALPHA_OUTER, 45.0f, segments);
-            drawCrossBlade(matrix, buffer, span, fade * LayeredRender.ALPHA_OUTER, -45.0f, segments);
-        });
+        drawCross(poseStack, collector, KiRenderHelper.kiAdditiveType(),
+            state.seed, radius * 1.16f, span, scale, fade, 0.0f, distScale,
+            LayeredRender.ALPHA_OUTER, false);
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
+    /**
+     * Composes one cross out of BespokeGeometry builders: two blade arcs
+     * rolled to an X, tip fans at the four arm ends, and, on the main pass
+     * only, the strike starburst. alphaMul scales every layer alpha for
+     * the additive pass.
+     */
+    private static void drawCross(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
+                                  long seed, float radius, float span, float scale,
+                                  float fade, float impact, float distScale, float alphaMul,
+                                  boolean withStarburst) {
+        // Each blade: stand the flat arc upright (rotate about X), roll it
+        // in its own plane (rotate about Z), and pull it back along its
+        // belly direction so the band straddles the origin like the old
+        // centered crescents did.
+        float[] rolls = {45.0f, -45.0f};
+        for (int b = 0; b < rolls.length; b++) {
+            long bladeSeed = seed + b * 0x9E3779B9L;
+            poseStack.pushPose();
+            poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(rolls[b])));
+            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
+            poseStack.translate(-span * 0.55f, 0.0f, 0.0f);
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.bladeArc(pose, buffer, bladeSeed, radius, 140.0f,
+                    1.0f, 0.84f, 0.0f, 0.90f * alphaMul, fade, distScale);
+                BespokeGeometry.bladeArc(pose, buffer, bladeSeed ^ 0x2B992DDFL, radius * 0.84f, 140.0f,
+                    0.0f, 0.95f, 1.0f, 0.95f * alphaMul, fade, distScale);
+                BespokeGeometry.bladeArc(pose, buffer, bladeSeed ^ 0x51ED2701L, radius * 0.72f, 140.0f,
+                    1.0f, 1.0f, 1.0f, 1.0f * alphaMul, fade, distScale);
+            });
+            poseStack.popPose();
+        }
+
+        // Tip fans at the four arm ends of the X, where the old rolled
+        // spurs quilled out from the crescent tips.
+        float arm = span * 0.66f;
+        float[][] tips = {{arm, arm}, {-arm, arm}, {arm, -arm}, {-arm, -arm}};
+        for (int t = 0; t < tips.length; t++) {
+            long tipSeed = seed ^ (0x85EBCA6BL + t * 131L);
+            float tx = tips[t][0];
+            float ty = tips[t][1];
+            poseStack.pushPose();
+            poseStack.translate(tx, ty, 0.0f);
+            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.shardFan(pose, buffer, tipSeed, 0.34f * scale,
+                    0.85f, 0.98f, 1.0f, 0.85f * alphaMul, fade, distScale);
+            });
+            poseStack.popPose();
+        }
+
+        // Strike starburst at the center during the impact window.
+        if (withStarburst && impact > 0.02f) {
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.0f, 0.1f);
+            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x27D4EB2FL, 1.15f * scale * impact,
+                    1.0f, 0.87f, 0.25f, 1.0f, impact, distScale);
+                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x165667B1L, 1.15f * scale * impact * 0.62f,
+                    0.55f, 0.97f, 1.0f, 0.85f, impact, distScale);
+            });
+            poseStack.popPose();
+        }
+    }
+
     private static float strike(float progress) {
         if (progress <= 0.28f || progress >= 0.62f) return 0.0f;
         return (float) Math.sin(((progress - 0.28f) / 0.34f) * Math.PI);
-    }
-
-    private static void drawCrossBlade(Matrix4f matrix, VertexConsumer buffer, float span, float fade, float rollDeg, int segments) {
-        float rad = (float) Math.toRadians(rollDeg);
-        float cos = (float) Math.cos(rad);
-        float sin = (float) Math.sin(rad);
-        float reach = Math.abs(span);
-        float chord = reach * 0.30f;
-        drawRolledCrescent(matrix, buffer, reach, chord, 0.16f, 0.42f, segments, cos, sin, 1.0f, 0.84f, 0.0f, 0.90f * fade);
-        drawRolledCrescent(matrix, buffer, reach * 0.84f, chord * 0.84f, 0.055f, 0.16f, segments, cos, sin, 0.0f, 0.95f, 1.0f, 0.95f * fade);
-        drawRolledCrescent(matrix, buffer, reach * 0.72f, chord * 0.72f, 0.02f, 0.06f, segments, cos, sin, 1.0f, 1.0f, 1.0f, fade);
-        drawRolledSpur(matrix, buffer, -reach, 0.20f, cos, sin, fade);
-        drawRolledSpur(matrix, buffer, reach, 0.20f, cos, sin, fade);
-    }
-
-    /** Crescent in the blade plane, then rolled so the pair crosses. */
-    private static void drawRolledCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float cos, float sin, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-            float x1 = t1 * span;
-            float x2 = t2 * span;
-            float z1 = (1.0f - t1 * t1) * chord;
-            float z2 = (1.0f - t2 * t2) * chord;
-            float th1 = thickness * (1.0f - Math.abs(t1) * 0.78f);
-            float th2 = thickness * (1.0f - Math.abs(t2) * 0.78f);
-            float wake1 = 1.0f - Math.abs(t1) * 0.65f;
-            float wake2 = 1.0f - Math.abs(t2) * 0.65f;
-
-            rolledVertex(matrix, consumer, x1, th1, z1, cos, sin, r, g, b, a);
-            rolledVertex(matrix, consumer, x2, th2, z2, cos, sin, r, g, b, a);
-            rolledVertex(matrix, consumer, x2, th2 * 0.25f, z2 - trailLength * wake2, cos, sin, r, g, b, 0.0f);
-            rolledVertex(matrix, consumer, x1, th1 * 0.25f, z1 - trailLength * wake1, cos, sin, r, g, b, 0.0f);
-
-            rolledVertex(matrix, consumer, x1, -th1 * 0.25f, z1 - trailLength * wake1, cos, sin, r, g, b, 0.0f);
-            rolledVertex(matrix, consumer, x2, -th2 * 0.25f, z2 - trailLength * wake2, cos, sin, r, g, b, 0.0f);
-            rolledVertex(matrix, consumer, x2, -th2, z2, cos, sin, r, g, b, a);
-            rolledVertex(matrix, consumer, x1, -th1, z1, cos, sin, r, g, b, a);
-        }
-    }
-
-    private static void drawRolledSpur(Matrix4f matrix, VertexConsumer consumer, float tipX, float spur, float cos, float sin, float fade) {
-        float sign = tipX < 0.0f ? -1.0f : 1.0f;
-        int steps = 5;
-        for (int i = 0; i < steps; i++) {
-            float t1 = i / (float) steps;
-            float t2 = (i + 1) / (float) steps;
-            float z1 = -spur * 1.9f * t1;
-            float z2 = -spur * 1.9f * t2;
-            float bow1 = (float) Math.sin(t1 * Math.PI) * spur * 0.45f;
-            float bow2 = (float) Math.sin(t2 * Math.PI) * spur * 0.45f;
-            float x1 = tipX + sign * (spur * 1.35f * t1) - sign * bow1;
-            float x2 = tipX + sign * (spur * 1.35f * t2) - sign * bow2;
-            float w1 = spur * 0.18f * (1.0f - t1);
-            float w2 = spur * 0.18f * (1.0f - t2);
-            float a1 = fade * (1.0f - t1);
-            float a2 = fade * (1.0f - t2) * 0.12f;
-            rolledVertex(matrix, consumer, x1, -w1, z1, cos, sin, 0.0f, 0.95f, 1.0f, a1);
-            rolledVertex(matrix, consumer, x1, w1, z1, cos, sin, 0.0f, 0.95f, 1.0f, a1);
-            rolledVertex(matrix, consumer, x2, w2, z2, cos, sin, 1.0f, 0.84f, 0.0f, a2);
-            rolledVertex(matrix, consumer, x2, -w2, z2, cos, sin, 1.0f, 0.84f, 0.0f, a2);
-            rolledVertex(matrix, consumer, x1, -w1 * 0.28f, z1, cos, sin, 1.0f, 1.0f, 1.0f, a1);
-            rolledVertex(matrix, consumer, x1, w1 * 0.28f, z1, cos, sin, 1.0f, 1.0f, 1.0f, a1);
-            rolledVertex(matrix, consumer, x2, w2 * 0.28f, z2, cos, sin, 1.0f, 1.0f, 1.0f, a2);
-            rolledVertex(matrix, consumer, x2, -w2 * 0.28f, z2, cos, sin, 1.0f, 1.0f, 1.0f, a2);
-        }
-    }
-
-    private static void rolledVertex(Matrix4f matrix, VertexConsumer consumer, float x, float y, float z, float cos, float sin, float r, float g, float b, float a) {
-        float xr = x * cos - y * sin;
-        float yr = x * sin + y * cos;
-        consumer.addVertex(matrix, xr, yr, z).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-    }
-
-    private static void drawGeometricStarburst(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float radius, int points, float rotDeg, float rCenter, float gCenter, float bCenter, float aCenter, float rEdge, float gEdge, float bEdge, float aEdge) {
-        double rotRad = Math.toRadians(rotDeg);
-        int totalSegments = points * 2;
-        for (int i = 0; i < totalSegments; i++) {
-            double a1 = ((i / (double) totalSegments) * Math.PI * 2.0) + rotRad;
-            double a2 = (((i + 1) / (double) totalSegments) * Math.PI * 2.0) + rotRad;
-
-            float r1 = (i % 2 == 0) ? radius : (radius * 0.35f);
-            float r2 = ((i + 1) % 2 == 0) ? radius : (radius * 0.35f);
-
-            float x1 = cx + (float) Math.cos(a1) * r1;
-            float y1 = cy + (float) Math.sin(a1) * r1;
-            float x2 = cx + (float) Math.cos(a2) * r2;
-            float y2 = cy + (float) Math.sin(a2) * r2;
-
-            // Front
-            consumer.addVertex(matrix, cx, cy, cz).setColor(rCenter, gCenter, bCenter, aCenter).setUv(0.5f, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1, y1, cz).setColor(rEdge, gEdge, bEdge, aEdge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, y2, cz).setColor(rEdge, gEdge, bEdge, aEdge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, cx, cy, cz).setColor(rCenter, gCenter, bCenter, aCenter).setUv(0.5f, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-
-            // Back
-            consumer.addVertex(matrix, cx, cy, cz).setColor(rCenter, gCenter, bCenter, aCenter).setUv(0.5f, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
-            consumer.addVertex(matrix, x2, y2, cz).setColor(rEdge, gEdge, bEdge, aEdge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
-            consumer.addVertex(matrix, x1, y1, cz).setColor(rEdge, gEdge, bEdge, aEdge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
-            consumer.addVertex(matrix, cx, cy, cz).setColor(rCenter, gCenter, bCenter, aCenter).setUv(0.5f, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
-        }
     }
 }

@@ -1,11 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.HeavenSplitterEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -14,20 +14,23 @@ import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
-
-import java.util.Random;
 
 /**
  * Entity Renderer for Heaven Splitter in Minecraft 26.2.
  * Renders a towering, physical 3D dimensional slash model across the entire dash path:
  * - The reality cut wall in three layers: a wide cyan outer mantle, the main
- *   wall, and a blinding white inner core wall, all on the shared FxEnvelope
- * - Angled cross cleaves alternating along the wall
- * - Transversal reality fracture ribs, placed from the entity seed
- * - Sonic shock rings at the start, midpoint, and end, peaking at the tick
- *   the cut lands (25 percent of life)
+ *   wall, and a blinding white inner core wall, all on the shared FxEnvelope.
+ *   Each layer is a torn ribbon from the shared BespokeGeometry toolkit,
+ *   stood on edge and run backwards along the path so its bright end lands
+ *   at the far end of the cut, like the old wall's rising lead alpha.
+ * - Angled cross cleaves alternating along the wall, as tilted blade arcs
+ * - Transversal reality fracture ribs, placed from the entity seed, drawn
+ *   as branching bolt ribbons across the wall face
+ * - Sonic shock rings at the start, midpoint, and end, as full blade arcs
+ *   peaking at the tick the cut lands (25 percent of life)
  * - An additive ground anchor glow under the midpoint of the path
+ * All geometry comes from BespokeGeometry seeded from the entity UUID
+ * (BESPOKE-STANDARD rule 1); no local draw helpers remain.
  */
 public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity, HeavenSplitterRenderer.HeavenSplitterRenderState> {
 
@@ -86,9 +89,8 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         float impact = strike(progress);
         float scale = state.scale * (0.92f + 0.14f * rise);
         float dist = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
-        int wallSegments = FxEnvelope.segments(28, dist, 14);
-        int ringSegments = FxEnvelope.segments(28, dist, 12);
         RenderType renderType = KiRenderHelper.kiRenderType();
+        long seed = state.seed;
 
         Vec3 dir = state.direction.normalize();
         double horiz = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
@@ -101,41 +103,93 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
 
         float len = state.dashLength;
         float slashHeight = 7.2f * scale * (0.12f + 0.88f * rise);
+        float bend = 0.35f * scale;
 
-        float wallHalf = 0.045f * scale;
+        // The wall: three torn ribbons sharing one pose. The pose stands the
+        // ribbon's width vertical and runs its length from the far end of
+        // the path back to the origin, so the ribbon's bright start sits at
+        // the far end and its torn taper dies at the player's feet. Width is
+        // the layer height, centered on half the wall height.
+        poseStack.pushPose();
+        poseStack.translate(0.0f, slashHeight * 0.5f, len);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
+            BespokeGeometry.tornRibbon(pose, buffer, seed, len, slashHeight * 0.92f, bend,
+                0.0f, 0.75f, 1.0f, 0.22f, fade, dist);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x1111L, len, slashHeight, bend,
+                0.0f, 0.85f, 1.0f, 0.82f, fade, dist);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x2222L, len, slashHeight * 0.58f, bend,
+                1.0f, 1.0f, 1.0f, 1.0f, fade, dist);
+        });
+        poseStack.popPose();
 
-            drawArcingSlashWall(matrix, buffer, len, slashHeight * 0.92f, wallHalf * 2.6f, 0.0f, 0.75f, 1.0f, 0.22f * fade, false, wallSegments);
-            drawArcingSlashWall(matrix, buffer, len, slashHeight, wallHalf, 0.0f, 0.85f, 1.0f, 0.82f * fade, true, wallSegments);
-            drawArcingSlashWall(matrix, buffer, len, slashHeight * 0.58f, wallHalf * 0.28f, 1.0f, 1.0f, 1.0f, fade, false, wallSegments);
+        // Angled cross cleaves alternating along the wall: tilted blade arcs
+        // stood into the wall plane, one submit each.
+        int arcs = Math.max(4, (int) (len / 3.5f));
+        for (int s = 0; s <= arcs; s++) {
+            float z = len * (s / (float) arcs);
+            float angle = (s % 2 == 0 ? 36.0f : -36.0f);
+            float arcSpan = 1.55f * scale * (0.78f + 0.22f * (float) Math.sin(s * 1.3));
+            long cleaveSeed = seed ^ (0x3300L + s);
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 1.0f, z);
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(angle)));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.bladeArc(pose, buffer, cleaveSeed, arcSpan * 0.9f, 120.0f,
+                    0.0f, 0.90f, 1.0f, 0.72f, fade, dist);
+            });
+            poseStack.popPose();
+        }
 
-            int arcs = Math.max(4, (int) (len / 3.5f));
-            for (int s = 0; s <= arcs; s++) {
-                float z = len * (s / (float) arcs);
-                float angle = (s % 2 == 0 ? 36.0f : -36.0f);
-                float arcSpan = 1.55f * scale * (0.78f + 0.22f * (float) Math.sin(s * 1.3));
-                drawAngledCrossCleave(matrix, buffer, z, arcSpan, angle, 0.0f, 0.90f, 1.0f, fade * 0.72f);
-            }
-
-            // Fracture ribs across the wall, placed from the entity seed so
-            // every cast cracks differently but deterministically.
-            Random rng = new Random(state.seed);
-            int ribs = Math.max(3, (int) (len / 5.0f));
-            for (int s = 1; s <= ribs; s++) {
-                float z = len * (s / (float) (ribs + 1)) + (rng.nextFloat() - 0.5f) * 1.2f;
-                float w = (1.1f + rng.nextFloat() * 0.7f) * scale;
-                float h = slashHeight * (0.35f + rng.nextFloat() * 0.3f);
-                drawTransversalFractureRib(matrix, buffer, z, w, h, 0.65f, 0.92f, 1.0f, fade * 0.5f);
-            }
-
-            if (impact > 0.02f) {
-                float ringR = 1.7f * scale * (0.55f + 0.45f * impact);
-                drawShockRingZ(matrix, buffer, 0, ringR, ringR * 0.70f, ringSegments, 0.0f, 0.0f, 0.85f, 1.0f, impact * 0.75f);
-                drawShockRingZ(matrix, buffer, len * 0.5f, ringR * 1.15f, ringR * 0.82f, ringSegments, 0.0f, 1.0f, 1.0f, 1.0f, impact * 0.9f);
-                drawShockRingZ(matrix, buffer, len, ringR * 1.25f, ringR * 0.88f, ringSegments, 0.0f, 0.0f, 0.95f, 1.0f, impact);
+        // Fracture ribs across the wall, placed from the entity seed so every
+        // cast cracks differently but deterministically: each rib is two
+        // branching bolt ribbons meeting at an apex on the wall face.
+        BespokeGeometry.Rng rng = new BespokeGeometry.Rng(seed);
+        int ribs = Math.max(3, (int) (len / 5.0f));
+        float[][] ribData = new float[ribs][3];
+        for (int s = 1; s <= ribs; s++) {
+            ribData[s - 1][0] = len * (s / (float) (ribs + 1)) + rng.range(-0.6f, 0.6f);
+            ribData[s - 1][1] = (1.1f + rng.nextFloat() * 0.7f) * scale;
+            ribData[s - 1][2] = slashHeight * (0.35f + rng.nextFloat() * 0.3f);
+        }
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            for (int s = 0; s < ribData.length; s++) {
+                float z = ribData[s][0], w = ribData[s][1], h = ribData[s][2];
+                BespokeGeometry.branch(pose, buffer, seed ^ (0x4400L + s),
+                    new Vec3(-w, 0, z), new Vec3(0, h, z), 0.10f * scale,
+                    0.65f, 0.92f, 1.0f, 0.5f, fade, dist);
+                BespokeGeometry.branch(pose, buffer, seed ^ (0x5500L + s),
+                    new Vec3(0, h, z), new Vec3(w, 0, z), 0.10f * scale,
+                    0.65f, 0.92f, 1.0f, 0.5f, fade, dist);
             }
         });
+
+        // Sonic shock rings at the start, midpoint, and end of the path:
+        // full blade arcs stood into the wall plane, peaking at the strike.
+        if (impact > 0.02f) {
+            float ringR = 1.7f * scale * (0.55f + 0.45f * impact);
+            float[] ringZ = {0.0f, len * 0.5f, len};
+            float[] ringScale = {1.0f, 1.15f, 1.25f};
+            float[][] ringColor = {{0.0f, 0.85f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.95f, 1.0f}};
+            float[] ringAlpha = {0.75f, 0.9f, 1.0f};
+            for (int k = 0; k < 3; k++) {
+                float zPos = ringZ[k];
+                float radius = ringR * ringScale[k] * 1.25f;
+                float cr = ringColor[k][0], cg = ringColor[k][1], cb = ringColor[k][2];
+                float ra = ringAlpha[k];
+                long ringSeed = seed ^ (0x6600L + k);
+                poseStack.pushPose();
+                poseStack.translate(0.0f, 0.0f, zPos);
+                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
+                collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                    BespokeGeometry.bladeArc(pose, buffer, ringSeed, radius, 360.0f,
+                        cr, cg, cb, ra, impact, dist);
+                });
+                poseStack.popPose();
+            }
+        }
 
         // Ground anchor glow under the midpoint, so the wall sits in the
         // world instead of floating over it (standard points 1 and 3).
@@ -155,107 +209,4 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         if (progress >= 0.5f) return 0.0f;
         return (float) Math.sin((progress / 0.5f) * Math.PI);
     }
-
-    /** Tall cut whose crest rises and falls, with a thin white lip along that arch. */
-    private static void drawArcingSlashWall(Matrix4f matrix, VertexConsumer consumer, float len, float height, float half, float r, float g, float b, float alpha, boolean crest, int segments) {
-        for (int i = 0; i < segments; i++) {
-            float u1 = i / (float) segments;
-            float u2 = (i + 1) / (float) segments;
-            float z1 = u1 * len;
-            float z2 = u2 * len;
-            float arch1 = (float) Math.sin(u1 * Math.PI);
-            float arch2 = (float) Math.sin(u2 * Math.PI);
-            float h1 = height * (0.20f + 0.80f * arch1);
-            float h2 = height * (0.20f + 0.80f * arch2);
-            float lead = 0.40f + 0.60f * u2;
-            float aTop = alpha * lead;
-
-            consumer.addVertex(matrix, -half, 0.0f, z1).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-            consumer.addVertex(matrix, -half, h1, z1).setColor(r, g, b, aTop).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-            consumer.addVertex(matrix, -half, h2, z2).setColor(r, g, b, aTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-            consumer.addVertex(matrix, -half, 0.0f, z2).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-
-            consumer.addVertex(matrix, half, 0.0f, z2).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-            consumer.addVertex(matrix, half, h2, z2).setColor(r, g, b, aTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-            consumer.addVertex(matrix, half, h1, z1).setColor(r, g, b, aTop).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-            consumer.addVertex(matrix, half, 0.0f, z1).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-
-            if (crest) {
-                float edge = half * 1.4f;
-                consumer.addVertex(matrix, -edge, h1, z1).setColor(1.0f, 1.0f, 1.0f, aTop).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, edge, h1, z1).setColor(1.0f, 1.0f, 1.0f, aTop).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, edge, h2 + 0.05f, z2).setColor(0.85f, 0.96f, 1.0f, aTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                consumer.addVertex(matrix, -edge, h2 + 0.05f, z2).setColor(0.85f, 0.96f, 1.0f, aTop).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            }
-        }
-    }
-
-    private static void drawAngledCrossCleave(Matrix4f matrix, VertexConsumer consumer, float z, float span, float angleDeg, float r, float g, float b, float a) {
-        float rad = (float) Math.toRadians(angleDeg);
-        float cos = (float) Math.cos(rad);
-        float sin = (float) Math.sin(rad);
-        float px = -sin;
-        float py = cos;
-        int steps = 8;
-        for (int i = 0; i < steps; i++) {
-            float t1 = (i / (float) steps) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) steps) * 2.0f - 1.0f;
-            float u1 = t1 * span;
-            float u2 = t2 * span;
-            float v1 = (1.0f - t1 * t1) * span * 0.38f;
-            float v2 = (1.0f - t2 * t2) * span * 0.38f;
-            float w1 = 0.11f * (1.0f - Math.abs(t1) * 0.82f);
-            float w2 = 0.11f * (1.0f - Math.abs(t2) * 0.82f);
-            float x1 = u1 * cos + px * v1;
-            float y1 = u1 * sin + py * v1 + 1.0f;
-            float x2 = u2 * cos + px * v2;
-            float y2 = u2 * sin + py * v2 + 1.0f;
-            float edge = a * (0.35f + 0.65f * (1.0f - Math.abs(t1)));
-            consumer.addVertex(matrix, x1 - px * w1, y1 - py * w1, z).setColor(r, g, b, edge * 0.55f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1 + px * w1, y1 + py * w1, z).setColor(r, g, b, edge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2 + px * w2, y2 + py * w2, z).setColor(r, g, b, edge).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2 - px * w2, y2 - py * w2, z).setColor(r, g, b, edge * 0.55f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            float c1 = w1 * 0.22f;
-            float c2 = w2 * 0.22f;
-            consumer.addVertex(matrix, x1 - px * c1, y1 - py * c1, z).setColor(1.0f, 1.0f, 1.0f, edge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1 + px * c1, y1 + py * c1, z).setColor(1.0f, 1.0f, 1.0f, edge).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2 + px * c2, y2 + py * c2, z).setColor(1.0f, 1.0f, 1.0f, edge).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2 - px * c2, y2 - py * c2, z).setColor(1.0f, 1.0f, 1.0f, edge).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1 - px * w1, y1 - py * w1, z - 0.16f).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1 + px * w1 * 0.2f, y1 + py * w1 * 0.2f, z).setColor(r, g, b, edge * 0.4f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2 + px * w2 * 0.2f, y2 + py * w2 * 0.2f, z).setColor(r, g, b, edge * 0.4f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2 - px * w2, y2 - py * w2, z - 0.16f).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
-    }
-
-    private static void drawTransversalFractureRib(Matrix4f matrix, VertexConsumer consumer, float z, float width, float height, float r, float g, float b, float a) {
-        consumer.addVertex(matrix, -width, 0, z).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, 0, height, z).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, width, 0, z).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, 0, -0.3f, z).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-    }
-
-    private static void drawShockRingZ(Matrix4f matrix, VertexConsumer consumer, float z, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
-        float rotRad = (float) Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = ((i / (double) segments) * Math.PI * 2) + rotRad;
-            double a2 = (((i + 1) / (double) segments) * Math.PI * 2) + rotRad;
-
-            float x1 = (float) Math.cos(a1) * rOuter;
-            float y1 = (float) Math.sin(a1) * rOuter;
-            float x2 = (float) Math.cos(a2) * rOuter;
-            float y2 = (float) Math.sin(a2) * rOuter;
-
-            float ix1 = (float) Math.cos(a1) * rInner;
-            float iy1 = (float) Math.sin(a1) * rInner;
-            float ix2 = (float) Math.cos(a2) * rInner;
-            float iy2 = (float) Math.sin(a2) * rInner;
-
-            consumer.addVertex(matrix, ix1, iy1, z).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, ix2, iy2, z).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, y2, z).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1, y1, z).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
-    }
-
 }

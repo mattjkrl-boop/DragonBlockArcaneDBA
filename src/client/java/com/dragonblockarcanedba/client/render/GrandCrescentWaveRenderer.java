@@ -1,9 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.entity.GrandCrescentWaveEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -11,16 +11,15 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Grand Crescent Wave in Minecraft 26.2.
- * Renders a tapered golden crescent blade: core, edge, wings, and a wake on the arc.
- * - Multi-layered volumetric 3D double-beveled crescent wave blade
- * - Radiant golden outer canopy, pure white-gold energy core, blinding razor cutting edge
- * - Upper and lower helical vortex wing ribbons
- * - Trailing secondary & tertiary 3D shockwave wave ripples
- * - Inscribed geometric valor runes along the arc
+ * Bespoke pass: the crescent is built only from BespokeGeometry builders,
+ * seeded from the entity UUID so every client draws the same silhouette.
+ * - Three nested bladeArc layers: golden canopy, white-gold mid, white core
+ * - Torn ribbon wing wisps above and below the arc
+ * - A trailing bladeArc wake behind the crescent
+ * - Glowing valor glyph fans inscribed along the arc, pulsing in sequence
  */
 public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveEntity, GrandCrescentWaveRenderer.GrandCrescentWaveRenderState> {
 
@@ -33,6 +32,7 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         public float xRot = 0;
         public float ageInTicks = 0;
         public int hitTick = -1;
+        public long seed = 0;
         public boolean isFirstPersonOwner = false;
     }
 
@@ -58,6 +58,7 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         state.xRot = entity.getXRot();
         state.ageInTicks = entity.tickCount + partialTicks;
         state.hitTick = entity.getHitTick();
+        state.seed = entity.getUUID().getMostSignificantBits() ^ entity.getUUID().getLeastSignificantBits();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null && 
@@ -98,25 +99,55 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         // segment count down instead of costing full geometry.
         float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
             cameraState, state.x, state.y, state.z);
-        int segments = com.dragonblockarcanedba.util.FxEnvelope.segments(32, distScale, 14);
         float age = state.ageInTicks;
+        // fade is reassigned by the hit fade above, so the geometry lambda
+        // captures this final snapshot of it.
+        final float fadeFinal = fade;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawVolumetricCrescent(matrix, buffer, span, chord, 0.15f, 0.62f, segments, 1.0f, 0.82f, 0.15f, 0.88f * fade);
-            drawVolumetricCrescent(matrix, buffer, span * 0.78f, chord * 0.78f, 0.045f, 0.22f, segments, 1.0f, 0.98f, 0.80f, fade);
-            drawVolumetricCrescent(matrix, buffer, span * 0.68f, chord * 0.68f, 0.016f, 0.08f, segments, 1.0f, 1.0f, 1.0f, fade);
-            drawWingRibbon(matrix, buffer, span * 1.04f, chord, 0.18f, segments, 1.0f, 0.90f, 0.30f, 0.70f * fade, age * 0.2f);
-            drawWingRibbon(matrix, buffer, span * 1.04f, chord, -0.18f, segments, 1.0f, 0.90f, 0.30f, 0.70f * fade, -age * 0.2f);
-            drawTrailingArc(matrix, buffer, span * 0.88f, chord * 0.88f, -0.48f, segments, 1.0f, 0.75f, 0.10f, 0.45f * fade);
-            drawValorGlyphs(matrix, buffer, span, chord, fade, age);
+            // Three nested bladeArc layers form the crescent belly and core.
+            drawArcLayer(pose, buffer, state.seed, span, 150.0f,
+                1.0f, 0.82f, 0.15f, 0.45f, fadeFinal, distScale, 0.0f);
+            drawArcLayer(pose, buffer, state.seed ^ 0x1A2B3C4DL, span * 0.80f, 142.0f,
+                1.0f, 0.98f, 0.80f, 0.65f, fadeFinal, distScale, 0.0f);
+            drawArcLayer(pose, buffer, state.seed ^ 0x3C4D5E6FL, span * 0.60f, 132.0f,
+                1.0f, 1.0f, 1.0f, 0.85f, fadeFinal, distScale, 0.0f);
+
+            // Trailing wake: the same arc stepped back behind the belly.
+            drawArcLayer(pose, buffer, state.seed ^ 0x7E57A11L, span * 0.88f, 150.0f,
+                1.0f, 0.75f, 0.10f, 0.30f, fadeFinal, distScale, 0.55f);
+
+            // Torn ribbon wing wisps reaching toward the arc tips.
+            drawWing(pose, buffer, state.seed ^ 0x11111L, span, chord, 0.18f, fadeFinal, distScale, false);
+            drawWing(pose, buffer, state.seed ^ 0x22222L, span, chord, -0.18f, fadeFinal, distScale, true);
+
+            // Inscribed valor glyphs: glow fans placed on the crescent band,
+            // alpha pulsing in sequence along the arc (same flow formula as
+            // the spectacle pass used for its diamond glyphs).
+            final int glyphs = 7;
+            for (int g = 0; g < glyphs; g++) {
+                double theta = -1.05 + 2.10 * (g / (double) (glyphs - 1));
+                double rm = 0.75 * span;
+                float gx = (float) (-Math.sin(theta) * rm);
+                float gz = (float) (Math.cos(theta) * rm - rm);
+                float glyphAlpha = fadeFinal * (0.70f + 0.30f * (float) Math.sin(age * 0.6f - g * 0.9f));
+                PoseStack glyphStack = new PoseStack();
+                glyphStack.last().pose().set(pose.pose());
+                glyphStack.last().normal().set(pose.normal());
+                glyphStack.translate(gx, 0.10f, gz);
+                BespokeGeometry.glowFan(glyphStack.last(), buffer, state.seed + 31L * g, 0.17f, 0.0f,
+                    1.0f, 1.0f, 0.90f, glyphAlpha, distScale);
+            }
+
+            // Strike flash: a bright shard fan at the belly on the opening
+            // frames, replacing the old hand drawn strike diamond.
             if (impact > 0.02f) {
-                float s = 0.34f * impact;
-                float belly = chord * 0.5f;
-                buffer.addVertex(matrix, -s, 0.0f, belly).setColor(1.0f, 0.98f, 0.8f, impact).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                buffer.addVertex(matrix, 0.0f, s, belly).setColor(1.0f, 1.0f, 1.0f, impact).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                buffer.addVertex(matrix, s, 0.0f, belly).setColor(1.0f, 0.98f, 0.8f, impact).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                buffer.addVertex(matrix, 0.0f, -s, belly).setColor(1.0f, 1.0f, 1.0f, impact).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
+                PoseStack strikeStack = new PoseStack();
+                strikeStack.last().pose().set(pose.pose());
+                strikeStack.last().normal().set(pose.normal());
+                strikeStack.translate(0.0f, 0.0f, chord * 0.5f);
+                BespokeGeometry.shardFan(strikeStack.last(), buffer, state.seed ^ 0x57A1EL, 0.55f,
+                    1.0f, 0.98f, 0.80f, impact, 1.0f, distScale);
             }
         });
 
@@ -134,93 +165,39 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         return (float) Math.sin((progress / 0.16f) * Math.PI);
     }
 
-    private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-            float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord;
-            float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord;
-            float th1 = thickness * (1.0f - Math.abs(t1) * 0.78f);
-            float th2 = thickness * (1.0f - Math.abs(t2) * 0.78f);
-            float z1Trail = z1 - trailLength * (1.0f - Math.abs(t1) * 0.55f);
-            float z2Trail = z2 - trailLength * (1.0f - Math.abs(t2) * 0.55f);
-
-            // Top Bevel Face
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2 * 0.3f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, th1 * 0.3f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Bottom Bevel Face
-            consumer.addVertex(matrix, x1, -th1 * 0.3f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2 * 0.3f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-            // Front Razor Edge Face
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
+    /**
+     * Pose glue only: turns one bladeArc so its flat XZ band stands as the
+     * wave's crescent (belly through the origin, tips trailing toward -Z),
+     * then calls the builder. Emits no vertices of its own.
+     */
+    private static void drawArcLayer(PoseStack.Pose pose, com.mojang.blaze3d.vertex.VertexConsumer buffer,
+                                     long seed, float radius, float sweepDeg,
+                                     float r, float g, float b, float alpha, float envelope,
+                                     float distScale, float backOffset) {
+        PoseStack arcStack = new PoseStack();
+        arcStack.last().pose().set(pose.pose());
+        arcStack.last().normal().set(pose.normal());
+        arcStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
+        arcStack.translate(-(radius * 0.75f + backOffset), 0.0f, 0.0f);
+        BespokeGeometry.bladeArc(arcStack.last(), buffer, seed, radius, sweepDeg,
+            r, g, b, alpha, envelope, distScale);
     }
 
-    private static void drawWingRibbon(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float yOffset, int segments, float r, float g, float b, float a, float rotOffset) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-
-            float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord;
-            float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord;
-
-            float y1 = yOffset + (float) Math.sin(t1 * Math.PI + rotOffset) * 0.12f;
-            float y2 = yOffset + (float) Math.sin(t2 * Math.PI + rotOffset) * 0.12f;
-
-            float ribbonWidth = 0.10f * (1.0f - Math.abs(t1) * 0.5f);
-
-            consumer.addVertex(matrix, x1, y1 + ribbonWidth, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, y2 + ribbonWidth, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, y2 - ribbonWidth, z2 - 0.25f).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, y1 - ribbonWidth, z1 - 0.25f).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+    /**
+     * Pose glue only: places one tornRibbon as a wing wisp reaching from the
+     * crescent belly toward a tip, then calls the builder.
+     */
+    private static void drawWing(PoseStack.Pose pose, com.mojang.blaze3d.vertex.VertexConsumer buffer,
+                                 long seed, float span, float chord, float yBase,
+                                 float envelope, float distScale, boolean flip) {
+        PoseStack wingStack = new PoseStack();
+        wingStack.last().pose().set(pose.pose());
+        wingStack.last().normal().set(pose.normal());
+        if (flip) {
+            wingStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(180.0f)));
         }
-    }
-
-    private static void drawTrailingArc(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float zOffset, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-            float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord + zOffset;
-            float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord + zOffset;
-
-            consumer.addVertex(matrix, x1, 0.05f, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, 0.05f, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, 0.05f, z2 - 0.35f).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, 0.05f, z1 - 0.35f).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawValorGlyphs(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float fade, float age) {
-        int glyphCount = 7;
-        for (int g = 0; g < glyphCount; g++) {
-            float t = (g / (float) (glyphCount - 1)) * 1.6f - 0.8f;
-            float gx = t * span;
-            float gz = (1.0f - t * t) * chord * 0.72f;
-
-            // Energy flow: a brightness pulse travels glyph to glyph along
-            // the arc instead of every glyph sitting at one flat alpha.
-            float glyphAlpha = fade * (0.70f + 0.30f * (float) Math.sin(age * 0.6f - g * 0.9f));
-
-            float gSize = 0.12f;
-            consumer.addVertex(matrix, gx - gSize, 0.08f, gz).setColor(1.0f, 1.0f, 0.90f, glyphAlpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, gx, 0.08f, gz + gSize).setColor(1.0f, 1.0f, 0.90f, glyphAlpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, gx + gSize, 0.08f, gz).setColor(1.0f, 1.0f, 0.90f, glyphAlpha).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, gx, 0.08f, gz - gSize).setColor(1.0f, 1.0f, 0.90f, glyphAlpha).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
+        wingStack.translate(span * 0.10f, yBase, chord * 0.20f);
+        BespokeGeometry.tornRibbon(wingStack.last(), buffer, seed, span * 0.95f, 0.20f, 0.12f,
+            1.0f, 0.90f, 0.30f, 0.45f, envelope, distScale);
     }
 }

@@ -1,8 +1,8 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -72,12 +72,12 @@ public class RiftedEffect extends MobEffect {
             double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
 
             level.sendParticles(
-                new DustParticleOptions(0x9400D3, 1.3F),
+                new DbaDustOptions(0x9400D3, 1.3F),
                 px, py, pz,
                 1, 0.0, 0.04, 0.0, 0.01
             );
             level.sendParticles(
-                ParticleTypes.PORTAL,
+                DbaParticles.VOID_SMOKE,
                 px, py, pz,
                 1, 0.0, 0.0, 0.0, 0.05
             );

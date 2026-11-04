@@ -4,8 +4,8 @@ import com.dragonblockarcanedba.effect.DbaEffects;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
@@ -158,7 +158,7 @@ public class BanshoWindProjectileEntity extends Projectile {
                 serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
                     this.getX(), this.getY(), this.getZ(), 10, 0.4, 0.4, 0.4, 0.08);
                 serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
-                    SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 0.6f, 1.4f);
+                    DbaSounds.WIND_GUST, SoundSource.PLAYERS, 0.6f, 1.4f);
                 this.discard();
                 return;
             }
@@ -169,9 +169,7 @@ public class BanshoWindProjectileEntity extends Projectile {
 
     private void onHitImpact(ServerLevel serverLevel, Vec3 hitPos, LivingEntity target) {
         Entity owner = this.getOwner();
-        DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-            ? serverLevel.damageSources().playerAttack(playerOwner)
-            : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+        DamageSource damageSource = com.dragonblockarcanedba.util.DbaDamage.tempest(this, owner);
 
         if (target != null) {
             hitEntityIds.add(target.getId());
@@ -210,8 +208,8 @@ public class BanshoWindProjectileEntity extends Projectile {
 
         // Tempest impact sound
         serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z,
-            SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 1.2f, 1.0f);
+            DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.2f, 1.0f);
         serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z,
-            SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 0.8f, 1.4f);
+            DbaSounds.FLIGHT_WIND, SoundSource.PLAYERS, 0.8f, 1.4f);
     }
 }

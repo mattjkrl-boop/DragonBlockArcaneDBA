@@ -1,7 +1,8 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -77,7 +78,10 @@ public class MeltingEffect extends MobEffect {
             float percentDamage = entity.getMaxHealth() * 0.01f;
             // Minimum 2.0 damage so it still works on low-HP entities
             float damage = Math.max(2.0f, percentDamage);
-            entity.hurtServer(level, level.damageSources().magic(), damage);
+            // Bespoke: Melting is applied by the Sickle of Sorrow's rift,
+            // so its DoT is void family. The effect stores no attacker, so
+            // the source anchors on the afflicted entity with no attacker.
+            entity.hurtServer(level, DbaDamage.voidDmg(entity, null), damage);
         }
 
         // --- Purple particle "fire" effect (every 3 ticks to avoid spam) ---
@@ -85,7 +89,7 @@ public class MeltingEffect extends MobEffect {
             float width = entity.getBbWidth();
             float height = entity.getBbHeight();
             level.sendParticles(
-                new DustParticleOptions(0x9900CC, 1.5F),
+                new DbaDustOptions(0x9900CC, 1.5F),
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * width * 1.2,
                 entity.getY() + level.getRandom().nextFloat() * height,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width * 1.2,
@@ -95,7 +99,7 @@ public class MeltingEffect extends MobEffect {
             );
             // Secondary deeper purple particle for richness
             level.sendParticles(
-                new DustParticleOptions(0x660099, 1.0F),
+                new DbaDustOptions(0x660099, 1.0F),
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * width,
                 entity.getY() + level.getRandom().nextFloat() * height * 0.6,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width,

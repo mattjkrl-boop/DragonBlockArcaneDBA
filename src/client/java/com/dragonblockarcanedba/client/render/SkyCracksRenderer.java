@@ -1,31 +1,35 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SkyCracksEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
-
-import java.util.Random;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * The torn sky above the Cursed Tempest. This used to draw nothing at all;
- * it now renders a branching crack network in the local XY plane,
- * billboarded to the camera the way TimeShatter's dial layer is. Seven main
- * fractures radiate from the tear's heart along jagged seeded paths, violet
- * forks branch off them, a white hot core runs down every main crack, and a
- * dark violet disc behind the network reads as the shadow of the tear.
- * Alpha runs the shared lifecycle envelope over the entity's 100 tick life
- * times a slow electrical flicker, so the tear opens, burns, and seals shut
- * instead of popping in and vanishing.
+ * the spectacle pass gave it a hand-rolled crack network, and the bespoke
+ * pass rebuilds that network entirely on BespokeGeometry: seven main
+ * fractures drawn with the branch builder (midpoint-displaced jagged
+ * ribbons, a crimson sheath with a white hot core on the identical seeded
+ * path), a crackStar web of wandering violet and crimson fractures woven
+ * between them, and a glowFan shadow pool behind it all. Everything is
+ * seeded from the entity's synced seed, so the tear is the same tear on
+ * every client. The network is billboarded to the camera; the flat
+ * builders (glowFan, crackStar) are drawn through a pose rotated so their
+ * ground plane becomes the billboard plane. Alpha runs the shared
+ * lifecycle envelope over the entity's 100 tick life times a slow
+ * electrical flicker, so the tear opens, burns, and seals shut instead of
+ * popping in and vanishing.
  */
 public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracksRenderer.SkyCracksRenderState> {
 
@@ -69,6 +73,7 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
         float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
         float flicker = 0.78f + 0.22f * (float) Math.sin(state.age * 2.1f + state.seed * 0.37f);
         float alpha = env * flicker;
+        long seed = state.seed;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -77,95 +82,39 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
         }
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
+            // Flat builders draw in the XZ ground plane; rotate a copy of
+            // the pose so that plane becomes the billboard XY plane.
+            PoseStack.Pose flat = pose.copy();
+            flat.rotate(Axis.XP.rotation((float) (-Math.PI / 2.0)));
 
-            // Shadow of the tear: a dark disc the cracks burn through.
-            drawDiscFan(matrix, buffer, 24.0f, 0.10f, 0.01f, 0.16f, 0.30f * alpha, ds);
+            // Shadow of the tear: a dark pool the cracks burn through.
+            BespokeGeometry.glowFan(flat, buffer, seed ^ 0x5EEDL, 24.0f, 0.0f,
+                0.10f, 0.01f, 0.16f, 0.30f * alpha, ds);
 
-            Random rng = new Random(state.seed);
+            // The fracture web between the mains: two crackStars, crimson
+            // wide and violet tighter, wandering and tapering.
+            BespokeGeometry.crackStar(flat, buffer, seed ^ 0xC4ACCL, 20.0f,
+                0.95f, 0.05f, 0.20f, 0.50f, alpha, ds);
+            BespokeGeometry.crackStar(flat, buffer, seed ^ 0xF04CL, 14.0f,
+                0.55f, 0.10f, 0.95f, 0.60f, alpha, ds);
+
+            // Seven main fractures: branch bolts radiating from the heart.
+            // Sheath and core share a seed, so the white core runs exactly
+            // down the crimson sheath's jagged path.
+            BespokeGeometry.Rng rng = new BespokeGeometry.Rng(seed);
             int mains = 7;
             for (int m = 0; m < mains; m++) {
-                double ang = (m / (double) mains) * Math.PI * 2.0 + rng.nextDouble() * 0.5;
-                float cx = 0.0f, cy = 0.0f;
-                int segs = 5 + rng.nextInt(3);
-                float step = (15.0f + rng.nextFloat() * 10.0f) / segs;
-                for (int s = 0; s < segs; s++) {
-                    float t = (s + 1) / (float) segs;
-                    double a = ang + (rng.nextDouble() - 0.5) * 0.55;
-                    float nx = cx + (float) Math.cos(a) * step;
-                    float ny = cy + (float) Math.sin(a) * step;
-                    float w = 0.34f * (1.0f - t * 0.8f);
-                    // Crimson sheath, then the white hot core inside it.
-                    ribbon(matrix, buffer, cx, cy, nx, ny, w, 0.95f, 0.05f, 0.20f, alpha);
-                    ribbon(matrix, buffer, cx, cy, nx, ny, w * 0.38f, 1.0f, 0.95f, 0.97f, alpha);
-
-                    // Violet branch forks off the main fracture.
-                    if (s >= 1 && rng.nextFloat() < 0.55f) {
-                        double ba = a + (rng.nextBoolean() ? 0.7 : -0.7);
-                        float bx = nx, by = ny;
-                        int bsegs = 2 + rng.nextInt(2);
-                        for (int b = 0; b < bsegs; b++) {
-                            float bt = (b + 1) / (float) bsegs;
-                            double bba = ba + (rng.nextDouble() - 0.5) * 0.5;
-                            float bnx = bx + (float) Math.cos(bba) * step * 0.55f;
-                            float bny = by + (float) Math.sin(bba) * step * 0.55f;
-                            ribbon(matrix, buffer, bx, by, bnx, bny, 0.16f * (1.0f - bt * 0.7f), 0.55f, 0.10f, 0.95f, alpha * 0.85f);
-                            bx = bnx; by = bny;
-                        }
-                    }
-                    cx = nx; cy = ny;
-                }
+                double ang = (m / (double) mains) * Math.PI * 2.0 + rng.range(-0.25f, 0.25f);
+                float len = rng.range(15.0f, 25.0f);
+                Vec3 to = new Vec3(Math.cos(ang) * len, Math.sin(ang) * len, 0);
+                long crackSeed = seed * 31L + m * 101L;
+                BespokeGeometry.branch(pose, buffer, crackSeed, Vec3.ZERO, to, 0.34f,
+                    0.95f, 0.05f, 0.20f, 0.95f, alpha, ds);
+                BespokeGeometry.branch(pose, buffer, crackSeed, Vec3.ZERO, to, 0.13f,
+                    1.0f, 0.95f, 0.97f, 0.95f, alpha, ds);
             }
         });
 
         poseStack.popPose();
-    }
-
-    /** One crack segment in the XY plane: a tapered quad ribbon, drawn both ways. */
-    private static void ribbon(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float x2, float y2,
-                               float width, float r, float g, float b, float a) {
-        float dx = x2 - x1, dy = y2 - y1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy);
-        if (len < 0.001f || a < 0.02f) return;
-        float nx = -dy / len * width * 0.5f;
-        float ny = dx / len * width * 0.5f;
-        v(consumer, matrix, x1 - nx, y1 - ny, r, g, b, a, 1);
-        v(consumer, matrix, x1 + nx, y1 + ny, r, g, b, a, 1);
-        v(consumer, matrix, x2 + nx, y2 + ny, r, g, b, a, 1);
-        v(consumer, matrix, x2 - nx, y2 - ny, r, g, b, a, 1);
-        v(consumer, matrix, x2 - nx, y2 - ny, r, g, b, a, -1);
-        v(consumer, matrix, x2 + nx, y2 + ny, r, g, b, a, -1);
-        v(consumer, matrix, x1 + nx, y1 + ny, r, g, b, a, -1);
-        v(consumer, matrix, x1 - nx, y1 - ny, r, g, b, a, -1);
-    }
-
-    /** A soft disc in the XY plane: full alpha at the heart, gone at the rim. */
-    private static void drawDiscFan(Matrix4f matrix, VertexConsumer consumer, float radius,
-                                    float r, float g, float b, float a, float distScale) {
-        if (a < 0.01f) return;
-        int segments = FxEnvelope.segments(28, distScale, 10);
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-            float x1 = (float) Math.cos(a1) * radius, y1 = (float) Math.sin(a1) * radius;
-            float x2 = (float) Math.cos(a2) * radius, y2 = (float) Math.sin(a2) * radius;
-            float rim = a * 0.05f;
-            // Degenerate quads (heart vertex doubled), the same trick the
-            // codebase's shard pyramids use for triangles.
-            v(consumer, matrix, 0, 0, r, g, b, a, 1);
-            v(consumer, matrix, 0, 0, r, g, b, a, 1);
-            v(consumer, matrix, x2, y2, r, g, b, rim, 1);
-            v(consumer, matrix, x1, y1, r, g, b, rim, 1);
-            v(consumer, matrix, 0, 0, r, g, b, a, -1);
-            v(consumer, matrix, 0, 0, r, g, b, a, -1);
-            v(consumer, matrix, x1, y1, r, g, b, rim, -1);
-            v(consumer, matrix, x2, y2, r, g, b, rim, -1);
-        }
-    }
-
-    private static void v(VertexConsumer consumer, Matrix4f matrix, float x, float y,
-                          float r, float g, float b, float a, float nz) {
-        consumer.addVertex(matrix, x, y, 0).setColor(r, g, b, a).setUv(0.5f, 0.5f)
-            .setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, nz);
     }
 }

@@ -11,7 +11,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Azure Rush Trail Entity — Physical 3D aerodynamic dragon wind trail and Mach shock cone.
+ * Azure Rush Trail Entity: Physical 3D aerodynamic dragon wind trail and Mach shock cone.
  */
 public class AzureRushTrailEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> IS_DOUBLE_RUSH = SynchedEntityData.defineId(AzureRushTrailEntity.class, EntityDataSerializers.BOOLEAN);

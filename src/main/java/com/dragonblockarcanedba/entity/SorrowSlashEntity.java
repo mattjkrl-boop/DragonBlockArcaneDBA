@@ -1,12 +1,12 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Sorrow Slash Entity — Physical 3D scythe crescent slash unleashed by the Sickle of Sorrow on Left-Click impact and air swings.
+ * Sorrow Slash Entity: Physical 3D scythe crescent slash unleashed by the Sickle of Sorrow on Left-Click impact and air swings.
  * Deals massive stat-scaled damage, applies Melting III, Sorrow Rift, and triggers Soul Rend lifesteal.
  */
 public class SorrowSlashEntity extends Projectile {
@@ -137,9 +137,9 @@ public class SorrowSlashEntity extends Projectile {
             }
 
             Entity owner = this.getOwner();
-            DamageSource damageSource = owner instanceof Player playerOwner
-                ? serverLevel.damageSources().playerAttack(playerOwner)
-                : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().generic());
+            // Ability damage uses the mod's void type (bespoke rule 4), with
+            // this slash as the direct entity, whoever owns it.
+            DamageSource damageSource = DbaDamage.voidDmg(this, owner);
 
             // Wave mode only from here on: impact bursts returned above.
             double hitWidth = 3.8;
@@ -160,7 +160,7 @@ public class SorrowSlashEntity extends Projectile {
                 // Apply Melting III (amplifier 2) for 15s (300 ticks)
                 target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 2, false, true), owner);
 
-                // Apply Sorrow Rift for 4s (80 ticks) — weeping shadow corruption
+                // Apply Sorrow Rift for 4s (80 ticks), weeping shadow corruption
                 target.addEffect(new MobEffectInstance(DbaEffects.SORROW_RIFT_HOLDER, 80, 0, false, true), owner);
 
                 // MC 26.2 Physics: Sorrowful void ice friction distortion
@@ -178,11 +178,11 @@ public class SorrowSlashEntity extends Projectile {
                     playerOwner.heal(healAmount);
                 }
 
-                // Audio impact
+                // Audio impact (bespoke bank: sweep -> slash whoosh, soul -> soul drift)
                 serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.6f, 0.5f);
+                    DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.6f, 0.5f);
                 serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                    SoundEvents.SOUL_ESCAPE.value(), SoundSource.PLAYERS, 1.2f, 0.7f);
+                    DbaSounds.SOUL_DRIFT, SoundSource.PLAYERS, 1.2f, 0.7f);
             }
 
             // Lifetime limit for the flying wave (impact bursts expire in their branch above)

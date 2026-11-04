@@ -11,6 +11,7 @@ import com.dragonblockarcanedba.entity.SaberSlashEntity;
 import com.dragonblockarcanedba.entity.SaberVoidTearEntity;
 import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
@@ -20,7 +21,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -255,7 +255,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
                 // Sound cue for target chain lock
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.6f);
+                    com.dragonblockarcanedba.sound.DbaSounds.SWING_LIGHT, SoundSource.PLAYERS, 1.4f, 1.6f);
             }
         }
 
@@ -291,7 +291,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     }
                 }
                 if (struck != null) {
-                    struck.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(lungeDamage));
+                    struck.hurtServer(level, DbaDamage.ki(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(lungeDamage));
                 }
                 SaberSlashEntity lunge = new SaberSlashEntity(
                     level, player, eye.add(look.scale(0.6)), player.getYRot(), player.getXRot(), 0.0f, 1.15f, false, 12
@@ -350,11 +350,11 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     // one tick: 60 percent on the arrival tick, 40 percent 5 ticks
                     // later while the 16 tick crescent is at peak.
                     float baseDamage = 280.0f + (float) (accessor.dba$getStrength() * 1.8);
-                    currentTarget.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(baseDamage * 0.6f));
+                    currentTarget.hurtServer(level, DbaDamage.voidDmg(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(baseDamage * 0.6f));
                     queuePendingHit(player, level, currentTarget, baseDamage * 0.4f, 5);
                     
                     level.playSound(null, currentTarget.getX(), currentTarget.getY(), currentTarget.getZ(),
-                        SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.0f, 1.5f);
+                        com.dragonblockarcanedba.sound.DbaSounds.CRIT_HIT, SoundSource.PLAYERS, 1.0f, 1.5f);
                     level.playSound(null, currentTarget.getX(), currentTarget.getY(), currentTarget.getZ(),
                         com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.0f, 1.5f);
                     
@@ -852,9 +852,9 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
         level.playSound(null, destination.x, destination.y, destination.z,
             com.dragonblockarcanedba.sound.DbaSounds.SABER_HUM, SoundSource.PLAYERS, 0.7f, 1.3f);
         level.playSound(null, destination.x, destination.y, destination.z,
-            SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.2f, 1.4f);
+            com.dragonblockarcanedba.sound.DbaSounds.TELEPORT_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.4f);
         level.playSound(null, destination.x, destination.y, destination.z,
-            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 1.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.SWING_LIGHT, SoundSource.PLAYERS, 1.5f, 1.8f);
         level.playSound(null, destination.x, destination.y, destination.z,
             com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 1.8f);
 
@@ -867,7 +867,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
         // 40 percent 5 ticks later as the tears dissipate.
         float pathDamage = 320.0f + (float) (accessor.dba$getStrength() * 1.6);
         for (LivingEntity enemy : crossedEnemies) {
-            enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(pathDamage * 0.6f));
+            enemy.hurtServer(level, DbaDamage.voidDmg(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(pathDamage * 0.6f));
             queuePendingHit(player, level, enemy, pathDamage * 0.4f, 5);
             Vec3 enemySlashPos = enemy.position().add(0, enemy.getBbHeight() * 0.55, 0);
             SaberSlashEntity pathSlash = new SaberSlashEntity(
@@ -924,9 +924,9 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
         // Counter sound & 3D geometric spark burst
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.SHIELD_BLOCK, SoundSource.PLAYERS, 2.0f, 1.5f);
+            com.dragonblockarcanedba.sound.DbaSounds.SHIELD_CLANK, SoundSource.PLAYERS, 2.0f, 1.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 2.0f, 1.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.CRIT_HIT, SoundSource.PLAYERS, 2.0f, 1.8f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 2.0f, 1.8f);
 
@@ -950,8 +950,8 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
             if (hit.level.getGameTime() >= hit.dueGameTime) {
                 if (hit.target != null && hit.target.isAlive() && !hit.target.isRemoved()) {
                     DamageSource src = (hit.player != null && !hit.player.isRemoved() && hit.player.isAlive())
-                        ? hit.level.damageSources().playerAttack(hit.player)
-                        : hit.level.damageSources().generic();
+                        ? DbaDamage.voidDmg(hit.player)
+                        : DbaDamage.voidDmg(hit.target, null);
                     hit.target.hurtServer(hit.level, src, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(hit.damage));
                 }
                 hitIt.remove();
@@ -1036,8 +1036,8 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     // was the telegraph), 30 percent at beam tick 8, 20 percent
                     // at beam tick 16.
                     DamageSource dmgSource = (!anim.player.isRemoved() && anim.player.isAlive())
-                        ? level.damageSources().playerAttack(anim.player)
-                        : level.damageSources().generic();
+                        ? DbaDamage.voidDmg(anim.player)
+                        : DbaDamage.voidDmg(e, null);
                     e.hurtServer(level, dmgSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(anim.damage * 0.5f));
                     queuePendingHit(anim.player, level, e, anim.damage * 0.3f, 8);
                     queuePendingHit(anim.player, level, e, anim.damage * 0.2f, 16);
@@ -1059,13 +1059,13 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
                 // Violent sounds: neck snap crunch + thunder clap + sweep
                 level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
-                    SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 2.0f, 1.8f);
+                    com.dragonblockarcanedba.sound.DbaSounds.SLAM_THUD, SoundSource.PLAYERS, 2.0f, 1.8f);
                 level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
-                    SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 2.5f, 0.6f);
+                    com.dragonblockarcanedba.sound.DbaSounds.CRIT_HIT, SoundSource.PLAYERS, 2.5f, 0.6f);
                 level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
                     com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 2.5f, 0.6f);
                 level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
-                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.5f, 1.4f);
+                    com.dragonblockarcanedba.sound.DbaSounds.THUNDER_CRACK, SoundSource.WEATHER, 1.5f, 1.4f);
                 level.playSound(null, anim.centroid.x, anim.centroid.y, anim.centroid.z,
                     com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 1.5f, 1.4f);
 

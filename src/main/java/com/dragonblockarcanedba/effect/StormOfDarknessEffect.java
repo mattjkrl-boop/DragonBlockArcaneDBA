@@ -1,8 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -58,18 +57,18 @@ public class StormOfDarknessEffect extends MobEffect {
                 3, entity.getBbWidth() * 0.4, entity.getBbHeight() * 0.3, entity.getBbWidth() * 0.4, 0.05
             );
             level.sendParticles(
-                new DustParticleOptions(0x8B0000, 1.2F), // Dark crimson
+                new DbaDustOptions(0x8B0000, 1.2F), // Dark crimson
                 entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
                 2, 0.3, 0.3, 0.3, 0.02
             );
             level.sendParticles(
-                new DustParticleOptions(0x0A0A0A, 1.5F), // Black ash
+                new DbaDustOptions(0x0A0A0A, 1.5F), // Black ash
                 entity.getX(), entity.getY() + entity.getBbHeight(), entity.getZ(),
                 1, 0.4, 0.4, 0.4, 0.01
             );
             if (level.getRandom().nextFloat() < 0.2f) {
                 level.sendParticles(
-                    new DustParticleOptions(0xFFFF00, 1.0F), // Yellow static
+                    new DbaDustOptions(0xFFFF00, 1.0F), // Yellow static
                     entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
                     1, 0.5, 0.5, 0.5, 0.01
                 );

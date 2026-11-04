@@ -6,6 +6,7 @@ import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DbaCompat;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.GroundScar;
@@ -16,13 +17,11 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -113,11 +112,11 @@ public class VoidRiftEntity extends Projectile {
         return this.entityData.get(IMPLODE_START_TICK);
     }
 
-    private DamageSource damageSource(ServerLevel level, LivingEntity victim) {
-        Entity owner = this.getOwner();
-        if (owner instanceof Player p) return level.damageSources().playerAttack(p);
-        if (owner instanceof LivingEntity le) return level.damageSources().mobAttack(le);
-        return level.damageSources().mobAttack(victim);
+    private DamageSource damageSource() {
+        // Bespoke pass: the channel pulses and the burst are ability damage,
+        // so they use the mod's own void type with this rift as the direct
+        // entity and the caster as the attacker.
+        return DbaDamage.voidDmg(this, this.getOwner());
     }
 
     private static Vec3 centerOf(Entity e) {
@@ -277,7 +276,7 @@ public class VoidRiftEntity extends Projectile {
                 living.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 30, 0, false, false), owner);
                 if (damageTick && dist <= radius) {
                     double falloff = 1.0 - 0.65 * (dist / radius);
-                    living.hurtServer(serverLevel, damageSource(serverLevel, living),
+                    living.hurtServer(serverLevel, damageSource(),
                         DbaEffectsConfig.capDamage((float) (this.damage * TICK_DAMAGE_FRACTION * falloff)));
                 }
             }
@@ -291,7 +290,7 @@ public class VoidRiftEntity extends Projectile {
         // Sound pulse
         if (this.tickCount % 25 == 0) {
             serverLevel.playSound(null, center.x, center.y, center.z,
-                SoundEvents.PORTAL_AMBIENT, SoundSource.PLAYERS, 0.8f, 0.7f + (radius / 10.0f) * 0.5f);
+                com.dragonblockarcanedba.sound.DbaSounds.RIFT_AMBIENT, SoundSource.PLAYERS, 0.8f, 0.7f + (radius / 10.0f) * 0.5f);
         }
 
         // Auto implode when the channel runs past the cap.
@@ -313,7 +312,7 @@ public class VoidRiftEntity extends Projectile {
             // Gentle falloff to the edge of the honest blast sphere; the old box
             // test paid full damage at the corners, about 1.41x the radius out.
             float falloff = (float) (1.0 - 0.4 * (dist / blastRadius));
-            victim.hurtServer(serverLevel, damageSource(serverLevel, victim),
+            victim.hurtServer(serverLevel, damageSource(),
                 DbaEffectsConfig.capDamage(this.damage * falloff));
 
             // The fling is the shared ejection beat, weight classed like the pull.
@@ -337,9 +336,9 @@ public class VoidRiftEntity extends Projectile {
         // The implosion is the weapon's biggest moment: give it camera weight.
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, center.x, center.y, center.z);
         serverLevel.playSound(null, center.x, center.y, center.z,
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.5f, 0.6f);
+            com.dragonblockarcanedba.sound.DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 2.5f, 0.6f);
         serverLevel.playSound(null, center.x, center.y, center.z,
-            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.0f, 0.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.BOOM_SONIC, SoundSource.PLAYERS, 2.0f, 0.8f);
         serverLevel.playSound(null, center.x, center.y, center.z,
             com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.0f, 0.8f);
     }

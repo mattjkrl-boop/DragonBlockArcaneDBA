@@ -1,30 +1,33 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.DarknessDomainEntity;
-import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Darkness Sword (World of Darkness & Abyssal Eclipse) in Minecraft 26.2.
- * Completely replaces vanilla dust/particle spam with a monumental 3D supernatural environment:
- * - Double-layered volumetric 3D void-sphere dome
- * - Quad-tier counter-rotating corrupted demonic ground whirlpools
- * - 16 Orbiting 3D jagged obsidian void spires
- * - Central vertical cyclonic vortex updraft column
- * Lightning is no longer drawn here: the domain entity fires real branched
- * BoltEntity strikes, which have their own renderer. Every alpha in this
- * renderer is multiplied by the entity's synced lifecycle fade, and segment
- * counts scale with camera distance through the shared standard.
+ *
+ * Bespoke pass: the hand-rolled lat/long dome mesh, ring helper, and shard
+ * pyramid helper are gone. The dome is two counter-rotating
+ * BespokeGeometry.displacedDome shells (noise-displaced, seeded from the
+ * entity UUID), the ground whirlpools and vortex column are
+ * brokenVortexBand tubes, and the 16 orbiting spires are branch shards
+ * leaning inward on the same orbit math as before. The shared
+ * LayeredRender.drawVortexBands call around the funnel is unchanged.
+ * Lightning is still not drawn here: the domain entity fires real branched
+ * BoltEntity strikes, which have their own renderer. Every alpha is
+ * multiplied by the entity's synced lifecycle fade, and segment counts
+ * scale with camera distance through the shared standard.
  */
 public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity, DarknessDomainRenderer.DarknessDomainRenderState> {
 
@@ -71,292 +74,132 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
     public void submit(DarknessDomainRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
-        float radius = state.radius;
-        float age = state.age;
-        // Lifecycle fade from the entity (point 5): the dome builds in and
-        // dissipates, it never pops. Distance scale (point 1) steps segment
-        // counts down and softens alpha far away.
+        final float radius = state.radius;
+        final float age = state.age;
+        // Lifecycle fade from the entity: the dome builds in and dissipates,
+        // it never pops. Distance scale steps segment counts down and
+        // softens alpha far away.
         final float fade = Math.max(0.0f, Math.min(1.0f, state.fade));
         if (fade <= 0.01f) {
             return;
         }
         final float ds = LayeredRender.distScale(cameraState, state.px, state.py, state.pz);
         final float aMul = fade * (float) Math.sqrt(ds);
+        final long seed = state.seed;
+        final float domeHeight = Math.min(26.0f, radius * 1.35f);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
+        // 1. Quad-tier counter-rotating ground whirlpools: broken vortex
+        // bands hugging the floor, each in its own rotated pose so the gap
+        // patterns sweep at the old per-band speeds and directions.
+        for (int band = 0; band < 4; band++) {
+            final float bandRadius = radius * (0.30f + band * 0.23f) * 0.915f;
+            final float bandY = 0.08f + (band * 0.05f);
+            final float rotDeg = age * (band % 2 == 0 ? 1.0f : -1.3f) * (10.0f + band * 5.0f);
+            final float bandAlpha = (0.65f - (band * 0.08f)) * aMul;
+            final float red = band % 2 == 0 ? 0.65f : 0.20f;
+            final float blue = band % 2 == 0 ? 0.95f : 0.45f;
+            final long bandSeed = seed ^ (0xBA9DL + band * 977L);
+            final float bandTwist = band % 2 == 0 ? 1.5f : -1.9f;
+            poseStack.pushPose();
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(rotDeg)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.brokenVortexBand(pose, buffer, bandSeed, bandRadius, bandY, bandY + 0.06f,
+                    bandTwist, red, 0.02f, blue, bandAlpha, ds);
+            });
+            poseStack.popPose();
+        }
+
+        // 2. The dome: two displaced dome shells counter-rotating. The
+        // outer shell sits at ground level, the inner crimson one a block
+        // up and slightly smaller, as the old inner mesh did.
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 3.5f)));
+        poseStack.translate(0, 1.0f, 0);
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD09E1L, radius,
+                0.15f, 0.0f, 0.24f, 0.55f, aMul, ds);
+        });
+        poseStack.popPose();
 
-            // 1. Quad-Tier Counter-Rotating Ground Whirlpools (4 dark corrupted energy bands)
-            int groundSegments = FxEnvelope.segments(48, ds, 20);
-            for (int band = 0; band < 4; band++) {
-                float rOuter = radius * (0.30f + band * 0.23f);
-                float rInner = rOuter * 0.83f;
-                float rotSpeed = (band % 2 == 0 ? 1.0f : -1.3f) * (10.0f + band * 5.0f);
-                float bandAlpha = 0.65f - (band * 0.08f);
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-age * 5.5f)));
+        poseStack.translate(0, 2.0f, 0);
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD09E2L, radius * 0.85f,
+                0.78f, 0.03f, 0.45f, 0.39f, aMul, ds);
+        });
+        poseStack.popPose();
 
-                float red = band % 2 == 0 ? 0.65f : 0.20f;
-                float green = 0.02f;
-                float blue = band % 2 == 0 ? 0.95f : 0.45f;
-
-                drawRotatingRing(matrix, buffer, 0, 0.08f + (band * 0.05f), 0, rOuter, rInner, groundSegments, age * rotSpeed, red, green, blue, bandAlpha * aMul);
-            }
-
-            // 2. Volumetric Double-Layered Void Cyclone Dome (Massive Physical Void-Sphere)
-            float domeHeight = Math.min(26.0f, radius * 1.35f);
-
-            // Layer A: Outer Massive Rotating Void Cloud Dome
-            int domeLatitudes = 12;
-            int domeLongitudes = FxEnvelope.segments(36, ds, 16);
-            for (int lat = 0; lat < domeLatitudes; lat++) {
-                float latProgress1 = lat / (float) domeLatitudes;
-                float latProgress2 = (lat + 1) / (float) domeLatitudes;
-
-                float y1 = 1.0f + (float) Math.sin(latProgress1 * (Math.PI / 2.0)) * domeHeight;
-                float y2 = 1.0f + (float) Math.sin(latProgress2 * (Math.PI / 2.0)) * domeHeight;
-
-                float r1 = radius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
-                float r2 = radius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
-
-                float domeAlpha = 0.28f + (latProgress1 * 0.40f);
-                float red = 0.02f + (latProgress1 * 0.22f);
-                float green = 0.0f;
-                float blue = 0.04f + (latProgress1 * 0.32f);
-
-                for (int lon = 0; lon < domeLongitudes; lon++) {
-                    double angleOffset = (age * (3.5f + lat * 1.2f)) * (Math.PI / 180.0);
-                    double a1 = ((lon / (double) domeLongitudes) * Math.PI * 2.0) + angleOffset;
-                    double a2 = (((lon + 1) / (double) domeLongitudes) * Math.PI * 2.0) + angleOffset;
-
-                    float x1 = (float) Math.cos(a1) * r1;
-                    float z1 = (float) Math.sin(a1) * r1;
-                    float x2 = (float) Math.cos(a2) * r1;
-                    float z2 = (float) Math.sin(a2) * r1;
-
-                    float x3 = (float) Math.cos(a2) * r2;
-                    float z3 = (float) Math.sin(a2) * r2;
-                    float x4 = (float) Math.cos(a1) * r2;
-                    float z4 = (float) Math.sin(a1) * r2;
-
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, red, green, blue, domeAlpha * aMul);
-                }
-            }
-
-            // Layer B: Inner Turbulent Demonic Stratus Ceiling (Counter-Rotating)
-            int innerLats = 6;
-            int innerLons = FxEnvelope.segments(24, ds, 12);
-            float innerDomeHeight = domeHeight * 0.75f;
-            float innerRadius = radius * 0.85f;
-
-            for (int lat = 0; lat < innerLats; lat++) {
-                float p1 = lat / (float) innerLats;
-                float p2 = (lat + 1) / (float) innerLats;
-
-                float iy1 = 2.0f + (float) Math.sin(p1 * (Math.PI / 2.0)) * innerDomeHeight;
-                float iy2 = 2.0f + (float) Math.sin(p2 * (Math.PI / 2.0)) * innerDomeHeight;
-
-                float ir1 = innerRadius * (float) Math.cos(p1 * (Math.PI / 2.0));
-                float ir2 = innerRadius * (float) Math.cos(p2 * (Math.PI / 2.0));
-
-                float alpha = 0.28f + (p1 * 0.22f);
-
-                // T2 gradient: deep violet at the inner ceiling base rising to
-                // the demonic crimson of the spires at the crown.
-                float inR = 0.55f + (p1 * 0.45f);
-                float inG = 0.03f;
-                float inB = 0.30f + (p1 * 0.30f);
-
-                for (int lon = 0; lon < innerLons; lon++) {
-                    double angleOffset = (-age * (5.5f + lat * 2.0f)) * (Math.PI / 180.0);
-                    double a1 = ((lon / (double) innerLons) * Math.PI * 2.0) + angleOffset;
-                    double a2 = (((lon + 1) / (double) innerLons) * Math.PI * 2.0) + angleOffset;
-
-                    float x1 = (float) Math.cos(a1) * ir1;
-                    float z1 = (float) Math.sin(a1) * ir1;
-                    float x2 = (float) Math.cos(a2) * ir1;
-                    float z2 = (float) Math.sin(a2) * ir1;
-
-                    float x3 = (float) Math.cos(a2) * ir2;
-                    float z3 = (float) Math.sin(a2) * ir2;
-                    float x4 = (float) Math.cos(a1) * ir2;
-                    float z4 = (float) Math.sin(a1) * ir2;
-
-                    drawQuad(matrix, buffer, x1, iy1, z1, x2, iy1, z2, x3, iy2, z3, x4, iy2, z4, inR, inG, inB, alpha * aMul);
-                }
-            }
-
-            // 3. 16 Orbiting 3D Jagged Obsidian Void Spires (Floating & Tilting around domain perimeter)
+        // 3. 16 orbiting jagged obsidian spires leaning inward, drawn as
+        // branch shards on the unchanged orbit math.
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             int spireCount = 16;
             float spireOrbitR = radius * 0.92f;
             float spireRot = age * 12.0f;
-
             for (int i = 0; i < spireCount; i++) {
                 double sAngle = (i / (double) spireCount) * Math.PI * 2.0 + Math.toRadians(spireRot);
                 float sx = (float) Math.cos(sAngle) * spireOrbitR;
                 float sz = (float) Math.sin(sAngle) * spireOrbitR;
                 float sy = 1.0f + (float) Math.sin(age * 0.15f + i * 0.8f) * 0.8f;
-
                 float spireHeight = 3.2f + (i % 3 == 0 ? 1.5f : 0.0f);
-                float spireWidth = 0.35f;
-
-                // Inward lean vector toward player
                 float leanX = -(float) Math.cos(sAngle) * 0.6f;
                 float leanZ = -(float) Math.sin(sAngle) * 0.6f;
-
-                // Tangent vector
-                float tx = -(float) Math.sin(sAngle) * spireWidth;
-                float tz = (float) Math.cos(sAngle) * spireWidth;
-
-                draw3DShardPyramid(matrix, buffer,
-                    sx - tx, sy, sz - tz,
-                    sx + tx, sy, sz + tz,
-                    sx + leanX, sy + spireHeight, sz + leanZ,
-                    0.08f, 0.0f, 0.16f, 0.95f * aMul,
-                    0.75f, 0.05f, 0.95f, aMul
-                );
+                BespokeGeometry.branch(pose, buffer, seed ^ (0x591E1L + i * 131L),
+                    new Vec3(sx, sy, sz), new Vec3(sx + leanX, sy + spireHeight, sz + leanZ),
+                    0.35f, 0.75f, 0.05f, 0.95f, aMul, aMul, ds);
             }
-
-            // 4. Central Abyssal Vortex Funnel Column (Towering vertical cyclonic vortex)
-            int eyeLevels = 8;
-            int eyeSegments = FxEnvelope.segments(16, ds, 8);
-            float eyeRadius = Math.max(1.8f, radius * 0.16f);
-            for (int lvl = 0; lvl < eyeLevels; lvl++) {
-                float ey1 = (lvl / (float) eyeLevels) * domeHeight;
-                float ey2 = ((lvl + 1) / (float) eyeLevels) * domeHeight;
-                float er1 = eyeRadius * (0.6f + 0.5f * (lvl / (float) eyeLevels));
-                float er2 = eyeRadius * (0.6f + 0.5f * ((lvl + 1) / (float) eyeLevels));
-
-                // T2 gradient: saturated violet at the funnel base warming
-                // toward violet-crimson at the top of the column.
-                float lvlT = lvl / (float) eyeLevels;
-                float eyeR = 0.45f + (0.45f * lvlT);
-                float eyeG = 0.03f;
-                float eyeB = 0.85f - (0.25f * lvlT);
-
-                float rotEye = age * (22.0f + lvl * 4.0f) * (float) (Math.PI / 180.0);
-                for (int i = 0; i < eyeSegments; i++) {
-                    double a1 = ((i / (double) eyeSegments) * Math.PI * 2.0) + rotEye;
-                    double a2 = (((i + 1) / (double) eyeSegments) * Math.PI * 2.0) + rotEye;
-
-                    float x1 = (float) Math.cos(a1) * er1;
-                    float z1 = (float) Math.sin(a1) * er1;
-                    float x2 = (float) Math.cos(a2) * er1;
-                    float z2 = (float) Math.sin(a2) * er1;
-
-                    float x3 = (float) Math.cos(a2) * er2;
-                    float z3 = (float) Math.sin(a2) * er2;
-                    float x4 = (float) Math.cos(a1) * er2;
-                    float z4 = (float) Math.sin(a1) * er2;
-
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, eyeR, eyeG, eyeB, 0.45f * aMul);
-                }
-            }
-
-            drawRotatingRing(matrix, buffer, 0, 1.05f, 0, radius * 0.98f, radius * 0.93f, FxEnvelope.segments(48, ds, 20), age * 5.0f, 0.72f, 0.05f, 0.95f, 0.50f * aMul);
-            drawRotatingRing(matrix, buffer, 0, 0.55f, 0, radius * 0.86f, radius * 0.78f, FxEnvelope.segments(40, ds, 16), age * 5.0f - 20.0f, 0.35f, 0.02f, 0.70f, 0.20f * aMul);
         });
 
-        // T1 plus T6: one additive pass holding a halo shell around the
-        // vortex column and a soft ground glow disc, so the domain blooms at
-        // its core and sits anchored in the scene.
+        // 4. Central vortex column: two counter-rotating broken bands, a
+        // violet outer tube and a warmer crimson core, spinning at the old
+        // funnel speeds.
+        final float eyeRadius = Math.max(1.8f, radius * 0.16f);
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 22.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xE7E1L, eyeRadius * 0.85f,
+                0f, domeHeight, 2.5f, 0.68f, 0.03f, 0.70f, 0.45f * aMul, ds);
+        });
+        poseStack.popPose();
+
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-age * 30.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xE7E2L, eyeRadius * 0.55f,
+                0f, domeHeight, -2.0f, 0.90f, 0.03f, 0.60f, 0.35f * aMul, ds);
+        });
+        poseStack.popPose();
+
+        // 5. Two rim bands circling the dome wall where the old rim rings
+        // floated, turning together at the old slow rate.
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 5.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB191L, radius * 0.955f,
+                1.0f, 1.1f, 0.8f, 0.72f, 0.05f, 0.95f, 0.50f * aMul, ds);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB192L, radius * 0.82f,
+                0.5f, 0.6f, -0.8f, 0.35f, 0.02f, 0.70f, 0.20f * aMul, ds);
+        });
+        poseStack.popPose();
+
+        // Additive pass: a halo band around the vortex column, the shared
+        // ground anchor glow, and the shared layered vortex bands around
+        // the funnel, all driven by the same fade as the rest of the dome.
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 22.0f)));
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x4A10L, eyeRadius * 1.45f * 0.85f,
+                0f, domeHeight, 2.5f, 0.35f, 0.03f, 0.50f, 0.15f * aMul, ds);
+        });
+        poseStack.popPose();
 
-            float glowDomeHeight = Math.min(26.0f, radius * 1.35f);
-            float glowEyeRadius = Math.max(1.8f, radius * 0.16f) * 1.45f;
-            int glowLevels = 8;
-            int glowSegments = FxEnvelope.segments(16, ds, 8);
-
-            for (int lvl = 0; lvl < glowLevels; lvl++) {
-                float ey1 = (lvl / (float) glowLevels) * glowDomeHeight;
-                float ey2 = ((lvl + 1) / (float) glowLevels) * glowDomeHeight;
-                float er1 = glowEyeRadius * (0.6f + 0.5f * (lvl / (float) glowLevels));
-                float er2 = glowEyeRadius * (0.6f + 0.5f * ((lvl + 1) / (float) glowLevels));
-
-                float rotEye = age * (22.0f + lvl * 4.0f) * (float) (Math.PI / 180.0);
-                for (int i = 0; i < glowSegments; i++) {
-                    double a1 = ((i / (double) glowSegments) * Math.PI * 2.0) + rotEye;
-                    double a2 = (((i + 1) / (double) glowSegments) * Math.PI * 2.0) + rotEye;
-
-                    float x1 = (float) Math.cos(a1) * er1;
-                    float z1 = (float) Math.sin(a1) * er1;
-                    float x2 = (float) Math.cos(a2) * er1;
-                    float z2 = (float) Math.sin(a2) * er1;
-
-                    float x3 = (float) Math.cos(a2) * er2;
-                    float z3 = (float) Math.sin(a2) * er2;
-                    float x4 = (float) Math.cos(a1) * er2;
-                    float z4 = (float) Math.sin(a1) * er2;
-
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.35f, 0.03f, 0.50f, 0.15f * aMul);
-                }
-            }
-
-            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, radius * 0.50f, 0.0f, FxEnvelope.segments(48, ds, 20), age * 10.0f, 0.30f, 0.02f, 0.45f, 0.10f * aMul);
-
-            // Shared layered bands around the funnel (point 1): a bright
-            // core, a theme mid band, and a wispy outer band, counter
-            // rotating, all driven by the same fade as the rest of the dome.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            LayeredRender.drawAnchorGlow(pose, buffer, radius * 0.50f, 0.06f,
+                0.30f, 0.02f, 0.45f, 0.10f * aMul, ds);
             LayeredRender.drawVortexBands(pose, buffer,
-                Math.max(1.8f, radius * 0.16f) * 1.05f, glowDomeHeight, age,
+                Math.max(1.8f, radius * 0.16f) * 1.05f, domeHeight, age,
                 0.45f, 0.05f, 0.85f, fade, ds);
         });
-    }
-
-    private static void drawRotatingRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
-        double rotRad = rotDeg * (Math.PI / 180.0);
-        for (int i = 0; i < segments; i++) {
-            double a1 = ((i / (double) segments) * Math.PI * 2.0) + rotRad;
-            double a2 = (((i + 1) / (double) segments) * Math.PI * 2.0) + rotRad;
-
-            float x1 = cx + (float) Math.cos(a1) * rOuter;
-            float z1 = cz + (float) Math.sin(a1) * rOuter;
-            float x2 = cx + (float) Math.cos(a2) * rOuter;
-            float z2 = cz + (float) Math.sin(a2) * rOuter;
-
-            float ix1 = cx + (float) Math.cos(a1) * rInner;
-            float iz1 = cz + (float) Math.sin(a1) * rInner;
-            float ix2 = cx + (float) Math.cos(a2) * rInner;
-            float iz2 = cz + (float) Math.sin(a2) * rInner;
-
-            drawQuad(matrix, consumer, ix1, cy, iz1, ix2, cy, iz2, x2, cy, z2, x1, cy, z1, r, g, b, a);
-        }
-    }
-
-    private static void draw3DShardPyramid(Matrix4f matrix, VertexConsumer consumer,
-                                          float x1, float y1, float z1,
-                                          float x2, float y2, float z2,
-                                          float tipX, float tipY, float tipZ,
-                                          float rBase, float gBase, float bBase, float aBase,
-                                          float rTip, float gTip, float bTip, float aTip) {
-        // Front Face
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Back Face
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-    }
-
-    private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,
-                                 float x1, float y1, float z1,
-                                 float x2, float y2, float z2,
-                                 float x3, float y3, float z3,
-                                 float x4, float y4, float z4,
-                                 float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Reverse for backface
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 }

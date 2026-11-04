@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.GroundScar;
@@ -11,7 +13,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -168,7 +169,7 @@ public class DimensionalRiftEntity extends Projectile {
                         currentRadius * 0.3, 0.8, currentRadius * 0.3, 0.08);
                 }
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 2.0f, 0.7f);
+                    DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 2.0f, 0.7f);
             }
 
             // Effects and damage on everything inside the current radius.
@@ -208,11 +209,11 @@ public class DimensionalRiftEntity extends Projectile {
                 );
 
                 // The burst lands at the visual's peak tick, when expansion
-                // completes, on everything inside at that moment.
+                // completes, on everything inside at that moment. Ability
+                // damage uses the mod's void type (bespoke rule 4), with this
+                // rift as the direct entity.
                 if (burstNow) {
-                    DamageSource damageSource = owner instanceof Player playerOwner
-                        ? serverLevel.damageSources().playerAttack(playerOwner)
-                        : (owner instanceof LivingEntity livingCast ? serverLevel.damageSources().mobAttack(livingCast) : serverLevel.damageSources().magic());
+                    DamageSource damageSource = DbaDamage.voidDmg(this, owner);
 
                     target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(this.burstDamage));
 
@@ -221,7 +222,7 @@ public class DimensionalRiftEntity extends Projectile {
                         target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
                         10, 0.4, 0.5, 0.4, 0.05);
                     serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                        SoundEvents.SOUL_ESCAPE.value(), SoundSource.PLAYERS, 0.9f, 0.6f);
+                        DbaSounds.SOUL_DRIFT, SoundSource.PLAYERS, 0.9f, 0.6f);
 
                     // Soul Rend heal from AOE: 1% of burst damage per target hit
                     if (owner instanceof Player playerOwner) {
@@ -231,25 +232,24 @@ public class DimensionalRiftEntity extends Projectile {
 
                 // Sustained tick damage spread across the hold, never after the visual ends.
                 if (tickDamageNow) {
-                    DamageSource tickSource = owner instanceof Player playerOwner
-                        ? serverLevel.damageSources().playerAttack(playerOwner)
-                        : serverLevel.damageSources().magic();
+                    DamageSource tickSource = DbaDamage.voidDmg(this, owner);
                     target.hurtServer(serverLevel, tickSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(TICK_DAMAGE));
                 }
             }
 
-            // Ambient audio cues
+            // Ambient audio cues (bespoke bank: sonic boom -> boom sonic,
+            // anchor set spawn -> dark charge rise, portal -> rift ambient)
             if (this.tickCount == 1) {
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.6f);
+                    DbaSounds.BOOM_SONIC, SoundSource.PLAYERS, 2.5f, 0.6f);
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.6f);
+                    DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.6f);
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.RESPAWN_ANCHOR_SET_SPAWN, SoundSource.PLAYERS, 2.0f, 0.5f);
+                    DbaSounds.CHARGE_DARK, SoundSource.PLAYERS, 2.0f, 0.5f);
             }
             if (this.tickCount % 20 == 0) {
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.PORTAL_AMBIENT, SoundSource.PLAYERS, 1.2f, 0.7f + (currentRadius / 15.0f) * 0.3f);
+                    DbaSounds.RIFT_AMBIENT, SoundSource.PLAYERS, 1.2f, 0.7f + (currentRadius / 15.0f) * 0.3f);
             }
 
             if (this.tickCount >= MAX_LIFETIME) {

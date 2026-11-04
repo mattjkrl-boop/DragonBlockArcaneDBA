@@ -5,7 +5,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
@@ -21,7 +20,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Void Slash Entity — Large crescent blade wave unleashed on every 3rd Hollow Rush teleport.
+ * Void Slash Entity: Large crescent blade wave unleashed on every 3rd Hollow Rush teleport.
  */
 public class VoidSlashEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> TILT_RIGHT = SynchedEntityData.defineId(VoidSlashEntity.class, EntityDataSerializers.BOOLEAN);
@@ -97,8 +96,10 @@ public class VoidSlashEntity extends Projectile {
                 hitEntities.add(target.getId());
 
                 // Massive void damage, only when the item actually set it.
+                // Bespoke pass: ability damage uses the mod's own void type,
+                // this slash as the direct entity and the caster as attacker.
                 if (this.damage > 0.0f) {
-                    target.hurtServer(serverLevel, serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : target), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
+                    target.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.voidDmg(this, owner), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
                 }
 
                 // Inflict Dark Faded
@@ -106,7 +107,7 @@ public class VoidSlashEntity extends Projectile {
 
                 // Sound
                 serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 0.6f);
+                    com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 0.6f);
             }
 
             if (this.tickCount > 40) {

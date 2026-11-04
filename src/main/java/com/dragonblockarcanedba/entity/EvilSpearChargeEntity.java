@@ -13,7 +13,7 @@ import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 
 /**
- * Evil Spear Charge Entity — Physical 3D demonic crimson ground seals, contracting energy torus rings,
+ * Evil Spear Charge Entity: Physical 3D demonic crimson ground seals, contracting energy torus rings,
  * orbiting blood shards, and pulsating demonic core matrix during Evil Spear Left-Click charging.
  */
 public class EvilSpearChargeEntity extends Projectile {

@@ -4,7 +4,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -36,6 +35,7 @@ public class AzureStormEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> IS_MAX_CHARGED = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> LIFE_TICKS = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> CHARGE = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Long> SEED = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.LONG);
 
     /** Azure theme color for the layered particle emitters (r 0.31, g 0.78, b 1.0). */
     public static final int AZURE_ARGB = 0xFF4FC8FF;
@@ -63,6 +63,9 @@ public class AzureStormEntity extends Projectile {
         this.entityData.set(IS_MAX_CHARGED, isMaxCharged);
         this.entityData.set(LIFE_TICKS, Math.max(20, lifeTicks));
         this.entityData.set(CHARGE, chargeRatio);
+        // Renderer shape seed: fixed at spawn so every client draws the same
+        // bespoke storm shape. Synced and saved like the rest of the state.
+        this.entityData.set(SEED, this.getUUID().getMostSignificantBits() ^ this.getUUID().getLeastSignificantBits());
         this.targetUuid = target != null ? target.getUUID() : null;
     }
 
@@ -78,6 +81,10 @@ public class AzureStormEntity extends Projectile {
         return this.entityData.get(CHARGE);
     }
 
+    public long getRenderSeed() {
+        return this.entityData.get(SEED);
+    }
+
     public int getAgeTicks() {
         return this.ageTicks;
     }
@@ -90,6 +97,7 @@ public class AzureStormEntity extends Projectile {
         builder.define(IS_MAX_CHARGED, false);
         builder.define(LIFE_TICKS, 220);
         builder.define(CHARGE, 0.0f);
+        builder.define(SEED, 0L);
     }
 
     // Persist ALL storm state. The old save wrote only the max charge flag and
@@ -106,6 +114,7 @@ public class AzureStormEntity extends Projectile {
         output.putBoolean("DebrisSpawned", this.debrisSpawned);
         output.putInt("LifeTicks", this.getLifeTicks());
         output.putFloat("Charge", this.getChargeRatio());
+        output.putLong("RenderSeed", this.getRenderSeed());
         output.putInt("AgeTicks", this.ageTicks);
         output.putBoolean("HasTarget", this.targetUuid != null);
         if (this.targetUuid != null) {
@@ -124,6 +133,7 @@ public class AzureStormEntity extends Projectile {
         this.debrisSpawned = input.getBooleanOr("DebrisSpawned", false);
         this.entityData.set(LIFE_TICKS, input.getIntOr("LifeTicks", 220));
         this.entityData.set(CHARGE, input.getFloatOr("Charge", 0.0f));
+        this.entityData.set(SEED, input.getLongOr("RenderSeed", 0L));
         this.ageTicks = input.getIntOr("AgeTicks", 0);
         if (input.getBooleanOr("HasTarget", false)) {
             this.targetUuid = new UUID(input.getLongOr("TargetUuidMost", 0L), input.getLongOr("TargetUuidLeast", 0L));
@@ -223,16 +233,13 @@ public class AzureStormEntity extends Projectile {
             radius, 14.0, livingOwner, 0.05 + 0.06 * charge, 1.3, 0.12, env);
 
         // Point 1, layered particles: core, mid, and outer bands scaled by the
-        // same envelope the renderer fades with, plus dissipation drizzle.
+        // same envelope the renderer fades with. Rain inside the storm zone is
+        // not emitted here: the AtmosphereClient system renders storm rain for
+        // every active AtmosphereServer zone, this storm included.
         if (this.ageTicks % 2 == 0) {
             com.dragonblockarcanedba.util.LayeredParticles.emitVortex(serverLevel, center,
                 radius * 0.6f, 9.0f + charge * 5.0f, this.ageTicks, life,
                 AZURE_ARGB, com.dragonblockarcanedba.particle.DbaParticles.WIND);
-            if (this.ageTicks > life * 0.65f) {
-                com.dragonblockarcanedba.util.LayeredParticles.emitRain(serverLevel, center,
-                    radius * 0.8f, 10.0f, this.ageTicks, life,
-                    com.dragonblockarcanedba.particle.DbaParticles.WIND);
-            }
         }
 
         // Giant tornado finisher at the storm's peak, once the build window
@@ -280,7 +287,7 @@ public class AzureStormEntity extends Projectile {
         // Ambient storm sound
         if (this.ageTicks % 40 == 0) {
             serverLevel.playSound(null, center.x, center.y, center.z,
-                SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 1.0f, 0.9f);
+                com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 1.0f, 0.9f);
         }
 
         if (this.ageTicks >= life) {

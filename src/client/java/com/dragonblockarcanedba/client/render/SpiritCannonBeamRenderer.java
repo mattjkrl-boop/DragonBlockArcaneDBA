@@ -1,5 +1,6 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SpiritCannonBeamEntity;
@@ -13,16 +14,17 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Spirit Cannon Beam in Minecraft 26.2.
- * Renders a continuous, physical 3D geometric energy beam:
- * - Multi-layered prismatic core (superdense white spine, fluted cyan shroud, outer hexagonal energy sheath)
- * - Quad helical energy drill ribbons orbiting and boring forward
- * - Orbital Ki ring nodes and pulsing energy reticles
- * - Muzzle celestial rune array and convergence emitter geometry
- * - Terminus impact hemisphere dome and radiating splash shards
+ * Bespoke pass: every shape comes from BespokeGeometry seeded by the
+ * entity's synced seed. The beam body is crossed torn ribbons (white core,
+ * cyan flow pair, wide sheath pair), the orbital nodes are glow fan
+ * apertures with counter spun shard star reticles, the muzzle is a glow
+ * aperture with a shard seal, and the terminus is a displaced dome with a
+ * gold splash star and a white flash fan. Layer radii, colors, envelope,
+ * first person anchoring, and the fade retract are unchanged from the
+ * spectacle pass.
  */
 public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEntity, SpiritCannonBeamRenderer.SpiritCannonRenderState> {
 
@@ -39,6 +41,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         public int casterId = -1;
         public boolean isFirstPersonOwner = false;
         public boolean onRight = true;
+        public long seed = 0L;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -65,14 +68,15 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         state.age = entity.tickCount + partialTicks;
         state.fade = entity.getFade();
         state.casterId = entity.getCasterId();
+        state.seed = entity.getSeed();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-        state.isFirstPersonOwner = (mc.player != null && 
-            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+        state.isFirstPersonOwner = (mc.player != null &&
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) &&
             mc.options.getCameraType().isFirstPerson());
         if (mc.player != null) {
             boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
-            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem && 
+            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem &&
                 !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem));
             state.onRight = isRightHanded ? !isOffhand : isOffhand;
         }
@@ -94,6 +98,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         // beam retracts and thins instead of vanishing in one tick.
         final float env = fadeIn * state.fade;
         final float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        final long seed = state.seed;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -113,304 +118,121 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         final float fFpScale = fpScale;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
+            // 1. Beam body as crossed torn ribbons. Widths are the old
+            // prism diameters (core 0.26, mid 0.52, sheath 0.84 across),
+            // rolls advance at the old prism rotation speeds, and the
+            // bends give the flow layers a slow irregular wander the
+            // prisms never had.
+            float runLen = drawLength - fZStart;
+            beamRibbon(pose, buffer, seed + 1L, age * 5.0f, fZStart, runLen,
+                0.26f * pulse * fFpScale, 0.02f, 1.0f, 1.0f, 1.0f, 0.95f, env, distScale);
+            beamRibbon(pose, buffer, seed + 2L, age * 5.0f + 90.0f, fZStart, runLen,
+                0.26f * pulse * fFpScale, -0.02f, 1.0f, 1.0f, 1.0f, 0.95f, env, distScale);
+            beamRibbon(pose, buffer, seed + 3L, -age * 8.0f, fZStart, runLen,
+                0.52f * pulse * fFpScale, 0.35f, 0.0f, 0.92f, 1.0f, 0.65f, env, distScale);
+            beamRibbon(pose, buffer, seed + 4L, -age * 8.0f + 90.0f, fZStart, runLen,
+                0.52f * pulse * fFpScale, -0.35f, 0.0f, 0.92f, 1.0f, 0.65f, env, distScale);
+            beamRibbon(pose, buffer, seed + 5L, age * 3.0f, fZStart, runLen,
+                0.84f * pulse * fFpScale, 0.55f, 0.05f, 0.70f, 1.0f, 0.30f, env, distScale);
+            beamRibbon(pose, buffer, seed + 6L, age * 3.0f + 90.0f, fZStart, runLen,
+                0.84f * pulse * fFpScale, -0.55f, 0.05f, 0.70f, 1.0f, 0.30f, env, distScale);
 
-            // 1. Multi-Layered Prismatic Core Beam (scaled down in first person)
-            // Layer A: Superdense White-Cyan Inner Core (8 sides)
-            float innerRadius = 0.13f * pulse * fFpScale;
-            drawPrismBeam(matrix, buffer, innerRadius, fZStart, drawLength, 8, age * 5.0f, 1.0f, 1.0f, 1.0f, 0.95f * env);
-
-            // Layer B: Fluted Radiant Cyan Shroud (8 sides), now with the
-            // same traveling flow as the sheath at a slower band speed, so
-            // both the mid and outer layers visibly stream toward the target.
-            float midRadius = 0.26f * pulse * fFpScale;
-            drawPrismBeamFlow(matrix, buffer, midRadius, fZStart, drawLength, 8, -age * 8.0f, age * 0.55f, 0.0f, 0.92f, 1.0f, 0.65f * env,
-                FxEnvelope.segments(10, distScale, 5));
-
-            // Layer C: Hexagonal Outer Energy Sheath with Traveling Wave (6 sides)
-            // Drawn in segments with a traveling brightness band (redesign T7)
-            // so energy visibly flows down the beam instead of sitting uniform.
-            float outerRadius = 0.42f * pulse * fFpScale;
-            drawPrismBeamFlow(matrix, buffer, outerRadius, fZStart, drawLength, 6, age * 3.0f, age, 0.05f, 0.70f, 1.0f, 0.30f * env,
-                FxEnvelope.segments(12, distScale, 6));
-
-            // 2. Quad Helical Energy Drill Ribbons
-            int ribbonSegments = Math.min(FxEnvelope.segments((int) (drawLength * 3.0f), distScale, 8), 72);
-            float spiralRadius = 0.48f * pulse * fFpScale;
-            float ribbonSize = 0.045f * fFpScale;
-            float spiralSpeed = age * 0.35f;
-            if (ribbonSegments > 1) {
-                for (int h = 0; h < 4; h++) {
-                    float phase = h * ((float) Math.PI * 0.5f);
-                    boolean isGold = (h % 2 == 1);
-                    float rCol = isGold ? 1.0f : 0.0f;
-                    float gCol = isGold ? 0.85f : 0.95f;
-                    float bCol = isGold ? 0.20f : 1.0f;
-                    float aCol = (isGold ? 0.85f : 0.75f) * env;
-                    float dir = isGold ? -1.0f : 1.0f;
-                    for (int i = 0; i < ribbonSegments; i++) {
-                        float z1 = (i / (float) ribbonSegments) * (drawLength - fZStart) + fZStart;
-                        float z2 = ((i + 1) / (float) ribbonSegments) * (drawLength - fZStart) + fZStart;
-                        float p1 = z1 / drawLength;
-                        float p2 = z2 / drawLength;
-                        double a1 = (p1 * Math.PI * 8.0) + (spiralSpeed * dir) + phase;
-                        double a2 = (p2 * Math.PI * 8.0) + (spiralSpeed * dir) + phase;
-                        float x1 = (float) Math.cos(a1) * spiralRadius;
-                        float y1 = (float) Math.sin(a1) * spiralRadius;
-                        float x2 = (float) Math.cos(a2) * spiralRadius;
-                        float y2 = (float) Math.sin(a2) * spiralRadius;
-                        float w1 = ribbonSize * (0.35f + 0.65f * (float) Math.sin(p1 * Math.PI));
-                        float w2 = ribbonSize * (0.35f + 0.65f * (float) Math.sin(p2 * Math.PI));
-                        drawQuad(matrix, buffer, x1 - w1, y1, z1, x1 + w1, y1, z1, x2 + w2, y2, z2, x2 - w2, y2, z2, rCol, gCol, bCol, aCol);
-                        float c1 = w1 * 0.32f;
-                        float c2 = w2 * 0.32f;
-                        drawQuad(matrix, buffer, x1 - c1, y1, z1, x1 + c1, y1, z1, x2 + c2, y2, z2, x2 - c2, y2, z2, 1.0f, 1.0f, 1.0f, aCol);
-                        float ix1 = x1 * 0.7f;
-                        float iy1 = y1 * 0.7f;
-                        float ix2 = x2 * 0.7f;
-                        float iy2 = y2 * 0.7f;
-                        buffer.addVertex(matrix, x1, y1, z1).setColor(rCol, gCol, bCol, aCol * 0.55f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                        buffer.addVertex(matrix, x1 + (ix1 - x1) * 0.15f, y1 + (iy1 - y1) * 0.15f, z1).setColor(rCol, gCol, bCol, aCol * 0.55f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                        buffer.addVertex(matrix, ix2, iy2, z2).setColor(rCol, gCol, bCol, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                        buffer.addVertex(matrix, ix1, iy1, z1).setColor(rCol, gCol, bCol, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-                    }
+            // 2. Orbital nodes: glow fan apertures riding the beam with a
+            // counter spun shard star reticle inside each. Placement,
+            // alternating cyan and gold, pulse phasing, and radii are the
+            // spectacle numbers; only the shapes went bespoke.
+            float usable = drawLength - fZStart;
+            if (usable >= 3.0f && env > 0.01f) {
+                int nodes = FxEnvelope.segments(Math.min(8, Math.max(2, (int) (usable / 4.0f))), distScale, 2);
+                for (int n = 0; n < nodes; n++) {
+                    float frac = (n + 1) / (float) (nodes + 1);
+                    float z = fZStart + usable * frac;
+                    boolean gold = (n % 2 == 1);
+                    float r = gold ? 1.0f : 0.0f;
+                    float g = gold ? 0.82f : 0.92f;
+                    float b = gold ? 0.25f : 1.0f;
+                    float nodePulse = 0.72f + 0.28f * (float) Math.sin(age * 3.0f + n * 1.7f);
+                    float ringR = (0.64f + 0.08f * (float) Math.sin(age * 2.0f + n * 2.3f)) * pulse * fFpScale;
+                    float spin = age * (gold ? -38.0f : 38.0f) + n * 30.0f;
+                    PoseStack.Pose aperture = pose.copy();
+                    aperture.translate(0.0f, 0.0f, z);
+                    aperture.rotate(Axis.ZP.rotationDegrees(spin));
+                    aperture.rotate(Axis.XP.rotationDegrees(90.0f));
+                    BespokeGeometry.glowFan(aperture, buffer, seed + 100L + n * 17L, ringR, 0.0f,
+                        r, g, b, 0.50f * nodePulse * env, distScale);
+                    PoseStack.Pose reticle = pose.copy();
+                    reticle.translate(0.0f, 0.0f, z);
+                    reticle.rotate(Axis.ZP.rotationDegrees(-spin * 1.4f));
+                    reticle.rotate(Axis.XP.rotationDegrees(90.0f));
+                    BespokeGeometry.shardFan(reticle, buffer, seed + 200L + n * 29L, ringR * 0.62f,
+                        Math.min(1f, r + 0.4f), Math.min(1f, g + 0.4f), Math.min(1f, b + 0.4f),
+                        0.55f, nodePulse * env, distScale);
                 }
             }
 
-            // 3. Orbital Ki Ring Nodes and Pulsing Energy Reticles: rings
-            // riding the beam at even intervals, alternating cyan and gold,
-            // each with a smaller counter rotating reticle whose alpha
-            // pulses out of phase with its neighbours.
-            drawBeamRingNodes(matrix, buffer, fZStart, drawLength, age, pulse, fFpScale, env, distScale);
+            // 3. Muzzle aperture at the blade tip: a cyan glow fan with a
+            // counter spun white-cyan shard seal inside it.
+            PoseStack.Pose muzzle = pose.copy();
+            muzzle.translate(0.0f, 0.0f, 0.15f);
+            muzzle.rotate(Axis.ZP.rotationDegrees(age * 30.0f));
+            muzzle.rotate(Axis.XP.rotationDegrees(90.0f));
+            BespokeGeometry.glowFan(muzzle, buffer, seed + 300L, 0.70f * pulse, 0.0f,
+                0.0f, 0.90f, 1.0f, 0.85f * env, distScale);
+            PoseStack.Pose seal = pose.copy();
+            seal.translate(0.0f, 0.0f, 0.20f);
+            seal.rotate(Axis.ZP.rotationDegrees(-age * 45.0f));
+            seal.rotate(Axis.XP.rotationDegrees(90.0f));
+            BespokeGeometry.shardFan(seal, buffer, seed + 301L, 0.48f * pulse,
+                0.0f, 0.95f, 1.0f, 0.90f, env, distScale);
 
-            // 4. Muzzle at the blade tip, then the impact where the beam ends.
-            drawMuzzleEmitter(matrix, buffer, age, pulse, env);
-
-            // 5. Terminus Impact Geometry (at Hit Point Z=drawLength)
-            drawTerminusImpact(matrix, buffer, drawLength, age, pulse, env);
+            // 4. Terminus at the hit point: a displaced dome bellied back
+            // toward the caster, a gold splash star on the contact plane,
+            // and a white flash fan at its heart.
+            PoseStack.Pose dome = pose.copy();
+            dome.translate(0.0f, 0.0f, drawLength - 0.05f);
+            dome.rotate(Axis.XP.rotationDegrees(90.0f));
+            BespokeGeometry.displacedDome(dome, buffer, seed + 400L, 0.85f * pulse,
+                0.0f, 0.95f, 1.0f, 0.75f, env, distScale);
+            PoseStack.Pose splash = pose.copy();
+            splash.translate(0.0f, 0.0f, drawLength);
+            splash.rotate(Axis.ZP.rotationDegrees(age * 25.0f));
+            splash.rotate(Axis.XP.rotationDegrees(90.0f));
+            BespokeGeometry.shardFan(splash, buffer, seed + 401L, 1.1f * pulse,
+                1.0f, 0.90f, 0.30f, 0.85f, env, distScale);
+            PoseStack.Pose flash = pose.copy();
+            flash.translate(0.0f, 0.0f, drawLength);
+            flash.rotate(Axis.XP.rotationDegrees(90.0f));
+            BespokeGeometry.glowFan(flash, buffer, seed + 402L, 0.50f * pulse, 0.0f,
+                1.0f, 1.0f, 1.0f, 0.90f * env, distScale);
         });
 
         // Glow pass: a low alpha copy of the core and sheath so the beam
-        // blooms as light instead of reading as matte prisms.
+        // blooms as light instead of reading as matte ribbons.
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawPrismBeam(matrix, buffer, 0.13f * pulse * fFpScale, fZStart, drawLength, 8, age * 5.0f, 1.0f, 1.0f, 1.0f, 0.22f * env);
-            drawPrismBeam(matrix, buffer, 0.42f * pulse * fFpScale, fZStart, drawLength, 6, age * 3.0f, 0.05f, 0.70f, 1.0f, 0.10f * env);
+            float runLen = drawLength - fZStart;
+            beamRibbon(pose, buffer, seed + 7L, age * 5.0f + 45.0f, fZStart, runLen,
+                0.30f * pulse * fFpScale, 0.02f, 1.0f, 1.0f, 1.0f, 0.22f, env, distScale);
+            beamRibbon(pose, buffer, seed + 8L, age * 3.0f + 45.0f, fZStart, runLen,
+                0.88f * pulse * fFpScale, 0.55f, 0.05f, 0.70f, 1.0f, 0.10f, env, distScale);
         });
 
         poseStack.popPose();
     }
 
-    private static void drawPrismBeam(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float length, int sides, float rotDeg, float r, float g, float b, float a) {
-        double rotRad = Math.toRadians(rotDeg);
-        for (int i = 0; i < sides; i++) {
-            double a1 = (i / (double) sides) * Math.PI * 2.0 + rotRad;
-            double a2 = ((i + 1) / (double) sides) * Math.PI * 2.0 + rotRad;
-
-            float x1 = (float) Math.cos(a1) * radius;
-            float y1 = (float) Math.sin(a1) * radius;
-            float x2 = (float) Math.cos(a2) * radius;
-            float y2 = (float) Math.sin(a2) * radius;
-
-            drawQuad(matrix, consumer,
-                x1, y1, zStart,
-                x2, y2, zStart,
-                x2, y2, length,
-                x1, y1, length,
-                r, g, b, a
-            );
-        }
-    }
-
     /**
-     * Segmented prism beam with a traveling brightness band (redesign T7).
-     * Alpha pulses in a sine wave whose phase runs along the beam length and
-     * advances with age, so the sheath reads as flowing energy.
+     * One beam layer: a torn ribbon started at zStart and run down the beam
+     * axis. tornRibbon runs along its local +X in the XZ plane, so the pose
+     * is rolled around the beam axis first, then turned so +X points down
+     * +Z. Pose operations post-multiply, so the calls below compose as
+     * translate, roll, turn when read against a vertex.
      */
-    private static void drawPrismBeamFlow(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float length, int sides, float rotDeg, float age, float r, float g, float b, float a, int flowSegments) {
-        for (int sgm = 0; sgm < flowSegments; sgm++) {
-            float z1 = zStart + (length - zStart) * (sgm / (float) flowSegments);
-            float z2 = zStart + (length - zStart) * ((sgm + 1) / (float) flowSegments);
-            float p = sgm / (float) flowSegments;
-            float band = 0.70f + 0.55f * (0.5f + 0.5f * (float) Math.sin(p * Math.PI * 6.0 - age * 0.9f));
-            drawPrismBeam(matrix, consumer, radius, z1, z2, sides, rotDeg, r, g, b, a * band);
-        }
-    }
-
-    private static void drawPlaneRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
-        double rotRad = Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0 + rotRad;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0 + rotRad;
-
-            float x1Out = cx + (float) Math.cos(a1) * rOuter;
-            float y1Out = cy + (float) Math.sin(a1) * rOuter;
-            float x2Out = cx + (float) Math.cos(a2) * rOuter;
-            float y2Out = cy + (float) Math.sin(a2) * rOuter;
-
-            float x1In = cx + (float) Math.cos(a1) * rInner;
-            float y1In = cy + (float) Math.sin(a1) * rInner;
-            float x2In = cx + (float) Math.cos(a2) * rInner;
-            float y2In = cy + (float) Math.sin(a2) * rInner;
-
-            drawQuad(matrix, consumer, x1In, y1In, cz, x2In, y2In, cz, x2Out, y2Out, cz, x1Out, y1Out, cz, r, g, b, a);
-        }
-    }
-
-    /**
-     * Orbital Ki ring nodes along the beam (section 3). Each node is a ring
-     * standing perpendicular to the beam axis with three beads orbiting on
-     * it, plus a smaller counter rotating reticle ring inside whose alpha
-     * pulses. Node count and ring segments step down with camera distance.
-     */
-    private static void drawBeamRingNodes(Matrix4f matrix, VertexConsumer consumer, float zStart, float beamLength,
-                                          float age, float pulse, float fpScale, float env, float distScale) {
-        float usable = beamLength - zStart;
-        if (usable < 3.0f || env <= 0.01f) return;
-        int nodes = FxEnvelope.segments(Math.min(8, Math.max(2, (int) (usable / 4.0f))), distScale, 2);
-        int ringSegs = FxEnvelope.segments(20, distScale, 10);
-        int reticleSegs = FxEnvelope.segments(12, distScale, 8);
-        for (int n = 0; n < nodes; n++) {
-            float frac = (n + 1) / (float) (nodes + 1);
-            float z = zStart + usable * frac;
-            boolean gold = (n % 2 == 1);
-            float r = gold ? 1.0f : 0.0f;
-            float g = gold ? 0.82f : 0.92f;
-            float b = gold ? 0.25f : 1.0f;
-            float nodePulse = 0.72f + 0.28f * (float) Math.sin(age * 3.0f + n * 1.7f);
-            float ringR = (0.64f + 0.08f * (float) Math.sin(age * 2.0f + n * 2.3f)) * pulse * fpScale;
-            float spin = age * (gold ? -38.0f : 38.0f) + n * 30.0f;
-
-            // The node ring itself.
-            drawPlaneRing(matrix, consumer, 0, 0, z, ringR, ringR * 0.80f, ringSegs, spin, r, g, b, 0.50f * nodePulse * env);
-            // Pulsing reticle: smaller, counter rotating, brighter core color.
-            drawPlaneRing(matrix, consumer, 0, 0, z, ringR * 0.55f, ringR * 0.42f, reticleSegs, -spin * 1.4f,
-                Math.min(1f, r + 0.4f), Math.min(1f, g + 0.4f), Math.min(1f, b + 0.4f), 0.55f * nodePulse * env);
-
-            // Three beads orbiting on the node ring.
-            for (int k = 0; k < 3; k++) {
-                double ba = age * 2.2 + n * 1.3 + k * (Math.PI * 2.0 / 3.0);
-                float bx = (float) Math.cos(ba) * ringR;
-                float by = (float) Math.sin(ba) * ringR;
-                float s = 0.055f * fpScale;
-                drawQuad(matrix, consumer,
-                    bx - s, by - s, z, bx + s, by - s, z, bx + s, by + s, z, bx - s, by + s, z,
-                    1.0f, 1.0f, 1.0f, 0.80f * nodePulse * env);
-            }
-        }
-    }
-
-    private static void drawMuzzleEmitter(Matrix4f matrix, VertexConsumer consumer, float age, float pulse, float env) {
-        // 2 Concentric Rotating Celestial Muzzle Seals
-        drawPlaneRing(matrix, consumer, 0, 0, 0.15f, 0.70f * pulse, 0.52f * pulse, 24, age * 30.0f, 0.0f, 0.90f, 1.0f, 0.85f * env);
-        drawPlaneRing(matrix, consumer, 0, 0, 0.20f, 0.48f * pulse, 0.32f * pulse, 16, -age * 45.0f, 0.0f, 0.95f, 1.0f, 0.90f * env);
-
-        for (int s = 0; s < 4; s++) {
-            double sAngle = (s / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 20.0f);
-            float sx = (float) Math.cos(sAngle) * 0.85f * pulse;
-            float sy = (float) Math.sin(sAngle) * 0.85f * pulse;
-            drawCurvedNeedle(matrix, consumer, sx, sy, 0.06f, 0.0f, 0.0f, 0.48f, 1.0f, 1.0f, 1.0f, 0.95f * env);
-        }
-    }
-
-    private static void drawTerminusImpact(Matrix4f matrix, VertexConsumer consumer, float beamLength, float age, float pulse, float env) {
-        // Expanding Impact Dome at Impact Contact Point
-        float domeRadius = 0.85f * pulse;
-        int segments = 16;
-
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-
-            float x1 = (float) Math.cos(a1) * domeRadius;
-            float y1 = (float) Math.sin(a1) * domeRadius;
-            float x2 = (float) Math.cos(a2) * domeRadius;
-            float y2 = (float) Math.sin(a2) * domeRadius;
-
-            // Outer flared ring at contact point
-            drawQuad(matrix, consumer,
-                x1 * 0.5f, y1 * 0.5f, beamLength - 0.3f,
-                x2 * 0.5f, y2 * 0.5f, beamLength - 0.3f,
-                x2, y2, beamLength,
-                x1, y1, beamLength,
-                0.0f, 0.95f, 1.0f, 0.75f * env
-            );
-
-            // Center dense white flash point
-            drawQuad(matrix, consumer,
-                x1 * 0.3f, y1 * 0.3f, beamLength - 0.1f,
-                x2 * 0.3f, y2 * 0.3f, beamLength - 0.1f,
-                x2 * 0.3f, y2 * 0.3f, beamLength + 0.1f,
-                x1 * 0.3f, y1 * 0.3f, beamLength + 0.1f,
-                1.0f, 1.0f, 1.0f, 0.95f * env
-            );
-        }
-
-        for (int f = 0; f < 4; f++) {
-            double fAngle = (f / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 25.0f);
-            float fx = (float) Math.cos(fAngle) * 1.1f * pulse;
-            float fy = (float) Math.sin(fAngle) * 1.1f * pulse;
-            drawCurvedNeedle(matrix, consumer, 0.0f, 0.0f, beamLength, fx, fy, beamLength + 0.15f, 1.0f, 0.90f, 0.30f, 0.85f * env);
-        }
-    }
-
-    /** A tapered curve with a bright core and a tail that fades, used where a spike used to sit. */
-    private static void drawCurvedNeedle(Matrix4f matrix, VertexConsumer consumer,
-                                         float x1, float y1, float z1, float x2, float y2, float z2,
-                                         float r, float g, float b, float a) {
-        float dx = x2 - x1;
-        float dy = y2 - y1;
-        float dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.001f) {
-            return;
-        }
-        float px = -dy / len;
-        float py = dx / len;
-        float bow = len * 0.28f;
-        float mx = (x1 + x2) * 0.5f + px * bow;
-        float my = (y1 + y2) * 0.5f + py * bow;
-        float mz = (z1 + z2) * 0.5f + dz / len * bow * 0.15f;
-        float w = Math.min(0.07f, len * 0.12f);
-        needleHalf(matrix, consumer, x1, y1, z1, mx, my, mz, w, w * 0.45f, r, g, b, a, a * 0.7f);
-        needleHalf(matrix, consumer, mx, my, mz, x2, y2, z2, w * 0.45f, 0.008f, r, g, b, a * 0.7f, 0.0f);
-        needleHalf(matrix, consumer, x1, y1, z1, mx, my, mz, w * 0.28f, w * 0.12f, 1.0f, 1.0f, 1.0f, a, a * 0.8f);
-        needleHalf(matrix, consumer, mx, my, mz, mx - px * bow, my - py * bow, mz, w * 0.35f, 0.006f, r, g, b, a * 0.4f, 0.0f);
-    }
-
-    private static void needleHalf(Matrix4f matrix, VertexConsumer consumer,
-                                   float x1, float y1, float z1, float x2, float y2, float z2,
-                                   float w1, float w2, float r, float g, float b, float a1, float a2) {
-        float dx = x2 - x1;
-        float dy = y2 - y1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + 0.0001f);
-        float nx = -dy / len;
-        float ny = dx / len;
-        consumer.addVertex(matrix, x1 - nx * w1, y1 - ny * w1, z1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x1 + nx * w1, y1 + ny * w1, z1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x2 + nx * w2, y2 + ny * w2, z2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x2 - nx * w2, y2 - ny * w2, z2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x1, y1, z1 - w1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1, y1, z1 + w1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2 + w2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2 - w2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-    }
-
-    private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,
-                                 float x1, float y1, float z1,
-                                 float x2, float y2, float z2,
-                                 float x3, float y3, float z3,
-                                 float x4, float y4, float z4,
-                                 float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Reverse
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+    private static void beamRibbon(PoseStack.Pose base, VertexConsumer buffer, long seed,
+                                   float rollDeg, float zStart, float length, float width, float bend,
+                                   float r, float g, float b, float alpha, float env, float distScale) {
+        PoseStack.Pose p = base.copy();
+        p.translate(0.0f, 0.0f, zStart);
+        p.rotate(Axis.ZP.rotationDegrees(rollDeg));
+        p.rotate(Axis.YP.rotationDegrees(-90.0f));
+        BespokeGeometry.tornRibbon(p, buffer, seed, length, width, bend, r, g, b, alpha, env, distScale);
     }
 }

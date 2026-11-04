@@ -1,9 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.ZShockwaveEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -11,12 +12,16 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Z-Sword Massive Kinetic Shockwave in Minecraft 26.2.
- * Renders a colossal, towering 3D volumetric golden crescent blade model with multi-tier incandescent
- * pressure crests, transverse geometric kinetic ribs, trailing swept-back wake ribbons, and solar apex core.
+ *
+ * Bespoke pass: the crescent is a seeded BespokeGeometry blade arc stood
+ * upright (the builder's flat arc is rotated into the vertical plane and
+ * squashed to the spectacle pass span and height), with a narrower bright
+ * core arc inside it, a dimmer trailing arc as the wake, and a shard fan
+ * starburst as the apex solar core. Every layer takes the entity's synced
+ * seed, so the nick pattern is frame stable and identical for every viewer.
  */
 public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockwaveRenderer.ZShockwaveRenderState> {
     public ZShockwaveRenderer(EntityRendererProvider.Context context) {
@@ -56,11 +61,11 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
-        state.seed = entity.getUUID().getMostSignificantBits();
+        state.seed = entity.getSeed();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-        state.isFirstPersonOwner = (mc.player != null && 
-            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+        state.isFirstPersonOwner = (mc.player != null &&
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) &&
             mc.options.getCameraType().isFirstPerson());
     }
 
@@ -93,32 +98,76 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         float span = (sub ? (3.2f + charge * 3.2f) : (4.8f + charge * 6.2f)) * fpScale * grow;
         float chord = (sub ? (1.0f + charge * 0.6f) : (1.6f + charge * 1.4f)) * fpScale;
         float height = (sub ? (0.9f + charge * 0.8f) : (1.5f + charge * 1.8f)) * fpScale;
-        float thickness = (sub ? (0.22f + charge * 0.15f) : (0.38f + charge * 0.32f)) * fpScale;
-        float dist = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        int segments = com.dragonblockarcanedba.util.FxEnvelope.segments(36, dist, 16);
+        float dist = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float plate = thickness * 0.16f;
-            drawVolumetricCrescent(matrix, buffer, span, chord, height, plate,
-                0.85f, segments, 1.0f, 0.88f, 0.20f, 0.95f * fade, fade * 0.32f);
-            drawVolumetricCrescent(matrix, buffer, span * 0.26f, chord * 0.94f, height * 0.78f, plate * 0.30f,
-                0.20f, segments, 1.0f, 1.0f, 0.92f, fade, 0.0f);
-            drawWakeRibbon(matrix, buffer, span * 0.92f, chord, height * 0.48f, 0.40f, segments,
-                1.0f, 0.80f, 0.15f, fade * 0.40f);
-            if (impact > 0.02f) {
-                drawApexSolarCore(matrix, buffer, 0, 0, chord, (0.28f + charge * 0.16f) * impact,
-                    1.0f, 1.0f, 0.95f, impact);
-            }
-        });
+        // Blade arc fitting: with a 150 degree sweep the builder's band spans
+        // about 0.61 of its radius sideways and about 0.98 of its radius
+        // vertically, centred about 0.62 of its radius up. Solve the radius
+        // from the span, squash Y so the band is exactly 2 * height tall, and
+        // recenter it on the entity origin. The band sits at 60 percent of the
+        // chord so it stays inside the damage band tolerance front and back.
+        float arcRadius = span * 1.64f;
+        float arcScaleY = (2.0f * height) / (0.98f * arcRadius);
+        float arcCenterY = 0.62f * arcRadius * arcScaleY;
+        float bandZ = chord * 0.6f;
+
+        // Outer crescent: the golden blade itself.
+        poseStack.pushPose();
+        poseStack.translate(0.0f, -arcCenterY, bandZ);
+        poseStack.scale(1.0f, arcScaleY, 1.0f);
+        standArcUpright(poseStack);
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.bladeArc(pose, buffer, state.seed, arcRadius, 150.0f,
+                1.0f, 0.88f, 0.20f, 0.95f, fade, dist));
+        poseStack.popPose();
+
+        // Inner core: a narrow near white arc, the incandescent heart.
+        poseStack.pushPose();
+        poseStack.translate(0.0f, -arcCenterY * 0.78f, bandZ + 0.05f);
+        poseStack.scale(0.30f, arcScaleY * 0.78f, 1.0f);
+        standArcUpright(poseStack);
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.bladeArc(pose, buffer, state.seed ^ 0xC0DEL, arcRadius, 150.0f,
+                1.0f, 1.0f, 0.92f, 1.0f, fade, dist));
+        poseStack.popPose();
+
+        // Wake: the same blade, flatter and dimmer, trailing behind.
+        poseStack.pushPose();
+        poseStack.translate(0.0f, -arcCenterY * 0.48f, bandZ - 0.85f);
+        poseStack.scale(0.92f, arcScaleY * 0.48f, 1.0f);
+        standArcUpright(poseStack);
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.bladeArc(pose, buffer, state.seed ^ 0xACE1L, arcRadius, 150.0f,
+                1.0f, 0.80f, 0.15f, 0.40f, fade, dist));
+        poseStack.popPose();
+
+        // Apex solar core: a shard fan starburst facing forward at the chord.
+        if (impact > 0.02f) {
+            float coreRadius = (0.28f + charge * 0.16f) * Math.max(0.05f, impact) * 1.6f;
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.0f, chord);
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+                BespokeGeometry.shardFan(pose, buffer, state.seed ^ 0xA9E5L, coreRadius,
+                    1.0f, 1.0f, 0.95f, 0.95f, impact, dist));
+            poseStack.popPose();
+        }
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
     /**
-     * Renders a fully closed 3D volumetric crescent geometry with top, bottom, front bevels, and tapered trail.
+     * Rotates the flat blade arc (XZ plane, opening around +X) into the
+     * vertical XY plane: +X becomes up, +Z becomes the span direction.
+     * Applied after the caller's translate and scale, so the squash and
+     * recentering happen in world axes, not arc axes.
      */
+    private static void standArcUpright(PoseStack poseStack) {
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
+    }
+
     private static float smooth(float t) {
         float x = Math.max(0.0f, Math.min(1.0f, t));
         return x * x * (3.0f - 2.0f * x);
@@ -128,118 +177,4 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         if (progress >= 0.7f) return 0.0f;
         return (float) Math.sin((progress / 0.7f) * Math.PI);
     }
-
-    private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer,
-                                               float span, float chord, float height, float thickness, float trailLength,
-                                               int segments, float r, float g, float b, float aLead, float aTrail) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-
-            float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord;
-            float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord;
-
-            // Height and thickness falloff towards crescent tips
-            float factor1 = 1.0f - (float) Math.pow(Math.abs(t1), 1.8);
-            float factor2 = 1.0f - (float) Math.pow(Math.abs(t2), 1.8);
-
-            float h1 = height * factor1;
-            float h2 = height * factor2;
-            float th1 = thickness * factor1;
-            float th2 = thickness * factor2;
-
-            float z1Trail = z1 - trailLength * factor1;
-            float z2Trail = z2 - trailLength * factor2;
-
-            // 1. Upper Beveled Face (Crest)
-            consumer.addVertex(matrix, x1, 0, z1).setColor(r, g, b, aLead).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, 0, z2).setColor(r, g, b, aLead).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, h2, z2 - th2).setColor(r, g, b, aLead * 0.9f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, h1, z1 - th1).setColor(r, g, b, aLead * 0.9f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // 2. Lower Beveled Face (Keel)
-            consumer.addVertex(matrix, x1, -h1, z1 - th1).setColor(r, g, b, aLead * 0.9f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -h2, z2 - th2).setColor(r, g, b, aLead * 0.9f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, 0, z2).setColor(r, g, b, aLead).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, 0, z1).setColor(r, g, b, aLead).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-            // 3. Upper Trailing Slope (Back toward trail)
-            consumer.addVertex(matrix, x1, h1, z1 - th1).setColor(r, g, b, aLead * 0.8f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, h2, z2 - th2).setColor(r, g, b, aLead * 0.8f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, 0, z2Trail).setColor(r, g, b, aTrail).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, 0, z1Trail).setColor(r, g, b, aTrail).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // 4. Lower Trailing Slope
-            consumer.addVertex(matrix, x1, 0, z1Trail).setColor(r, g, b, aTrail).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, 0, z2Trail).setColor(r, g, b, aTrail).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -h2, z2 - th2).setColor(r, g, b, aLead * 0.8f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, -h1, z1 - th1).setColor(r, g, b, aLead * 0.8f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        }
-    }
-
-    private static void drawWakeRibbon(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float height, float offsetZ, int segments,
-                                       float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-
-            float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord - offsetZ;
-            float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord - offsetZ;
-
-            float h1 = height * (1.0f - Math.abs(t1) * 0.8f);
-            float h2 = height * (1.0f - Math.abs(t2) * 0.8f);
-
-            consumer.addVertex(matrix, x1, -h1 * 0.5f, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, -h2 * 0.5f, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, h2 * 0.5f, z2).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, h1 * 0.5f, z1).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawApexSolarCore(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float radius,
-                                          float r, float g, float b, float a) {
-        float rHalf = radius * 0.6f;
-        // Diamond 3D core
-        consumer.addVertex(matrix, cx - rHalf, cy, cz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx + rHalf, cy, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx, cy + radius, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx, cy + radius, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        consumer.addVertex(matrix, cx + rHalf, cy, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, cx - rHalf, cy, cz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, cx, cy - radius, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, cx, cy - radius, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        int arms = 4;
-        int steps = 3;
-        for (int arm = 0; arm < arms; arm++) {
-            float ang = arm * ((float) Math.PI * 0.5f);
-            float dx = (float) Math.cos(ang);
-            float dy = (float) Math.sin(ang);
-            float px = -dy;
-            float py = dx;
-            for (int i = 0; i < steps; i++) {
-                float t1 = i / (float) steps;
-                float t2 = (i + 1) / (float) steps;
-                float bow1 = (float) Math.sin(t1 * Math.PI) * radius * 0.35f;
-                float bow2 = (float) Math.sin(t2 * Math.PI) * radius * 0.35f;
-                float d1 = radius * (0.45f + 0.9f * t1);
-                float d2 = radius * (0.45f + 0.9f * t2);
-                float w1 = radius * 0.16f * (1.0f - t1);
-                float w2 = radius * 0.16f * (1.0f - t2);
-                float x1 = cx + dx * d1 + px * bow1;
-                float y1 = cy + dy * d1 + py * bow1;
-                float x2 = cx + dx * d2 + px * bow2;
-                float y2 = cy + dy * d2 + py * bow2;
-                consumer.addVertex(matrix, x1 - px * w1, y1 - py * w1, cz).setColor(r, g, b, a * (1.0f - t1)).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x1 + px * w1, y1 + py * w1, cz).setColor(r, g, b, a * (1.0f - t1)).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 + px * w2, y2 + py * w2, cz).setColor(1.0f, 0.95f, 0.7f, a * (1.0f - t2) * 0.15f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 - px * w2, y2 - py * w2, cz).setColor(1.0f, 0.95f, 0.7f, a * (1.0f - t2) * 0.15f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            }
-        }
-    }
-
 }

@@ -2,7 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import net.minecraft.core.particles.BlockParticleOption;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -58,7 +58,7 @@ public class EarthShatterEffect extends MobEffect {
             double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
 
             level.sendParticles(
-                new BlockParticleOption(ParticleTypes.BLOCK, Blocks.DIRT.defaultBlockState()),
+                new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, Blocks.DIRT.defaultBlockState()),
                 px, py, pz,
                 2, 0.1, 0.1, 0.1, 0.05
             );

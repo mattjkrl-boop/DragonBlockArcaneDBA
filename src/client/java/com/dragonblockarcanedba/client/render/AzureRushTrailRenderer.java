@@ -1,5 +1,6 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.entity.AzureRushTrailEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -12,7 +13,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
-import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayDeque;
 import java.util.HashMap;
@@ -23,12 +24,19 @@ import java.util.Map;
  * shell, a bright core tube, a shock lip, and two ribbons with thickness.
  * The tail keeps its width and fades out. Older puff entities do not each
  * stamp another cone.
+ *
+ * Bespoke pass: the wake sampling, centerline, and frame math are unchanged,
+ * but the mesh is no longer hand built from equal side rings. The core is a
+ * chain of BespokeGeometry.branch ribbons down the centerline, the shell is
+ * six helical branch strands riding the old shell radius profile, the shock
+ * lip is branch segments around the shell mouth, and the nose is a short
+ * bright branch. Seeds derive from the trail entity's synced caster id, the
+ * same key the wake maps already use. The toolkit has no swept tube builder;
+ * that gap is filed as a change request in the bespoke report.
  */
 public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity, AzureRushTrailRenderer.TrailRenderState> {
 
     private static final int STATIONS = 16;
-    private static final int SHELL_SIDES = 12;
-    private static final int CORE_SIDES = 8;
 
     private static final Map<Integer, ArrayDeque<Nose>> WAKES = new HashMap<>();
     private static final Map<Integer, Integer> WRITER = new HashMap<>();
@@ -207,9 +215,10 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
         buildCenterline(noses, state.renderX, state.renderY, state.renderZ, firstPerson, scale, cx, cy, cz);
 
         RenderType renderType = KiRenderHelper.kiRenderType();
+        final long seed = (long) state.casterKey * 0x9E3779B97F4A7C15L ^ 0xA20E57L;
         poseStack.pushPose();
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                emitWake(pose.pose(), buffer, cx, cy, cz, scale, spin, fadeLife, doubleRush, firstPerson));
+                emitWake(pose, buffer, cx, cy, cz, scale, spin, fadeLife, doubleRush, firstPerson, seed));
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -304,8 +313,8 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
         return new double[] {-Math.sin(yr) * cp, -Math.sin(pr), Math.cos(yr) * cp};
     }
 
-    private static void emitWake(Matrix4f matrix, VertexConsumer buffer, float[] cx, float[] cy, float[] cz,
-                                 float scale, float spin, float life, boolean doubleRush, boolean firstPerson) {
+    private static void emitWake(PoseStack.Pose pose, VertexConsumer buffer, float[] cx, float[] cy, float[] cz,
+                                 float scale, float spin, float life, boolean doubleRush, boolean firstPerson, long seed) {
         int stations = cx.length;
         int last = stations - 1;
         float shellCr = doubleRush ? 0.08F : 0.02F;
@@ -413,35 +422,14 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
             hasSide = true;
         }
 
-        float[] shellX = new float[stations * SHELL_SIDES];
-        float[] shellY = new float[stations * SHELL_SIDES];
-        float[] shellZ = new float[stations * SHELL_SIDES];
-        float[] coreX = new float[stations * CORE_SIDES];
-        float[] coreY = new float[stations * CORE_SIDES];
-        float[] coreZ = new float[stations * CORE_SIDES];
-        for (int s = 0; s < stations; s++) {
-            for (int k = 0; k < SHELL_SIDES; k++) {
-                float ang = (float) (k / (double) SHELL_SIDES * Math.PI * 2.0);
-                float wobble = 1.0F + 0.07F * (float) Math.sin(ang * 3.0 + spin * 0.35F);
-                float cs = (float) Math.cos(ang);
-                float sn = (float) Math.sin(ang);
-                float radius = shellRadius[s] * wobble;
-                int idx = s * SHELL_SIDES + k;
-                shellX[idx] = cx[s] + (sideX[s] * cs + binX[s] * sn) * radius;
-                shellY[idx] = cy[s] + (sideY[s] * cs + binY[s] * sn) * radius;
-                shellZ[idx] = cz[s] + (sideZ[s] * cs + binZ[s] * sn) * radius;
-            }
-            for (int k = 0; k < CORE_SIDES; k++) {
-                float ang = (float) (k / (double) CORE_SIDES * Math.PI * 2.0 + 0.2F);
-                float cs = (float) Math.cos(ang);
-                float sn = (float) Math.sin(ang);
-                int idx = s * CORE_SIDES + k;
-                coreX[idx] = cx[s] + (sideX[s] * cs + binX[s] * sn) * coreRadius[s];
-                coreY[idx] = cy[s] + (sideY[s] * cs + binY[s] * sn) * coreRadius[s];
-                coreZ[idx] = cz[s] + (sideZ[s] * cs + binZ[s] * sn) * coreRadius[s];
-            }
-        }
-
+        // Bespoke emission. Per segment the old tube's numbers are kept
+        // exactly: the same fade curve, the same hot to shell color blend,
+        // and the same shell and core alphas. What changed is the mesh: the
+        // core is a chain of branch ribbons down the centerline, the shell
+        // is six helical branch strands riding the shell radius profile
+        // (the old ribbons' twist rate), the shock lip is branch segments
+        // around the shell mouth inside its old station window, and the
+        // nose cap is one short bright branch into the first station.
         for (int s = 0; s < last; s++) {
             float t = (s + 0.5F) / last;
             float fade = (1.0F - smooth(0.55F, 1.0F, t)) * life;
@@ -451,206 +439,74 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
             float b = hot * hotB + (1.0F - hot) * shellCb;
             float shellA = fade * (firstPerson ? 0.22F : 0.34F);
             float coreA = fade * (firstPerson ? 0.55F : 0.88F);
-            for (int k = 0; k < SHELL_SIDES; k++) {
-                int k2 = (k + 1) % SHELL_SIDES;
-                int a = s * SHELL_SIDES + k;
-                int c = s * SHELL_SIDES + k2;
-                int d = (s + 1) * SHELL_SIDES + k2;
-                int e = (s + 1) * SHELL_SIDES + k;
-                drawQuad(matrix, buffer,
-                        shellX[a], shellY[a], shellZ[a],
-                        shellX[c], shellY[c], shellZ[c],
-                        shellX[d], shellY[d], shellZ[d],
-                        shellX[e], shellY[e], shellZ[e],
-                        r, g, b, shellA);
-            }
-            for (int k = 0; k < CORE_SIDES; k++) {
-                int k2 = (k + 1) % CORE_SIDES;
-                int a = s * CORE_SIDES + k;
-                int c = s * CORE_SIDES + k2;
-                int d = (s + 1) * CORE_SIDES + k2;
-                int e = (s + 1) * CORE_SIDES + k;
-                drawQuad(matrix, buffer,
-                        coreX[a], coreY[a], coreZ[a],
-                        coreX[c], coreY[c], coreZ[c],
-                        coreX[d], coreY[d], coreZ[d],
-                        coreX[e], coreY[e], coreZ[e],
-                        hotR, hotG, hotB, coreA);
-            }
-        }
 
-        // Shock lip: one curved band around the mouth, with radial thickness
-        // and a short run down the wake. Not a second cone.
-        for (int s = 0; s < last; s++) {
+            Vec3 c0 = new Vec3(cx[s], cy[s], cz[s]);
+            Vec3 c1 = new Vec3(cx[s + 1], cy[s + 1], cz[s + 1]);
+            float coreW = Math.max(0.05F, coreRadius[s] + coreRadius[s + 1]);
+            BespokeGeometry.branch(pose, buffer, seed ^ (0xC02EL + s * 17L), c0, c1, coreW,
+                    hotR, hotG, hotB, coreA, 1.0F, 1.0F);
+
+            int strands = 6;
+            for (int k = 0; k < strands; k++) {
+                float phase = k * (float) (Math.PI * 2.0 / strands);
+                Vec3 p0 = strandPoint(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, shellRadius, along, s, phase, spin);
+                Vec3 p1 = strandPoint(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, shellRadius, along, s + 1, phase, spin);
+                float w = Math.max(0.08F, (shellRadius[s] + shellRadius[s + 1]) * 0.55F);
+                BespokeGeometry.branch(pose, buffer, seed ^ (0x57AA1L + k * 131L + s * 17L), p0, p1, w,
+                        r, g, b, shellA, 1.0F, 1.0F);
+            }
+
+            // Shock lip: branch segments around the mouth at 1.22 times the
+            // shell radius, across the old lip's station window only.
             float tMid = (along[s] + along[s + 1]) * 0.5F;
-            if (tMid < 0.28F || tMid > 0.48F) {
-                continue;
-            }
-            float lipA = life * (firstPerson ? 0.4F : 0.78F);
-            for (int k = 0; k < SHELL_SIDES; k++) {
-                int k2 = (k + 1) % SHELL_SIDES;
-                float a0 = (float) (k / (double) SHELL_SIDES * Math.PI * 2.0);
-                float a1 = (float) (k2 / (double) SHELL_SIDES * Math.PI * 2.0);
-                float in0 = shellRadius[s];
-                float out0 = shellRadius[s] * 1.22F;
-                float out1 = shellRadius[s + 1] * 1.16F;
-                drawQuad(matrix, buffer,
-                        ringPoint(cx[s], sideX[s], binX[s], a0, in0),
-                        ringPoint(cy[s], sideY[s], binY[s], a0, in0),
-                        ringPoint(cz[s], sideZ[s], binZ[s], a0, in0),
-                        ringPoint(cx[s], sideX[s], binX[s], a0, out0),
-                        ringPoint(cy[s], sideY[s], binY[s], a0, out0),
-                        ringPoint(cz[s], sideZ[s], binZ[s], a0, out0),
-                        ringPoint(cx[s], sideX[s], binX[s], a1, out0),
-                        ringPoint(cy[s], sideY[s], binY[s], a1, out0),
-                        ringPoint(cz[s], sideZ[s], binZ[s], a1, out0),
-                        ringPoint(cx[s], sideX[s], binX[s], a1, in0),
-                        ringPoint(cy[s], sideY[s], binY[s], a1, in0),
-                        ringPoint(cz[s], sideZ[s], binZ[s], a1, in0),
-                        hotR, hotG, hotB, lipA);
-                drawQuad(matrix, buffer,
-                        ringPoint(cx[s], sideX[s], binX[s], a0, out0),
-                        ringPoint(cy[s], sideY[s], binY[s], a0, out0),
-                        ringPoint(cz[s], sideZ[s], binZ[s], a0, out0),
-                        ringPoint(cx[s], sideX[s], binX[s], a1, out0),
-                        ringPoint(cy[s], sideY[s], binY[s], a1, out0),
-                        ringPoint(cz[s], sideZ[s], binZ[s], a1, out0),
-                        ringPoint(cx[s + 1], sideX[s + 1], binX[s + 1], a1, out1),
-                        ringPoint(cy[s + 1], sideY[s + 1], binY[s + 1], a1, out1),
-                        ringPoint(cz[s + 1], sideZ[s + 1], binZ[s + 1], a1, out1),
-                        ringPoint(cx[s + 1], sideX[s + 1], binX[s + 1], a0, out1),
-                        ringPoint(cy[s + 1], sideY[s + 1], binY[s + 1], a0, out1),
-                        ringPoint(cz[s + 1], sideZ[s + 1], binZ[s + 1], a0, out1),
-                        hotR, hotG, hotB, lipA * 0.85F);
+            if (tMid >= 0.28F && tMid <= 0.48F) {
+                float lipA = life * (firstPerson ? 0.4F : 0.78F);
+                int lipPoints = 8;
+                for (int k = 0; k < lipPoints; k++) {
+                    float a0 = (float) (k / (double) lipPoints * Math.PI * 2.0);
+                    float a1 = (float) ((k + 1) / (double) lipPoints * Math.PI * 2.0);
+                    Vec3 q0 = ringVec(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, s, a0, shellRadius[s] * 1.22F);
+                    Vec3 q1 = ringVec(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, s, a1, shellRadius[s] * 1.22F);
+                    BespokeGeometry.branch(pose, buffer, seed ^ (0x11B0L + k * 31L + s * 17L), q0, q1, 0.30F * scale * fp,
+                            hotR, hotG, hotB, lipA, 1.0F, 1.0F);
+                }
             }
         }
 
-        // Rounded core nose, a cap rather than a spike down the flight line.
+        // Rounded core nose: a short bright branch reaching ahead of the
+        // first station by twice the old cap reach, at the old cap alpha.
         float capReach = 0.2F * scale * fp;
-        float capX = cx[0] - tanX[0] * capReach;
-        float capY = cy[0] - tanY[0] * capReach;
-        float capZ = cz[0] - tanZ[0] * capReach;
         float capA = life * (firstPerson ? 0.45F : 0.8F);
-        for (int k = 0; k < CORE_SIDES; k++) {
-            int k2 = (k + 1) % CORE_SIDES;
-            int a = k;
-            int c = k2;
-            drawTriangleGrad(matrix, buffer,
-                    capX, capY, capZ,
-                    coreX[a], coreY[a], coreZ[a],
-                    coreX[c], coreY[c], coreZ[c],
-                    1.0F, 1.0F, 1.0F, capA,
-                    hotR, hotG, hotB, capA * 0.7F);
-        }
-
-        for (int strand = 0; strand < 2; strand++) {
-            float phase = strand * (float) Math.PI;
-            float[] px = new float[stations];
-            float[] py = new float[stations];
-            float[] pz = new float[stations];
-            float[] wx = new float[stations];
-            float[] wy = new float[stations];
-            float[] wz = new float[stations];
-            float[] nx = new float[stations];
-            float[] ny = new float[stations];
-            float[] nz = new float[stations];
-            float[] hw = new float[stations];
-            float[] ht = new float[stations];
-            for (int s = 0; s < stations; s++) {
-                float t = along[s];
-                float ang = phase + t * 4.4F + spin;
-                float cs = (float) Math.cos(ang);
-                float sn = (float) Math.sin(ang);
-                float rad = shellRadius[s] * (0.55F + 0.38F * t);
-                px[s] = cx[s] + (sideX[s] * cs + binX[s] * sn) * rad;
-                py[s] = cy[s] + (sideY[s] * cs + binY[s] * sn) * rad;
-                pz[s] = cz[s] + (sideZ[s] * cs + binZ[s] * sn) * rad;
-                wx[s] = -sideX[s] * sn + binX[s] * cs;
-                wy[s] = -sideY[s] * sn + binY[s] * cs;
-                wz[s] = -sideZ[s] * sn + binZ[s] * cs;
-                nx[s] = sideX[s] * cs + binX[s] * sn;
-                ny[s] = sideY[s] * cs + binY[s] * sn;
-                nz[s] = sideZ[s] * cs + binZ[s] * sn;
-                hw[s] = 0.2F * (1.0F - t * 0.62F) * scale * fp;
-                ht[s] = 0.055F * (1.0F - t * 0.4F) * scale * fp;
-            }
-            for (int s = 0; s < last; s++) {
-                float t = (s + 0.5F) / last;
-                float fade = (1.0F - smooth(0.5F, 1.0F, t));
-                fade = fade * fade * life;
-                float ribbonA = fade * (firstPerson ? 0.4F : 0.7F);
-                float c0x = px[s] - wx[s] * hw[s] - nx[s] * ht[s];
-                float c0y = py[s] - wy[s] * hw[s] - ny[s] * ht[s];
-                float c0z = pz[s] - wz[s] * hw[s] - nz[s] * ht[s];
-                float c1x = px[s] + wx[s] * hw[s] - nx[s] * ht[s];
-                float c1y = py[s] + wy[s] * hw[s] - ny[s] * ht[s];
-                float c1z = pz[s] + wz[s] * hw[s] - nz[s] * ht[s];
-                float c2x = px[s] + wx[s] * hw[s] + nx[s] * ht[s];
-                float c2y = py[s] + wy[s] * hw[s] + ny[s] * ht[s];
-                float c2z = pz[s] + wz[s] * hw[s] + nz[s] * ht[s];
-                float c3x = px[s] - wx[s] * hw[s] + nx[s] * ht[s];
-                float c3y = py[s] - wy[s] * hw[s] + ny[s] * ht[s];
-                float c3z = pz[s] - wz[s] * hw[s] + nz[s] * ht[s];
-                int n = s + 1;
-                float d0x = px[n] - wx[n] * hw[n] - nx[n] * ht[n];
-                float d0y = py[n] - wy[n] * hw[n] - ny[n] * ht[n];
-                float d0z = pz[n] - wz[n] * hw[n] - nz[n] * ht[n];
-                float d1x = px[n] + wx[n] * hw[n] - nx[n] * ht[n];
-                float d1y = py[n] + wy[n] * hw[n] - ny[n] * ht[n];
-                float d1z = pz[n] + wz[n] * hw[n] - nz[n] * ht[n];
-                float d2x = px[n] + wx[n] * hw[n] + nx[n] * ht[n];
-                float d2y = py[n] + wy[n] * hw[n] + ny[n] * ht[n];
-                float d2z = pz[n] + wz[n] * hw[n] + nz[n] * ht[n];
-                float d3x = px[n] - wx[n] * hw[n] + nx[n] * ht[n];
-                float d3y = py[n] - wy[n] * hw[n] + ny[n] * ht[n];
-                float d3z = pz[n] - wz[n] * hw[n] + nz[n] * ht[n];
-                float rr = shellCr * 0.35F + 0.65F;
-                float rg = shellCg;
-                float rb = shellCb;
-                drawQuad(matrix, buffer, c0x, c0y, c0z, c1x, c1y, c1z, d1x, d1y, d1z, d0x, d0y, d0z, rr, rg, rb, ribbonA);
-                drawQuad(matrix, buffer, c1x, c1y, c1z, c2x, c2y, c2z, d2x, d2y, d2z, d1x, d1y, d1z, hotR, hotG, hotB, ribbonA);
-                drawQuad(matrix, buffer, c2x, c2y, c2z, c3x, c3y, c3z, d3x, d3y, d3z, d2x, d2y, d2z, rr, rg, rb, ribbonA * 0.85F);
-                drawQuad(matrix, buffer, c3x, c3y, c3z, c0x, c0y, c0z, d0x, d0y, d0z, d3x, d3y, d3z, rr, rg, rb, ribbonA * 0.7F);
-            }
-        }
+        BespokeGeometry.branch(pose, buffer, seed ^ 0xCA91L,
+                new Vec3(cx[0] - tanX[0] * capReach * 2.0F, cy[0] - tanY[0] * capReach * 2.0F, cz[0] - tanZ[0] * capReach * 2.0F),
+                new Vec3(cx[0], cy[0], cz[0]),
+                Math.max(0.08F, coreRadius[0] * 2.4F), 1.0F, 1.0F, 1.0F, capA, 1.0F, 1.0F);
     }
 
-    private static float ringPoint(float center, float side, float bin, float angle, float radius) {
-        return center + (side * (float) Math.cos(angle) + bin * (float) Math.sin(angle)) * radius;
+    /** A point on a helical shell strand for one station. */
+    private static Vec3 strandPoint(float[] cx, float[] cy, float[] cz,
+                                    float[] sideX, float[] sideY, float[] sideZ,
+                                    float[] binX, float[] binY, float[] binZ,
+                                    float[] shellRadius, float[] along, int s, float phase, float spin) {
+        float ang = phase + along[s] * 4.4F + spin;
+        return ringVec(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, s, ang, shellRadius[s]);
+    }
+
+    /** A point on the ring around one station, in the station's frame. */
+    private static Vec3 ringVec(float[] cx, float[] cy, float[] cz,
+                                float[] sideX, float[] sideY, float[] sideZ,
+                                float[] binX, float[] binY, float[] binZ,
+                                int s, float angle, float radius) {
+        float cs = (float) Math.cos(angle);
+        float sn = (float) Math.sin(angle);
+        return new Vec3(
+                cx[s] + (sideX[s] * cs + binX[s] * sn) * radius,
+                cy[s] + (sideY[s] * cs + binY[s] * sn) * radius,
+                cz[s] + (sideZ[s] * cs + binZ[s] * sn) * radius);
     }
 
     private static float smooth(float edge0, float edge1, float t) {
         float x = Mth.clamp((t - edge0) / (edge1 - edge0), 0.0F, 1.0F);
         return x * x * (3.0F - 2.0F * x);
-    }
-
-    private static void drawTriangleGrad(Matrix4f matrix, VertexConsumer consumer,
-                                         float x1, float y1, float z1,
-                                         float x2, float y2, float z2,
-                                         float x3, float y3, float z3,
-                                         float r1, float g1, float b1, float a1,
-                                         float r2, float g2, float b2, float a2) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r1, g1, b1, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r2, g2, b2, a2).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r2, g2, b2, a2).setUv(0.5F, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r2, g2, b2, a2).setUv(0.5F, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r2, g2, b2, a2).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r1, g1, b1, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-    }
-
-    private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,
-                                 float x1, float y1, float z1,
-                                 float x2, float y2, float z2,
-                                 float x3, float y3, float z3,
-                                 float x4, float y4, float z4,
-                                 float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 }

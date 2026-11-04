@@ -1,8 +1,9 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -47,7 +48,10 @@ public class SorrowRiftEffect extends MobEffect {
         // Periodic tear damage every 20 ticks
         if (entity.tickCount % 20 == 0) {
             float damage = 10.0f + (amplifier * 5.0f);
-            entity.hurtServer(level, level.damageSources().magic(), damage);
+            // Bespoke: Sickle of Sorrow void bleeding is void family. The
+            // effect stores no attacker, so the source anchors on the
+            // afflicted entity with no attacker.
+            entity.hurtServer(level, DbaDamage.voidDmg(entity, null), damage);
         }
 
         // Purple tears & portal embers
@@ -57,12 +61,12 @@ public class SorrowRiftEffect extends MobEffect {
             double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
 
             level.sendParticles(
-                new DustParticleOptions(0x8A2BE2, 1.2f),
+                new DbaDustOptions(0x8A2BE2, 1.2f),
                 px, py, pz,
                 1, 0.0, -0.02, 0.0, 0.01
             );
             level.sendParticles(
-                ParticleTypes.PORTAL,
+                DbaParticles.VOID_SMOKE,
                 px, py, pz,
                 1, 0.0, 0.0, 0.0, 0.05
             );

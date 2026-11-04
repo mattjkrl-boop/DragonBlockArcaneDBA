@@ -5,7 +5,6 @@ import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
@@ -69,11 +68,10 @@ public class DarknessBladeEntity extends Projectile {
                 : !serverLevel.getBlockState(pos.below()).isAir() ? pos.below()
                 : null;
             if (groundPos != null || this.tickCount > 40) {
-                // Impact detonation!
+                // Impact detonation! Bespoke pass: the splash uses the
+                // mod's darkness type with this blade as the direct entity.
                 LivingEntity owner = (LivingEntity) this.getOwner();
-                DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                    ? serverLevel.damageSources().playerAttack(playerOwner)
-                    : serverLevel.damageSources().generic();
+                DamageSource damageSource = com.dragonblockarcanedba.util.DbaDamage.darkness(this, owner);
 
                 AABB splashBox = this.getBoundingBox().inflate(4.0, 2.0, 4.0);
                 List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, splashBox, e -> e.isAlive() && e != owner);
@@ -96,7 +94,7 @@ public class DarknessBladeEntity extends Projectile {
                 }
                 LayeredParticles.emitGroundBurst(serverLevel, this.position(), 2.8f, 0xA605F2);
 
-                serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 0.6f);
+                serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 1.5f, 0.6f);
 
                 this.discard();
             }

@@ -1,25 +1,28 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.WarMaceSmashEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
 
 /**
- * A bowed shell in the ground, now one layer of three: an anchor glow disc
- * grounds it, three counter rotating LayeredRender bands carry the dust ring
- * at the shell's edge, and the original bronze shell stays as the bright core
- * on top. Everything runs the shared FxEnvelope, so the shell builds in over
- * the first ticks instead of appearing at full alpha, peaks, and settles.
+ * The smash shell, rebuilt on the bespoke toolkit (BESPOKE-STANDARD rule 1).
+ * A jittered glow fan grounds it, three broken vortex bands in the standard
+ * band alphas carry the dust ring at the shell's edge, a crack star draws the
+ * fracture marks on the ground, an early plume carries the impact dust, and
+ * the bronze shell itself is a noise displaced dome squashed to the old bow
+ * height, with a brighter displaced core dome inside it. All of it is seeded
+ * from the entity's synced seed, so every client draws the same silhouette.
+ * Everything runs the shared FxEnvelope, so the shell builds in over the
+ * first ticks instead of appearing at full alpha, peaks, and settles.
  */
 public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, WarMaceSmashRenderer.SmashState> {
     public WarMaceSmashRenderer(EntityRendererProvider.Context context) {
@@ -30,6 +33,7 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         public float age;
         public boolean heavy;
         public float radius;
+        public int seed;
         public double ex;
         public double ey;
         public double ez;
@@ -54,6 +58,7 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         state.age = entity.tickCount + partialTick;
         state.heavy = entity.isHeavy();
         state.radius = entity.radiusAt(state.age);
+        state.seed = entity.getSeed();
         state.ex = entity.getX();
         state.ey = entity.getY();
         state.ez = entity.getZ();
@@ -66,61 +71,53 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         float bow = (state.heavy ? 1.35f : 0.72f) * (0.35f + 0.65f * env);
         float distScale = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
         float bandsHeight = state.heavy ? 1.7f : 1.05f;
+        long seed = state.seed;
         RenderType type = KiRenderHelper.kiRenderType();
+
+        // Ground layer at natural height: glow splash, the three counter
+        // rotating broken bands, the fracture star, and the impact plume.
         collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            LayeredRender.drawAnchorGlow(pose, buffer, state.radius * 1.02f, 0.05f,
+            BespokeGeometry.glowFan(pose, buffer, seed ^ 0x610F,
+                state.radius * 1.02f, 0.05f,
                 1.0f, 0.78f, 0.38f, 0.55f * env, distScale);
-            LayeredRender.drawVortexBands(pose, buffer, state.radius * 0.82f, bandsHeight, state.age,
-                0.85f, 0.62f, 0.28f, env, distScale);
-            drawShell(buffer, matrix, pose, state.radius, bow, env, state.heavy, distScale);
-        });
-        super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static void drawShell(VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
-                                  float radius, float bow, float fade, boolean heavy, float distScale) {
-        int around = FxEnvelope.segments(22, distScale, 12);
-        int bands = 5;
-        float inner = radius * 0.62f;
-        for (int i = 0; i < around; i++) {
-            float a0 = (float) (i * Math.PI * 2.0 / around);
-            float a1 = (float) ((i + 1) * Math.PI * 2.0 / around);
-            float ripple = 1.0f + 0.08f * (float) Math.sin(a0 * 3.0);
-            for (int b = 0; b < bands; b++) {
-                float t0 = b / (float) bands;
-                float t1 = (b + 1) / (float) bands;
-                float r0 = (inner + (radius - inner) * t0) * ripple;
-                float r1 = (inner + (radius - inner) * t1) * ripple;
-                float h0 = bow * (float) Math.sin(t0 * Math.PI);
-                float h1 = bow * (float) Math.sin(t1 * Math.PI);
-                float edge = b == bands - 1 ? 1.0f : 0.55f + 0.45f * t1;
-                float cr = heavy ? 0.72f + 0.28f * edge : 0.78f + 0.16f * edge;
-                float cg = heavy ? 0.42f + 0.28f * edge : 0.58f + 0.18f * edge;
-                float cb = heavy ? 0.16f : 0.28f + 0.2f * edge;
-                float alpha = fade * (0.35f + 0.6f * (float) Math.sin(t1 * Math.PI));
-                quad(buffer, matrix, pose, a0, r0, h0, a1, r1, h1, cr, cg, cb, alpha);
-                if (b == bands / 2) {
-                    quad(buffer, matrix, pose, a0, r0, h0 + 0.05f, a1, r1, h1 + 0.05f, 1.0f, 0.92f, 0.7f, alpha * 0.85f);
-                }
+            float bandR = state.radius * 0.82f;
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBA01,
+                bandR, 0.10f, bandsHeight, state.age * 0.45f,
+                0.85f, 0.62f, 0.28f, 0.85f * env, distScale);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBA02,
+                bandR * 1.07f, 0.06f, bandsHeight * 0.78f, -state.age * 0.6f,
+                0.85f, 0.62f, 0.28f, 0.45f * env, distScale);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBA03,
+                bandR * 1.16f, 0.03f, bandsHeight * 0.55f, state.age * 0.3f,
+                0.85f, 0.62f, 0.28f, 0.18f * env, distScale);
+            BespokeGeometry.crackStar(pose, buffer, seed ^ 0xCA01,
+                state.radius * 0.98f,
+                0.16f, 0.10f, 0.05f, 0.9f, env, distScale);
+            float plumeEnv = env * Math.max(0.0f, 1.0f - state.age / (life * 0.6f));
+            if (plumeEnv > 0.02f) {
+                BespokeGeometry.plume(pose, buffer, seed ^ 0xD057,
+                    state.radius * 0.38f, state.heavy ? 2.3f : 1.5f,
+                    0.92f, 0.76f, 0.50f, 0.5f, plumeEnv, distScale);
             }
-        }
-    }
+        });
 
-    private static void quad(VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
-                             float a0, float r0, float h0, float a1, float r1, float h1,
-                             float r, float g, float b, float a) {
-        float x0 = (float) Math.cos(a0) * r0;
-        float z0 = (float) Math.sin(a0) * r0;
-        float x1 = (float) Math.cos(a1) * r0;
-        float z1 = (float) Math.sin(a1) * r0;
-        float x2 = (float) Math.cos(a1) * r1;
-        float z2 = (float) Math.sin(a1) * r1;
-        float x3 = (float) Math.cos(a0) * r1;
-        float z3 = (float) Math.sin(a0) * r1;
-        KiRenderHelper.vertex(buffer, matrix, pose, x0, h0, z0, r, g, b, a, 0, 0, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x1, h0, z1, r, g, b, a, 1, 0, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x2, h1, z2, r, g, b, a, 1, 1, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x3, h1, z3, r, g, b, a, 0, 1, 0, 1, 0);
+        // The bronze shell: a displaced dome squashed to the old bow height,
+        // with a brighter, smaller displaced dome as the hot core inside it.
+        float squash = bow / Math.max(0.7f, state.radius);
+        poseStack.pushPose();
+        poseStack.scale(1.0f, squash, 1.0f);
+        collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
+            if (state.heavy) {
+                BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD001,
+                    state.radius, 0.86f, 0.56f, 0.20f, 0.70f, env, distScale);
+            } else {
+                BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD001,
+                    state.radius, 0.85f, 0.64f, 0.32f, 0.70f, env, distScale);
+            }
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD002,
+                state.radius * 0.62f, 1.0f, 0.90f, 0.62f, 0.45f, env, distScale);
+        });
+        poseStack.popPose();
+        super.submit(state, poseStack, collector, cameraState);
     }
 }

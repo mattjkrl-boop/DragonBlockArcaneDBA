@@ -22,7 +22,7 @@ import com.dragonblockarcanedba.util.LayeredParticles;
 import java.util.List;
 
 /**
- * Hell Hunt Impact Entity — Physical 3D demonic ground-shatter fissure trenches, erupting cursed blood/obsidian spikes,
+ * Hell Hunt Impact Entity: Physical 3D demonic ground-shatter fissure trenches, erupting cursed blood/obsidian spikes,
  * expanding shockwave seals, and surging execution pillars triggered during Hell Hunt chain executions.
  *
  * Spectacle pass: the drawn fissures are now backed by real world interaction.

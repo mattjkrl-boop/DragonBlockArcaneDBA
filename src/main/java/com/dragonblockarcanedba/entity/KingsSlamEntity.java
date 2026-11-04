@@ -185,9 +185,7 @@ public class KingsSlamEntity extends Projectile {
             e -> e.isAlive() && e != owner && !hitEntityIds.contains(e.getId())
         );
 
-        DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-            ? serverLevel.damageSources().playerAttack(playerOwner)
-            : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().generic());
+        DamageSource damageSource = com.dragonblockarcanedba.util.DbaDamage.crush(this, owner);
         LivingEntity effectSource = owner instanceof LivingEntity livingOwner ? livingOwner : null;
 
         for (LivingEntity target : targets) {

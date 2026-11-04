@@ -3,6 +3,8 @@ package com.dragonblockarcanedba.entity;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.GroundScar;
@@ -14,14 +16,12 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -47,6 +47,8 @@ public class DimensionalWarpRiftEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> IS_DESTINATION = SynchedEntityData.defineId(DimensionalWarpRiftEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(DimensionalWarpRiftEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> LIFE = SynchedEntityData.defineId(DimensionalWarpRiftEntity.class, EntityDataSerializers.INT);
+    /** Bespoke geometry seed, rolled once at spawn and synced, so the torn shapes draw identically on every client. */
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(DimensionalWarpRiftEntity.class, EntityDataSerializers.INT);
 
     /** Origin: a shorter tear, it only has to let the player out. */
     public static final int ORIGIN_LIFE = 34;
@@ -92,6 +94,7 @@ public class DimensionalWarpRiftEntity extends Projectile {
         this.entityData.set(RADIUS, radius);
         this.entityData.set(IS_DESTINATION, isDestination);
         this.entityData.set(LIFE, isDestination ? DEST_LIFE : ORIGIN_LIFE);
+        this.entityData.set(SEED, level.getRandom().nextInt());
     }
 
     /** Arm this origin rift to carry a warp. Called by the item before the rift enters the world. */
@@ -108,6 +111,7 @@ public class DimensionalWarpRiftEntity extends Projectile {
         builder.define(IS_DESTINATION, false);
         builder.define(RADIUS, 3.5f);
         builder.define(LIFE, ORIGIN_LIFE);
+        builder.define(SEED, 0);
     }
 
     public boolean isDestination() {
@@ -120,6 +124,11 @@ public class DimensionalWarpRiftEntity extends Projectile {
 
     public int getMaxLifetime() {
         return this.entityData.get(LIFE);
+    }
+
+    /** Synced bespoke geometry seed for this rift. */
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int getBurstTick() {
@@ -142,26 +151,27 @@ public class DimensionalWarpRiftEntity extends Projectile {
         int burstTick = this.getBurstTick();
         LivingEntity livingOwner = owner instanceof LivingEntity living ? living : null;
 
-        // Audio cue on initial spawn
+        // Audio cue on initial spawn, all from the mod's own bank
+        // (BESPOKE-STANDARD rule 3).
         if (this.tickCount == 1) {
             if (!isDest) {
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 2.0f, 0.7f);
+                    DbaSounds.TELEPORT_WHOOSH, SoundSource.PLAYERS, 2.0f, 0.7f);
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    com.dragonblockarcanedba.sound.DbaSounds.DARK_PULSE, SoundSource.PLAYERS, 2.0f, 0.7f);
+                    DbaSounds.DARK_PULSE, SoundSource.PLAYERS, 2.0f, 0.7f);
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.RESPAWN_ANCHOR_SET_SPAWN, SoundSource.PLAYERS, 1.8f, 0.6f);
+                    DbaSounds.CHARGE_DARK, SoundSource.PLAYERS, 1.8f, 0.6f);
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.PORTAL_TRAVEL, SoundSource.PLAYERS, 1.5f, 1.4f);
+                    DbaSounds.RIFT_OPEN, SoundSource.PLAYERS, 1.5f, 1.4f);
             } else {
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.2f, 0.8f);
+                    DbaSounds.BOOM_SONIC, SoundSource.PLAYERS, 2.2f, 0.8f);
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.2f, 0.8f);
+                    DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.2f, 0.8f);
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 2.0f, 0.6f);
+                    DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 2.0f, 0.6f);
                 serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 0.5f);
+                    DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 1.5f, 0.5f);
             }
         }
 
@@ -222,9 +232,9 @@ public class DimensionalWarpRiftEntity extends Projectile {
         );
 
         for (LivingEntity target : targets) {
-            DamageSource damageSource = owner instanceof Player playerOwner
-                ? serverLevel.damageSources().playerAttack(playerOwner)
-                : (livingOwner != null ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().magic());
+            // Ability damage uses the mod's void type (BESPOKE-STANDARD
+            // rule 4); only the plain melee hit keeps the vanilla source.
+            DamageSource damageSource = DbaDamage.voidDmg(this, owner);
 
             target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(this.burstDamage));
             target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 200, 1, false, true), owner);
@@ -279,7 +289,7 @@ public class DimensionalWarpRiftEntity extends Projectile {
             );
             serverLevel.addFreshEntity(destRift);
             serverLevel.playSound(null, warpLanding.x, warpLanding.y, warpLanding.z,
-                SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.2f, 0.8f);
+                DbaSounds.TELEPORT_WHOOSH, SoundSource.PLAYERS, 1.2f, 0.8f);
         }
     }
 

@@ -8,10 +8,8 @@ import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.entity.OxChargeEntity;
 import com.dragonblockarcanedba.entity.OxShockwaveEntity;
 import com.dragonblockarcanedba.entity.OxStanceAuraEntity;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -37,7 +35,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Ox King's Axe — Immovable powerhouse: knockback, ground destruction, massive AoE, and battlefield denial.
+ * Ox King's Axe: Immovable powerhouse: knockback, ground destruction, massive AoE, and battlefield denial.
  * 
  * Stamina Drain: 125% per minute (smooth).
  * 
@@ -105,7 +103,7 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
         // effect, no cost, and no visual of its own, on the heaviest weapon in
         // the set. It now lands like the weapon it is: a heavy shove scaled by
         // the target's weight class, a brief fissure stun tremor, embers, and
-        // an anvil thud. Still no stamina or Ki cost: the abilities pay those.
+        // a heavy thunk. Still no stamina or Ki cost: the abilities pay those.
         if (!(attacker.level() instanceof ServerLevel serverLevel)) return;
 
         Vec3 away = target.position().subtract(attacker.position());
@@ -148,7 +146,7 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
                 Math.max(1, Math.round(6f * density)), 0.3, 0.3, 0.3, 0.04);
         }
         serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-            SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 0.5f, 0.9f);
+            com.dragonblockarcanedba.sound.DbaSounds.THUNK, SoundSource.PLAYERS, 0.5f, 0.9f);
     }
 
     // --- LEFT CLICK: Groundbreaker Charging & Downward Shockwave Strike ---
@@ -192,13 +190,13 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
         // Audio rumble
         if (chargeTicks % 20 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BEACON_AMBIENT, SoundSource.PLAYERS, 0.9f, 0.4f + chargeRatio * 0.4f);
+                com.dragonblockarcanedba.sound.DbaSounds.CHARGE_HUM, SoundSource.PLAYERS, 0.9f, 0.4f + chargeRatio * 0.4f);
         }
 
         // Full-charge ready cue: without it a maxed charge felt identical to 95 percent.
         if (chargeTicks == MAX_LEFT_CHARGE_TICKS - 10) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.WARDEN_SONIC_CHARGE, SoundSource.PLAYERS, 1.2f, 1.6f);
+                com.dragonblockarcanedba.sound.DbaSounds.CHARGE_FULL, SoundSource.PLAYERS, 1.2f, 1.6f);
             player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§6Groundbreaker fully charged!"), true);
         }
     }
@@ -227,11 +225,11 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
         // Downward swing sounds & impact, scaled by charge so a tap release and a
         // full 10-second charge no longer sound identical.
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f + chargeRatio, 0.4f + chargeRatio * 0.3f);
+            com.dragonblockarcanedba.sound.DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 1.0f + chargeRatio, 0.4f + chargeRatio * 0.3f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.0f + chargeRatio * 0.8f, 0.6f);
+            com.dragonblockarcanedba.sound.DbaSounds.SLAM_THUD, SoundSource.PLAYERS, 1.0f + chargeRatio * 0.8f, 0.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.8f + chargeRatio * 0.7f, 0.6f + chargeRatio * 0.3f);
+            com.dragonblockarcanedba.sound.DbaSounds.RELEASE_BLAST, SoundSource.PLAYERS, 0.8f + chargeRatio * 0.7f, 0.6f + chargeRatio * 0.3f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // Cooldown based on power
@@ -307,7 +305,7 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
                     if (heldTicks % 5 == 0) {
                         PlayerStatsAccessor acc = (PlayerStatsAccessor) player;
                         float auraPressureDmg = (45.0f + (float) (acc.dba$getStrength() * 0.4f)) * (float) damageScale;
-                        enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (auraPressureDmg)));
+                        enemy.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.crush(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (auraPressureDmg)));
                         enemy.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 25, 0, false, false, false), player);
                     }
 
@@ -335,14 +333,14 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
             // 3. Pressure damage after 10s (heldTicks >= 200): 3% current HP per second
             if (heldTicks >= 200) {
                 float pressureDmg = Math.max(1.0f, player.getHealth() * 0.03f / 20.0f);
-                player.hurtServer(serverLevel, serverLevel.damageSources().generic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (pressureDmg)));
+                player.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.crush(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (pressureDmg)));
             }
 
             // 4. Critical Peak Window (14.0s – 15.0s / 280–300 ticks)
             if (isPeak) {
                 if (heldTicks % 5 == 0) {
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.WARDEN_SONIC_CHARGE, SoundSource.PLAYERS, 1.2f, 1.8f);
+                        com.dragonblockarcanedba.sound.DbaSounds.CHARGE_FULL, SoundSource.PLAYERS, 1.2f, 1.8f);
                 }
             }
 
@@ -357,16 +355,16 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
                 float maxSlamDamage = 2000.0f + (float) (accessor.dba$getStrength() * 5.0f);
                 float recoilDamage = maxSlamDamage * 0.25f;
 
-                player.hurtServer(serverLevel, serverLevel.damageSources().generic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (recoilDamage)));
+                player.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.crush(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (recoilDamage)));
                 player.stopUsingItem();
 
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.SHIELD_BREAK.value(), SoundSource.PLAYERS, 2.5f, 0.5f);
+                    com.dragonblockarcanedba.sound.DbaSounds.ITEM_SHATTER, SoundSource.PLAYERS, 2.5f, 0.5f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.6f);
+                    com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 2.0f, 0.6f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
 
-                serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, player.getX(), player.getY() + 1.0, player.getZ(), 2, 0, 0, 0, 0);
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.BLAST, player.getX(), player.getY() + 1.0, player.getZ(), 2, 0, 0, 0, 0);
 
                 // 10-second penalty cooldown
                 player.getCooldowns().addCooldown(stack, 200);
@@ -402,13 +400,13 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
                     KingsSlamEntity slam = new KingsSlamEntity(serverLevel, player, player.position(), (float) slamRadius, true, peakDamage);
                     serverLevel.addFreshEntity(slam);
 
-                    serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, player.getX(), player.getY() + 0.5, player.getZ(), 3, 0.5, 0.2, 0.5, 0);
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.BLAST, player.getX(), player.getY() + 0.5, player.getZ(), 3, 0.5, 0.2, 0.5, 0);
 
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 3.0f, 0.5f);
+                        com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 3.0f, 0.5f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.6f);
+                        com.dragonblockarcanedba.sound.DbaSounds.BOOM_SONIC, SoundSource.PLAYERS, 2.5f, 0.6f);
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                         com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.6f);
 
@@ -430,10 +428,10 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
                     serverLevel.addFreshEntity(slam);
 
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.7f);
+                        com.dragonblockarcanedba.sound.DbaSounds.RELEASE_BLAST, SoundSource.PLAYERS, 2.0f, 0.7f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.5f, 0.6f);
+                        com.dragonblockarcanedba.sound.DbaSounds.SLAM_THUD, SoundSource.PLAYERS, 1.5f, 0.6f);
 
                     player.getCooldowns().addCooldown(stack, 40 + (int) (holdRatio * 60));
                 }

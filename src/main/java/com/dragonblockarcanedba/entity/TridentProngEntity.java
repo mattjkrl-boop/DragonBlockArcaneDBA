@@ -154,7 +154,7 @@ public class TridentProngEntity extends Projectile {
                 this.setPos(block.getLocation().x, block.getLocation().y, block.getLocation().z);
                 this.emitHitBurst(serverLevel, block.getLocation());
                 serverLevel.playSound(null, block.getLocation().x, block.getLocation().y, block.getLocation().z,
-                    net.minecraft.sounds.SoundEvents.TRIDENT_HIT_GROUND, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 0.8f);
+                    com.dragonblockarcanedba.sound.DbaSounds.TRIDENT_HIT, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 0.8f);
                 this.beginDying();
                 return;
             }
@@ -165,9 +165,7 @@ public class TridentProngEntity extends Projectile {
                 int pierceIndex = this.hitIds.size();
                 this.hitIds.add(living.getId());
                 Entity owner = this.getOwner();
-                var source = owner instanceof net.minecraft.world.entity.player.Player player
-                    ? serverLevel.damageSources().playerAttack(player)
-                    : serverLevel.damageSources().magic();
+                var source = com.dragonblockarcanedba.util.DbaDamage.hellfire(this, owner);
                 float dealt = this.damage * PIERCE_SHARES[pierceIndex];
                 living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(dealt));
                 // A prong hit marks the victim for the devil, the same mark the
@@ -176,7 +174,7 @@ public class TridentProngEntity extends Projectile {
                     com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER, 60, 0, false, false), owner);
                 this.emitHitBurst(serverLevel, living.position().add(0, living.getBbHeight() * 0.5, 0));
                 serverLevel.playSound(null, living.getX(), living.getY(), living.getZ(),
-                    net.minecraft.sounds.SoundEvents.TRIDENT_HIT, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 0.9f);
+                    com.dragonblockarcanedba.sound.DbaSounds.TRIDENT_HIT, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 0.9f);
                 if (this.hitIds.size() >= MAX_PIERCES) {
                     this.beginDying();
                     return;

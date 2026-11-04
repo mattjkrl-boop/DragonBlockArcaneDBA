@@ -1,23 +1,28 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.OxFissureEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Random;
 
 /**
  * Entity Renderer for Ox King's Ground Fissure in Minecraft 26.2.
- * Renders jagged subterranean magma fracture trenches, erupting stone fissure teeth, and glowing volcanic core.
+ * Bespoke pass: every shape comes from BespokeGeometry. The trench is a
+ * layered crack star squashed on X (0.55) inside the yaw aligned pose, so
+ * the star's arms fill the same rotated rectangle the entity damages
+ * (about 4.2 long, 2.0 wide) instead of the old hand drawn straight decal.
+ * The stone teeth are branch spikes along the crack's long axis, and the
+ * additive pass redraws the hot core layer so the crack blooms.
  */
 public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissureRenderer.OxFissureRenderState> {
     public OxFissureRenderer(EntityRendererProvider.Context context) {
@@ -63,181 +68,79 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
         float inEase = 1.0f - (1.0f - inT) * (1.0f - inT) * (1.0f - inT);
         float outT = life <= 0.70f ? 0.0f : Math.min(1.0f, (life - 0.70f) / 0.30f);
         float fade = inEase * (1.0f - outT * outT * (3.0f - 2.0f * outT));
+        long seed = state.seed;
 
-        // Align the trench with the yaw the spawner set (radially outward from
-        // the slam). Every fissure used to render pointing the same way.
+        // Stone teeth along the crack's long axis (local Z), alternating
+        // sides like the spectacle build; heights from the seeded stream.
+        Random rng = new Random(seed);
+        int toothCount = 4;
+        float[] toothFrom = new float[toothCount * 3];
+        float[] toothTo = new float[toothCount * 3];
+        float toothGrow = Math.min(1.0f, state.ageInTicks * 0.2f);
+        for (int i = 0; i < toothCount; i++) {
+            float side = (i % 2 == 0) ? 1.0f : -1.0f;
+            float toothH = (0.3f + rng.nextFloat() * 0.35f) * toothGrow;
+            float tx = side * 0.3f;
+            float tz = -1.35f + i * 0.9f;
+            toothFrom[i * 3] = tx;
+            toothFrom[i * 3 + 1] = 0.05f;
+            toothFrom[i * 3 + 2] = tz;
+            toothTo[i * 3] = tx + side * 0.15f;
+            toothTo[i * 3 + 1] = Math.max(0.08f, toothH);
+            toothTo[i * 3 + 2] = tz + side * 0.15f;
+        }
+
+        float fadeF = fade;
+        float pulseF = pulse;
+        float coreFade = fade * (1.0f - outT);
+
+        // Align the trench with the yaw the spawner set (radially outward
+        // from the slam). Every fissure used to render pointing the same way.
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotationDegrees(-state.yRot)));
 
+        // Anchor glow and teeth in the unscaled yaw pose.
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
-
-            // Anchor glow (point 1): a molten pool under the crack so the
-            // trench sits in its own light along its whole length.
             LayeredRender.drawAnchorGlow(pose, buffer, 2.0f, 0.05f,
-                1.0f, 0.50f, 0.08f, LayeredRender.ALPHA_MID * fade, 1.0f);
-
-            // Draw jagged branching fracture trenches
-            int mainSegments = 8;
-            float totalLength = 3.6f;
-            float[] fx = new float[mainSegments + 1];
-            float[] fz = new float[mainSegments + 1];
-
-            fx[0] = 0; fz[0] = -totalLength * 0.5f;
-
-            for (int i = 1; i <= mainSegments; i++) {
-                float progress = i / (float) mainSegments;
-                fz[i] = -totalLength * 0.5f + (progress * totalLength);
-                fx[i] = fx[i - 1] + (rng.nextFloat() - 0.5f) * 0.7f;
-            }
-
-            for (int i = 0; i < mainSegments; i++) {
-                float x1 = fx[i], z1 = fz[i];
-                float x2 = fx[i + 1], z2 = fz[i + 1];
-
-                // Along-length gradient (redesign T2): the crack burns
-                // hottest at its root near the slam and cools toward the tip.
-                float segShade = 1.0f - (i / (float) mainSegments) * 0.35f;
-
-                // Magma Trench Base
-                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.45f, 1.0f, 0.25f * pulse * segShade, 0.0f, 0.95f * fade);
-                // Glowing Heat Core
-                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.18f, 1.0f, 0.90f * pulse * segShade, 0.2f, fade * (0.70f + 0.30f * segShade));
-                drawTrenchSegment(matrix, buffer, x1, z1, x2, z2, 0.05f, 1.0f, 0.98f, 0.72f, fade * (0.85f + 0.15f * segShade) * (1.0f - outT));
-
-                // Small 3D stone fissure teeth along edges
-                if (i % 2 == 0) {
-                    float side = (i % 4 == 0) ? 1.0f : -1.0f;
-                    float toothW = 0.25f;
-                    float toothH = (0.3f + rng.nextFloat() * 0.35f) * Math.min(1.0f, state.ageInTicks * 0.2f);
-                    float toothX = (x1 + x2) * 0.5f + side * 0.3f;
-                    float toothZ = (z1 + z2) * 0.5f;
-
-                    drawRockTooth(matrix, buffer,
-                        toothX - toothW * 0.5f, 0.05f, toothZ,
-                        toothX + toothW * 0.5f, 0.05f, toothZ,
-                        toothX, toothH, toothZ + side * 0.15f,
-                        1.0f, 0.35f, 0.05f, 0.95f * fade,
-                        0.25f, 0.20f, 0.16f, 1.0f * fade
-                    );
-                }
-            }
-
-            // Two jittered branch cracks splitting off the main line, so the
-            // fissure reads as a radial fracture instead of one straight decal.
-            for (int b = 0; b < 2; b++) {
-                int fromSeg = b == 0 ? 3 : 5;
-                float bx = fx[fromSeg], bz = fz[fromSeg];
-                double branchAngle = (b == 0 ? -1.0 : 1.0) * (0.55 + rng.nextDouble() * 0.35);
-                double dirX = Math.sin(branchAngle), dirZ = Math.cos(branchAngle);
-                for (int s = 0; s < 2; s++) {
-                    float segLen = 0.55f - s * 0.15f;
-                    float nx2 = bx + (float) dirX * segLen + (rng.nextFloat() - 0.5f) * 0.2f;
-                    float nz2 = bz + (float) dirZ * segLen;
-                    float branchDie = 1.0f - s * 0.42f;
-                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.30f * branchDie, 1.0f, 0.25f * pulse, 0.0f, 0.85f * fade * branchDie);
-                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.12f * branchDie, 1.0f, 0.90f * pulse, 0.2f, 0.95f * fade * branchDie);
-                    drawTrenchSegment(matrix, buffer, bx, bz, nx2, nz2, 0.04f * branchDie, 1.0f, 0.98f, 0.72f, 0.80f * fade * branchDie);
-                    bx = nx2; bz = nz2;
-                }
+                1.0f, 0.50f, 0.08f, LayeredRender.ALPHA_MID * fadeF, 1.0f);
+            for (int i = 0; i < toothCount; i++) {
+                Vec3 from = new Vec3(toothFrom[i * 3], toothFrom[i * 3 + 1], toothFrom[i * 3 + 2]);
+                Vec3 to = new Vec3(toothTo[i * 3], toothTo[i * 3 + 1], toothTo[i * 3 + 2]);
+                BespokeGeometry.branch(pose, buffer, seed ^ (0x7007L + i * 131L),
+                    from, to, 0.16f,
+                    0.25f, 0.20f, 0.16f, fadeF, 1.0f, 1.0f);
+                BespokeGeometry.branch(pose, buffer, seed ^ (0x7008L + i * 131L),
+                    from, new Vec3(to.x, Math.max(0.06f, to.y * 0.65f), to.z), 0.07f,
+                    1.0f, 0.35f, 0.05f, fadeF * 0.95f, 1.0f, 1.0f);
             }
         });
 
-        // Additive glow halo (redesign T1): the heat core of the main trench
-        // blooms so the crack reads as molten light in the ground. The point
-        // path is rebuilt from the same seed, so the glow follows the crack.
+        // The crack star itself, squashed on X so its arms span the damage
+        // rectangle: radius 1.9 along Z, about 1.05 across X after the squash.
+        // Four layers share one seed, so the paths coincide: dark underlay,
+        // magma base, heat core, white hot center.
+        poseStack.pushPose();
+        poseStack.scale(0.55f, 1.0f, 1.0f);
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            BespokeGeometry.crackStar(pose, buffer, seed, 1.95f,
+                0.45f, 0.08f, 0.0f, fadeF * 0.95f, 1.0f, 1.0f);
+            BespokeGeometry.crackStar(pose, buffer, seed, 1.90f,
+                1.0f, 0.25f * pulseF, 0.0f, fadeF * 0.95f, 1.0f, 1.0f);
+            BespokeGeometry.crackStar(pose, buffer, seed, 1.82f,
+                1.0f, 0.90f * pulseF, 0.20f, fadeF, 1.0f, 1.0f);
+            BespokeGeometry.crackStar(pose, buffer, seed, 1.74f,
+                1.0f, 0.98f, 0.72f, coreFade, 1.0f, 1.0f);
+        });
+
+        // Additive glow halo: the heat core layer blooms so the crack reads
+        // as molten light in the ground.
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
-            int mainSegments = 8;
-            float totalLength = 3.6f;
-            float[] fx = new float[mainSegments + 1];
-            float[] fz = new float[mainSegments + 1];
-            fx[0] = 0; fz[0] = -totalLength * 0.5f;
-            for (int i = 1; i <= mainSegments; i++) {
-                float progress = i / (float) mainSegments;
-                fz[i] = -totalLength * 0.5f + (progress * totalLength);
-                fx[i] = fx[i - 1] + (rng.nextFloat() - 0.5f) * 0.7f;
-            }
-            for (int i = 0; i < mainSegments; i++) {
-                float segShade = 1.0f - (i / (float) mainSegments) * 0.35f;
-                drawTrenchSegment(matrix, buffer, fx[i], fz[i], fx[i + 1], fz[i + 1], 0.20f,
-                    1.0f, 0.90f * pulse * segShade, 0.2f, 0.35f * fade * (0.70f + 0.30f * segShade));
-            }
+            BespokeGeometry.crackStar(pose, buffer, seed, 1.82f,
+                1.0f, 0.90f * pulseF, 0.20f, fadeF * 0.35f, 1.0f, 1.0f);
         });
+        poseStack.popPose();
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static void drawTrenchSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {
-        float dx = x2 - x1, dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dz * dz);
-        if (len < 0.001f) return;
-
-        float nx = -dz / len * width;
-        float nz = dx / len * width;
-
-        consumer.addVertex(matrix, x1 - nx, 0.04f, z1 - nz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1 + nx, 0.04f, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, 0.04f, z2 + nz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, 0.04f, z2 - nz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-    }
-
-    private static void drawRockTooth(Matrix4f matrix, VertexConsumer consumer,
-                                      float x1, float y1, float z1,
-                                      float x2, float y2, float z2,
-                                      float tipX, float tipY, float tipZ,
-                                      float rBase, float gBase, float bBase, float aBase,
-                                      float rTip, float gTip, float bTip, float aTip) {
-        float bx = (x1 + x2) * 0.5f;
-        float by = (y1 + y2) * 0.5f;
-        float bz = (z1 + z2) * 0.5f;
-        float width = (float) Math.sqrt((x2 - x1) * (x2 - x1) + (z2 - z1) * (z2 - z1)) * 0.5f;
-        float mx = (bx + tipX) * 0.5f + (x1 - x2) * 0.35f;
-        float my = (by + tipY) * 0.62f;
-        float mz = (bz + tipZ) * 0.5f + (z1 - z2) * 0.35f;
-        int steps = 5;
-        float px = bx;
-        float py = by;
-        float pz = bz;
-        for (int i = 1; i <= steps; i++) {
-            float t = i / (float) steps;
-            float u = 1.0f - t;
-            float x = u * u * bx + 2.0f * u * t * mx + t * t * tipX;
-            float y = u * u * by + 2.0f * u * t * my + t * t * tipY;
-            float z = u * u * bz + 2.0f * u * t * mz + t * t * tipZ;
-            float w = width * (1.0f - t * 0.88f);
-            float a = aBase * (1.0f - t * t * 0.55f);
-            toothSpan(matrix, consumer, px, py, pz, x, y, z, w, rBase, gBase, bBase, a);
-            toothSpan(matrix, consumer, px, py, pz, x, y, z, w * 0.30f, 1.0f, 0.82f, 0.22f, Math.min(1.0f, aTip * (1.0f - t * 0.4f)));
-            px = x;
-            py = y;
-            pz = z;
-        }
-    }
-
-    private static void toothSpan(Matrix4f matrix, VertexConsumer consumer,
-                                  float x0, float y0, float z0,
-                                  float x1, float y1, float z1,
-                                  float width, float r, float g, float b, float a) {
-        float dx = x1 - x0;
-        float dy = y1 - y0;
-        float dz = z1 - z0;
-        float px = -dz;
-        float py = 0.0f;
-        float pz = dx;
-        float plen = (float) Math.sqrt(px * px + pz * pz + dy * dy);
-        if (plen < 0.0001f) {
-            return;
-        }
-        float s = width / plen;
-        px *= s;
-        pz *= s;
-        consumer.addVertex(matrix, x0 - px, y0, z0 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, 1, pz);
-        consumer.addVertex(matrix, x0 + px, y0, z0 + pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, 1, pz);
-        consumer.addVertex(matrix, x1 + px, y1, z1 + pz).setColor(r, g, b, a * 0.6f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, 1, pz);
-        consumer.addVertex(matrix, x1 - px, y1, z1 - pz).setColor(r, g, b, a * 0.6f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(px, 1, pz);
     }
 }

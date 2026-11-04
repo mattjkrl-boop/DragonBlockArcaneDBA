@@ -34,6 +34,7 @@ public class SpiritCannonBeamEntity extends Projectile {
     private static final EntityDataAccessor<Float> BEAM_Y_ROT = SynchedEntityData.defineId(SpiritCannonBeamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> BEAM_X_ROT = SynchedEntityData.defineId(SpiritCannonBeamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> FADE = SynchedEntityData.defineId(SpiritCannonBeamEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Long> SEED = SynchedEntityData.defineId(SpiritCannonBeamEntity.class, EntityDataSerializers.LONG);
 
     public static final float MAX_BEAM_RANGE = 32.0f;
     public static final int FADE_TICKS = 6;
@@ -52,6 +53,7 @@ public class SpiritCannonBeamEntity extends Projectile {
         super(DbaEntities.SPIRIT_CANNON_BEAM, level);
         this.setOwner(caster);
         this.noPhysics = true;
+        this.entityData.set(SEED, this.getUUID().getMostSignificantBits());
         if (caster != null) {
             this.entityData.set(CASTER_ID, caster.getId());
             Vec3 eye = caster.getEyePosition();
@@ -71,6 +73,12 @@ public class SpiritCannonBeamEntity extends Projectile {
         builder.define(BEAM_Y_ROT, 0.0f);
         builder.define(BEAM_X_ROT, 0.0f);
         builder.define(FADE, 1.0f);
+        builder.define(SEED, 0L);
+    }
+
+    /** Synced geometry seed for the bespoke renderer (bespoke pass rule 1). */
+    public long getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int getCasterId() {

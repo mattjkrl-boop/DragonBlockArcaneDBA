@@ -9,7 +9,7 @@ import com.dragonblockarcanedba.entity.ZShockwaveEntity;
 import com.dragonblockarcanedba.entity.ZStanceAuraEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -164,7 +164,7 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
         // Audio hum
         if (chargeTicks % 20 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BEACON_AMBIENT, SoundSource.PLAYERS, 0.8f, 0.6f + chargeRatio * 0.8f);
+                DbaSounds.CHARGE_HUM, SoundSource.PLAYERS, 0.8f, 0.6f + chargeRatio * 0.8f);
         }
     }
 
@@ -212,9 +212,9 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
 
         // Sounds & shockwave burst
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 0.5f);
+            DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 1.5f, 0.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.2f);
+            DbaSounds.RELEASE_BLAST, SoundSource.PLAYERS, 1.2f, 1.2f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // Cooldown based on power. A full charge wave lives 80 ticks in flight,
@@ -284,7 +284,7 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
             // Gravity pulse sound
             if (heldTicks % 30 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.WARDEN_SONIC_CHARGE, SoundSource.PLAYERS, 0.8f, 0.5f + stanceRatio * 0.5f);
+                    DbaSounds.CHARGE_FULL, SoundSource.PLAYERS, 0.8f, 0.5f + stanceRatio * 0.5f);
             }
         }
     }
@@ -352,10 +352,10 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
 
                 // Sound
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.6f);
+                    DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 2.0f, 0.6f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.5f, 0.5f);
+                    DbaSounds.SLAM_THUD, SoundSource.PLAYERS, 1.5f, 0.5f);
 
                 // Cooldown: at least the slam visual life (80 to 120 ticks), so a
                 // second slam can never stack on a still burning first one.
@@ -363,7 +363,7 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
             } else {
                 // Releasing too early used to waste the stance drain with no feedback at all.
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 0.7f, 0.6f);
+                    DbaSounds.GROUND_CRACK, SoundSource.PLAYERS, 0.7f, 0.6f);
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7The Z Sword is too heavy: hold the stance a moment longer."), true);
             }
         }

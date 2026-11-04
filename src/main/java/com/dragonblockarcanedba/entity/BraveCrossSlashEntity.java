@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.LayeredParticles;
@@ -118,9 +119,8 @@ public class BraveCrossSlashEntity extends Projectile {
 
             if (isPulseTick(this.tickCount)
                 && FxEnvelope.inActiveWindow(this.tickCount, this.maxLifetime, 0.2f, 0.3f)) {
-                DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                    ? serverLevel.damageSources().playerAttack(playerOwner)
-                    : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+                // Bespoke damage: valor type, this cross as the direct entity.
+                DamageSource damageSource = DbaDamage.valor(this, owner);
 
                 pulseHitEntityIds.clear();
                 AABB hitbox = this.getBoundingBox().inflate(radius, 2.0, radius);

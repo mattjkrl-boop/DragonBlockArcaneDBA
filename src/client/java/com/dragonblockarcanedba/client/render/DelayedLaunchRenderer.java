@@ -1,16 +1,17 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.DelayedLaunchEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
 
 /**
  * Telegraph for the Z Sword delayed launch. A violet gravity ring contracts
@@ -23,6 +24,10 @@ import org.joml.Matrix4f;
  * radius (synced from the entity) and contracts to 35 percent of it, over the
  * true delay (40 to 80 ticks, also synced), and a faint anchor disc marks the
  * full footprint for the whole countdown.
+ *
+ * Bespoke pass: the footprint marker is a seeded crack star at the true
+ * slam radius, the contracting rings are flat broken vortex bands, and the
+ * rune ticks are small gold shard fans at the cardinal points.
  */
 public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, DelayedLaunchRenderer.DelayedLaunchRenderState> {
     public DelayedLaunchRenderer(EntityRendererProvider.Context context) {
@@ -33,6 +38,7 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
         public float age = 0;
         public float radius = 10.0f;
         public int delayTicks = 40;
+        public long seed = 0;
     }
 
     @Override
@@ -46,6 +52,7 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
         state.age = entity.tickCount + partialTicks;
         state.radius = entity.getRadius();
         state.delayTicks = Math.max(1, entity.getDelayTicks());
+        state.seed = entity.getSeed();
     }
 
     @Override
@@ -61,76 +68,48 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
         float pulse = 0.60f + 0.40f * (float) Math.sin(age * (0.35 + progress * 0.85));
         float ringAlpha = (0.35f + progress * 0.45f) * pulse;
         float rot = age * (6.0f + progress * 30.0f);
-        float dist = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        int ringSegs = com.dragonblockarcanedba.util.FxEnvelope.segments(48, dist, 20);
+        float dist = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
+        // Full footprint marker at the true slam radius for the whole
+        // countdown, faint, so the warning size equals the hit size.
         poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(rot * 0.5f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.crackStar(pose, buffer, state.seed, slamRadius,
+                0.58f, 0.10f, 0.98f, 1.0f, ringAlpha * 0.30f, dist));
+        poseStack.popPose();
+
+        // Contracting violet band and the tighter gold band inside it.
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            // Full footprint marker at the true slam radius for the whole
-            // countdown, faint, so the warning size equals the hit size.
-            drawGroundRing(matrix, buffer, slamRadius, 0.30f, ringSegs, 0.0f,
-                0.58f, 0.10f, 0.98f, ringAlpha * 0.30f);
-            // Outer violet ring band, alpha 0 at both edges, bright at the crest line.
-            drawGroundRing(matrix, buffer, radius, 0.45f, ringSegs, 0.0f,
-                0.58f, 0.10f, 0.98f, ringAlpha);
-            // Inner gold ring closing tighter.
-            drawGroundRing(matrix, buffer, radius * 0.62f, 0.22f, ringSegs, 0.0f,
-                1.0f, 0.85f, 0.30f, ringAlpha * 0.9f);
-
-            // Four rune ticks at the cardinal points, rotating as the launch nears.
-            for (int i = 0; i < 4; i++) {
-                double a = Math.toRadians(rot + i * 90.0);
-                float cx = (float) Math.cos(a) * radius;
-                float cz = (float) Math.sin(a) * radius;
-                drawRuneTick(matrix, buffer, cx, cz, (float) a, 0.55f,
-                    1.0f, 0.95f, 0.55f, Math.min(1.0f, ringAlpha + 0.25f));
-            }
+            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0xC7L, radius,
+                0.02f, 0.16f, (float) Math.toRadians(rot), 0.58f, 0.10f, 0.98f, ringAlpha, dist);
+            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0x601DL, radius * 0.62f,
+                0.02f, 0.12f, (float) Math.toRadians(-rot * 0.7f), 1.0f, 0.85f, 0.30f, ringAlpha * 0.9f, dist);
         });
 
-        // Additive halo pass: a wider faint violet ring under the telegraph so
-        // the warning glows against the ground as the launch nears, plus the
-        // shared anchor glow across the full slam footprint.
+        // Four rune ticks at the cardinal points, rotating as the launch nears.
+        for (int i = 0; i < 4; i++) {
+            double a = Math.toRadians(rot + i * 90.0);
+            float cx = (float) Math.cos(a) * radius;
+            float cz = (float) Math.sin(a) * radius;
+            long tickSeed = state.seed + i * 7L;
+            poseStack.pushPose();
+            poseStack.translate(cx, 0.10f, cz);
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+                BespokeGeometry.shardFan(pose, buffer, tickSeed, 0.55f,
+                    1.0f, 0.95f, 0.55f, Math.min(1.0f, ringAlpha + 0.25f), 1.0f, dist));
+            poseStack.popPose();
+        }
+
+        // Additive halo pass: a wider faint violet glow fan under the
+        // telegraph so the warning glows against the ground as the launch
+        // nears, plus the shared anchor glow across the full slam footprint.
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawGroundRing(matrix, buffer, radius * 1.12f, 0.60f, ringSegs, 0.0f,
-                0.58f, 0.10f, 0.98f, ringAlpha * 0.35f);
-            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawAnchorGlow(pose, buffer,
+            BespokeGeometry.glowFan(pose, buffer, state.seed ^ 0xAA10L, radius * 1.12f, 0.04f,
+                0.58f, 0.10f, 0.98f, ringAlpha * 0.35f, dist);
+            LayeredRender.drawAnchorGlow(pose, buffer,
                 slamRadius, 0.03f, 0.58f, 0.10f, 0.98f, ringAlpha * 0.22f, dist);
         });
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static void drawGroundRing(Matrix4f matrix, VertexConsumer consumer, float radius, float width, int segments, float y,
-                                       float r, float g, float b, float a) {
-        float inner = Math.max(0.05f, radius - width);
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-            float x1o = (float) Math.cos(a1) * radius, z1o = (float) Math.sin(a1) * radius;
-            float x2o = (float) Math.cos(a2) * radius, z2o = (float) Math.sin(a2) * radius;
-            float x1i = (float) Math.cos(a1) * inner, z1i = (float) Math.sin(a1) * inner;
-            float x2i = (float) Math.cos(a2) * inner, z2i = (float) Math.sin(a2) * inner;
-
-            consumer.addVertex(matrix, x1o, y + 0.06f, z1o).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2o, y + 0.06f, z2o).setColor(r, g, b, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2i, y + 0.06f, z2i).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1i, y + 0.06f, z1i).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawRuneTick(Matrix4f matrix, VertexConsumer consumer, float cx, float cz, float facing, float len,
-                                     float r, float g, float b, float a) {
-        float dx = (float) Math.cos(facing), dz = (float) Math.sin(facing);
-        float px = -dz * 0.09f, pz = dx * 0.09f;
-        float x1 = cx - dx * len * 0.5f, z1 = cz - dz * len * 0.5f;
-        float x2 = cx + dx * len * 0.5f, z2 = cz + dz * len * 0.5f;
-
-        consumer.addVertex(matrix, x1 - px, 0.10f, z1 - pz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - px, 0.10f, z2 - pz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + px, 0.10f, z2 + pz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1 + px, 0.10f, z1 + pz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 }

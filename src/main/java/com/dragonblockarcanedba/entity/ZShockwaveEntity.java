@@ -6,7 +6,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -40,6 +39,7 @@ public class ZShockwaveEntity extends Projectile {
     private static final EntityDataAccessor<Float> CHARGE_RATIO = SynchedEntityData.defineId(ZShockwaveEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> IS_SUB_WAVE = SynchedEntityData.defineId(ZShockwaveEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(ZShockwaveEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(ZShockwaveEntity.class, EntityDataSerializers.INT);
 
     private float damage = 500.0f;
     private boolean pierceBlocks = false;
@@ -79,6 +79,7 @@ public class ZShockwaveEntity extends Projectile {
 
         this.entityData.set(CHARGE_RATIO, chargeRatio);
         this.entityData.set(IS_SUB_WAVE, isSubWave);
+        this.entityData.set(SEED, level.getRandom().nextInt());
 
         // Tweak B & C are unlocked at maximum charge (>= 90%)
         if (chargeRatio >= 0.90f && !isSubWave) {
@@ -92,6 +93,7 @@ public class ZShockwaveEntity extends Projectile {
         builder.define(CHARGE_RATIO, 0.0f);
         builder.define(IS_SUB_WAVE, false);
         builder.define(CASTER_ID, -1);
+        builder.define(SEED, 0);
     }
 
     // Persist the combat fields: the synced charge is not saved by vanilla, and
@@ -106,6 +108,7 @@ public class ZShockwaveEntity extends Projectile {
         output.putBoolean("PierceBlocks", this.pierceBlocks);
         output.putBoolean("RootOnHit", this.rootOnHit);
         output.putBoolean("HasSpawnedSubWaves", this.hasSpawnedSubWaves);
+        output.putInt("Seed", getSeed());
     }
 
     @Override
@@ -117,6 +120,7 @@ public class ZShockwaveEntity extends Projectile {
         this.pierceBlocks = input.getBooleanOr("PierceBlocks", false);
         this.rootOnHit = input.getBooleanOr("RootOnHit", false);
         this.hasSpawnedSubWaves = input.getBooleanOr("HasSpawnedSubWaves", false);
+        this.entityData.set(SEED, input.getIntOr("Seed", 0));
     }
 
     public int getCasterId() {
@@ -129,6 +133,10 @@ public class ZShockwaveEntity extends Projectile {
 
     public boolean isSubWave() {
         return this.entityData.get(IS_SUB_WAVE);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     @Override
@@ -199,7 +207,7 @@ public class ZShockwaveEntity extends Projectile {
             }
             if (this.tickCount % 15 == 0) {
                 serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
-                    net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.HOSTILE, 1.1f, 0.55f);
+                    com.dragonblockarcanedba.sound.DbaSounds.SWING_HEAVY, net.minecraft.sounds.SoundSource.HOSTILE, 1.1f, 0.55f);
             }
 
             // Tweak A: Spawn trailing sub-waves at max charge
@@ -242,7 +250,7 @@ public class ZShockwaveEntity extends Projectile {
                 hitEntityIds.add(target.getId());
 
                 // Deal massive damage
-                target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, owner instanceof LivingEntity ? (LivingEntity) owner : null), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
+                target.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.gravity(this, owner instanceof LivingEntity ? (LivingEntity) owner : null), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
 
                 // Heavy knockback
                 Vec3 knockback = movement.normalize().scale(1.8 + (charge * 2.2));
@@ -261,17 +269,14 @@ public class ZShockwaveEntity extends Projectile {
                     if (buriedCellsSolid) {
                         target.teleportTo(target.getX(), target.getY() - 2.0, target.getZ());
                         // Suffocation / block crush damage from head embedded in terrain
-                        DamageSource crushSource = owner instanceof LivingEntity livingOwner
-                            ? serverLevel.damageSources().indirectMagic(this, livingOwner)
-                            : serverLevel.damageSources().inWall();
-                        target.hurtServer(serverLevel, crushSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (250.0f)));
+                        target.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.crush(this, owner instanceof LivingEntity livingOwner ? livingOwner : null), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (250.0f)));
                     }
                     target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 80, 9, false, true), owner instanceof LivingEntity livingOwner ? livingOwner : null);
                     // The crush used to be a silent teleport: give it debris, shake, and a crunch.
                     com.dragonblockarcanedba.fx.SlamDebris.burst(serverLevel, target.position(), 1.6, com.dragonblockarcanedba.fx.SlamDebris.Profile.Z_GRAVITY);
                     com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, target.getX(), target.getY(), target.getZ());
                     serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                        net.minecraft.sounds.SoundEvents.ANVIL_LAND, net.minecraft.sounds.SoundSource.HOSTILE, 1.2f, 0.7f);
+                        com.dragonblockarcanedba.sound.DbaSounds.GROUND_CRACK, net.minecraft.sounds.SoundSource.HOSTILE, 1.2f, 0.7f);
                 }
             }
 
@@ -288,12 +293,12 @@ public class ZShockwaveEntity extends Projectile {
                         serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                             hitPos.x, hitPos.y, hitPos.z,
                             Math.max(4, Math.round(18f * density)), span * 0.4, height * 0.5, span * 0.4, 0.12);
-                        serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.POOF,
+                        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.DUST_PUFF,
                             hitPos.x, hitPos.y, hitPos.z,
                             Math.max(2, Math.round(8f * density)), span * 0.3, 0.4, span * 0.3, 0.05);
                     }
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
-                        net.minecraft.sounds.SoundEvents.ANVIL_LAND, net.minecraft.sounds.SoundSource.HOSTILE, 0.9f, 0.8f);
+                        com.dragonblockarcanedba.sound.DbaSounds.SLAM_THUD, net.minecraft.sounds.SoundSource.HOSTILE, 0.9f, 0.8f);
                     this.discard();
                 }
             }

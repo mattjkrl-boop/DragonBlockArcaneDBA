@@ -4,10 +4,10 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.WarMaceRiseEntity;
 import com.dragonblockarcanedba.entity.WarMaceSmashEntity;
 import com.dragonblockarcanedba.movement.MovementPhysics;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -107,9 +107,9 @@ public class WarMaceItem extends Item implements com.dragonblockarcanedba.item.g
         WarMaceSmashEntity smash = new WarMaceSmashEntity(level, player, damage, heavy);
         level.addFreshEntity(smash);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, heavy ? 1.6f : 1.0f, heavy ? 0.55f : 0.75f);
+            DbaSounds.SLAM_THUD, SoundSource.PLAYERS, heavy ? 1.6f : 1.0f, heavy ? 0.55f : 0.75f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, heavy ? 1.1f : 0.55f, heavy ? 0.7f : 0.95f);
+            DbaSounds.BOOM_BIG, SoundSource.PLAYERS, heavy ? 1.1f : 0.55f, heavy ? 0.7f : 0.95f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
     }
 
@@ -152,9 +152,9 @@ public class WarMaceItem extends Item implements com.dragonblockarcanedba.item.g
         float damage = 480.0f + strength * 1.5f;
         level.addFreshEntity(new WarMaceRiseEntity(level, player, damage));
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.1f, 0.55f);
+            DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 1.1f, 0.55f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.ANVIL_HIT, SoundSource.PLAYERS, 0.9f, 0.7f);
+            DbaSounds.HIT_METAL, SoundSource.PLAYERS, 0.9f, 0.7f);
     }
 
     /**

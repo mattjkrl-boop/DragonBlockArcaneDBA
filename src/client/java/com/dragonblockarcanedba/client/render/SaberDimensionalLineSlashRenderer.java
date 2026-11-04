@@ -1,11 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SaberDimensionalLineSlashEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -14,15 +14,19 @@ import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Saber Dimensional Line Slash in Minecraft 26.2.
- * Renders a massive, continuous physical 3D dimensional reality cut beam along the 3D Best-Fit Line Snap Finisher vector:
- * - Multi-faceted diamond laser beam spanning the full length of the snapped targets
- * - Inner blinding white-hot cutting core
- * - Cyan plasma mantle & outer spatial rift distortion sheath
- * - Transversal reality-crack ribs & concentric shock rings.
+ *
+ * <p>Bespoke pass: the hand-rolled tapered tube beam, equal segment shock
+ * rings, diamond ribs and the helix edge strip are deleted. The beam is
+ * two crossed pairs of {@link BespokeGeometry} torn ribbons (cyan sheath
+ * and white core, one pair flat and one pair upright, so the cut has
+ * volume from any angle), the traveling bands and the impact ring are
+ * broken vortex bands riding the beam, and the transversal ribs are
+ * shard fans. The helix is gone by design: the ribbons' torn, jittered
+ * edges replace it. Cut growth, envelope fade, colors and alphas are
+ * unchanged from the spectacle pass.</p>
  */
 public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimensionalLineSlashEntity, SaberDimensionalLineSlashRenderer.LineSlashRenderState> {
 
@@ -39,6 +43,7 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
         public double ex = 0;
         public double ey = 0;
         public double ez = 0;
+        public long seed = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -67,6 +72,14 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
         state.ex = entity.getX();
         state.ey = entity.getY();
         state.ez = entity.getZ();
+        // Synced seed: entity id plus the synced direction and length, so
+        // every client tears the beam's edges the same way.
+        Vec3 dir = entity.getLineDirection();
+        state.seed = entity.getId() * 0x9E3779B97F4A7C15L
+            ^ Float.floatToIntBits((float) dir.x) * 31L
+            ^ Float.floatToIntBits((float) dir.y) * 131L
+            ^ Float.floatToIntBits((float) dir.z) * 1021L
+            ^ Float.floatToIntBits(entity.getLineLength());
     }
 
     @Override
@@ -74,17 +87,15 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         if (progress >= 1.0f) return;
 
-        float cut = smooth(Math.min(1.0f, progress / 0.40f));
+        float cut = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.40f));
         // The shared envelope folds into the fade so beam alpha, the entity's
         // particle sheath, and the split damage window all share one curve.
         float env = FxEnvelope.envelope(state.age, (float) state.maxLifetime, 0.15f, 0.35f);
-        float fade = (1.0f - smooth(progress)) * Math.min(1.0f, env * 1.5f);
+        float fade = (1.0f - FxEnvelope.smoothstep(progress)) * Math.min(1.0f, env * 1.5f);
         float impact = strike(progress);
         float scale = state.scale;
         float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-        int outerSegs = FxEnvelope.segments(10, ds, 5);
-        int coreSegs = FxEnvelope.segments(7, ds, 4);
-        int ringSegs = FxEnvelope.segments(20, ds, 8);
+        long seed = state.seed;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         Vec3 dir = state.direction.normalize();
@@ -97,133 +108,94 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(pitch)));
 
         float halfLen = ((state.lineLength * 0.5f) + 1.0f) * cut;
+        float beamLen = halfLen * 2.0f;
 
+        // Beam, flat pair. tornRibbon runs along +X in its own frame; the
+        // Y rotation maps +X onto the beam's +Z and the translate centers
+        // the ribbon on the snap point, so it spans -halfLen to +halfLen.
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90f)));
+        poseStack.translate(-halfLen, 0, 0);
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, 0.16f * scale, outerSegs,
-                0.0f, 0.75f, 1.0f, 0.72f * fade);
-            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, 0.045f * scale, coreSegs,
-                1.0f, 1.0f, 1.0f, fade);
-            int bands = 3;
-            for (int b = 0; b < bands; b++) {
-                float bandProg = (state.age * 0.08f + (b / (float) bands)) % 1.0f;
-                float bandZ = -halfLen + bandProg * (halfLen * 2.0f);
-                drawShockRing(matrix, buffer, bandZ, 0.38f * scale, ringSegs, 0.55f, 0.95f, 1.0f, fade * 0.5f * (1.0f - bandProg * 0.35f));
-            }
-            if (impact > 0.02f) {
-                drawShockRing(matrix, buffer, 0.0f, 0.55f * scale * impact, ringSegs, 1.0f, 1.0f, 1.0f, impact);
-            }
-            // Transversal reality-crack ribs across the beam, as the class doc
-            // promises: five diamond ribs spaced along the cut, brightest at
-            // the center where the snap converged.
-            int ribs = 5;
-            for (int ri = 0; ri < ribs; ri++) {
-                float rt = 0.12f + 0.76f * (ri / (float) (ribs - 1));
-                float ribZ = -halfLen + (halfLen * 2.0f) * rt;
-                float ribA = fade * 0.45f * (float) Math.sin(rt * Math.PI);
-                drawTransversalRib(matrix, buffer, ribZ, 0.55f * scale, 0.55f, 0.90f, 1.0f, ribA);
-            }
-            int helix = FxEnvelope.segments(18, ds, 8);
-            float spin = state.age * 0.45f;
-            float edgeR = 0.22f * scale;
-            for (int h = 0; h < helix; h++) {
-                float t1 = h / (float) helix;
-                float t2 = (h + 1) / (float) helix;
-                float z1 = -halfLen + (halfLen * 2.0f) * t1;
-                float z2 = -halfLen + (halfLen * 2.0f) * t2;
-                float taper1 = (float) Math.sin(t1 * Math.PI);
-                float taper2 = (float) Math.sin(t2 * Math.PI);
-                float ang1 = spin + t1 * (float) Math.PI * 4.0f;
-                float ang2 = spin + t2 * (float) Math.PI * 4.0f;
-                float x1 = (float) Math.cos(ang1) * edgeR * taper1;
-                float y1 = (float) Math.sin(ang1) * edgeR * taper1;
-                float x2 = (float) Math.cos(ang2) * edgeR * taper2;
-                float y2 = (float) Math.sin(ang2) * edgeR * taper2;
-                float px = -(y2 - y1);
-                float py = x2 - x1;
-                float pLen = (float) Math.sqrt(px * px + py * py);
-                if (pLen < 0.0001f) continue;
-                px = px / pLen * 0.02f * scale;
-                py = py / pLen * 0.02f * scale;
-                float ha = fade * taper1;
-                buffer.addVertex(matrix, x1 - px, y1 - py, z1).setColor(0.75f, 0.95f, 1.0f, ha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                buffer.addVertex(matrix, x1 + px, y1 + py, z1).setColor(0.75f, 0.95f, 1.0f, ha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                buffer.addVertex(matrix, x2 + px, y2 + py, z2).setColor(1.0f, 1.0f, 1.0f, fade * taper2 * 0.2f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                buffer.addVertex(matrix, x2 - px, y2 - py, z2).setColor(1.0f, 1.0f, 1.0f, fade * taper2 * 0.2f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            }
+            BespokeGeometry.tornRibbon(pose, buffer, seed, beamLen, 0.32f * scale, 0.0f,
+                0.0f, 0.75f, 1.0f, 0.72f * fade, 1.0f, ds);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0xC03EL, beamLen, 0.09f * scale, 0.0f,
+                1.0f, 1.0f, 1.0f, fade, 1.0f, ds);
         });
+        poseStack.popPose();
+
+        // Beam, upright pair: the extra Z rotation turns the ribbons'
+        // width vertical, so the cut reads as a cross, not a flat sheet.
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90f)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90f)));
+        poseStack.translate(-halfLen, 0, 0);
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x9E37L, beamLen, 0.32f * scale, 0.0f,
+                0.0f, 0.75f, 1.0f, 0.72f * fade, 1.0f, ds);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x9E38L, beamLen, 0.09f * scale, 0.0f,
+                1.0f, 1.0f, 1.0f, fade, 1.0f, ds);
+        });
+        poseStack.popPose();
+
+        // Three traveling shock bands riding the beam, as broken vortex
+        // bands. The bands circle the Y axis in their own frame; the
+        // translate seats each at its z along the beam and the X rotation
+        // wraps it around the beam axis.
+        int bands = 3;
+        for (int b = 0; b < bands; b++) {
+            final float bandProg = (state.age * 0.08f + (b / (float) bands)) % 1.0f;
+            final float bandZ = -halfLen + bandProg * beamLen;
+            final float bandAlpha = fade * 0.5f * (1.0f - bandProg * 0.35f);
+            final float bandTwist = state.age * 2.2f + b * 2.094f;
+            final long bandSeed = seed + b * 77L;
+            if (bandAlpha <= 0.01f) continue;
+            poseStack.pushPose();
+            poseStack.translate(0, 0, bandZ);
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+                BespokeGeometry.brokenVortexBand(pose, buffer, bandSeed,
+                    0.38f * scale, 0.0f, 0.10f * scale, bandTwist,
+                    0.55f, 0.95f, 1.0f, bandAlpha, ds));
+            poseStack.popPose();
+        }
+
+        // Impact ring at the snap center, same strike window as before.
+        if (impact > 0.02f) {
+            poseStack.pushPose();
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x19ACL,
+                    0.55f * scale * impact, 0.0f, 0.10f * scale, state.age * 3.0f,
+                    1.0f, 1.0f, 1.0f, impact, ds));
+            poseStack.popPose();
+        }
+
+        // Transversal reality-crack ribs across the beam: five shard fans
+        // spaced along the cut, brightest at the center where the snap
+        // converged, on the same sine profile as the old diamond ribs.
+        int ribs = 5;
+        for (int ri = 0; ri < ribs; ri++) {
+            final float rt = 0.12f + 0.76f * (ri / (float) (ribs - 1));
+            final float ribZ = -halfLen + beamLen * rt;
+            final float ribA = fade * 0.45f * (float) Math.sin(rt * Math.PI);
+            final long ribSeed = seed + 500L + ri * 13L;
+            if (ribA <= 0.01f) continue;
+            poseStack.pushPose();
+            poseStack.translate(0, 0, ribZ);
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+                BespokeGeometry.shardFan(pose, buffer, ribSeed,
+                    0.55f * scale, 0.55f, 0.90f, 1.0f, ribA, 1.0f, ds));
+            poseStack.popPose();
+        }
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static float smooth(float t) {
-        float x = Math.max(0.0f, Math.min(1.0f, t));
-        return x * x * (3.0f - 2.0f * x);
-    }
-
     private static float strike(float progress) {
         if (progress <= 0.32f || progress >= 0.62f) return 0.0f;
         return (float) Math.sin(((progress - 0.32f) / 0.30f) * Math.PI);
-    }
-
-    private static void drawVolumetricBeam(Matrix4f matrix, VertexConsumer consumer, float zStart, float zEnd, float radius, int segments, float r, float g, float b, float a) {
-        int steps = 14;
-        float span = zEnd - zStart;
-        for (int s = 0; s < steps; s++) {
-            float t1 = s / (float) steps;
-            float t2 = (s + 1) / (float) steps;
-            float z1 = zStart + span * t1;
-            float z2 = zStart + span * t2;
-            float taper1 = (float) Math.sin(t1 * Math.PI);
-            float taper2 = (float) Math.sin(t2 * Math.PI);
-            float r1 = radius * (0.18f + 0.82f * taper1);
-            float r2 = radius * (0.18f + 0.82f * taper2);
-            float a1 = a * (0.2f + 0.8f * taper1);
-            float a2 = a * (0.2f + 0.8f * taper2);
-            for (int i = 0; i < segments; i++) {
-                double ang1 = (i / (double) segments) * Math.PI * 2.0;
-                double ang2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-                float c1 = (float) Math.cos(ang1);
-                float s1 = (float) Math.sin(ang1);
-                float c2 = (float) Math.cos(ang2);
-                float s2 = (float) Math.sin(ang2);
-                consumer.addVertex(matrix, c1 * r1, s1 * r1, z1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c1, s1, 0);
-                consumer.addVertex(matrix, c2 * r1, s2 * r1, z1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c2, s2, 0);
-                consumer.addVertex(matrix, c2 * r2, s2 * r2, z2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c2, s2, 0);
-                consumer.addVertex(matrix, c1 * r2, s1 * r2, z2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c1, s1, 0);
-            }
-        }
-    }
-
-    private static void drawTransversalRib(Matrix4f matrix, VertexConsumer consumer, float z, float span, float r, float g, float b, float a) {
-        // Cross Diamond Rib
-        consumer.addVertex(matrix, -span, 0, z).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, 0, span, z).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, span, 0, z).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, 0, -span, z).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-    }
-
-    private static void drawShockRing(Matrix4f matrix, VertexConsumer consumer, float z, float radius, int segments, float r, float g, float b, float a) {
-        float rInner = radius * 0.75f;
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-
-            float x1 = (float) Math.cos(a1) * radius;
-            float y1 = (float) Math.sin(a1) * radius;
-            float x2 = (float) Math.cos(a2) * radius;
-            float y2 = (float) Math.sin(a2) * radius;
-
-            float ix1 = (float) Math.cos(a1) * rInner;
-            float iy1 = (float) Math.sin(a1) * rInner;
-            float ix2 = (float) Math.cos(a2) * rInner;
-            float iy2 = (float) Math.sin(a2) * rInner;
-
-            consumer.addVertex(matrix, ix1, iy1, z).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, ix2, iy2, z).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, y2, z).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1, y1, z).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
     }
 }

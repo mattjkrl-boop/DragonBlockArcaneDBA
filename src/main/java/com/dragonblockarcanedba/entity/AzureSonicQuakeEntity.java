@@ -31,6 +31,7 @@ import java.util.UUID;
  */
 public class AzureSonicQuakeEntity extends Projectile {
     private static final EntityDataAccessor<Float> MAX_RADIUS = SynchedEntityData.defineId(AzureSonicQuakeEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Long> SEED = SynchedEntityData.defineId(AzureSonicQuakeEntity.class, EntityDataSerializers.LONG);
 
     /** How long the bounciness stamped by triggerSonicQuake lasts on a victim. */
     public static final int BOUNCE_TICKS = 60;
@@ -52,11 +53,14 @@ public class AzureSonicQuakeEntity extends Projectile {
         this.setPos(pos.x, pos.y, pos.z);
         this.noPhysics = true;
         this.entityData.set(MAX_RADIUS, maxRadius);
+        // Renderer shape seed: fixed at spawn, synced and saved.
+        this.entityData.set(SEED, this.getUUID().getMostSignificantBits() ^ this.getUUID().getLeastSignificantBits());
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(MAX_RADIUS, 8.5f);
+        builder.define(SEED, 0L);
     }
 
     /** Register a victim whose bounce modifier this quake must remove later. */
@@ -70,6 +74,7 @@ public class AzureSonicQuakeEntity extends Projectile {
     @Override
     protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
         super.addAdditionalSaveData(output);
+        output.putLong("RenderSeed", this.getRenderSeed());
         output.putBoolean("GroundWorkDone", this.groundWorkDone);
         output.putInt("BounceTicksLeft", this.bounceTicksLeft);
         output.putInt("BounceCount", this.bounceTargets.size());
@@ -83,6 +88,7 @@ public class AzureSonicQuakeEntity extends Projectile {
     @Override
     protected void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput input) {
         super.readAdditionalSaveData(input);
+        this.entityData.set(SEED, input.getLongOr("RenderSeed", 0L));
         this.groundWorkDone = input.getBooleanOr("GroundWorkDone", false);
         this.bounceTicksLeft = input.getIntOr("BounceTicksLeft", 0);
         int count = input.getIntOr("BounceCount", 0);
@@ -96,6 +102,10 @@ public class AzureSonicQuakeEntity extends Projectile {
 
     public float getMaxRadius() {
         return this.entityData.get(MAX_RADIUS);
+    }
+
+    public long getRenderSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int getMaxLifetime() {

@@ -10,7 +10,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -140,7 +139,7 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
         if (currentAmmo < ammoNeeded && !player.isCreative()) {
             player.sendSystemMessage(Component.literal("§cOut of Blaster Ammo!"), true);
             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.DISPENSER_FAIL, SoundSource.PLAYERS, 1.0f, 1.8f);
+                com.dragonblockarcanedba.sound.DbaSounds.FIZZLE, SoundSource.PLAYERS, 1.0f, 1.8f);
             return;
         }
 
@@ -172,12 +171,12 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
             // instead of heat being a pure buff that converts at 100 for free.
             player.getCooldowns().addCooldown(stack, 20);
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 1.2f);
+                com.dragonblockarcanedba.sound.DbaSounds.RELEASE_BLAST, SoundSource.PLAYERS, 1.5f, 1.2f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
         } else {
             setHeat(stack, currentHeat + 8); // Build heat
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.0f, 1.6f + heatRatio * 0.4f);
+                com.dragonblockarcanedba.sound.DbaSounds.FIRE_SHOT, SoundSource.PLAYERS, 1.0f, 1.6f + heatRatio * 0.4f);
         }
 
         // Actionbar HUD update
@@ -237,7 +236,7 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
 
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.BEACON_AMBIENT, SoundSource.PLAYERS, 1.0f, 0.6f + chargeRatio * 0.8f);
+                    com.dragonblockarcanedba.sound.DbaSounds.BEAM_CHARGE, SoundSource.PLAYERS, 1.0f, 0.6f + chargeRatio * 0.8f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 0.8f, 0.6f + chargeRatio * 0.9f);
             }
@@ -269,7 +268,7 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
                     fizzlePos.x, fizzlePos.y, fizzlePos.z, 6, 0.20, 0.20, 0.20, 0.05);
                 player.sendSystemMessage(Component.literal("§cErasure Cannon fizzled: hold the charge longer!"), true);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.DISPENSER_FAIL, SoundSource.PLAYERS, 1.0f, 1.2f);
+                    com.dragonblockarcanedba.sound.DbaSounds.FIZZLE, SoundSource.PLAYERS, 1.0f, 1.2f);
                 return true;
             }
 
@@ -281,7 +280,7 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
             if (available < ammoCost && !player.isCreative()) {
                 player.sendSystemMessage(Component.literal("§cNot enough Blaster Ammo for that charge level!"), true);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.DISPENSER_FAIL, SoundSource.PLAYERS, 1.0f, 1.8f);
+                    com.dragonblockarcanedba.sound.DbaSounds.FIZZLE, SoundSource.PLAYERS, 1.0f, 1.8f);
                 return true;
             }
             consumeAmmo(player, ammoCost);

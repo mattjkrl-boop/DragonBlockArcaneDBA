@@ -1,11 +1,9 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -29,6 +27,7 @@ public class BlasterBoltEntity extends Projectile {
     private static final EntityDataAccessor<Float> HEAT_RATIO = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> IMPACT_AGE = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(BlasterBoltEntity.class, EntityDataSerializers.INT);
 
     private float damage = 250.0f;
     private final Set<Integer> hitEntityIds = new HashSet<>();
@@ -63,6 +62,7 @@ public class BlasterBoltEntity extends Projectile {
         this.damage = damage;
         this.entityData.set(IS_OVERCHARGED, isOvercharged);
         this.entityData.set(HEAT_RATIO, heatRatio);
+        this.entityData.set(SEED, level.getRandom().nextInt());
         this.noPhysics = true;
     }
 
@@ -72,6 +72,12 @@ public class BlasterBoltEntity extends Projectile {
         builder.define(HEAT_RATIO, 0.0f);
         builder.define(CASTER_ID, -1);
         builder.define(IMPACT_AGE, -1);
+        builder.define(SEED, 0);
+    }
+
+    /** Synced seed for the bespoke renderer: same seed, same silhouette, every client. */
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int getImpactAge() {
@@ -125,7 +131,7 @@ public class BlasterBoltEntity extends Projectile {
                 this.setDeltaMovement(Vec3.ZERO);
                 if (!this.level().isClientSide() && this.level() instanceof ServerLevel impactLevel) {
                     impactLevel.playSound(null, hitPoint.x, hitPoint.y, hitPoint.z,
-                        SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 0.7f, 1.6f);
+                        com.dragonblockarcanedba.sound.DbaSounds.EXTINGUISH, SoundSource.PLAYERS, 0.7f, 1.6f);
                     this.entityData.set(IMPACT_AGE, 0);
                     emitImpactBurst(impactLevel, hitPoint);
                 }
@@ -156,9 +162,11 @@ public class BlasterBoltEntity extends Projectile {
                 }
             }
 
-            DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                ? serverLevel.damageSources().playerAttack(playerOwner)
-                : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+            // Bespoke pass: ability damage uses the mod's own ki damage type
+            // (rule 4), with this bolt as the direct entity. The plain melee
+            // hit of the gun itself is untouched and stays player attack.
+            DamageSource damageSource = com.dragonblockarcanedba.util.DbaDamage.ki(this,
+                owner instanceof LivingEntity livingOwner ? livingOwner : null);
 
             boolean overcharged = isOvercharged();
             float heat = getHeatRatio();
@@ -219,8 +227,8 @@ public class BlasterBoltEntity extends Projectile {
                     for (LivingEntity st : splashTargets) {
                         st.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage * 0.6f)));
                     }
-                    serverLevel.sendParticles(ParticleTypes.EXPLOSION, target.getX(), target.getY() + 1.0, target.getZ(), 1, 0, 0, 0, 0);
-                    serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.4f);
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.BLAST, target.getX(), target.getY() + 1.0, target.getZ(), 1, 0, 0, 0, 0);
+                    serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(), com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 1.2f, 1.4f);
                 }
             }
 

@@ -8,12 +8,10 @@ import com.dragonblockarcanedba.entity.BraveRushTrailEntity;
 import com.dragonblockarcanedba.entity.BraveSlashEntity;
 import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -175,7 +173,7 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 MovementPhysics.teleport(player, past);
 
                 float finisherDmg = 900.0f + (strength * 4.0f);
-                target.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finisherDmg)));
+                target.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.valor(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finisherDmg)));
 
                 // MC 26.2 Physics: Finisher ricochet bounce
                 com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
@@ -195,9 +193,9 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 crossSlash.excludeEntity(target.getId());
                 level.addFreshEntity(crossSlash);
 
-                level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.6f);
+                level.playSound(null, target.getX(), target.getY(), target.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 2.0f, 0.6f);
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 2.0f, 0.6f);
-                level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.8f, 1.2f);
+                level.playSound(null, target.getX(), target.getY(), target.getZ(), com.dragonblockarcanedba.sound.DbaSounds.BOOM_HOLY, SoundSource.PLAYERS, 1.8f, 1.2f);
                 com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, target.getX(), target.getY(), target.getZ());
 
                 setCombo(stack, 0); // Reset combo
@@ -213,12 +211,12 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 // Combo particle feedback & sound. A heavy hit plays its own
                 // louder pair only; before this pass it played both pairs in
                 // the same tick, doubling the sweep and whoosh.
-                level.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1.0, target.getZ(), 8, 0.3, 0.3, 0.3, 0.1);
+                level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.CRIT_SPARK, target.getX(), target.getY() + 1.0, target.getZ(), 8, 0.3, 0.3, 0.3, 0.1);
                 if (heavy) {
-                    level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 1.4f);
+                    level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 1.5f, 1.4f);
                     level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 1.4f);
                 } else {
-                    level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
+                    level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SWING_LIGHT, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
                     level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
                 }
                 player.sendSystemMessage(Component.literal(String.format("§6Brave Power: §e%d Hits", combo)), true);
@@ -233,7 +231,7 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
             cut.setDeltaMovement(look.scale(1.8));
             level.addFreshEntity(cut);
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0f, 1.35f);
+                com.dragonblockarcanedba.sound.DbaSounds.SWING_LIGHT, SoundSource.PLAYERS, 1.0f, 1.35f);
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.0f, 1.35f);
         }
@@ -293,7 +291,7 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
 
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.9f, 0.8f + chargeRatio * 0.5f);
+                    com.dragonblockarcanedba.sound.DbaSounds.CHARGE_RISE, SoundSource.PLAYERS, 0.9f, 0.8f + chargeRatio * 0.5f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 0.9f, 0.8f + chargeRatio * 0.5f);
             }
@@ -359,7 +357,7 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
             MovementPhysics.teleport(player, end);
 
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.7f);
+                com.dragonblockarcanedba.sound.DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 2.0f, 0.7f);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 2.0f, 0.7f);
 

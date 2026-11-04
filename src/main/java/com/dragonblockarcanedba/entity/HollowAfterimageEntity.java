@@ -17,7 +17,7 @@ import net.minecraft.world.phys.AABB;
 import java.util.List;
 
 /**
- * Hollow Afterimage Entity — Ghostly translucent player clone left behind when passing through enemies.
+ * Hollow Afterimage Entity: Ghostly translucent player clone left behind when passing through enemies.
  */
 public class HollowAfterimageEntity extends Projectile {
     private static final EntityDataAccessor<Float> SYNC_YAW = SynchedEntityData.defineId(HollowAfterimageEntity.class, EntityDataSerializers.FLOAT);

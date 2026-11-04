@@ -10,7 +10,9 @@ import com.dragonblockarcanedba.entity.DarknessChargeEntity;
 import com.dragonblockarcanedba.entity.DarknessDomainEntity;
 import com.dragonblockarcanedba.entity.DarknessShatterEntity;
 import com.dragonblockarcanedba.entity.DarknessWaveEntity;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.AtmosphereServer;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
@@ -18,7 +20,6 @@ import com.dragonblockarcanedba.util.VortexPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -143,7 +144,7 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
 
         if (chargeTicks % 20 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BEACON_AMBIENT, SoundSource.PLAYERS, 0.8f, 0.4f + chargeRatio * 0.5f);
+                DbaSounds.CHARGE_HUM, SoundSource.PLAYERS, 0.8f, 0.4f + chargeRatio * 0.5f);
         }
     }
 
@@ -190,9 +191,9 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
 
         // Downward swing audio
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.8f, 0.5f);
+            DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 1.8f, 0.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.2f);
+            DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 1.2f, 1.2f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // Base dust where the slash leaves the caster (point 3).
@@ -287,10 +288,11 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
                 Math.min(26.0, domainRadius * 1.35), player,
                 0.055, 0.85, 0.05, 0.35f + 0.65f * chargeRatio);
 
-            // Point 4: the domain IS the eclipse. Real thunder weather for
-            // the channel's life plus a strong client gloom grade, refreshed
-            // in steps so AtmosphereServer keeps both alive and restores the
-            // prior weather when the channel ends.
+            // Point 4: the domain IS the eclipse. The shared atmosphere
+            // system runs a custom storm volume (its own rain, thunder, and
+            // gloom grade, never vanilla weather) for the channel's life,
+            // refreshed in steps so the broadcast stays alive; when the
+            // channel ends the volume simply expires.
             if (heldTicks % 20 == 0) {
                 AtmosphereServer.begin(serverLevel, player.position(),
                     (float) domainRadius + 14.0f, 0.85f, AtmosphereServer.Kind.THUNDER, 45);
@@ -299,7 +301,7 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             // Sound cue
             if (heldTicks % 30 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.PORTAL_AMBIENT, SoundSource.PLAYERS, 0.9f, 0.5f + chargeRatio * 0.4f);
+                    DbaSounds.RIFT_AMBIENT, SoundSource.PLAYERS, 0.9f, 0.5f + chargeRatio * 0.4f);
             }
 
             // Max Charge Trigger: Abyssal Eclipse (at 15s / 300 ticks)
@@ -323,7 +325,7 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             enemy.addEffect(new MobEffectInstance(
                 DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false
             ), player);
-            enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
+            enemy.hurtServer(level, DbaDamage.darkness(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
         }
 
         // Blade rain scales with the domain it falls across: a flat 10
@@ -358,9 +360,9 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
         }
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.5f);
+            DbaSounds.BOOM_SONIC, SoundSource.PLAYERS, 2.5f, 0.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.5f);
+            DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.5f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // 8-second cooldown: the domain lived 15 seconds, and the raised
@@ -429,7 +431,7 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             enemy.setDeltaMovement(0, 0.4, 0);
             enemy.addEffect(new MobEffectInstance(DbaEffects.PETRIFICATION_CURSE_HOLDER, 40, 1, false, false));
             enemy.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 40, 0, false, false, false), player);
-            enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
+            enemy.hurtServer(level, DbaDamage.darkness(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
         }
 
         // The unfinished eclipse still rains blades, scaled by what was
@@ -452,7 +454,7 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
         DebrisSpawner.spawnField(level, player, player.position(), 24, radius * 0.6, 7.0, 70, DEBRIS_PALETTE);
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.0f, 0.7f);
+            DbaSounds.BOOM_SONIC, SoundSource.PLAYERS, 2.0f, 0.7f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
         player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§5✦ Abyssal Eclipse (unfinished) ✦"), true);
     }

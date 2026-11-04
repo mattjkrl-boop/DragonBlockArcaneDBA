@@ -12,7 +12,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityType;
@@ -113,7 +112,7 @@ public class BanshoCycloneEntity extends Projectile {
         float envelope = FxEnvelope.envelope(age, LIFE_TICKS, BUILD_FRAC, DECAY_FRAC);
 
         // Cast beat: dust bursts off the ground the storm stands on, and the
-        // sky answers. The fan's storm drives real rain for its whole life.
+        // sky answers. The fan's storm drives the mod's own rain for its whole life.
         if (age == 1) {
             LayeredParticles.emitGroundBurst(serverLevel, center, (float) radius * 0.85f, THEME_ARGB);
             AtmosphereServer.begin(serverLevel, center, 24f, 0.45f, AtmosphereServer.Kind.RAIN, LIFE_TICKS);
@@ -157,9 +156,7 @@ public class BanshoCycloneEntity extends Projectile {
                 LivingEntity.class, aoe,
                 e -> e.isAlive() && e != this.getOwner()
             );
-            net.minecraft.world.damagesource.DamageSource source = this.getOwner() instanceof net.minecraft.world.entity.player.Player playerOwner
-                ? serverLevel.damageSources().playerAttack(playerOwner)
-                : (owner != null ? serverLevel.damageSources().mobAttack(owner) : serverLevel.damageSources().magic());
+            net.minecraft.world.damagesource.DamageSource source = com.dragonblockarcanedba.util.DbaDamage.tempest(this, this.getOwner());
             for (LivingEntity target : targets) {
                 target.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.slashDamage * 0.11f)));
                 // Bleeding I (amplifier 0) for 5 seconds (100 ticks), refreshed per shred tick.
@@ -187,15 +184,15 @@ public class BanshoCycloneEntity extends Projectile {
                 VortexPhysics.fling(target, center, 1.15, 0.9);
             }
             serverLevel.playSound(null, center.x, center.y, center.z,
-                SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 1.2f, 1.0f);
+                com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.2f, 1.0f);
         }
 
         // Howling tempest sound.
         if (age == 1 || age % 12 == 0) {
             serverLevel.playSound(null, center.x, center.y, center.z,
-                SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.4f, 1.1f);
+                com.dragonblockarcanedba.sound.DbaSounds.FLIGHT_WIND, SoundSource.PLAYERS, 1.4f, 1.1f);
             serverLevel.playSound(null, center.x, center.y, center.z,
-                SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 1.0f, 1.3f);
+                com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.0f, 1.3f);
         }
 
         if (age >= LIFE_TICKS) {

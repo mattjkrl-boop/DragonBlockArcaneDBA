@@ -1,9 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
@@ -76,7 +74,7 @@ public class OxFissureEntity extends Projectile {
 
             if (this.tickCount % 10 == 0) {
                 // Sizzle / crackle sound
-                serverLevel.playSound(null, pos.x, pos.y, pos.z, SoundEvents.LAVA_POP, SoundSource.PLAYERS, 0.6f, 0.8f);
+                serverLevel.playSound(null, pos.x, pos.y, pos.z, com.dragonblockarcanedba.sound.DbaSounds.LAVA_BUBBLE, SoundSource.PLAYERS, 0.6f, 0.8f);
 
                 // Damage enemies standing on the fissure (damagePerSec per
                 // second, paid as half a second per 10 tick hit).
@@ -86,9 +84,7 @@ public class OxFissureEntity extends Projectile {
                     e -> e.isAlive() && e != owner
                 );
 
-                DamageSource damageSource = owner != null
-                    ? serverLevel.damageSources().indirectMagic(this, owner)
-                    : serverLevel.damageSources().hotFloor();
+                DamageSource damageSource = com.dragonblockarcanedba.util.DbaDamage.crush(this, owner);
 
                 // The damage zone now shares the drawn trench's shape and
                 // orientation: the renderer draws a 3.6 block crack along the

@@ -9,7 +9,6 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -35,6 +34,7 @@ public class ZGravitySlamEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(ZGravitySlamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> POWER_RATIO = SynchedEntityData.defineId(ZGravitySlamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> LIFETIME = SynchedEntityData.defineId(ZGravitySlamEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(ZGravitySlamEntity.class, EntityDataSerializers.INT);
 
     private float damage = 0.0f;
     private int pinTicks = 40;
@@ -58,6 +58,7 @@ public class ZGravitySlamEntity extends Projectile {
         this.entityData.set(RADIUS, radius);
         this.entityData.set(POWER_RATIO, powerRatio);
         this.entityData.set(LIFETIME, life);
+        this.entityData.set(SEED, level.getRandom().nextInt());
     }
 
     @Override
@@ -65,6 +66,7 @@ public class ZGravitySlamEntity extends Projectile {
         builder.define(RADIUS, 10.0f);
         builder.define(POWER_RATIO, 1.0f);
         builder.define(LIFETIME, 50);
+        builder.define(SEED, 0);
     }
 
     public float getRadius() {
@@ -77,6 +79,10 @@ public class ZGravitySlamEntity extends Projectile {
 
     public int getLifetime() {
         return this.entityData.get(LIFETIME);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     /** The tick the dome reaches full size and the damage lands: 30 percent of life. */
@@ -96,6 +102,7 @@ public class ZGravitySlamEntity extends Projectile {
         output.putFloat("Damage", this.damage);
         output.putInt("PinTicks", this.pinTicks);
         output.putBoolean("Struck", this.struck);
+        output.putInt("Seed", getSeed());
     }
 
     @Override
@@ -107,6 +114,7 @@ public class ZGravitySlamEntity extends Projectile {
         this.damage = input.getFloatOr("Damage", 0.0f);
         this.pinTicks = input.getIntOr("PinTicks", 40);
         this.struck = input.getBooleanOr("Struck", false);
+        this.entityData.set(SEED, input.getIntOr("Seed", 0));
     }
 
     @Override
@@ -175,14 +183,8 @@ public class ZGravitySlamEntity extends Projectile {
 
     private void strike(ServerLevel serverLevel, float radius) {
         Entity owner = this.getOwner();
-        DamageSource source;
-        if (owner instanceof Player player) {
-            source = serverLevel.damageSources().playerAttack(player);
-        } else if (owner instanceof LivingEntity livingOwner) {
-            source = serverLevel.damageSources().mobAttack(livingOwner);
-        } else {
-            source = serverLevel.damageSources().generic();
-        }
+        DamageSource source = com.dragonblockarcanedba.util.DbaDamage.gravity(this,
+            owner instanceof LivingEntity livingOwner ? livingOwner : null);
 
         AABB box = this.getBoundingBox().inflate(radius, 4.0, radius);
         List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, box,
@@ -200,7 +202,7 @@ public class ZGravitySlamEntity extends Projectile {
 
         // The payoff sound sits on the strike tick now, not front loaded on release.
         serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
-            net.minecraft.sounds.SoundEvents.ANVIL_LAND, net.minecraft.sounds.SoundSource.HOSTILE, 1.6f, 0.5f);
+            com.dragonblockarcanedba.sound.DbaSounds.SLAM_THUD, net.minecraft.sounds.SoundSource.HOSTILE, 1.6f, 0.5f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, this.getX(), this.getY(), this.getZ());
     }
 

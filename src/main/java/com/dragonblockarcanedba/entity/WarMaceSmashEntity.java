@@ -2,11 +2,12 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.fx.DbaImpactFx;
 import com.dragonblockarcanedba.item.WarMaceItem;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -43,6 +44,8 @@ import java.util.Set;
 public class WarMaceSmashEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> HEAVY = SynchedEntityData.defineId(WarMaceSmashEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(WarMaceSmashEntity.class, EntityDataSerializers.FLOAT);
+    /** Synced seed for the bespoke renderer geometry: same seed, same shape, every client. */
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(WarMaceSmashEntity.class, EntityDataSerializers.INT);
 
     /** Bronze theme color for dust, matching the renderer shell (0.85, 0.62, 0.28). */
     private static final int THEME_ARGB = 0xD99E47;
@@ -72,12 +75,22 @@ public class WarMaceSmashEntity extends Projectile {
         }
         this.entityData.set(HEAVY, heavy);
         this.entityData.set(DAMAGE, damage);
+        int seed = (owner != null ? owner.getUUID().hashCode() : 0)
+            ^ (int) (level.getGameTime() * 31L)
+            ^ Float.floatToIntBits(damage)
+            ^ (heavy ? 0x5EED : 0);
+        this.entityData.set(SEED, seed);
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(HEAVY, false);
         builder.define(DAMAGE, 900.0f);
+        builder.define(SEED, 0);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public boolean isHeavy() {
@@ -176,9 +189,7 @@ public class WarMaceSmashEntity extends Projectile {
                 continue;
             }
             this.hitIds.add(living.getId());
-            var source = owner instanceof net.minecraft.world.entity.player.Player player
-                ? server.damageSources().playerAttack(player)
-                : server.damageSources().magic();
+            var source = DbaDamage.crush(this, owner);
             living.hurtServer(server, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage * this.falloffAt(dist)));
             // A small nudge only. The player is the one who goes up, and the mob has to
             // still be under the next falling smash.
@@ -214,7 +225,7 @@ public class WarMaceSmashEntity extends Projectile {
         // three layers while it expands, then settling drizzle as it dies.
         Vec3 center = new Vec3(this.getX(), this.getY() + 0.1, this.getZ());
         LayeredParticles.emitVortex(server, center, radius, heavy ? 1.6f : 1.0f,
-            this.tickCount, this.life(), THEME_ARGB, ParticleTypes.POOF);
+            this.tickCount, this.life(), THEME_ARGB, DbaParticles.DUST_PUFF);
         if (this.tickCount / (float) this.life() > 0.65f) {
             LayeredParticles.emitRain(server, center, radius, heavy ? 1.6f : 1.0f,
                 this.tickCount, this.life(), LayeredParticles.dust(THEME_ARGB, 1.1f));
@@ -310,5 +321,17 @@ public class WarMaceSmashEntity extends Projectile {
             return Blocks.GRAVEL.defaultBlockState();
         }
         return null;
+    }
+
+    @Override
+    protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
+        super.addAdditionalSaveData(output);
+        output.putInt("Seed", this.entityData.get(SEED));
+    }
+
+    @Override
+    protected void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput input) {
+        super.readAdditionalSaveData(input);
+        this.entityData.set(SEED, input.getIntOr("Seed", 0));
     }
 }

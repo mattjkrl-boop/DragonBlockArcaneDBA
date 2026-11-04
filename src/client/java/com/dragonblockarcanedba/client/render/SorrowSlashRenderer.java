@@ -1,9 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.entity.SorrowSlashEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -15,7 +15,13 @@ import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Sorrow Slash in Minecraft 26.2.
- * Renders a massive 3D scythe crescent slash arc with abyssal void silhouette, weeping magenta blade crest, and razor cyan cutting edge.
+ * Every layer of the crescent is a BespokeGeometry bladeArc (BESPOKE-STANDARD
+ * rule 1): a seeded, nicked scythe moon in place of the old hand built
+ * parabolic bow. The layer stack is the spectacle pass layout, kept: a dim
+ * wide wake, the abyssal void silhouette, the weeping magenta crest, the
+ * razor cyan edge, and a thin hot core, plus the impact burst's crossing
+ * crescent. Seeds derive from synced entity state, so the nicks sit in the
+ * same place on every client.
  */
 public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, SorrowSlashRenderer.SorrowSlashRenderState> {
 
@@ -29,6 +35,8 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
         public float yRot = 0;
         public float xRot = 0;
         public float age = 0;
+        public double wx = 0, wy = 0, wz = 0;
+        public long seed = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -54,6 +62,14 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
+        // Seed from synced state only, so every client bites the same nicks
+        // out of the same crescent.
+        state.seed = (long) entity.getId() * 2654435761L
+            ^ (entity.getTilt() ? 0x51ED27L : 0x2545F4L)
+            ^ (entity.isImpactBurst() ? 0x77AA55L : 0L);
     }
 
     @Override
@@ -70,6 +86,8 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
             fade *= intro * intro * (3.0f - 2.0f * intro);
         }
         final float slashFade = fade;
+        final float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
+            cameraState, state.wx, state.wy, state.wz);
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
@@ -90,79 +108,57 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
         float scale = state.isImpactBurst ? (0.85f + ease * 0.45f) : (0.72f + ease * 0.48f);
         poseStack.scale(scale, scale, scale);
 
-        float span = 4.2f;
-        float chord = 1.35f;
-        int segments = 40;
+        // Layer radii are the old crescent spans mapped onto bladeArc moons:
+        // at a 140 degree sweep the tip to tip width is radius x sin(70), so
+        // radius 8.9 spans the same 8.4 blocks the parabolic bow spanned.
+        // Soft wake of the same crescent, wider and dimmer, so the reap has a trail.
+        submitArc(state, poseStack, collector, renderType, distScale, slashFade,
+            10.9f, false, 0.42f, 0.0f, 0.55f, 0.32f);
+        // 1. Abyssal Dark Void Outer Silhouette
+        submitArc(state, poseStack, collector, renderType, distScale, slashFade,
+            9.85f, false, 0.08f, 0.0f, 0.15f, 0.90f);
+        // 2. Weeping Sorrow Radiant Magenta / Violet Blade Crest
+        submitArc(state, poseStack, collector, renderType, distScale, slashFade,
+            8.9f, false, 0.80f, 0.05f, 0.85f, 0.95f);
+        // 3. Piercing Razor-Sharp Cyan / White Dimensional Edge.
+        // On a hit the edge burns and then eases out with the crescent.
+        float edge = state.isImpactBurst ? (0.45f + 0.55f * (1.0f - ease)) : 1.0f;
+        submitArc(state, poseStack, collector, renderType, distScale, slashFade,
+            6.4f, false, 0.90f, 0.98f, 1.0f, edge);
+        // Hot core along the crest. Thin, so the edge stays a line.
+        submitArc(state, poseStack, collector, renderType, distScale, slashFade,
+            5.16f, false, 1.0f, 0.94f, 1.0f, edge);
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            // Soft wake of the same crescent, wider and dimmer, so the reap has a trail.
-            drawCrescentArc(matrix, buffer, span + 0.95f, chord + 0.72f, 0.10f, segments,
-                0.42f, 0.0f, 0.55f, 0.32f * slashFade);
-
-            // 1. Abyssal Dark Void Outer Silhouette
-            drawCrescentArc(matrix, buffer, span + 0.45f, chord + 0.4f, 0.26f, segments,
-                0.08f, 0.0f, 0.15f, 0.90f * slashFade);
-
-            // 2. Weeping Sorrow Radiant Magenta / Violet Blade Crest
-            drawCrescentArc(matrix, buffer, span, chord, 0.14f, segments,
-                0.80f, 0.05f, 0.85f, 0.95f * slashFade);
-
-            // 3. Piercing Razor-Sharp Cyan / White Dimensional Edge.
-            // On a hit the edge burns and then eases out with the crescent.
-            float edge = state.isImpactBurst ? (0.45f + 0.55f * (1.0f - ease)) : 1.0f;
-            drawCrescentArc(matrix, buffer, span * 0.72f, chord * 0.72f, 0.06f, segments,
-                0.90f, 0.98f, 1.0f, slashFade * edge);
-
-            // Hot core along the crest. Thin, so the edge stays a line.
-            drawCrescentArc(matrix, buffer, span * 0.58f, chord * 0.58f, 0.028f, segments,
-                1.0f, 0.94f, 1.0f, slashFade * edge);
-
-            // The hit keeps its second crescent, crossing the first.
-            if (state.isImpactBurst) {
-                drawCrescentArc(matrix, buffer, span * 0.55f, -chord * 0.55f, 0.08f, segments,
-                    0.65f, 0.0f, 0.90f, 0.75f * slashFade);
-            }
-        });
+        // The hit keeps its second crescent, crossing the first.
+        if (state.isImpactBurst) {
+            submitArc(state, poseStack, collector, renderType, distScale, slashFade,
+                4.9f, true, 0.65f, 0.0f, 0.90f, 0.75f);
+        }
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static void drawCrescentArc(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
+    private static final float ARC_SWEEP_DEG = 140.0f;
 
-            // Parabolic scythe bow. The pose tilt makes it a sickle; the bow itself stays deep.
-            float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord;
-            float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord;
-
-            float th1 = thickness * (1.0f - Math.abs(t1) * 0.75f);
-            float th2 = thickness * (1.0f - Math.abs(t2) * 0.75f);
-
-            float z1Trail = z1 - 0.9f * (1.0f - Math.abs(t1));
-            float z2Trail = z2 - 0.9f * (1.0f - Math.abs(t2));
-
-            // Three-stop shading (redesign T2): the arc burns hottest at its
-            // center and deepens toward the horn tips.
-            float shade1 = 1.0f - Math.abs(t1) * 0.35f;
-            float shade2 = 1.0f - Math.abs(t2) * 0.35f;
-
-            // Top Face
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r * shade1, g * shade1, b * shade1, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r * shade2, g * shade2, b * shade2, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2, z2Trail).setColor(r * shade2, g * shade2, b * shade2, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, th1, z1Trail).setColor(r * shade1, g * shade1, b * shade1, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Bottom Face
-            consumer.addVertex(matrix, x1, -th1, z1Trail).setColor(r * shade1, g * shade1, b * shade1, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2, z2Trail).setColor(r * shade2, g * shade2, b * shade2, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r * shade2, g * shade2, b * shade2, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r * shade1, g * shade1, b * shade1, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        }
+    /**
+     * One crescent layer. bladeArc sweeps its moon around +X with the belly
+     * pointing +X; rotate Y -90 so the belly faces +Z, the old bow's
+     * direction (Y +90 for the impact burst's flipped crossing crescent),
+     * then recenter the moon on the entity: its tips sit at 0.5 x radius
+     * along the belly axis and its belly at about 1.12 x radius.
+     */
+    private void submitArc(SorrowSlashRenderState state, PoseStack poseStack, SubmitNodeCollector collector,
+                           RenderType renderType, float distScale, float envelope,
+                           float radius, boolean flipped, float r, float g, float b, float alpha) {
+        float center = (0.5f * (float) Math.cos(Math.toRadians(ARC_SWEEP_DEG / 2.0f)) + 1.12f) * 0.5f * radius;
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(flipped ? 90.0f : -90.0f)));
+        poseStack.translate(0, 0, flipped ? center : -center);
+        final long seed = state.seed ^ (long) (radius * 977.0f);
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+            BespokeGeometry.bladeArc(pose, buffer, seed, radius, ARC_SWEEP_DEG,
+                r, g, b, alpha, envelope, distScale));
+        poseStack.popPose();
     }
 }

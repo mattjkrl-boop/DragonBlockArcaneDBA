@@ -4,11 +4,11 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.TemporalRiftEntity;
 import com.dragonblockarcanedba.entity.TimeShatterEntity;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.TimeTracker;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -32,7 +32,7 @@ import java.util.List;
  * 
  * Left-click: 350 + (Dexterity × 2) damage.
  *   - Time reversal for 5 seconds (100 ticks, the position history buffer maximum)
- *   - Temporal Shatter: 1.5% of target's max HP as bonus magic damage
+ *   - Temporal Shatter: 1.5% of target's max HP as bonus temporal damage
  *   - Temporal Stasis amplifier 0 for 100 ticks (full time freeze with temporal drag)
  *   - Physical 3D Time Shatter entity (prismatic tumbling glass shards & fractured chrono-mirror)
  *
@@ -40,7 +40,7 @@ import java.util.List;
  *   - All entities in range: Temporal Stasis for 3 seconds (60 ticks), then a
  *     5-second (100 tick) reversal that starts when the freeze ends, triggered
  *     by the rift entity at tick 60
- *   - 400 + (Spirit × 1.5) magic damage to all entities in range, split in two
+ *   - 400 + (Spirit × 1.5) temporal damage to all entities in range, split in two
  *     halves: the first at cast, the second at the rift's envelope peak (tick 15)
  *   - Self-Buff: Celestial Grace for 10 seconds
  *   - Physical 3D Translucent Celestial Dome & 3D Rotating Clock Astrolabe Entity
@@ -141,12 +141,15 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) serverPlayer;
             float dexBonus = (float) (accessor.dba$getDexterity() * 2.0);
             if (dexBonus > 0) {
-                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (dexBonus)));
+                // Bonus hit layered on the melee swing: the mod's temporal type,
+                // direct and attacker both the player, the same source shape the
+                // vanilla player attack had. The swing itself stays player attack.
+                target.hurtServer(serverLevel, DbaDamage.temporal(serverPlayer, serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (dexBonus)));
             }
 
-            // Temporal Shatter: 1.5% of target's max HP as bonus magic damage
+            // Temporal Shatter: 1.5% of target's max HP as bonus temporal damage
             float temporalDamage = target.getMaxHealth() * 0.015f;
-            target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (temporalDamage)));
+            target.hurtServer(serverLevel, DbaDamage.temporal(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (temporalDamage)));
 
             // Physical 3D Time Shatter Entity: Prismatic Glass & Chrono-Mirror Burst
             TimeShatterEntity shatter = new TimeShatterEntity(
@@ -160,12 +163,12 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             // Crisp glass & temporal distortion sound
             serverLevel.playSound(
                 null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-                SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.PLAYERS,
+                com.dragonblockarcanedba.sound.DbaSounds.CRYSTAL_CHIME, SoundSource.PLAYERS,
                 1.2f, 1.6f
             );
             serverLevel.playSound(
                 null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS,
+                com.dragonblockarcanedba.sound.DbaSounds.CHARGE_RISE, SoundSource.PLAYERS,
                 0.9f, 1.9f
             );
             serverLevel.playSound(
@@ -196,7 +199,7 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             level.addFreshEntity(new TimeShatterEntity(level, player, pos, shatterScales[step]));
         }
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.PLAYERS, 1.0f, 1.7f);
+            com.dragonblockarcanedba.sound.DbaSounds.CRYSTAL_CHIME, SoundSource.PLAYERS, 1.0f, 1.7f);
 
         AABB reach = player.getBoundingBox().expandTowards(look.scale(6.5)).inflate(1.15);
         LivingEntity struck = null;
@@ -248,11 +251,15 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             damage += 350.0f;
         }
         if (damage > 0.0f) {
-            target.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
+            // The extended strike is an ability hit, not the plain melee swing:
+            // the mod's temporal type, direct and attacker both the player. The
+            // percent-health bonus is folded into this one hit in the code, so
+            // the whole hit converts together; the total is unchanged.
+            target.hurtServer(level, DbaDamage.temporal(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
         }
         level.addFreshEntity(new TimeShatterEntity(level, player, target.position().add(0, target.getBbHeight() * 0.5, 0), 1.2f));
         level.playSound(null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-            SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.PLAYERS, 1.2f, 1.6f);
+            com.dragonblockarcanedba.sound.DbaSounds.CRYSTAL_CHIME, SoundSource.PLAYERS, 1.2f, 1.6f);
         level.playSound(null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 0.9f, 1.9f);
     }
@@ -289,8 +296,8 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
 
             for (LivingEntity target : targets) {
                 if (player.distanceTo(target) <= AOE_RADIUS) {
-                    // First half of the burst magic damage
-                    target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (castDamage)));
+                    // First half of the burst damage, the mod's temporal type
+                    target.hurtServer(serverLevel, DbaDamage.temporal(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (castDamage)));
 
                     // Temporal Stasis: Custom time paralysis for 3 seconds (60 ticks)
                     target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, RIFT_STASIS_TICKS, 0, false, true), player);
@@ -328,12 +335,12 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             );
             serverLevel.playSound(
                 null, player.getX(), player.getY() + 1.0, player.getZ(),
-                SoundEvents.BEACON_POWER_SELECT, SoundSource.PLAYERS,
+                com.dragonblockarcanedba.sound.DbaSounds.CHARGE_FULL, SoundSource.PLAYERS,
                 1.4f, 1.2f
             );
             serverLevel.playSound(
                 null, player.getX(), player.getY() + 1.0, player.getZ(),
-                SoundEvents.EVOKER_PREPARE_SUMMON, SoundSource.PLAYERS,
+                com.dragonblockarcanedba.sound.DbaSounds.CAST_MAGIC, SoundSource.PLAYERS,
                 1.0f, 1.6f
             );
         }

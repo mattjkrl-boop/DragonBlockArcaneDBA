@@ -4,7 +4,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -287,7 +286,7 @@ public class PowerPoleWhirlwindEntity extends Projectile {
             // Sustained gust audio under the item's spawn sounds.
             if (this.tickCount % 16 == 0 && env > 0.5f) {
                 serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
-                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.1f, 1.3f);
+                    com.dragonblockarcanedba.sound.DbaSounds.FLIGHT_WIND, SoundSource.PLAYERS, 1.1f, 1.3f);
                 serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 0.8f, 1.1f);
             }

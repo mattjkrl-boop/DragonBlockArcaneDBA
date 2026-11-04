@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.fx.DbaImpactFx;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -29,6 +30,8 @@ import java.util.Set;
  */
 public class WarMaceRiseEntity extends Projectile {
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(WarMaceRiseEntity.class, EntityDataSerializers.FLOAT);
+    /** Synced seed for the bespoke renderer geometry: same seed, same shape, every client. */
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(WarMaceRiseEntity.class, EntityDataSerializers.INT);
 
     /** Bronze theme color for dust, matching the renderer crescent (0.85, 0.62, 0.28). */
     private static final int THEME_ARGB = 0xD99E47;
@@ -56,11 +59,21 @@ public class WarMaceRiseEntity extends Projectile {
             this.setYRot(owner.getYRot());
         }
         this.entityData.set(DAMAGE, damage);
+        int seed = (owner != null ? owner.getUUID().hashCode() : 0)
+            ^ (int) (level.getGameTime() * 31L)
+            ^ Float.floatToIntBits(damage)
+            ^ 0x215E;
+        this.entityData.set(SEED, seed);
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(DAMAGE, 480.0f);
+        builder.define(SEED, 0);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     @Override
@@ -102,9 +115,7 @@ public class WarMaceRiseEntity extends Projectile {
                 continue;
             }
             this.hitIds.add(living.getId());
-            var source = owner instanceof net.minecraft.world.entity.player.Player player
-                ? server.damageSources().playerAttack(player)
-                : server.damageSources().magic();
+            var source = DbaDamage.crush(this, owner);
             living.hurtServer(server, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
             Vec3 away = living.position().subtract(this.position());
             away = new Vec3(away.x, 0.0, away.z);
@@ -122,5 +133,17 @@ public class WarMaceRiseEntity extends Projectile {
                 DbaImpactFx.medium(server, living.getX(), living.getY(), living.getZ());
             }
         }
+    }
+
+    @Override
+    protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
+        super.addAdditionalSaveData(output);
+        output.putInt("Seed", this.entityData.get(SEED));
+    }
+
+    @Override
+    protected void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput input) {
+        super.readAdditionalSaveData(input);
+        this.entityData.set(SEED, input.getIntOr("Seed", 0));
     }
 }

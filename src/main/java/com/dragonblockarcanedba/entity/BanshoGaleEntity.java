@@ -85,7 +85,7 @@ public class BanshoGaleEntity extends Projectile {
                 serverLevel.addFreshEntity(burst);
                 com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, hitPos, 1.6f, 0x26FFA6);
                 serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z,
-                    net.minecraft.sounds.SoundEvents.WIND_CHARGE_BURST.value(), net.minecraft.sounds.SoundSource.PLAYERS, 0.9f, 1.2f);
+                    com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, net.minecraft.sounds.SoundSource.PLAYERS, 0.9f, 1.2f);
                 this.discard();
                 return;
             }
@@ -105,9 +105,7 @@ public class BanshoGaleEntity extends Projectile {
                     }
                 }
                 this.hitIds.add(living.getId());
-                var source = owner instanceof net.minecraft.world.entity.player.Player player
-                    ? serverLevel.damageSources().playerAttack(player)
-                    : serverLevel.damageSources().magic();
+                var source = com.dragonblockarcanedba.util.DbaDamage.tempest(this, owner);
                 living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(this.damage));
                 living.addEffect(new MobEffectInstance(DbaEffects.BLEEDING_HOLDER, 300, 1, false, true), owner);
                 Vec3 launch = motion.lengthSqr() < 1.0E-4 ? new Vec3(0, 0.4, 0) : motion.normalize().scale(1.6);

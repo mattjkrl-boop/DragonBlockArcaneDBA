@@ -1,11 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
+import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.KatanaAimGuideEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -13,16 +13,21 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Katana Aim Guide in Minecraft 26.2.
- * Renders a sleek, physical 3D laser guide beam, calibrating reticle rings,
- * terminal target brackets, and traveling energy pulse nodes for Iaijutsu:
- * Heaven Splitter. The beam length is the entity's synced max range, which
- * the item keeps equal to the real dash distance at the current charge.
- * Alpha fades in over the first 3 ticks and out over the entity's
- * FADE_TICKS once the stance ends, so the beam never pops.
+ * Renders the Heaven Splitter aim guide from the shared BespokeGeometry
+ * toolkit (BESPOKE-STANDARD rule 1): the beam is two crossed torn ribbon
+ * sheets (a cyan sheath sheet and a white core sheet, one horizontal and
+ * one vertical, so the line reads from every angle), brighter ribbon bands
+ * travel down it, the calibrating reticles are full blade arcs with shard
+ * fan brackets, the terminal reticle is a blade arc with a white shard fan
+ * cross, and the traveling energy nodes are small shard fans. The beam
+ * length is the entity's synced max range, which the item keeps equal to
+ * the real dash distance at the current charge. Alpha fades in over the
+ * first 3 ticks and out over the entity's FADE_TICKS once the stance ends,
+ * so the beam never pops. All geometry is seeded from the entity UUID; no
+ * local draw helpers remain.
  */
 public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity, KatanaAimGuideRenderer.AimGuideRenderState> {
 
@@ -39,6 +44,7 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         public boolean isFirstPersonOwner = false;
         public boolean onRight = true;
         public int fadeStart = -1;
+        public long seed = 0;
         public double wx = 0, wy = 0, wz = 0;
     }
 
@@ -66,6 +72,7 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.fadeStart = entity.getFadeStart();
+        state.seed = entity.getUUID().getMostSignificantBits();
         state.wx = entity.getX();
         state.wy = entity.getY();
         state.wz = entity.getZ();
@@ -96,9 +103,9 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
             if (fadeT >= 1.0f) return;
             alpha *= 1.0f - FxEnvelope.smoothstep(fadeT);
         }
+        final float alphaF = alpha;
         float distScale = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
-        int ringSegments = FxEnvelope.segments(24, distScale, 12);
-        int coreRingSegments = FxEnvelope.segments(20, distScale, 10);
+        long seed = state.seed;
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
@@ -110,191 +117,149 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         }
 
         float zStart = state.isFirstPersonOwner ? 0.25f : 0.4f;
+        float beamLen = range - zStart;
+        float sheathRadius = 0.035f + (charge * 0.025f);
+        float coreRadius = 0.012f + (charge * 0.008f);
 
+        // 1 and 2. The beam: crossed torn ribbon sheets run from zStart to
+        // the terminal point. A -90 degree yaw turns the ribbon length down
+        // +Z; the second sheet adds a 90 degree roll around the beam axis so
+        // its width stands vertical. Cyan sheath outside, white core inside.
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, zStart);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            // 1. Sleek Outer Cyan Laser Sheath (Volumetric quad beam)
-            float sheathRadius = 0.035f + (charge * 0.025f);
-            drawLaserBeam(matrix, buffer, zStart, range, sheathRadius, 0.0f, 0.85f, 1.0f, alpha * 0.65f);
-
-            // 2. Blinding White-Hot Razor Cutting Core
-            float coreRadius = 0.012f + (charge * 0.008f);
-            drawLaserBeam(matrix, buffer, zStart, range, coreRadius, 1.0f, 1.0f, 1.0f, alpha * 0.95f);
-            drawRingZ(matrix, buffer, zStart + 0.2f, 0.16f + charge * 0.10f, 0.10f + charge * 0.04f, coreRingSegments, age * 28.0f, 1.0f, 1.0f, 1.0f, alpha);
-
-            // 2b. Energy flow bands: brighter sheath segments travel down the
-            // beam so the guide reads as flowing energy, not a static tube.
-            int bandCount = 3;
-            for (int b = 0; b < bandCount; b++) {
-                float bandProg = (age * 0.10f + (b / (float) bandCount)) % 1.0f;
-                float bandZ = zStart + bandProg * (range - zStart);
-                float bandEnd = Math.min(range, bandZ + 1.4f);
-                drawLaserBeam(matrix, buffer, bandZ, bandEnd, sheathRadius * 1.20f,
-                    0.55f, 0.95f, 1.0f, alpha * 0.55f * (1.0f - bandProg * 0.35f));
-            }
-
-            // 3. Calibrating Concentric Reticle Rings along the guide line (every 6 blocks)
-            int stationCount = (int) (range / 6.0f);
-            for (int s = 1; s <= stationCount; s++) {
-                float dist = s * 6.0f;
-                if (state.isFirstPersonOwner && dist < 3.0f) continue;
-                float ringR = (0.18f + charge * 0.12f) * (1.0f + 0.1f * (float) Math.sin(age * 0.3f + s));
-                float ringRot = age * (15.0f + s * 10.0f);
-                drawRingZ(matrix, buffer, dist, ringR, ringR * 0.80f, ringSegments, ringRot, 0.1f, 0.9f, 1.0f, alpha * 0.75f);
-                drawDiamondBracket(matrix, buffer, dist, ringR * 1.25f, 0.85f, 0.98f, 1.0f, alpha * 0.85f);
-            }
-
-            // 4. Terminal Aim Crosshair & Focusing Target Diamond at endpoint
-            float endR = 0.30f + (charge * 0.20f);
-            drawRingZ(matrix, buffer, range, endR, endR * 0.82f, ringSegments, -age * 40.0f, 0.0f, 0.95f, 1.0f, alpha * 0.90f);
-            drawDiamondBracket(matrix, buffer, range, endR * 1.35f, 1.0f, 1.0f, 1.0f, alpha);
-            drawCrosshairSpokes(matrix, buffer, range, endR * 1.5f, 0.0f, 0.9f, 1.0f, alpha * 0.8f);
-
-            // 5. High-Velocity Energy Frequency Nodes traveling down the beam
-            int nodeCount = 4;
-            for (int n = 0; n < nodeCount; n++) {
-                float nodeProg = (age * 0.15f + (n / (float) nodeCount)) % 1.0f;
-                float nodeZ = 0.5f + nodeProg * (range - 0.5f);
-                drawDiamondSparkZ(matrix, buffer, nodeZ, 0.08f * (1.0f + charge * 0.5f), 1.0f, 1.0f, 1.0f, alpha * (1.0f - nodeProg * 0.3f));
-            }
+            BespokeGeometry.tornRibbon(pose, buffer, seed, beamLen, sheathRadius * 2.4f, 0.0f,
+                0.0f, 0.85f, 1.0f, 0.65f, alphaF, distScale);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x1111L, beamLen, coreRadius * 2.4f, 0.0f,
+                1.0f, 1.0f, 1.0f, 0.95f, alphaF, distScale);
         });
+        poseStack.popPose();
+
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, zStart);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x2222L, beamLen, sheathRadius * 2.4f, 0.0f,
+                0.0f, 0.85f, 1.0f, 0.65f, alphaF, distScale);
+            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x3333L, beamLen, coreRadius * 2.4f, 0.0f,
+                1.0f, 1.0f, 1.0f, 0.95f, alphaF, distScale);
+        });
+        poseStack.popPose();
+
+        // Start ring at the beam origin: a full white blade arc stood into
+        // the XY plane, spinning with age.
+        float startRingR = (0.16f + charge * 0.10f) * 1.25f;
+        float startRot = age * 28.0f;
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, zStart + 0.2f);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(startRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x4444L, startRingR, 360.0f,
+                1.0f, 1.0f, 1.0f, 1.0f, alphaF, distScale);
+        });
+        poseStack.popPose();
+
+        // 2b. Energy flow bands: brighter ribbon segments travel down the
+        // beam so the guide reads as flowing energy, not a static line.
+        int bandCount = 3;
+        for (int b = 0; b < bandCount; b++) {
+            float bandProg = (age * 0.10f + (b / (float) bandCount)) % 1.0f;
+            float bandZ = zStart + bandProg * (range - zStart);
+            float bandEnd = Math.min(range, bandZ + 1.4f);
+            float bandAlpha = 0.55f * (1.0f - bandProg * 0.35f);
+            long bandSeed = seed ^ (0x5500L + b);
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.0f, bandZ);
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.tornRibbon(pose, buffer, bandSeed, bandEnd - bandZ, sheathRadius * 2.4f * 1.2f, 0.0f,
+                    0.55f, 0.95f, 1.0f, bandAlpha, alphaF, distScale);
+            });
+            poseStack.popPose();
+        }
+
+        // 3. Calibrating reticle stations along the guide line (every 6
+        // blocks): a full cyan blade arc ring with a pale shard fan bracket,
+        // counter rotating per station.
+        int stationCount = (int) (range / 6.0f);
+        for (int s = 1; s <= stationCount; s++) {
+            float stationDist = s * 6.0f;
+            if (state.isFirstPersonOwner && stationDist < 3.0f) continue;
+            float ringR = (0.18f + charge * 0.12f) * (1.0f + 0.1f * (float) Math.sin(age * 0.3f + s));
+            float ringRot = age * (15.0f + s * 10.0f);
+            long stationSeed = seed ^ (0x6600L + s);
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.0f, stationDist);
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(ringRot)));
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.bladeArc(pose, buffer, stationSeed, ringR * 1.25f, 360.0f,
+                    0.1f, 0.9f, 1.0f, 0.75f, alphaF, distScale);
+                BespokeGeometry.shardFan(pose, buffer, stationSeed ^ 0x77L, ringR * 1.4f,
+                    0.85f, 0.98f, 1.0f, 0.85f, alphaF, distScale);
+            });
+            poseStack.popPose();
+        }
+
+        // 4. Terminal reticle at the endpoint: a counter rotating cyan blade
+        // arc with a white shard fan cross standing in for the old bracket
+        // and crosshair spokes.
+        float endR = 0.30f + (charge * 0.20f);
+        float endRot = -age * 40.0f;
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, range);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(endRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x8888L, endR * 1.25f, 360.0f,
+                0.0f, 0.95f, 1.0f, 0.90f, alphaF, distScale);
+            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x9999L, endR * 1.6f,
+                1.0f, 1.0f, 1.0f, 1.0f, alphaF, distScale);
+        });
+        poseStack.popPose();
+
+        // 5. High velocity energy nodes traveling down the beam: small shard
+        // fans lying in the XZ plane at each node's z.
+        int nodeCount = 4;
+        for (int n = 0; n < nodeCount; n++) {
+            float nodeProg = (age * 0.15f + (n / (float) nodeCount)) % 1.0f;
+            float nodeZ = 0.5f + nodeProg * (range - 0.5f);
+            float nodeAlpha = 1.0f - nodeProg * 0.3f;
+            long nodeSeed = seed ^ (0xAA00L + n);
+            poseStack.pushPose();
+            poseStack.translate(0.0f, 0.0f, nodeZ);
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+                BespokeGeometry.shardFan(pose, buffer, nodeSeed, 0.14f * (1.0f + charge * 0.5f),
+                    1.0f, 1.0f, 1.0f, nodeAlpha, alphaF, distScale);
+            });
+            poseStack.popPose();
+        }
 
         // Additive halo pass: the terminal reticle and the beam sheath get a
         // soft bloom so the aim point glows against the world.
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, range);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(endRot)));
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            float endR = 0.30f + (charge * 0.20f);
-            drawRingZ(matrix, buffer, range, endR * 1.25f, endR * 0.95f, ringSegments, -age * 40.0f, 0.0f, 0.95f, 1.0f, alpha * 0.20f);
-            drawLaserBeam(matrix, buffer, zStart, range, (0.035f + (charge * 0.025f)) * 1.9f, 0.0f, 0.85f, 1.0f, alpha * 0.10f);
+            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x8888L, endR * 1.25f * 1.25f, 360.0f,
+                0.0f, 0.95f, 1.0f, 0.20f, alphaF, distScale);
         });
+        poseStack.popPose();
+
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, zStart);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            BespokeGeometry.tornRibbon(pose, buffer, seed, beamLen, sheathRadius * 3.8f, 0.0f,
+                0.0f, 0.85f, 1.0f, 0.10f, alphaF, distScale);
+        });
+        poseStack.popPose();
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static void drawLaserBeam(Matrix4f matrix, VertexConsumer consumer, float zStart, float zEnd, float radius, float r, float g, float b, float a) {
-        int sides = 8;
-        float tipRadius = radius * 0.55f;
-        for (int i = 0; i < sides; i++) {
-            double a1 = (i / (double) sides) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) sides) * Math.PI * 2.0;
-            float c1 = (float) Math.cos(a1);
-            float s1 = (float) Math.sin(a1);
-            float c2 = (float) Math.cos(a2);
-            float s2 = (float) Math.sin(a2);
-            consumer.addVertex(matrix, c1 * radius, s1 * radius, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c1, s1, 0);
-            consumer.addVertex(matrix, c2 * radius, s2 * radius, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c2, s2, 0);
-            consumer.addVertex(matrix, c2 * tipRadius, s2 * tipRadius, zEnd).setColor(r, g, b, a * 0.18f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c2, s2, 0);
-            consumer.addVertex(matrix, c1 * tipRadius, s1 * tipRadius, zEnd).setColor(r, g, b, a * 0.18f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(c1, s1, 0);
-        }
-    }
-
-    private static void drawRingZ(Matrix4f matrix, VertexConsumer consumer, float z, float rOuter, float rInner, int segments, float rotDeg, float r, float g, float b, float a) {
-        float rotRad = (float) Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = ((i / (double) segments) * Math.PI * 2) + rotRad;
-            double a2 = (((i + 1) / (double) segments) * Math.PI * 2) + rotRad;
-
-            float x1 = (float) Math.cos(a1) * rOuter;
-            float y1 = (float) Math.sin(a1) * rOuter;
-            float x2 = (float) Math.cos(a2) * rOuter;
-            float y2 = (float) Math.sin(a2) * rOuter;
-
-            float ix1 = (float) Math.cos(a1) * rInner;
-            float iy1 = (float) Math.sin(a1) * rInner;
-            float ix2 = (float) Math.cos(a2) * rInner;
-            float iy2 = (float) Math.sin(a2) * rInner;
-
-            consumer.addVertex(matrix, ix1, iy1, z).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, ix2, iy2, z).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, y2, z).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1, y1, z).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
-    }
-
-    private static void drawDiamondBracket(Matrix4f matrix, VertexConsumer consumer, float z, float s, float r, float g, float b, float a) {
-        float[] dirX = {1.0f, 0.0f, -1.0f, 0.0f};
-        float[] dirY = {0.0f, 1.0f, 0.0f, -1.0f};
-        int steps = 4;
-        for (int arm = 0; arm < 4; arm++) {
-            float dx = dirX[arm];
-            float dy = dirY[arm];
-            float px = -dy;
-            float py = dx;
-            for (int i = 0; i < steps; i++) {
-                float t1 = i / (float) steps;
-                float t2 = (i + 1) / (float) steps;
-                float d1 = s * (0.72f + 0.55f * t1);
-                float d2 = s * (0.72f + 0.55f * t2);
-                float bow1 = (float) Math.sin(t1 * Math.PI) * s * 0.12f;
-                float bow2 = (float) Math.sin(t2 * Math.PI) * s * 0.12f;
-                float w1 = s * 0.09f * (1.0f - t1);
-                float w2 = s * 0.09f * (1.0f - t2);
-                float x1 = dx * d1 + px * bow1;
-                float y1 = dy * d1 + py * bow1;
-                float x2 = dx * d2 + px * bow2;
-                float y2 = dy * d2 + py * bow2;
-                float a1 = a * (1.0f - t1 * 0.2f);
-                float a2 = a * (1.0f - t2);
-                consumer.addVertex(matrix, x1 - px * w1, y1 - py * w1, z).setColor(r, g, b, a1 * 0.4f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x1 + px * w1, y1 + py * w1, z).setColor(r, g, b, a1 * 0.4f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 + px * w2, y2 + py * w2, z).setColor(r, g, b, a2 * 0.08f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 - px * w2, y2 - py * w2, z).setColor(r, g, b, a2 * 0.08f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x1 - px * w1 * 0.28f, y1 - py * w1 * 0.28f, z).setColor(1.0f, 1.0f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x1 + px * w1 * 0.28f, y1 + py * w1 * 0.28f, z).setColor(1.0f, 1.0f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 + px * w2 * 0.28f, y2 + py * w2 * 0.28f, z).setColor(1.0f, 1.0f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 - px * w2 * 0.28f, y2 - py * w2 * 0.28f, z).setColor(1.0f, 1.0f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            }
-        }
-    }
-
-    private static void drawCrosshairSpokes(Matrix4f matrix, VertexConsumer consumer, float z, float len, float r, float g, float b, float a) {
-        float gap = len * 0.34f;
-        float[] dirX = {1.0f, 0.0f, -1.0f, 0.0f};
-        float[] dirY = {0.0f, 1.0f, 0.0f, -1.0f};
-        int steps = 4;
-        for (int arm = 0; arm < 4; arm++) {
-            float dx = dirX[arm];
-            float dy = dirY[arm];
-            float px = -dy;
-            float py = dx;
-            for (int i = 0; i < steps; i++) {
-                float t1 = i / (float) steps;
-                float t2 = (i + 1) / (float) steps;
-                float d1 = gap + (len - gap) * t1;
-                float d2 = gap + (len - gap) * t2;
-                float bow1 = (float) Math.sin(t1 * Math.PI) * len * 0.06f;
-                float bow2 = (float) Math.sin(t2 * Math.PI) * len * 0.06f;
-                float w1 = 0.045f * (1.0f - t1);
-                float w2 = 0.045f * (1.0f - t2);
-                float a1 = a * (1.0f - t1 * 0.35f);
-                float a2 = a * (1.0f - t2);
-                float x1 = dx * d1 + px * bow1;
-                float y1 = dy * d1 + py * bow1;
-                float x2 = dx * d2 + px * bow2;
-                float y2 = dy * d2 + py * bow2;
-                consumer.addVertex(matrix, x1 - px * w1, y1 - py * w1, z).setColor(r, g, b, a1 * 0.45f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x1 + px * w1, y1 + py * w1, z).setColor(r, g, b, a1 * 0.45f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 + px * w2, y2 + py * w2, z).setColor(r, g, b, a2 * 0.1f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 - px * w2, y2 - py * w2, z).setColor(r, g, b, a2 * 0.1f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                float c1 = w1 * 0.32f;
-                float c2 = w2 * 0.32f;
-                consumer.addVertex(matrix, x1 - px * c1, y1 - py * c1, z).setColor(1.0f, 1.0f, 1.0f, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x1 + px * c1, y1 + py * c1, z).setColor(1.0f, 1.0f, 1.0f, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 + px * c2, y2 + py * c2, z).setColor(1.0f, 1.0f, 1.0f, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-                consumer.addVertex(matrix, x2 - px * c2, y2 - py * c2, z).setColor(1.0f, 1.0f, 1.0f, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            }
-        }
-    }
-
-    private static void drawDiamondSparkZ(Matrix4f matrix, VertexConsumer consumer, float z, float size, float r, float g, float b, float a) {
-        float h = size * 1.5f;
-        float w = size * 0.6f;
-
-        consumer.addVertex(matrix, -w, 0, z).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, 0, 0, z + h).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, w, 0, z).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, 0, 0, z - h).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 }

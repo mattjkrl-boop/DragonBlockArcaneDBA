@@ -7,7 +7,6 @@ import com.dragonblockarcanedba.entity.CurseChainEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -147,7 +146,7 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
 
                 // Sound
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.CHAIN_PLACE, SoundSource.PLAYERS, 0.9f, 0.7f + serverLevel.getRandom().nextFloat() * 0.4f);
+                    com.dragonblockarcanedba.sound.DbaSounds.CHAIN_RATTLE, SoundSource.PLAYERS, 0.9f, 0.7f + serverLevel.getRandom().nextFloat() * 0.4f);
             }
         }
     }
@@ -203,11 +202,12 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                 domain.refreshLifetime();
             }
 
-            // 1b. Real storm atmosphere (point 4): the tempest drives actual
-            // server thunder weather plus client gloom for its whole life.
-            // AtmosphereServer saves and restores the prior weather itself,
-            // and the client gloom lerps out when the storm ends, so the
-            // dissipation needs no hard cut here.
+            // 1b. Storm atmosphere (point 4): the tempest registers its
+            // tracked storm volume with AtmosphereServer for its whole life.
+            // The storm is fully custom (client rain, gloom grade, and the
+            // bank's dark thunder); world weather is never touched, and the
+            // gloom lerps out when the storm ends, so the dissipation needs
+            // no hard cut here.
             if (heldTicks % 20 == 0) {
                 com.dragonblockarcanedba.util.AtmosphereServer.begin(serverLevel, player.position(),
                     (float) domainRadius + 24.0f, 0.45f + 0.45f * stormRatio,
@@ -262,7 +262,7 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                         serverLevel.addFreshEntity(itemEntity);
 
                         serverLevel.playSound(null, enemy.getX(), enemy.getY(), enemy.getZ(),
-                            SoundEvents.ITEM_BREAK.value(), SoundSource.PLAYERS, 1.0f, 1.0f);
+                            com.dragonblockarcanedba.sound.DbaSounds.ITEM_SHATTER, SoundSource.PLAYERS, 1.0f, 1.0f);
                     }
                 }
             }
@@ -301,15 +301,15 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
 
                         // Magic thunder damage (scales with Strength like its sibling weapons)
                         float strikeDamage = 450.0f + (float) (((PlayerStatsAccessor) player).dba$getStrength() * 1.5f);
-                        lightningTarget.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strikeDamage)));
+                        lightningTarget.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.curse(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strikeDamage)));
                         com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, targetPos.x, targetPos.y, targetPos.z);
                         lightningTarget.igniteForSeconds(5);
                         serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
-                            SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 3.0f, 0.7f);
+                            com.dragonblockarcanedba.sound.DbaSounds.THUNDER_DARK, SoundSource.WEATHER, 3.0f, 0.7f);
                         serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
                             com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 3.0f, 0.7f);
                         serverLevel.playSound(null, targetPos.x, targetPos.y, targetPos.z,
-                            SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 2.0f, 0.6f);
+                            com.dragonblockarcanedba.sound.DbaSounds.ZAP_DARK, SoundSource.WEATHER, 2.0f, 0.6f);
                                 
                         // Fire on ground
                         BlockPos firePos = BlockPos.containing(targetPos.x, targetPos.y, targetPos.z);
@@ -357,9 +357,9 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
 
                 // Thunder sound
                 serverLevel.playSound(null, rx, ry, rz,
-                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.2f, 0.6f + serverLevel.getRandom().nextFloat() * 0.4f);
+                    com.dragonblockarcanedba.sound.DbaSounds.THUNDER_DARK, SoundSource.WEATHER, 1.2f, 0.6f + serverLevel.getRandom().nextFloat() * 0.4f);
                 serverLevel.playSound(null, rx, ry, rz,
-                    SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 0.9f, 0.5f + serverLevel.getRandom().nextFloat() * 0.2f);
+                    com.dragonblockarcanedba.sound.DbaSounds.ZAP_DARK, SoundSource.WEATHER, 0.9f, 0.5f + serverLevel.getRandom().nextFloat() * 0.2f);
 
                 // Damage, scorch, and a dust burst where the bolt lands. Both
                 // strike types now scorch the same way, so identical looking
@@ -368,7 +368,7 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                 float ambientDamage = 120.0f + (float) (((PlayerStatsAccessor) player).dba$getStrength() * 0.35f);
                 AABB strikeBox = new AABB(rx - 3.5, ry - 3, rz - 3.5, rx + 3.5, ry + 3, rz + 3.5);
                 for (LivingEntity victim : serverLevel.getEntitiesOfClass(LivingEntity.class, strikeBox, e -> e != player)) {
-                    victim.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(ambientDamage));
+                    victim.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.curse(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(ambientDamage));
                     victim.igniteForSeconds(3);
                 }
                 scorchGround(serverLevel, rx, rz, 0, 1.0f, 120);
@@ -397,7 +397,7 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                         com.dragonblockarcanedba.util.DbaCompat.markHurt(enemy);
 
                         // Magic impact damage (scales with Strength)
-                        enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (slamDamage)));
+                        enemy.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.curse(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (slamDamage)));
                         if (!slamImpactPlayed) {
                             slamImpactPlayed = true;
                             com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, enemy.getX(), enemy.getY(), enemy.getZ());
@@ -426,7 +426,7 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
             // Ambient storm sound
             if (heldTicks % 40 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 0.8f, 0.5f);
+                    com.dragonblockarcanedba.sound.DbaSounds.THUNDER_DARK, SoundSource.WEATHER, 0.8f, 0.5f);
             }
         }
     }
@@ -458,7 +458,7 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                 int bolts = 0;
                 for (LivingEntity enemy : caught) {
                     MobEffectInstance curse = enemy.getEffect(DbaEffects.MOVEMENT_CURSE_HOLDER);
-                    enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player),
+                    enemy.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.curse(player),
                         com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(verdictDamage));
                     enemy.igniteForSeconds(4);
                     int amp = Math.min(9, (curse != null ? curse.getAmplifier() + 1 : 0) + 2);
@@ -479,9 +479,9 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                 scorchGround(serverLevel, player.getX(), player.getZ(), Math.min(8, (int) (domainRadius * 0.5)), 0.45f, 240);
                 com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, player.position(), (float) domainRadius * 0.5f, 0xFFE61230);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 3.0f, 0.6f);
+                    com.dragonblockarcanedba.sound.DbaSounds.THUNDER_DARK, SoundSource.WEATHER, 3.0f, 0.6f);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 2.0f, 0.5f);
+                    com.dragonblockarcanedba.sound.DbaSounds.ZAP_DARK, SoundSource.WEATHER, 2.0f, 0.5f);
             }
         }
         return true;

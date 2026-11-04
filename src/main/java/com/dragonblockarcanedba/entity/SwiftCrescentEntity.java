@@ -8,7 +8,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -138,7 +137,7 @@ public class SwiftCrescentEntity extends Projectile {
         if (!(level.getEntity(getTargetId()) instanceof LivingEntity target)) return;
         if (!target.isAlive() || target.isRemoved()) return;
         if (this.getOwner() instanceof Player player) {
-            target.hurtServer(level, level.damageSources().playerAttack(player),
+            target.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.ki(this, player),
                 DbaEffectsConfig.capDamage(getStrikeDamage()));
         }
         if (isStrikePrimary()) {
@@ -148,7 +147,7 @@ public class SwiftCrescentEntity extends Projectile {
         LayeredParticles.emitGroundBurst(level,
             new Vec3(target.getX(), target.getY(), target.getZ()), 0.8f, 0x9FE8FF);
         level.playSound(null, target.getX(), target.getY(), target.getZ(),
-            SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.6f, getStrikePitch());
+            com.dragonblockarcanedba.sound.DbaSounds.CRIT_HIT, SoundSource.PLAYERS, 1.6f, getStrikePitch());
         level.playSound(null, target.getX(), target.getY(), target.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.6f, getStrikePitch());
     }

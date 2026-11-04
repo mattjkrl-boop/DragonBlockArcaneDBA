@@ -1,8 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -67,7 +66,7 @@ public class MovementCurseEffect extends MobEffect {
                 double pz = entity.getZ() + (level.getRandom().nextFloat() - 0.5) * (width + 0.4);
 
                 level.sendParticles(
-                    new DustParticleOptions(0x4B0082, 1.4F), // Indigo purple
+                    new DbaDustOptions(0x4B0082, 1.4F), // Indigo purple
                     px, py, pz,
                     1, 0.0, 0.02, 0.0, 0.01
                 );

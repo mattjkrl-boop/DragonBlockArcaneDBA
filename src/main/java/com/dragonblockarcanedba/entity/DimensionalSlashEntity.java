@@ -2,6 +2,8 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
@@ -9,14 +11,12 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.level.Level;
@@ -34,6 +34,8 @@ public class DimensionalSlashEntity extends Projectile {
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(DimensionalSlashEntity.class, EntityDataSerializers.INT);
     /** Tick at which the slash struck and stopped flying; -1 while in flight. Synced so the renderer can run the tear fade. */
     private static final EntityDataAccessor<Integer> FADE_START = SynchedEntityData.defineId(DimensionalSlashEntity.class, EntityDataSerializers.INT);
+    /** Bespoke geometry seed, rolled once at spawn and synced, so the torn shapes draw identically on every client. */
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(DimensionalSlashEntity.class, EntityDataSerializers.INT);
 
     /** Hard flight cap: at speed 2.5 this is about 250 blocks of range. The renderer's envelope fades the last 30 ticks of it. */
     public static final int MAX_LIFE_TICKS = 100;
@@ -80,6 +82,7 @@ public class DimensionalSlashEntity extends Projectile {
             this.entityData.set(CASTER_ID, owner.getId());
         }
         this.entityData.set(TILT, tiltRight);
+        this.entityData.set(SEED, level.getRandom().nextInt());
         this.damage = damage;
         this.noPhysics = true;
     }
@@ -89,6 +92,7 @@ public class DimensionalSlashEntity extends Projectile {
         builder.define(TILT, false);
         builder.define(CASTER_ID, -1);
         builder.define(FADE_START, -1);
+        builder.define(SEED, 0);
     }
 
     public int getCasterId() {
@@ -102,6 +106,11 @@ public class DimensionalSlashEntity extends Projectile {
     /** Tick the slash struck and began its lingering tear fade, or -1 while it is still flying. */
     public int getFadeStart() {
         return this.entityData.get(FADE_START);
+    }
+
+    /** Synced bespoke geometry seed for this slash. */
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public float getDamage() {
@@ -131,9 +140,9 @@ public class DimensionalSlashEntity extends Projectile {
 
         if (!this.level().isClientSide() && this.tickCount == 1) {
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                SoundEvents.ILLUSIONER_CAST_SPELL, SoundSource.PLAYERS, 1.8f, 1.3f);
+                DbaSounds.CAST_DARK, SoundSource.PLAYERS, 1.8f, 1.3f);
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                SoundEvents.RESPAWN_ANCHOR_SET_SPAWN, SoundSource.PLAYERS, 1.2f, 1.6f);
+                DbaSounds.CHARGE_DARK, SoundSource.PLAYERS, 1.2f, 1.6f);
         }
 
         // Layered trail (point 1): a bright mote core on the flight line, a
@@ -190,9 +199,9 @@ public class DimensionalSlashEntity extends Projectile {
             Entity hitEntity = result.getEntity();
             Entity owner = this.getOwner();
             if (hitEntity instanceof LivingEntity living) {
-                DamageSource source = owner instanceof Player playerOwner
-                    ? serverLevel.damageSources().playerAttack(playerOwner)
-                    : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().magic());
+                // Ability damage uses the mod's void type (BESPOKE-STANDARD
+                // rule 4); only the plain melee hit keeps the vanilla source.
+                DamageSource source = DbaDamage.voidDmg(this, owner);
 
                 living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (damage)));
                 living.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 300, 1, false, true), owner);
@@ -214,7 +223,7 @@ public class DimensionalSlashEntity extends Projectile {
                 );
 
                 serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
-                    SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 1.8f, 1.2f);
+                    DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 1.8f, 1.2f);
             }
         }
     }
@@ -249,7 +258,7 @@ public class DimensionalSlashEntity extends Projectile {
             GroundScar.scar(serverLevel, blockHit.getBlockPos(),
                 Blocks.CRYING_OBSIDIAN.defaultBlockState(), 140);
             serverLevel.playSound(null, at.x, at.y, at.z,
-                SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 1.4f, 1.5f);
+                DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 1.4f, 1.5f);
         }
     }
 }

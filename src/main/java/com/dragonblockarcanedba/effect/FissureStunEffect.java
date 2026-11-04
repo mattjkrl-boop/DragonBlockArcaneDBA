@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -44,7 +44,7 @@ public class FissureStunEffect extends MobEffect {
     public boolean applyEffectTick(ServerLevel level, LivingEntity entity, int amplifier) {
         if (entity.tickCount % 3 == 0) {
             level.sendParticles(
-                ParticleTypes.SMOKE,
+                DbaParticles.DUST_PUFF,
                 entity.getX(), entity.getY() + 0.2, entity.getZ(),
                 2, entity.getBbWidth() * 0.3, 0.1, entity.getBbWidth() * 0.3, 0.02
             );

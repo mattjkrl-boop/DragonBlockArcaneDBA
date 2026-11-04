@@ -25,6 +25,7 @@ public class AzureTempestChannelEntity extends Projectile {
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(AzureTempestChannelEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> RELEASING = SynchedEntityData.defineId(AzureTempestChannelEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> RELEASE_AGE = SynchedEntityData.defineId(AzureTempestChannelEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Long> SEED = SynchedEntityData.defineId(AzureTempestChannelEntity.class, EntityDataSerializers.LONG);
 
     /** Ticks the collapse fade runs after beginRelease(). */
     public static final int RELEASE_TICKS = 8;
@@ -41,6 +42,10 @@ public class AzureTempestChannelEntity extends Projectile {
             this.setPos(caster.getX(), caster.getY(), caster.getZ());
             this.entityData.set(CASTER_ID, caster.getId());
         }
+        // Renderer shape seed: fixed at spawn and synced. The channel is
+        // transient (it lives only while the caster channels), so it is not
+        // persisted like the longer lived Azure entities.
+        this.entityData.set(SEED, this.getUUID().getMostSignificantBits() ^ this.getUUID().getLeastSignificantBits());
         this.noPhysics = true;
     }
 
@@ -50,6 +55,7 @@ public class AzureTempestChannelEntity extends Projectile {
         builder.define(CASTER_ID, -1);
         builder.define(RELEASING, false);
         builder.define(RELEASE_AGE, 0);
+        builder.define(SEED, 0L);
     }
 
     public float getChargeRatio() {
@@ -70,6 +76,10 @@ public class AzureTempestChannelEntity extends Projectile {
 
     public int getReleaseAge() {
         return this.entityData.get(RELEASE_AGE);
+    }
+
+    public long getRenderSeed() {
+        return this.entityData.get(SEED);
     }
 
     /** Start the collapse: the renderer fades over RELEASE_TICKS, then the entity discards. */

@@ -4,10 +4,11 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.GrandCrescentWaveEntity;
 import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.entity.ValorFieldEntity;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -152,7 +153,7 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
                 e -> e.isAlive() && e != player
             );
             for (LivingEntity contact : contactTargets) {
-                contact.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (contactDamage)));
+                contact.hurtServer(level, DbaDamage.valor(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (contactDamage)));
                 Vec3 toward = player.position().subtract(contact.position());
                 toward = new Vec3(toward.x, 0, toward.z);
                 if (toward.lengthSqr() > 0.001) {
@@ -192,7 +193,7 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
             level.addFreshEntity(shard);
 
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 0.9f, 1.6f);
+                DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 0.9f, 1.6f);
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 0.9f, 1.6f);
         }
@@ -226,7 +227,7 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
                 level, player, p.position(), 1.0f
             );
             level.addFreshEntity(clash);
-            level.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.SHIELD_BLOCK.value(), SoundSource.PLAYERS, 0.8f, 1.5f);
+            level.playSound(null, p.getX(), p.getY(), p.getZ(), DbaSounds.SHIELD_CLANK, SoundSource.PLAYERS, 0.8f, 1.5f);
         }
     }
 
@@ -257,7 +258,7 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
             if (dist <= finisherRadius) {
                 double dot = look.dot(toEnemy.normalize());
                 if (dot > 0.35) { // Frontal sweep arc
-                    enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finisherDamage)));
+                    enemy.hurtServer(level, DbaDamage.valor(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finisherDamage)));
 
                     // Apply invisible cinematic tracking effect so Delayed Damage combo locks during sweep
                     enemy.addEffect(new net.minecraft.world.effect.MobEffectInstance(
@@ -296,9 +297,9 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
 
         // Sound & particles
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.6f);
+            DbaSounds.SWING_HEAVY, SoundSource.PLAYERS, 2.0f, 0.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.4f);
+            DbaSounds.BOOM_HOLY, SoundSource.PLAYERS, 1.2f, 1.4f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
         // World interaction at the release point: a ground dust burst, a

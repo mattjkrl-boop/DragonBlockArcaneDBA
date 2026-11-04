@@ -1,8 +1,9 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.LayeredParticles;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -27,6 +28,8 @@ import java.util.Set;
 /** A lava crescent that travels, drips, and leaves a short trail behind it. */
 public class LavaCleaveEntity extends Projectile {
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(LavaCleaveEntity.class, EntityDataSerializers.FLOAT);
+    /** Shape seed for the bespoke renderer: synced, so every client draws the same crescent. */
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(LavaCleaveEntity.class, EntityDataSerializers.INT);
     /** Flight time in ticks. At 1.35 blocks per tick that is about 16 blocks of reach. */
     private static final int LIFE_TICKS = 12;
     /** Ember and rock palette thrown where the crescent lands. */
@@ -49,6 +52,7 @@ public class LavaCleaveEntity extends Projectile {
         this.setOwner(owner);
         this.noPhysics = true;
         this.entityData.set(DAMAGE, damage);
+        this.entityData.set(SEED, level.getRandom().nextInt());
         if (owner != null) {
             Vec3 look = owner.getLookAngle();
             Vec3 start = owner.getEyePosition().add(look.scale(0.8));
@@ -61,6 +65,11 @@ public class LavaCleaveEntity extends Projectile {
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(DAMAGE, 740.0f);
+        builder.define(SEED, 0);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int life() {
@@ -93,10 +102,7 @@ public class LavaCleaveEntity extends Projectile {
             float damage = this.entityData.get(DAMAGE);
             for (LivingEntity living : hits) {
                 this.hitIds.add(living.getId());
-                var source = owner instanceof net.minecraft.world.entity.player.Player player
-                    ? server.damageSources().playerAttack(player)
-                    : server.damageSources().magic();
-                living.hurtServer(server, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
+                living.hurtServer(server, DbaDamage.lava(this, owner), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
                 living.setRemainingFireTicks(Math.max(living.getRemainingFireTicks(), 60));
                 // A shove along the flight line, about 0.35 horizontal: the
                 // crescent carries weight now instead of passing through.
@@ -107,11 +113,11 @@ public class LavaCleaveEntity extends Projectile {
             // bright motes at the core, orange dust mid, flame wisps outside,
             // all breathing with the flight envelope.
             LayeredParticles.emitVortex(server, start, 1.05f, 1.3f,
-                this.tickCount, LIFE_TICKS, 0xFF5A00, ParticleTypes.FLAME);
+                this.tickCount, LIFE_TICKS, 0xFF5A00, DbaParticles.FLAME);
             if (this.tickCount >= LIFE_TICKS - 2) {
                 // The crescent rains embers as it dies instead of vanishing.
                 LayeredParticles.emitRain(server, start, 1.2f, 1.2f,
-                    this.tickCount, LIFE_TICKS, ParticleTypes.FLAME);
+                    this.tickCount, LIFE_TICKS, DbaParticles.FLAME);
             }
             this.lavaLeft -= LavaSwordGround.scorchSegment(server, start, end, 1.35, this.lavaLeft);
             if (blocked) {

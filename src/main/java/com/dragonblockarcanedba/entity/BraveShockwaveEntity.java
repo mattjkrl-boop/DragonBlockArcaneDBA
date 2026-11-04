@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.GroundScar;
@@ -133,9 +134,8 @@ public class BraveShockwaveEntity extends Projectile {
             // visible front reaches its distance, never before, never after.
             if (this.damage > 0.0f) {
                 Entity owner = this.getOwner();
-                DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                    ? serverLevel.damageSources().playerAttack(playerOwner)
-                    : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+                // Bespoke damage: valor type, this shockwave as the direct entity.
+                DamageSource damageSource = DbaDamage.valor(this, owner);
 
                 AABB box = this.getBoundingBox().inflate(maxRadius + 1.0, 2.5, maxRadius + 1.0);
                 List<LivingEntity> targets = serverLevel.getEntitiesOfClass(

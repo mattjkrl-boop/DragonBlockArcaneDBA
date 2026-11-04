@@ -1,5 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -134,9 +136,8 @@ public class GrandCrescentWaveEntity extends Projectile {
             }
 
             Entity owner = this.getOwner();
-            DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                ? serverLevel.damageSources().playerAttack(playerOwner)
-                : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+            LivingEntity waveOwner = owner instanceof LivingEntity living ? living : null;
+            DamageSource damageSource = DbaDamage.valor(this, waveOwner);
 
             // Broad horizontal piercing hitbox
             double halfWidth = 3.2;
@@ -178,8 +179,7 @@ public class GrandCrescentWaveEntity extends Projectile {
                 this.setDeltaMovement(Vec3.ZERO);
                 Vec3 hitPos = blockHit instanceof net.minecraft.world.phys.BlockHitResult bhr
                     ? bhr.getLocation() : this.position();
-                LivingEntity livingOwner = owner instanceof LivingEntity living ? living : null;
-                com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, livingOwner,
+                com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, waveOwner,
                     hitPos, 26, 2.6, 2.8, 30);
                 com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, hitPos, 2.4f, 0xFFD833);
                 net.minecraft.core.BlockPos scarPos = net.minecraft.core.BlockPos.containing(hitPos.x, hitPos.y - 1.0, hitPos.z);
@@ -189,7 +189,7 @@ public class GrandCrescentWaveEntity extends Projectile {
                         200, 0.5f, serverLevel.getRandom());
                 }
                 serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z,
-                    net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(), net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 1.3f);
+                    DbaSounds.RELEASE_BLAST, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 1.3f);
                 return;
             }
 

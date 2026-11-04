@@ -31,6 +31,7 @@ public class DelayedLaunchEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(DelayedLaunchEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> POWER = SynchedEntityData.defineId(DelayedLaunchEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> DELAY = SynchedEntityData.defineId(DelayedLaunchEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(DelayedLaunchEntity.class, EntityDataSerializers.INT);
 
     private final List<LivingEntity> targets = new ArrayList<>();
     private final List<UUID> pendingTargetIds = new ArrayList<>();
@@ -62,6 +63,7 @@ public class DelayedLaunchEntity extends Projectile {
         this.entityData.set(RADIUS, radius);
         this.entityData.set(POWER, powerRatio);
         this.entityData.set(DELAY, delayTicks);
+        this.entityData.set(SEED, level.getRandom().nextInt());
     }
 
     @Override
@@ -69,6 +71,7 @@ public class DelayedLaunchEntity extends Projectile {
         builder.define(RADIUS, 10.0f);
         builder.define(POWER, 1.0f);
         builder.define(DELAY, 40);
+        builder.define(SEED, 0);
     }
 
     public float getRadius() {
@@ -83,6 +86,10 @@ public class DelayedLaunchEntity extends Projectile {
         return this.entityData.get(DELAY);
     }
 
+    public int getSeed() {
+        return this.entityData.get(SEED);
+    }
+
     @Override
     protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
         super.addAdditionalSaveData(output);
@@ -90,6 +97,7 @@ public class DelayedLaunchEntity extends Projectile {
         output.putFloat("PowerRatio", this.powerRatio);
         output.putInt("DelayTicks", this.delayTicks);
         output.putInt("Elapsed", this.elapsed);
+        output.putInt("Seed", getSeed());
         output.putDouble("CenterX", this.centerPos.x);
         output.putDouble("CenterY", this.centerPos.y);
         output.putDouble("CenterZ", this.centerPos.z);
@@ -110,6 +118,7 @@ public class DelayedLaunchEntity extends Projectile {
         this.powerRatio = input.getFloatOr("PowerRatio", 1.0f);
         this.delayTicks = input.getIntOr("DelayTicks", 40);
         this.elapsed = input.getIntOr("Elapsed", 0);
+        this.entityData.set(SEED, input.getIntOr("Seed", 0));
         this.centerPos = new Vec3(
             input.getDoubleOr("CenterX", this.getX()),
             input.getDoubleOr("CenterY", this.getY()),
@@ -220,6 +229,6 @@ public class DelayedLaunchEntity extends Projectile {
         com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, this.centerPos, getRadius() * 0.5f, 0x7A1FD6);
         com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, this.centerPos.x, this.centerPos.y, this.centerPos.z);
         serverLevel.playSound(null, this.centerPos.x, this.centerPos.y, this.centerPos.z,
-            net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(), net.minecraft.sounds.SoundSource.HOSTILE, 1.2f, 0.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.RELEASE_BLAST, net.minecraft.sounds.SoundSource.HOSTILE, 1.2f, 0.8f);
     }
 }

@@ -2,10 +2,10 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
@@ -85,9 +85,9 @@ public class BraveSlashEntity extends Projectile {
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
             Entity owner = this.getOwner();
-            DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                ? serverLevel.damageSources().playerAttack(playerOwner)
-                : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+            // Bespoke damage: the cut itself is the direct entity, the owner
+            // the attacker, typed as valor instead of the vanilla spread.
+            DamageSource damageSource = DbaDamage.valor(this, owner);
 
             double width = 3.0;
             double height = 1.2;
@@ -115,7 +115,7 @@ public class BraveSlashEntity extends Projectile {
                 com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
 
                 // Golden critical sparks
-                serverLevel.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1.0, target.getZ(), 10, 0.3, 0.5, 0.3, 0.15);
+                serverLevel.sendParticles(DbaParticles.CRIT_SPARK, target.getX(), target.getY() + 1.0, target.getZ(), 10, 0.3, 0.5, 0.3, 0.15);
             }
 
             // Layered wake (standard point 1): a bright mote core on the flight

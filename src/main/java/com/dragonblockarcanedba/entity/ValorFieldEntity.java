@@ -2,9 +2,10 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.item.GrandSwordItem;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -211,7 +212,7 @@ public class ValorFieldEntity extends Projectile {
             // Spawn moment: the field used to appear at full power in total silence.
             if (this.tickCount == 1) {
                 serverLevel.playSound(null, center.x, center.y + 1.0, center.z,
-                    SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.2f, 1.1f);
+                    DbaSounds.CHARGE_RISE, SoundSource.PLAYERS, 1.2f, 1.1f);
                 float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
                 if (density > 0f) {
                     serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
@@ -268,7 +269,7 @@ public class ValorFieldEntity extends Projectile {
                             if (caster instanceof Player playerCaster) {
                                 PlayerStatsAccessor acc = (PlayerStatsAccessor) playerCaster;
                                 float fieldPressureDmg = 55.0f + (float) (acc.dba$getStrength() * 0.45f);
-                                entity.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(playerCaster), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (fieldPressureDmg)));
+                                entity.hurtServer(serverLevel, DbaDamage.valor(playerCaster), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (fieldPressureDmg)));
                                 // Pressure hits had no feedback at all: enemies just lost health.
                                 serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                                     entity.getX(), entity.getY() + entity.getBbHeight() * 0.6, entity.getZ(), 3, 0.3, 0.3, 0.3, 0.05);
@@ -281,7 +282,7 @@ public class ValorFieldEntity extends Projectile {
                 // Ambient golden field hum sound
                 if (this.tickCount % 30 == 0) {
                     serverLevel.playSound(null, center.x, center.y + 1.0, center.z,
-                        SoundEvents.BEACON_AMBIENT, SoundSource.PLAYERS, 0.7f, 1.2f);
+                        DbaSounds.CHARGE_HUM, SoundSource.PLAYERS, 0.7f, 1.2f);
                 }
             }
 
@@ -309,7 +310,7 @@ public class ValorFieldEntity extends Projectile {
                         p.setDeltaMovement(0, 0, 0);
 
                         serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(),
-                            SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 0.8f, 1.8f);
+                            DbaSounds.CAST_MAGIC, SoundSource.PLAYERS, 0.8f, 1.8f);
                     }
                 }
             }
@@ -359,6 +360,12 @@ public class ValorFieldEntity extends Projectile {
                         fullSpeedDmg = kiBlast.getDamage();
                     }
 
+                    // Deliberately NOT DbaDamage: this hit is the suspended
+                    // projectile's own damage, dealt for its original owner
+                    // when something walks into it. The field deals no damage
+                    // here; re-typing it to valor would misattribute the kill
+                    // and change Ki blast behavior. The field's own ability
+                    // damage (the pressure ticks above) uses DbaDamage.valor.
                     DamageSource dmgSource = p.getOwner() instanceof LivingEntity livingOwner
                         ? (p instanceof KiBlastEntity ? serverLevel.damageSources().indirectMagic(p, livingOwner) : serverLevel.damageSources().mobProjectile(p, livingOwner))
                         : serverLevel.damageSources().generic();
@@ -366,9 +373,9 @@ public class ValorFieldEntity extends Projectile {
                     victim.hurtServer(serverLevel, dmgSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (fullSpeedDmg)));
 
                     if (p instanceof KiBlastEntity kiBlast) {
-                        serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.9f, 1.5f);
+                        serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 0.9f, 1.5f);
                     } else {
-                        serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.ARROW_HIT, SoundSource.PLAYERS, 1.0f, 1.0f);
+                        serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), DbaSounds.THUNK, SoundSource.PLAYERS, 1.0f, 1.0f);
                     }
                     p.discard();
                     it.remove();
@@ -378,7 +385,7 @@ public class ValorFieldEntity extends Projectile {
 
                 // 10-Second Stasis Timer (200 ticks): Breaks, falls down, and disappears after 10s
                 if (data.suspendedTicks >= 200) {
-                    serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.ITEM_BREAK.value(), SoundSource.PLAYERS, 0.8f, 1.2f);
+                    serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), DbaSounds.ITEM_SHATTER, SoundSource.PLAYERS, 0.8f, 1.2f);
                     p.discard();
                     it.remove();
                     this.suspendedDirty = true;

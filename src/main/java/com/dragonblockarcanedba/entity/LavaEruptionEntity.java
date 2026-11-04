@@ -1,8 +1,9 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.LayeredParticles;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -24,13 +25,14 @@ import java.util.Set;
 /** A wave of lava that bursts along the swing and fades. */
 public class LavaEruptionEntity extends Projectile {
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(LavaEruptionEntity.class, EntityDataSerializers.FLOAT);
+    /** Shape seed for the bespoke renderer: synced, so every client draws the same plume and cracks. */
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(LavaEruptionEntity.class, EntityDataSerializers.INT);
     /**
-     * Frontal cone edge, as a look dot. This is cos(1.15 radians), the exact
-     * half angle LavaEruptionRenderer draws its wave across (about 132
-     * degrees in total), so the damage, the ground burn, and the drawn wave
-     * all stop at the same edge. It used to be 0.15 (about 162 degrees), so
-     * targets at the sides took full damage from a wave that never reached
-     * them visually.
+     * Frontal cone edge, as a look dot. This is cos(1.15 radians), about 132
+     * degrees in total: the cone the damage, the ground burn, and the drawn
+     * eruption crown all share, so the three stop at the same edge. It used
+     * to be 0.15 (about 162 degrees), so targets at the sides took full
+     * damage from a wave that never reached them visually.
      */
     public static final double CONE_MIN_DOT = 0.4085;
     /** Ember and rock palette the eruption throws at cast. */
@@ -53,6 +55,7 @@ public class LavaEruptionEntity extends Projectile {
         this.setOwner(owner);
         this.noPhysics = true;
         this.entityData.set(DAMAGE, damage);
+        this.entityData.set(SEED, level.getRandom().nextInt());
         if (owner != null) {
             this.setPos(owner.getX(), owner.getY() + 0.15, owner.getZ());
             this.setYRot(owner.getYRot());
@@ -62,6 +65,11 @@ public class LavaEruptionEntity extends Projectile {
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(DAMAGE, 880.0f);
+        builder.define(SEED, 0);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int life() {
@@ -113,10 +121,7 @@ public class LavaEruptionEntity extends Projectile {
                 continue;
             }
             this.hitIds.add(living.getId());
-            var source = owner instanceof net.minecraft.world.entity.player.Player player
-                ? server.damageSources().playerAttack(player)
-                : server.damageSources().magic();
-            living.hurtServer(server, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
+            living.hurtServer(server, DbaDamage.lava(this, owner), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
             living.setRemainingFireTicks(Math.max(living.getRemainingFireTicks(), 80));
             living.setDeltaMovement(living.getDeltaMovement().add(lookX * 0.60, 0.40, lookZ * 0.60));
             com.dragonblockarcanedba.util.DbaCompat.markHurt(living);
@@ -134,7 +139,7 @@ public class LavaEruptionEntity extends Projectile {
         // motes at the core, orange dust on the lip, flame wisps outside,
         // breathing with the wave's own envelope.
         LayeredParticles.emitVortex(server, this.position().add(0, 0.2, 0), Math.max(1.2f, reach * 0.8f), 1.8f,
-            this.tickCount, this.life(), 0xFF5A00, ParticleTypes.FLAME);
+            this.tickCount, this.life(), 0xFF5A00, DbaParticles.FLAME);
         this.lavaLeft -= LavaSwordGround.scorchArc(server, this.getX(), this.getY(), this.getZ(), this.getYRot(), previous, reach, this.lavaLeft, CONE_MIN_DOT);
     }
 }

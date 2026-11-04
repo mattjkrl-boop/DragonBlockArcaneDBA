@@ -7,7 +7,6 @@ import com.dragonblockarcanedba.entity.SpiritCleaveEntity;
 import com.dragonblockarcanedba.entity.SpiritImpaleEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -92,18 +91,23 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
             net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
         );
 
-        // Spirit Cleave: 2% of target's max HP as bonus magic damage
+        // Spirit Cleave: 2% of target's max HP as bonus damage. Bespoke pass:
+        // both bonus hits layered on the melee swing (this percent hit and
+        // the Strength hit below) use the mod's spirit damage type, dealt
+        // direct by the attacker, exactly the shape the old playerAttack
+        // source had. The genuine melee hit itself is the item attack
+        // pipeline above and keeps the vanilla player attack source.
         if (attacker instanceof ServerPlayer serverPlayer) {
             // Ki is charged once on the swing, in performSpiritSwing.
             ServerLevel serverLevel = (ServerLevel) serverPlayer.level();
             float spiritCleave = target.getMaxHealth() * 0.02f;
-            target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (spiritCleave)));
+            target.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.spirit(serverPlayer, serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (spiritCleave)));
 
             // Stat-scaled bonus damage: Strength × 2
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) serverPlayer;
             float strengthBonus = (float) (accessor.dba$getStrength() * 2.0);
             if (strengthBonus > 0) {
-                target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
+                target.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.spirit(serverPlayer, serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
             }
 
             // 20% chance to Disarm (drop held item). Bosses and other players are immune:
@@ -133,9 +137,9 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
             // High-impact divine sounds, pitch jittered so identical stacks do not grate.
             float pitchJitter = 0.92f + serverLevel.getRandom().nextFloat() * 0.16f;
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, 1.3f, 1.15f * pitchJitter);
+                com.dragonblockarcanedba.sound.DbaSounds.THUNDER_CRACK, SoundSource.PLAYERS, 1.3f, 1.15f * pitchJitter);
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.1f, 1.35f * pitchJitter);
+                com.dragonblockarcanedba.sound.DbaSounds.CHARGE_RISE, SoundSource.PLAYERS, 1.1f, 1.35f * pitchJitter);
             serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 1.1f, 1.35f * pitchJitter);
         }
@@ -204,6 +208,8 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
         if (existingBeams.isEmpty()) {
             beam = new SpiritCannonBeamEntity(serverLevel, player);
             serverLevel.addFreshEntity(beam);
+            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                com.dragonblockarcanedba.sound.DbaSounds.BEAM_CHARGE, SoundSource.PLAYERS, 1.0f, 1.0f);
         } else {
             beam = existingBeams.get(0);
         }
@@ -247,13 +253,17 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
                 AABB entityBB = entity.getBoundingBox().inflate(0.3);
                 Optional<Vec3> hitVec = entityBB.clip(eyePos, endPos);
                 if (hitVec.isPresent() && entity instanceof LivingEntity livingTarget) {
-                    // Main beam damage
-                    livingTarget.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (beamDamage)));
+                    // Main beam damage. Bespoke pass: the mod's spirit
+                    // damage type with the beam as the direct entity and the
+                    // caster as the attacker, the shape the old playerAttack
+                    // source had.
+                    livingTarget.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.spirit(beam, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (beamDamage)));
 
-                    // 1% of target's max HP as bonus magic damage per pulse
-                    // (was 2% per 10 tick pulse; same rate at the new cadence)
+                    // 1% of target's max HP as bonus spirit damage per pulse
+                    // (was 2% per 10 tick pulse; same rate at the new
+                    // cadence). Same spirit source as the main hit.
                     float percentDamage = livingTarget.getMaxHealth() * 0.01f;
-                    livingTarget.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (percentDamage)));
+                    livingTarget.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.spirit(beam, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (percentDamage)));
 
                     // Apply Spirit Impale for 5 seconds (100 ticks)
                     livingTarget.addEffect(new MobEffectInstance(DbaEffects.SPIRIT_IMPALE_HOLDER, 100, 0, false, true), player);
@@ -281,7 +291,7 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
 
                     // Impact sound
                     serverLevel.playSound(null, livingTarget.getX(), livingTarget.getY(), livingTarget.getZ(),
-                        SoundEvents.BEACON_POWER_SELECT, SoundSource.PLAYERS, 1.2f, 1.5f);
+                        com.dragonblockarcanedba.sound.DbaSounds.CHARGE_FULL, SoundSource.PLAYERS, 1.2f, 1.5f);
                 }
             }
 
@@ -304,7 +314,7 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
 
             // Beam pulse resonance sound at caster
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0f, 1.6f);
+                com.dragonblockarcanedba.sound.DbaSounds.BEAM_FIRE, SoundSource.PLAYERS, 1.0f, 1.6f);
         }
     }
 

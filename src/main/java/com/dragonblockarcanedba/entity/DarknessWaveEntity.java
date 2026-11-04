@@ -88,9 +88,12 @@ public class DarknessWaveEntity extends Projectile {
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
             Entity owner = this.getOwner();
-            DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
-                ? serverLevel.damageSources().playerAttack(playerOwner)
-                : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+            // Bespoke pass: ability damage uses the mod's darkness type,
+            // with this wave as the direct entity. The attacker is the
+            // owner when it is a living entity; a null attacker (owner
+            // gone) still resolves through the wave itself.
+            DamageSource damageSource = com.dragonblockarcanedba.util.DbaDamage.darkness(this,
+                owner instanceof LivingEntity livingOwner ? livingOwner : null);
 
             double width = this.isSecondary ? 2.2 : 3.5;
             double height = 1.2;
@@ -141,7 +144,7 @@ public class DarknessWaveEntity extends Projectile {
 
                 // Impact feedback
                 serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
-                    net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.6f);
+                    com.dragonblockarcanedba.sound.DbaSounds.HIT_FLESH, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.6f);
             }
 
             // Layered trail (point 1): a bright ki mote core, a violet dust
