@@ -151,6 +151,17 @@ public class DimensionalWarpRiftEntity extends Projectile {
         int burstTick = this.getBurstTick();
         LivingEntity livingOwner = owner instanceof LivingEntity living ? living : null;
 
+        // The shard fan is real (ENTITY-STANDARD): on the first tick, four
+        // torn-space fragments burst from the tear's heart as entities and
+        // scatter, sink, and settle, matching the fan the renderer used to
+        // draw (same seed family, unit, cone, and colors). Origin rifts get
+        // 60 ticks of fragment life, destination rifts 72, host plus fallout.
+        if (this.tickCount == 1) {
+            FragmentEntity.burst(serverLevel, owner, center.add(0, 1.4, 0), new Vec3(0, 1, 0),
+                68f, 0.70f, 4, this.getSeed() ^ 0x5A17L, 0x1A0533, 0xE8CCFF,
+                0.12f, 0.32f, 0.6f, isDest ? 72 : 60, 8);
+        }
+
         // Audio cue on initial spawn, all from the mod's own bank
         // (BESPOKE-STANDARD rule 3).
         if (this.tickCount == 1) {

@@ -38,13 +38,18 @@ import java.util.Map;
  *
  * Complex pass: the tear gains a ring of solid void shards and two
  * energy tendrils streaming inward, drawn in the same billboard plane
- * the emission basis uses. Five shardBurst calls at rim anchors (one
- * shard each, faceted solid pieces through submitSolid) ring the mouth,
- * and two tendrils run from the top and bottom rim to the throat through
- * the tendril canvas. The shards follow the shard collapse window and
- * the tendrils follow the rim window of the implosion choreography.
- * ASH_FLAKE sprites drift on the rim as the complex particle layer. The
- * material emission stays as filler.
+ * the emission basis uses, and two tendrils run from the top and bottom
+ * rim to the throat through the tendril canvas, following the rim
+ * window of the implosion choreography. ASH_FLAKE sprites drift on the
+ * rim as the complex particle layer. The material emission stays as
+ * filler.
+ *
+ * Entity objects pass: the shard ring is no longer drawn here. The
+ * host spawns five FragmentEntity shards server side (entity-audit
+ * section 4) that hang on a world ring at the mouth for the channel
+ * and drop for real at implosion; the billboard anchors are world
+ * anchors now, the accepted trade recorded in the audit. Everything
+ * else in this renderer is unchanged.
  */
 public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRenderer.RiftRenderState> {
     private static final int SHARDS = 7;
@@ -316,18 +321,15 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         // Pieces layer, in the billboard plane: the pose is rotated by
         // the conjugate camera orientation, the same basis the emission
         // streams are built from, so local X and Y are the tear's right
-        // and up. Five shardBurst shards at rim anchors (5 times 288
-        // vertices) plus two inward tendrils (768 vertices) totals 2208,
-        // inside the class M budget of 2500. The pieces follow the same
-        // implosion windows as their emission partners: shards collapse
-        // with the body window, tendrils with the rim window.
-        float shardPieceEnv = state.isImploding ? fade * (1.0f - clamp01(implodeT / 0.70f)) : env;
+        // and up. Two inward tendrils (768 vertices), inside the class M
+        // budget of 2500, following the rim window of the implosion
+        // choreography. The shard ring that used to draw here is a set
+        // of FragmentEntity instances now (see the class doc).
         float tendrilPieceEnv = state.isImploding
             ? fade * (1.0f - clamp01((implodeT - 0.50f) / 0.36f)) : env;
-        if ((shardPieceEnv > 0.02f || tendrilPieceEnv > 0.02f) && ds > 0.05f) {
+        if (tendrilPieceEnv > 0.02f && ds > 0.05f) {
             final float bellyL = s.bellyX;
             final float halfHL = s.halfH;
-            final float bandL = s.bandScale;
             final float radiusL = radius;
             final long pseed = state.seed;
             final float geoDist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
@@ -335,20 +337,6 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
             if (cameraState.orientation != null) {
                 poseStack.mulPose(new Matrix4f().rotation(
                     new Quaternionf(cameraState.orientation).conjugate()));
-            }
-            if (shardPieceEnv > 0.02f && open > 0.04f) {
-                final float sEnv = shardPieceEnv;
-                ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
-                    for (int i = 0; i < 5; i++) {
-                        double ang = i * Math.PI * 2.0 / 5.0 + 0.35;
-                        Vec3 radial = new Vec3(Math.cos(ang), Math.sin(ang), 0);
-                        Vec3 origin = new Vec3(Math.cos(ang) * bellyL * bandL * 1.16,
-                            Math.sin(ang) * halfHL * bandL * 1.05, 0);
-                        ComplexGeometry.shardBurst(pose, buffer, pseed ^ (0xE11L + i * 131L),
-                            origin, radial, 24f, radiusL * 0.38f, 1,
-                            0x2E004D, 0x9905F2, 0.95f, sEnv, geoDist);
-                    }
-                });
             }
             if (tendrilPieceEnv > 0.02f) {
                 final float tEnv = tendrilPieceEnv;

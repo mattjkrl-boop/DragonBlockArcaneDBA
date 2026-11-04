@@ -135,6 +135,28 @@ public class DimensionalRiftEntity extends Projectile {
                 scarGround(serverLevel, center);
             }
 
+            // Fragment beat (tick 2): the tear's shard burst as real
+            // FragmentEntity instances, riding the same early beat as the
+            // debris field. They spawn once at the heart height for the
+            // radius at this tick and drift from there; unlike the old
+            // renderer fan they do not track the growing column (the
+            // audit records this trade). Burst seed family is the
+            // renderer seed ^ 0x5A17, with the renderer seed recomputed
+            // here from the same state the client derives it from
+            // (entity id and position, both server authoritative), so
+            // each fragment draws the identical silhouette the renderer
+            // burst drew.
+            if (this.tickCount == 2) {
+                double tearY = Math.min(8.0, 2.5 + currentRadius * 0.4) * 0.5;
+                long rendererSeed = (long) this.getId() * 2654435761L
+                    ^ (long) (this.getX() * 64.0) * 40503L
+                    ^ (long) (this.getZ() * 64.0) * 0x9E3779B9L;
+                FragmentEntity.burst(serverLevel, owner, center.add(0.0, tearY, 0.0),
+                    new Vec3(0.0, 1.0, 0.0), 100f, 0.80f, 5,
+                    rendererSeed ^ 0x5A17L, 0x24053D, 0xB84DFF,
+                    0.10f, 0.30f, 0.5f, 70, 8);
+            }
+
             // Layered particles every tick: bright core, violet helical mid band,
             // void smoke wisps at the rim, all scaled by the shared envelope.
             LayeredParticles.emitVortex(serverLevel, center, currentRadius * 0.85f, 6.5f,

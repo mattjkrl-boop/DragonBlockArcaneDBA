@@ -63,6 +63,16 @@ public class SkyCracksEntity extends Projectile {
             BoltEntity bolt = new BoltEntity(serverLevel, new Vec3(rx, ry, rz),
                 serverLevel.getRandom().nextInt(), violet ? 0xFF9B30FF : 0xFFF20D33, 34.0f, 8);
             serverLevel.addFreshEntity(bolt);
+
+            // On the same beat, the cracks rain real shard fragments:
+            // 3 clusters of 2, 2, 1 in a disc under the crack plane,
+            // falling the full height as FragmentEntity pieces (the
+            // ENTITY-STANDARD rain mode). These replace the bursts the
+            // renderer used to fake on its per-client billboard plane;
+            // positions are world truth now. Visual only, like the
+            // bolts: the item owns all tempest damage.
+            FragmentEntity.rain(serverLevel, this.getOwner(), this.position(), 9.5f,
+                new int[]{2, 2, 1}, 1.05f, getSeed(), 0x14030A, 0x5A1230);
         }
 
         if (this.tickCount >= LIFE_TICKS) {

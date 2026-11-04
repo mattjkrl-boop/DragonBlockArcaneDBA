@@ -18,11 +18,13 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Dimensional Warp Rift in Minecraft 26.2.
- * Complex pass: a layered composition. The pieces layer carries three
- * builders: a solid shardBurst fan of spatial glass shards at the tear,
- * two shader tendrils streaming inward from the rim to the heart, and a
- * shader crackFan on the rift's ground plane at the same radius as the
- * marked disk. The complex particle layer is WISP_CURL sprites pulled
+ * Complex pass: a layered composition. The pieces layer carries two
+ * builders: two shader tendrils streaming inward from the rim to the
+ * heart, and a shader crackFan on the rift's ground plane at the same
+ * radius as the marked disk. The spatial glass shard fan at the tear
+ * used to be a third, drawn builder; it is now real FragmentEntity
+ * pieces the host spawns server side on its first tick
+ * (ENTITY-STANDARD). The complex particle layer is WISP_CURL sprites pulled
  * inward with the stream. The material emission stays as filler only,
  * following the standard's rift method:
  * - Void plasma and darkness streaming inward from the rim toward the
@@ -191,25 +193,18 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
             MaterialEmitters.groundArea(base, radius * 0.80, state.y + 0.05),
             90f * radiusFactor, 140).tick(delta, envelope);
 
-        // Pieces layer, class M with three builders, drawn in entity
+        // Pieces layer, class M with two builders, drawn in entity
         // local space (the heart sits at local y 1.4, as in the emission).
-        // Vertex accounting at full detail: the shard fan is 4 shards at
-        // 288 vertices (1152), the two inward tendrils are at most 384
-        // each (768), and the crack fan runs at reduced detail scale as
-        // the third builder (at most about 450), for a worst case near
-        // 2370, inside the class M budget of 2500. The shard fan follows
-        // the tear open and shut shaping; the tendrils and cracks follow
-        // the shared lifecycle envelope.
+        // Vertex accounting at full detail: the two inward tendrils are
+        // at most 384 each (768), and the crack fan runs at reduced
+        // detail scale as the second builder (at most about 450), for a
+        // worst case near 1220, inside the class M budget of 2500. The
+        // tendrils and cracks follow the shared lifecycle envelope. The
+        // shard fan is no longer drawn here: the host spawns it as real
+        // FragmentEntity pieces on its first tick (ENTITY-STANDARD).
         float geoEnv = env;
-        float tearGeoEnv = env * openTear;
         float crackRadius = radius * 1.02f;
         float crackDetail = distScale * 0.70f;
-        if (tearGeoEnv > 0.02f) {
-            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
-                ComplexGeometry.shardBurst(pose, buffer, seed ^ 0x5A17L,
-                    new Vec3(0.0, 1.4, 0.0), new Vec3(0.0, 1.0, 0.0), 68f, 0.70f, 4,
-                    0x1A0533, 0xE8CCFF, 0.95f, tearGeoEnv, distScale));
-        }
         if (geoEnv > 0.02f) {
             ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
                 Vec3 heartLocal = new Vec3(0.0, 1.4, 0.0);

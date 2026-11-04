@@ -24,10 +24,12 @@ import java.util.Map;
 /**
  * Entity Renderer for Temporal Rift.
  *
- * Complex pass: a layered composition. The pieces layer is a solid
- * shardBurst of temporal glass shards suspended at the tear heart,
- * plus three shader tendrils streaming inward from the field rim to
- * that heart through the tendril canvas. The complex particle layer
+ * Complex pass: a layered composition. The pieces layer is three
+ * shader tendrils streaming inward from the field rim to the tear
+ * heart through the tendril canvas. The temporal glass shards at the
+ * heart are real FragmentEntity pieces, spawned server side by the
+ * host and drawn by the fragment renderer, not by this renderer. The
+ * complex particle layer
  * is WISP_CURL sprites streaming inward with the soul stream. The
  * shared material system stays as filler only: pale plasma and soul
  * material stream inward through the field volume, glass dust hangs
@@ -155,27 +157,24 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
         // Pieces layer, class M, in entity local space: the tear heart
         // sits at the same core lift the core emission streams toward
         // (height times 0.42), and the whole composition turns slowly
-        // around the field axis with age, so the shards hang in a
-        // suspended swirl instead of sitting static. Vertex accounting
-        // at full detail: the shard burst is 5 shards at 288 vertices
-        // (1440), and the three inward tendrils run at reduced detail
-        // scale (17 spine samples, 272 vertices each, 816), for a
-        // worst case of 2256, inside the class M budget of 2500. Both
-        // layers follow the same lifecycle envelope as the emission.
+        // around the field axis with age. Vertex accounting at full
+        // detail: the three inward tendrils run at reduced detail
+        // scale (17 spine samples, 272 vertices each, 816), inside the
+        // class M budget of 2500, and follow the same lifecycle
+        // envelope as the emission. The temporal glass shards that
+        // used to burst here are real FragmentEntity pieces now,
+        // spawned server side by the host at tick 2 and drawn by the
+        // fragment renderer; their spin is server truth, so this pose
+        // rotation now serves the tendrils alone.
         if (env > 0.02f) {
             final float geoEnv = env;
             final float geoDs = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
             final float fieldH = radius * 1.05f;
             final float tearY = fieldH * 0.42f;
             final float rimR = radius * 0.88f;
-            final float shardUnit = Math.max(0.5f, radius * 0.09f);
             final long pseed = state.seed;
             poseStack.pushPose();
             poseStack.mulPose(new Matrix4f().rotationY((float) Math.toRadians(age * 0.4f)));
-            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
-                ComplexGeometry.shardBurst(pose, buffer, pseed ^ 0x7E42L,
-                    new Vec3(0.0, tearY, 0.0), new Vec3(0.0, 1.0, 0.0), 150f, shardUnit, 5,
-                    0x2F6DB3, 0xDDF7FF, 0.95f, geoEnv, geoDs));
             ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
                 Vec3 heart = new Vec3(0.0, tearY, 0.0);
                 for (int i = 0; i < 3; i++) {

@@ -41,6 +41,10 @@ import java.util.UUID;
  * - Projectile Stasis: Enemy projectiles entering the field hang suspended in
  *   mid-air for up to 10s (200 ticks). Detonates on contact; resumes
  *   trajectory if the field moves away.
+ * - Suspended Shards: three steel shard fragments (FragmentEntity,
+ *   FIELD_HELD) hang in the dome volume as real entities, and up to two
+ *   more ride above the first suspended projectiles. The field releases
+ *   them on the same paths that free the projectiles, and they drop.
  * - Ki Drain: 90% of max Ki per minute (1.5% per second, smooth), drained by
  *   this entity while the field is up.
  * - Lifecycle: the dome rises over 10 ticks on spawn and fades out over
@@ -59,6 +63,19 @@ public class ValorFieldEntity extends Projectile {
     private boolean suspendedDirty = true;
     private static final int VALOR_GOLD_ARGB = 0xFFD833;
 
+    // Theme seeds for the suspended shard fragments, re-homed from the
+    // renderer: the fragments are real entities now, so their placement
+    // seeds live server side with the spawn code that uses them. The
+    // renderer still reads SEED_DOME for its plasma stream seed.
+    public static final long SEED_DOME = 0xD09E5L;
+    public static final long SEED_RING_OUTER = 0xB111L;
+
+    private static final int DOME_ROOT_ARGB = 0x767F8C;
+    private static final int DOME_TIP_ARGB = 0xFFD833;
+    private static final int MARKER_ROOT_ARGB = 0x8A93A6;
+    private static final int MARKER_TIP_ARGB = 0xFFF3B0;
+    private static final int MAX_MARKER_FRAGMENTS = 2;
+
     private static class SuspendedProjData {
         Vec3 origVelocity;
         boolean origNoGravity;
@@ -72,6 +89,13 @@ public class ValorFieldEntity extends Projectile {
     }
 
     private final Map<UUID, SuspendedProjData> suspendedMap = new HashMap<>();
+
+    // The suspended shard fragments this field holds: three dome shards
+    // spawned on the first tick, plus one marker per marked projectile
+    // (slot keeps the marker seed family stable as markers recycle).
+    private final java.util.List<FragmentEntity> domeFragments = new java.util.ArrayList<>();
+    private final Map<UUID, FragmentEntity> markerFragments = new HashMap<>();
+    private final Map<UUID, Integer> markerSlots = new HashMap<>();
 
     public ValorFieldEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -134,6 +158,14 @@ public class ValorFieldEntity extends Projectile {
         this.entityData.set(FADE_START, this.tickCount);
         if (this.level() instanceof ServerLevel serverLevel) {
             releaseAllSuspended(serverLevel);
+            // The dome fragments drop with the field, on the same beat
+            // the suspended projectiles resume. Markers still riding
+            // suspended projectiles were released inside
+            // releaseAllSuspended alongside their projectiles.
+            for (FragmentEntity fragment : domeFragments) {
+                if (fragment.isAlive()) fragment.release();
+            }
+            domeFragments.clear();
         }
     }
 
@@ -220,6 +252,25 @@ public class ValorFieldEntity extends Projectile {
                 }
                 com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, center,
                     FIELD_RADIUS * 0.7f, VALOR_GOLD_ARGB);
+
+                // The dome's suspended shards are real fragments now:
+                // three steel shards this field holds at the anchor
+                // formulas the renderer used to draw (angle, ring radius,
+                // base height; the renderer's bob was presentation and
+                // is dropped, the anchor follow on the moving field
+                // carries the read). They hang until beginFadeOut
+                // releases them, then they drop and rest 10.
+                for (int i = 0; i < 3; i++) {
+                    double ang = i * 2.35 + 0.6;
+                    double rr = FIELD_RADIUS * (0.34 + 0.13 * i);
+                    Vec3 anchor = new Vec3(Math.cos(ang) * rr, 1.9 + i * 0.85, Math.sin(ang) * rr);
+                    double phase = i * 1.9;
+                    Vec3 axis = new Vec3(Math.cos(phase) * 0.45, -0.35, Math.sin(phase) * 0.45).normalize();
+                    FragmentEntity fragment = FragmentEntity.hold(serverLevel, caster, this, anchor, axis,
+                        1.15f, 0.30f, (int) (SEED_DOME + i * 104729L),
+                        DOME_ROOT_ARGB, DOME_TIP_ARGB, 1.72f, 10);
+                    if (fragment != null) domeFragments.add(fragment);
+                }
             }
 
             // Theme particles: the shared layered vortex (bright core motes,
@@ -311,6 +362,8 @@ public class ValorFieldEntity extends Projectile {
 
                         serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(),
                             DbaSounds.CAST_MAGIC, SoundSource.PLAYERS, 0.8f, 1.8f);
+
+                        spawnMarker(serverLevel, caster, p);
                     }
                 }
             }
@@ -326,6 +379,7 @@ public class ValorFieldEntity extends Projectile {
                 if (!(entity instanceof Projectile p) || !p.isAlive()) {
                     it.remove();
                     this.suspendedDirty = true;
+                    releaseMarker(pUuid);
                     continue;
                 }
 
@@ -337,6 +391,7 @@ public class ValorFieldEntity extends Projectile {
                     com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
                     it.remove();
                     this.suspendedDirty = true;
+                    releaseMarker(pUuid);
                     continue;
                 }
 
@@ -380,6 +435,7 @@ public class ValorFieldEntity extends Projectile {
                     p.discard();
                     it.remove();
                     this.suspendedDirty = true;
+                    releaseMarker(pUuid);
                     continue;
                 }
 
@@ -389,6 +445,7 @@ public class ValorFieldEntity extends Projectile {
                     p.discard();
                     it.remove();
                     this.suspendedDirty = true;
+                    releaseMarker(pUuid);
                 }
             }
 
@@ -406,9 +463,55 @@ public class ValorFieldEntity extends Projectile {
                 p.setDeltaMovement(entry.getValue().origVelocity);
                 com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
             }
+            releaseMarker(entry.getKey());
         }
         suspendedMap.clear();
         this.suspendedDirty = true;
+    }
+
+    /**
+     * Spawn the marker fragment for a freshly suspended projectile, if a
+     * marker slot is free. The renderer used to mark the first two
+     * suspended projectiles with drawn shard meshes; the entity version
+     * keeps the same cap of two with real fragments that ride the
+     * projectile on the foundation's anchor follow, spinning at the
+     * renderer's marker rate. The slot index keeps each marker's seed in
+     * the SEED_RING_OUTER family as markers recycle.
+     */
+    private void spawnMarker(ServerLevel serverLevel, LivingEntity caster, Projectile p) {
+        if (markerFragments.size() >= MAX_MARKER_FRAGMENTS) return;
+        int slot = -1;
+        for (int s = 0; s < MAX_MARKER_FRAGMENTS; s++) {
+            if (!markerSlots.containsValue(s)) {
+                slot = s;
+                break;
+            }
+        }
+        if (slot < 0) return;
+        double phase = slot * 2.4;
+        Vec3 axis = new Vec3(Math.cos(phase) * 0.4, -0.5, Math.sin(phase) * 0.4).normalize();
+        FragmentEntity fragment = FragmentEntity.hold(serverLevel, caster, p,
+            new Vec3(0, 0.55, 0), axis, 0.75f, 0.20f,
+            (int) (SEED_RING_OUTER + slot * 31337L),
+            MARKER_ROOT_ARGB, MARKER_TIP_ARGB, 2.86f, 10);
+        if (fragment != null) {
+            markerFragments.put(p.getUUID(), fragment);
+            markerSlots.put(p.getUUID(), slot);
+        }
+    }
+
+    /**
+     * Release the marker fragment riding a projectile that is leaving
+     * the suspended map, whatever the reason: resumed on radius exit or
+     * field fade, detonated on contact, discarded by the stasis timer,
+     * or simply gone. The fragment drops from where it hangs and rests
+     * 10, like the dome shards. If a path is ever missed, the
+     * foundation's orphan rule releases it when its holder is gone.
+     */
+    private void releaseMarker(UUID projUuid) {
+        FragmentEntity fragment = markerFragments.remove(projUuid);
+        markerSlots.remove(projUuid);
+        if (fragment != null && fragment.isAlive()) fragment.release();
     }
 
     private static boolean isAlly(LivingEntity caster, LivingEntity other) {

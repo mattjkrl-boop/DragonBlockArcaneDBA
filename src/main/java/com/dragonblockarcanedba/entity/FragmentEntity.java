@@ -42,6 +42,7 @@ public class FragmentEntity extends Projectile {
     private static final EntityDataAccessor<Integer> MODE = SynchedEntityData.defineId(FragmentEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> FADE_START = SynchedEntityData.defineId(FragmentEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> RELEASE_AT = SynchedEntityData.defineId(FragmentEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> GROWTH_WINDOW = SynchedEntityData.defineId(FragmentEntity.class, EntityDataSerializers.INT);
 
     public static final int MODE_BALLISTIC = 0;
     public static final int MODE_BURST = 1;
@@ -86,6 +87,7 @@ public class FragmentEntity extends Projectile {
         builder.define(MODE, MODE_BURST);
         builder.define(FADE_START, -1);
         builder.define(RELEASE_AT, -1);
+        builder.define(GROWTH_WINDOW, 0);
     }
 
     public int getSeed() { return this.entityData.get(SEED); }
@@ -96,6 +98,14 @@ public class FragmentEntity extends Projectile {
     public int getMode() { return this.entityData.get(MODE); }
     public int getFadeStart() { return this.entityData.get(FADE_START); }
     public int getReleaseAt() { return this.entityData.get(RELEASE_AT); }
+
+    /**
+     * The FROZEN growth window preset at spawn (hang's releaseAtAge), or
+     * 0 for no growth. Kept separate from RELEASE_AT because release()
+     * restamps that field; the renderer keys growth to this preset so a
+     * host-called release can never step a fragment's drawn size.
+     */
+    public int getGrowthWindow() { return this.entityData.get(GROWTH_WINDOW); }
 
     /** Non-persistent by design: never written to chunk data, gone on unload. */
     @Override
@@ -135,6 +145,17 @@ public class FragmentEntity extends Projectile {
         this.entityData.set(FADE_START, age);
     }
 
+    /**
+     * Age at which a still-held fragment starts fading: its own spawn
+     * lifetime, backstopped by the hard cap. Held fragments fade and
+     * discard at that lifetime instead of only at HARD_LIFE_TICKS, so
+     * a host that dies without releasing its pieces cannot leave them
+     * hanging past the lifetime its helper declared.
+     */
+    private int heldFadeAge() {
+        return Math.min(this.lifeTicks, HARD_LIFE_TICKS) - FADE_TICKS;
+    }
+
     @Override
     public void tick() {
         super.tick();
@@ -159,12 +180,12 @@ public class FragmentEntity extends Projectile {
                 } else {
                     this.setPos(holder.position().add(this.anchorOffset));
                     if (this.spinDeg != 0f) this.setYRot(this.getYRot() + this.spinDeg);
-                    if (age >= HARD_LIFE_TICKS - FADE_TICKS && getFadeStart() < 0) stampFade(age);
+                    if (getFadeStart() < 0 && age >= heldFadeAge()) stampFade(age);
                     return;
                 }
             } else {
                 if (this.spinDeg != 0f) this.setYRot(this.getYRot() + this.spinDeg);
-                if (age >= HARD_LIFE_TICKS - FADE_TICKS && getFadeStart() < 0) stampFade(age);
+                if (getFadeStart() < 0 && age >= heldFadeAge()) stampFade(age);
                 return;
             }
         }
@@ -219,7 +240,8 @@ public class FragmentEntity extends Projectile {
     private static FragmentEntity spawn(ServerLevel level, Entity owner, Vec3 pos, Vec3 vel, Vec3 facing,
                                         int mode, int seed, int rootArgb, int tipArgb, float length, float girth,
                                         float gravityScale, double drag, int restTicks, int lifeTicks,
-                                        int releaseAt, UUID holderUuid, Vec3 anchorOffset, float spinDeg) {
+                                        int releaseAt, UUID holderUuid, Vec3 anchorOffset, float spinDeg,
+                                        int growthWindow) {
         FragmentEntity frag = new FragmentEntity(DbaEntities.FRAGMENT, level);
         frag.setOwner(owner);
         frag.setPos(pos.x, pos.y, pos.z);
@@ -232,6 +254,7 @@ public class FragmentEntity extends Projectile {
         frag.entityData.set(GIRTH, girth);
         frag.entityData.set(MODE, mode);
         if (releaseAt >= 0) frag.entityData.set(RELEASE_AT, releaseAt);
+        if (growthWindow > 0) frag.entityData.set(GROWTH_WINDOW, growthWindow);
         frag.gravityScale = gravityScale;
         frag.drag = drag;
         frag.restTicks = restTicks;
@@ -304,7 +327,7 @@ public class FragmentEntity extends Projectile {
             double speed = speedMin + rand.nextDouble() * (speedMax - speedMin);
             spawn(level, owner, origin, dir.scale(speed), dir, MODE_BURST,
                 (int) (burstSeed + i * 0x9E37L), rootArgb, tipArgb, length, girth,
-                gravityScale, 0.96, restTicks, lifeTicks, -1, null, Vec3.ZERO, 0f);
+                gravityScale, 0.96, restTicks, lifeTicks, -1, null, Vec3.ZERO, 0f, 0);
             spawned++;
         }
         return spawned;
@@ -341,7 +364,7 @@ public class FragmentEntity extends Projectile {
                     (rand.nextDouble() * 2.0 - 1.0) * 0.03);
                 spawn(level, owner, pos, vel, vel, MODE_BALLISTIC,
                     (int) (baseSeed + i * 0x9E37L), rootArgb, tipArgb, length, girth,
-                    1.0f, 0.99, 30, 220, -1, null, Vec3.ZERO, 0f);
+                    1.0f, 0.99, 30, 220, -1, null, Vec3.ZERO, 0f, 0);
                 spawned++;
             }
         }
@@ -357,11 +380,26 @@ public class FragmentEntity extends Projectile {
     public static FragmentEntity hang(ServerLevel level, Entity owner, Vec3 pos, Vec3 axisDir,
                                       float length, float girth, int seed, int rootArgb, int tipArgb,
                                       int releaseAtAge, int restTicks) {
+        int life = (releaseAtAge > 0 ? releaseAtAge : 600) + 300;
+        return hang(level, owner, pos, axisDir, length, girth, seed, rootArgb, tipArgb,
+            releaseAtAge, restTicks, life);
+    }
+
+    /**
+     * hang with an explicit lifetime. A fragment still held when that
+     * lifetime runs out fades and discards at it (see heldFadeAge), so
+     * the caller's declared bound governs even if its host never
+     * releases. A preset releaseAtAge also becomes the renderer's
+     * growth window.
+     */
+    public static FragmentEntity hang(ServerLevel level, Entity owner, Vec3 pos, Vec3 axisDir,
+                                      float length, float girth, int seed, int rootArgb, int tipArgb,
+                                      int releaseAtAge, int restTicks, int lifeTicks) {
         if (level.isClientSide()) return null;
         if (areaRoom(level, pos, 1) <= 0) return null;
-        int life = (releaseAtAge > 0 ? releaseAtAge : 600) + 300;
         return spawn(level, owner, pos, Vec3.ZERO, axisDir, MODE_FROZEN, seed, rootArgb, tipArgb,
-            length, girth, 1.0f, 0.99, restTicks, life, releaseAtAge, null, Vec3.ZERO, 0f);
+            length, girth, 1.0f, 0.99, restTicks, lifeTicks, releaseAtAge, null, Vec3.ZERO, 0f,
+            releaseAtAge > 0 ? releaseAtAge : 0);
     }
 
     /**
@@ -373,11 +411,25 @@ public class FragmentEntity extends Projectile {
     public static FragmentEntity hold(ServerLevel level, Entity owner, Entity holder, Vec3 anchorOffset,
                                       Vec3 axisDir, float length, float girth, int seed,
                                       int rootArgb, int tipArgb, float spinDegPerTick, int restTicks) {
+        return hold(level, owner, holder, anchorOffset, axisDir, length, girth, seed,
+            rootArgb, tipArgb, spinDegPerTick, restTicks, HARD_LIFE_TICKS);
+    }
+
+    /**
+     * hold with an explicit lifetime, for holders whose honest hold is
+     * bounded (the Void Rift channel cap): a fragment still held at
+     * that lifetime fades and discards there instead of riding the
+     * hard backstop.
+     */
+    public static FragmentEntity hold(ServerLevel level, Entity owner, Entity holder, Vec3 anchorOffset,
+                                      Vec3 axisDir, float length, float girth, int seed,
+                                      int rootArgb, int tipArgb, float spinDegPerTick, int restTicks,
+                                      int lifeTicks) {
         if (level.isClientSide() || holder == null) return null;
         Vec3 pos = holder.position().add(anchorOffset);
         if (areaRoom(level, pos, 1) <= 0) return null;
         return spawn(level, owner, pos, Vec3.ZERO, axisDir, MODE_FIELD_HELD, seed, rootArgb, tipArgb,
-            length, girth, 1.0f, 0.99, restTicks, HARD_LIFE_TICKS, -1,
-            holder.getUUID(), anchorOffset, spinDegPerTick);
+            length, girth, 1.0f, 0.99, restTicks, lifeTicks, -1,
+            holder.getUUID(), anchorOffset, spinDegPerTick, 0);
     }
 }

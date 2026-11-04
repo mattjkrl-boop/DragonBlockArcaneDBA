@@ -164,6 +164,18 @@ public class TemporalRiftEntity extends Projectile {
                 this.debrisSpawned = true;
                 DebrisSpawner.spawnField(serverLevel, ownerLiving, center,
                     DEBRIS_COUNT, radius * 0.8, 2.5, 80);
+
+                // Entity objects pass: the temporal glass shards at the
+                // tear heart are real FragmentEntity pieces now, burst on
+                // this same beat with the renderer's old values (5 shards,
+                // 150 degree upward cone, seed family riftSeed ^ 0x7E42,
+                // unit max(0.5, radius * 0.09), glass palette). They drift
+                // outward under slowed gravity (0.3, the suspension field)
+                // and live about as long as the rift itself. No damage.
+                FragmentEntity.burst(serverLevel, owner,
+                    center.add(0.0, radius * 0.441, 0.0), new Vec3(0.0, 1.0, 0.0), 150f,
+                    Math.max(0.5f, radius * 0.09f), 5, this.getSeed() ^ 0x7E42L,
+                    0x2F6DB3, 0xDDF7FF, 0.10f, 0.30f, 0.3f, 110, 10);
             }
 
             // Point 5: the second half of the burst lands at the envelope

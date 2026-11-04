@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.entity.FragmentEntity;
 import com.dragonblockarcanedba.entity.TemporalRiftEntity;
 import com.dragonblockarcanedba.entity.TimeShatterEntity;
 import com.dragonblockarcanedba.util.DbaDamage;
@@ -26,6 +27,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Random;
 
 /**
  * Whis Staff, the Temporal God Rod. Endgame legendary weapon.
@@ -60,6 +62,16 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
     private static final int RIFT_LIFETIME_TICKS = 100;
     private static final int RIFT_COOLDOWN_TICKS = 140;
     private static final int RIFT_STASIS_TICKS = 60;
+
+    // TimeShatter fan salts, re-homed from TimeShatterRenderer when the
+    // frozen fan became real FragmentEntity pieces (ENTITY-STANDARD,
+    // audits/entity-audit.md section 6): the angle salt seeds the
+    // java.util.Random that rolls the five spoke angles, the seed salt
+    // derives each spoke's fragment mesh seed from the host seed.
+    private static final long SHATTER_FAN_ANGLE_SALT = 0xFA17L;
+    private static final long SHATTER_FAN_SEED_SALT = 0x5A1DL;
+    private static final int SHATTER_FAN_SPOKES = 5;
+    private static final int SHATTER_FRAGMENT_REST_TICKS = 10;
 
     public WhisStaffItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -160,6 +172,7 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
                 1.2f
             );
             serverLevel.addFreshEntity(shatter);
+            spawnShatterFan(serverLevel, serverPlayer, shatter);
 
             // Crisp glass & temporal distortion sound
             serverLevel.playSound(
@@ -197,7 +210,9 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
         float[] shatterScales = {0.8f, 1.05f, 1.4f};
         for (int step = 0; step < shatterDistances.length; step++) {
             Vec3 pos = eye.add(look.scale(shatterDistances[step]));
-            level.addFreshEntity(new TimeShatterEntity(level, player, pos, shatterScales[step]));
+            TimeShatterEntity shatter = new TimeShatterEntity(level, player, pos, shatterScales[step]);
+            level.addFreshEntity(shatter);
+            spawnShatterFan(level, player, shatter);
         }
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.CRYSTAL_CHIME, SoundSource.PLAYERS, 1.0f, 1.7f);
@@ -221,6 +236,53 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
         }
         if (struck != null) {
             applyStaffHit(player, level, struck, true);
+        }
+    }
+
+    /**
+     * The TimeShatter frozen fan as real pieces (ENTITY-STANDARD,
+     * audits/entity-audit.md section 6). The five solid glass shards the
+     * renderer used to draw on its per-client camera plane now hang in
+     * the world as FROZEN FragmentEntity instances on the plane
+     * perpendicular to the caster's look direction at the cast moment,
+     * which the item owns server side. Everything the drawn fan read
+     * from is replicated exactly: the spoke angles roll from
+     * java.util.Random over the host seed with the same salt and are
+     * consumed in the same order, each spoke's mesh seed is the host
+     * seed with the same per-spoke salt (the old burst call's per-index
+     * seed salt adds zero at index zero, so nothing else shifts), the size
+     * unit is the host scale times 0.90, sizes roll over the shardBurst
+     * classes, and the gradient is the same near-white root to ghost
+     * cyan tip. RELEASE_AT is the host's own lifetime, so at the tick
+     * the shatter ends every fragment drops under gravity in the same
+     * tick, lands, rests, and fades instead of vanishing with the host.
+     * The fragments deal no damage; the host's damage, costs, timing,
+     * and synced seed are untouched.
+     */
+    private static void spawnShatterFan(ServerLevel level, Player caster, TimeShatterEntity host) {
+        long hostSeed = host.getSeed();
+        float fanUnit = host.getShatterScale() * 0.90f;
+        Vec3 center = host.position();
+
+        Vec3 forward = caster.getLookAngle().normalize();
+        Vec3 right = forward.cross(new Vec3(0, 1, 0));
+        right = right.lengthSqr() < 1.0e-6 ? new Vec3(1, 0, 0) : right.normalize();
+        Vec3 planeUp = right.cross(forward).normalize();
+
+        Random fanRandom = new Random(hostSeed ^ SHATTER_FAN_ANGLE_SALT);
+        for (int i = 0; i < SHATTER_FAN_SPOKES; i++) {
+            double angle = (i / (double) SHATTER_FAN_SPOKES) * Math.PI * 2.0
+                + (fanRandom.nextFloat() - 0.5f) * 0.55f;
+            Vec3 axis = right.scale(Math.cos(angle)).add(planeUp.scale(Math.sin(angle))).normalize();
+            int fragSeed = (int) (hostSeed ^ (SHATTER_FAN_SEED_SALT + i * 131L));
+            Random sizeRandom = new Random(fragSeed);
+            float roll = sizeRandom.nextFloat();
+            float length = fanUnit * (roll < 0.55f ? 0.30f + 0.25f * sizeRandom.nextFloat()
+                : roll < 0.85f ? 0.55f + 0.50f * sizeRandom.nextFloat()
+                : 1.05f + 0.55f * sizeRandom.nextFloat());
+            float girth = length * (0.30f + 0.14f * sizeRandom.nextFloat());
+            FragmentEntity.hang(level, caster, center, axis, length, girth,
+                fragSeed, 0xFFFFFF, 0x65D8FF, host.getMaxLifetime(), SHATTER_FRAGMENT_REST_TICKS);
         }
     }
 
@@ -258,7 +320,9 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             // the whole hit converts together; the total is unchanged.
             target.hurtServer(level, DbaDamage.temporal(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
         }
-        level.addFreshEntity(new TimeShatterEntity(level, player, target.position().add(0, target.getBbHeight() * 0.5, 0), 1.2f));
+        TimeShatterEntity shatter = new TimeShatterEntity(level, player, target.position().add(0, target.getBbHeight() * 0.5, 0), 1.2f);
+        level.addFreshEntity(shatter);
+        spawnShatterFan(level, player, shatter);
         level.playSound(null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.CRYSTAL_CHIME, SoundSource.PLAYERS, 1.2f, 1.6f);
         level.playSound(null, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),

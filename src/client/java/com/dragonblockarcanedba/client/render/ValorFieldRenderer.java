@@ -27,10 +27,11 @@ import java.util.Map;
  * Entity Renderer for Grand Sword's Valor Field in Minecraft 26.2.
  * Complex effects redo: layered composition at class L (two builder
  * types, full budget, shader treatment on the energy pieces). Vertical
- * tendrils lash at the field rim (submitEnergy on the tendril canvas),
- * and slow steel shard meshes hang suspended in the volume, with one
- * more shard mesh marking each actually suspended projectile, matching
- * the field's projectile stasis identity. WISP_CURL sprites drift in
+ * tendrils lash at the field rim (submitEnergy on the tendril canvas).
+ * The slow steel shards that hang suspended in the volume and mark each
+ * actually suspended projectile are real FragmentEntity pieces now,
+ * spawned and held server side by the field and drawn by the fragment
+ * renderer; they are not drawn here. WISP_CURL sprites drift in
  * the volume and SPARK_STREAK bursts fire when a projectile newly
  * suspends. The existing material emission stays as filler: valor
  * plasma motes, boundary vapor, ground dust, and steel spark accents,
@@ -42,8 +43,9 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
 
     // Fixed theme seeds: a Valor Field always has the same radius, so these
     // keep each material stream's variation stable and client-identical.
-    private static final long SEED_DOME = 0xD09E5L;
-    private static final long SEED_RING_OUTER = 0xB111L;
+    // The dome and ring outer seeds moved server side with the fragment
+    // spawns (ValorFieldEntity.SEED_DOME and SEED_RING_OUTER); the plasma
+    // stream below still reads the dome seed from there.
     private static final long SEED_RING_INNER = 0xB222L;
     private static final long SEED_RAYS = 0xBA75L;
     private static final long SEED_LIP = 0x1115L;
@@ -138,7 +140,7 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
             String base = state.entityId + ":";
 
             emit(level, base + "plasma",
-                MaterialEmitters.Preset.plasma(0xFFD833, 1.50f, (int) SEED_DOME,
+                MaterialEmitters.Preset.plasma(0xFFD833, 1.50f, (int) ValorFieldEntity.SEED_DOME,
                     new Vec3(0.0, 0.030, 0.0), 0.016f),
                 MaterialEmitters.sphereVolume(center.add(0.0, domeHeight * 0.45, 0.0), radius * 0.88),
                 320f, 400, age, envelope);
@@ -186,12 +188,11 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
             }
             if (lastSuspendedCounts.size() > 256) lastSuspendedCounts.clear();
 
-            // Pieces layer (class L, two builder types). One submit holds
-            // six vertical rim tendrils that sway as the field ages; one
-            // solid submit holds three slow steel shard meshes suspended
-            // in the volume, plus one small shard at each suspended
-            // projectile (capped so the class L vertex budget holds:
-            // 6 tendrils at 384 plus 5 shards at 288 is 3744 of 6000).
+            // Pieces layer (class L). One submit holds six vertical rim
+            // tendrils that sway as the field ages. The suspended shard
+            // meshes that used to share this layer are real FragmentEntity
+            // pieces now (spawned server side by the field, drawn by the
+            // fragment renderer), so they no longer appear here.
             final float fieldLife = rise * fadeOut;
             final float rimRadius = radius * 0.92f;
             final float rimHeight = domeHeight * 0.88f;
@@ -213,27 +214,6 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
                         0xFFD833, 0xFFF3B0, 0.92f, fieldLife, distScale);
                 }
                 return;
-            });
-            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
-                for (int i = 0; i < 3; i++) {
-                    double ang = i * 2.35 + 0.6;
-                    double rr = radius * (0.34 + 0.13 * i);
-                    double bob = Math.sin(age * 0.07 + i * 2.1) * 0.30;
-                    Vec3 at = new Vec3(Math.cos(ang) * rr, 1.9 + i * 0.85 + bob, Math.sin(ang) * rr);
-                    double spin = age * 0.03 + i * 1.9;
-                    Vec3 dir = new Vec3(Math.cos(spin) * 0.45, -0.35, Math.sin(spin) * 0.45).normalize();
-                    ComplexGeometry.shard(pose, buffer, SEED_DOME + i * 104729L,
-                        at, dir, 1.15f, 0.30f, 0x767F8C, 0xFFD833, 0.95f, fieldLife);
-                }
-                int marked = Math.min(2, state.suspendedRelPositions.size());
-                for (int i = 0; i < marked; i++) {
-                    Vec3 rel = state.suspendedRelPositions.get(i);
-                    double spin = age * 0.05 + i * 2.4;
-                    Vec3 dir = new Vec3(Math.cos(spin) * 0.4, -0.5, Math.sin(spin) * 0.4).normalize();
-                    ComplexGeometry.shard(pose, buffer, SEED_RING_OUTER + i * 31337L,
-                        rel.add(0.0, 0.55, 0.0), dir, 0.75f, 0.20f,
-                        0x8A93A6, 0xFFF3B0, 0.95f, fieldLife);
-                }
             });
         }
 

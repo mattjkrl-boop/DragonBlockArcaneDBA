@@ -29,9 +29,10 @@ import java.util.Random;
  * white at the heart, and a tighter violet web inside it, both through the
  * shader, on a pose billboarded to the camera and rotated so the crackFan
  * ground plane becomes the billboard plane. Falling from the cracks are
- * dark solid shards: three small shardBursts whose origins sit on the
- * billboard plane at seeded offsets, aimed down in world space, cycling
- * downward with age so the shards actually fall and respawn higher. The
+ * dark solid shards, real FragmentEntity pieces the host rains server
+ * side on its bolt beat in 3 clusters of 2, 2, 1 (ENTITY-STANDARD rain
+ * mode); their positions are world truth, so this renderer draws none
+ * of them. The
  * complex particle layer is wisp curls drifting off the fractures. The
  * material emission stays as filler: seven main jagged paths and a web of
  * shorter ones, regenerated from the entity's synced seed in the camera
@@ -103,37 +104,12 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
         List<List<Vec3>> paths = crackPaths(center, basisX, basisY, seed);
         MaterialEmitters.Source pathSource = pathsSource(paths);
 
-        // Pieces layer, part one: dark shards falling from the cracks. The
-        // burst origins sit on the billboard plane at seeded offsets,
-        // converted into entity local space through the camera basis, but
-        // the bursts themselves aim down in world space and cycle downward
-        // with age, so the fall is real motion and not a static cluster.
-        {
-            final long shardSeed = seed;
-            final float shardEnv = alpha;
-            final float shardDs = ds;
-            final float shardAge = state.age;
-            final Vector3f shardBasisX = basisX;
-            final Vector3f shardBasisY = basisY;
-            final double[][] planeSpots = {{6.0, 4.0}, {-8.0, -2.0}, {1.0, -9.0}};
-            final int[] burstCounts = {2, 2, 1};
-            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
-                for (int c = 0; c < planeSpots.length; c++) {
-                    double px = planeSpots[c][0];
-                    double py = planeSpots[c][1];
-                    double drop = (shardAge * 0.35 + c * 2.37) % 7.0;
-                    Vec3 origin = new Vec3(
-                        shardBasisX.x * px + shardBasisY.x * py,
-                        shardBasisX.y * px + shardBasisY.y * py - drop,
-                        shardBasisX.z * px + shardBasisY.z * py);
-                    ComplexGeometry.shardBurst(pose, buffer, shardSeed ^ (0x5A9DL + c * 131L), origin,
-                        new Vec3(0, -1, 0), 38f, 1.05f, burstCounts[c],
-                        0x14030A, 0x5A1230, 0.95f, shardEnv, shardDs);
-                }
-            });
-        }
+        // The falling shards are no longer drawn here: the host rains
+        // them server side as real FragmentEntity pieces (rain mode, see
+        // SkyCracksEntity.tick), so their positions are world truth
+        // instead of spots on this per-client billboard plane.
 
-        // Pieces layer, part two: the crack plane itself. The pose is
+        // Pieces layer: the crack plane itself. The pose is
         // billboarded to the camera, and a copy rotated minus ninety
         // degrees about X turns the crackFan ground plane into the
         // billboard plane, exactly as the old crack stars were oriented.

@@ -27,17 +27,20 @@ import java.util.Random;
  *
  * Complex pass: a layered composition on the shatter plane, which is the
  * camera plane the existing crack spokes and dial ghost already use. The
- * pieces layer is a frozen fan of five solid temporal glass shards
- * (ComplexGeometry shardBurst calls, one shard per spoke, through
- * submitSolid) plus a shader crackFan of temporal energy on the same
- * plane through submitEnergy. Both builders run on one shared radial
+ * pieces layer in this renderer is a shader crackFan of temporal energy
+ * on that plane through submitEnergy, running on the shared radial
  * gradient, near-white at the heart to the ghost cyan 0x65D8FF at the
  * tips, so the pieces present the old dial color split as a single
- * continuous gradient instead of two offset copies. The fan is frozen:
- * its angles, origins, and directions derive only from the synced seed,
- * never from age, so there is no rotation, sway, or drift; only the
- * envelope alpha and the travel-scaled size change, on the same travel
- * curve the filler uses, and that curve saturates. The complex particle
+ * continuous gradient instead of two offset copies. The five solid
+ * temporal glass shards that used to complete the pieces layer as a
+ * drawn frozen fan are real FragmentEntity instances since the Entity
+ * Objects Pass (ENTITY-STANDARD, audits/entity-audit.md section 6):
+ * WhisStaffItem hangs them server side on the caster's look plane with
+ * the same seeds, angles, gradient, and travel curve growth, and they
+ * drop and fade when the shatter ends instead of vanishing with this
+ * host. Only the envelope alpha and the travel-scaled size of the
+ * crackFan change here, on the same travel curve the filler uses, and
+ * that curve saturates. The complex particle
  * layer is SHARD_CHIP glass chips sampled along the old crack spoke
  * lines. The material emission stays as filler, unchanged: glass dust
  * hangs in the burst volume and drifts back against the outward flow
@@ -112,15 +115,14 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
 
     /**
      * Pieces layer, class M, on the billboarded shatter plane. Vertex
-     * accounting at full detail: the frozen fan is 5 shards at 288
-     * vertices each (1440), and the crackFan is at most 11 cracks whose
+     * accounting at full detail: the crackFan is at most 11 cracks whose
      * main walks emit 528 vertices plus at most 264 of fork vertices
-     * (792), for a worst case of 2232, inside the class M budget of
-     * 2500. The shardBurst count is 5 meshes in total, inside the 16
-     * mesh cap. Peak alphas are honest: 0.95 literal on the solid
-     * shards and 0.92 on the shader cracks, whose faintness gradient
-     * runs through color (white heart to cyan tips), never through a
-     * low constant alpha.
+     * (792), inside the class M budget of 2500 with room to spare since
+     * the Entity Objects Pass moved the five solid shards (1440
+     * vertices here before) onto FragmentEntity and its own renderer.
+     * Peak alpha is honest: 0.92 on the shader cracks, whose faintness
+     * gradient runs through color (white heart to cyan tips), never
+     * through a low constant alpha.
      */
     private void submitPieces(ShatterRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         if (state.maxLifetime <= 0) return;
@@ -135,32 +137,13 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
         final long pieceSeed = state.seed;
         final float pieceFade = fade;
         final float pieceDist = distScale;
-        final float fanUnit = scale * 0.90f;
         final float crackRadius = scale * 1.80f;
-
-        // Frozen fan spokes: five seeded angles, fixed for the whole
-        // life of the entity. Nothing in the posing reads age, so the
-        // shards hang suspended exactly where the seed put them.
-        final int spokes = 5;
-        final double[] fanAngles = new double[spokes];
-        Random fanRandom = new Random(pieceSeed ^ 0xFA17L);
-        for (int i = 0; i < spokes; i++) {
-            fanAngles[i] = (i / (double) spokes) * Math.PI * 2.0 + (fanRandom.nextFloat() - 0.5f) * 0.55f;
-        }
 
         poseStack.pushPose();
         if (cameraState.orientation != null) {
             poseStack.mulPose(new org.joml.Matrix4f().rotation(
                     new Quaternionf(cameraState.orientation).conjugate()));
         }
-        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
-            for (int i = 0; i < fanAngles.length; i++) {
-                Vec3 dir = new Vec3(Math.cos(fanAngles[i]), Math.sin(fanAngles[i]), 0.0);
-                ComplexGeometry.shardBurst(pose, buffer, pieceSeed ^ (0x5A1DL + i * 131L),
-                        Vec3.ZERO, dir, 14f, fanUnit, 1,
-                        0xFFFFFF, 0x65D8FF, 0.95f, pieceFade, pieceDist);
-            }
-        });
         ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
             PoseStack.Pose flat = pose.copy();
             flat.rotate(Axis.XP.rotation((float) (-Math.PI / 2.0)));

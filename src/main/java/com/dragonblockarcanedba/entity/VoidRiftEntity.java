@@ -28,7 +28,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
  * Void Rift Entity, a dimensional gravitational vortex created by Hollow's Edge.
@@ -56,11 +58,20 @@ public class VoidRiftEntity extends Projectile {
     private static final int THEME_ARGB = 0x800DE0;
     /** Channel tick damage per 10 tick pulse, as a fraction of burst damage at the core. */
     private static final float TICK_DAMAGE_FRACTION = 0.08f;
+    /** Rim shard gradient, root to tip: the exact colors the renderer drew them with. */
+    private static final int SHARD_ROOT_ARGB = 0x2E004D;
+    private static final int SHARD_TIP_ARGB = 0x9905F2;
+    /** Rim shards around the tear mouth, real fragments since the entity objects pass. */
+    private static final int RIM_SHARDS = 5;
+    /** Rim shard lifetime bound: channel cap + implosion + fallout (entity-audit section 4). */
+    private static final int RIM_SHARD_LIFE_TICKS = MAX_CHANNEL_TICKS + IMPLOSION_TICKS + 120;
 
     private float damage = 500.0f;
     private int implosionTimer = -1;
     private boolean debrisWaveSpawned = false;
     private boolean spawnBurstDone = false;
+    /** The rim shard fragments spawned on the first tick, released at implosion. Server only. */
+    private final List<FragmentEntity> rimShards = new ArrayList<>();
 
     public VoidRiftEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -106,6 +117,14 @@ public class VoidRiftEntity extends Projectile {
         this.entityData.set(IMPLODE_START_TICK, this.tickCount);
         this.implosionTimer = IMPLOSION_TICKS;
         this.debrisWaveSpawned = false;
+        // The implosion is the rim shards' release event (entity-audit
+        // section 4): they have hung at the mouth for the whole channel
+        // and now drop for real. release() is idempotent, and the auto
+        // implode at MAX_CHANNEL_TICKS lands here too, so every path
+        // drops them exactly once.
+        for (FragmentEntity shard : this.rimShards) {
+            if (shard != null) shard.release();
+        }
     }
 
     public int getImplodeStartTick() {
@@ -175,6 +194,60 @@ public class VoidRiftEntity extends Projectile {
         DebrisSpawner.spawnField(level, owner, groundCenter, count,
             Math.max(2.0, radius * 0.85), rise, orbitTicks,
             DebrisSpawner.sampleGroundPalette(level, groundCenter, radius));
+    }
+
+    /**
+     * The shard ring at the tear mouth, as real fragments (entity-audit
+     * section 4): five FIELD_HELD FragmentEntity shards anchored to the
+     * rift on a horizontal ring at radius * 1.16, heights staggered by
+     * the anchor sine across radius * 0.5, each axis radial in the ring
+     * plane and tilted by that same sine. The conversion first shipped
+     * them FROZEN at the opening position, but the channeling item
+     * drags the rift toward the crosshair while it channels, which
+     * left a fixed ring behind; the merge switched them to FIELD_HELD
+     * on the same anchor offsets, so the ring follows the rift for
+     * real. The anchor offsets are taken at spawn, so the ring keeps
+     * the opening radius while the rift itself grows (the accepted
+     * remainder). They hang for the whole channel and drop when
+     * triggerImplosion releases them, bounded at
+     * RIM_SHARD_LIFE_TICKS even if this rift is discarded without
+     * imploding. Seeds and colors are the renderer's own (rift seed
+     * from the entity UUID, per-shard salt 0xE11 + index * 131, root
+     * 0x2E004D to tip 0x9905F2), and sizes roll over the shardBurst
+     * class ranges at unit radius * 0.38, so the pieces match what the
+     * renderer used to draw, now as world objects every client sees in
+     * the same place.
+     */
+    private void spawnRimShards(ServerLevel level) {
+        long riftSeed = this.getUUID().getMostSignificantBits();
+        float radius = getRadius();
+        float unit = radius * 0.38f;
+        Entity owner = this.getOwner();
+        for (int i = 0; i < RIM_SHARDS; i++) {
+            double ang = i * Math.PI * 2.0 / RIM_SHARDS + 0.35;
+            double cos = Math.cos(ang);
+            double sin = Math.sin(ang);
+            Vec3 anchor = new Vec3(cos * radius * 1.16, sin * radius * 0.5, sin * radius * 1.16);
+            Vec3 axis = new Vec3(cos, sin, sin).normalize();
+            long shardSeed = riftSeed ^ (0xE11L + i * 131L);
+            Random rand = new Random(shardSeed);
+            float length = shardLength(rand, unit);
+            float girth = length * (0.30f + 0.14f * rand.nextFloat());
+            FragmentEntity shard = FragmentEntity.hold(level, owner, this, anchor, axis,
+                length, girth, (int) shardSeed, SHARD_ROOT_ARGB, SHARD_TIP_ARGB,
+                0f, 8, RIM_SHARD_LIFE_TICKS);
+            if (shard != null) {
+                this.rimShards.add(shard);
+            }
+        }
+    }
+
+    /** Shard length over the shardBurst size classes, the FragmentEntity server roll. */
+    private static float shardLength(Random rand, float unit) {
+        float roll = rand.nextFloat();
+        if (roll < 0.55f) return unit * (0.30f + 0.25f * rand.nextFloat());
+        if (roll < 0.85f) return unit * (0.55f + 0.50f * rand.nextFloat());
+        return unit * (1.05f + 0.55f * rand.nextFloat());
     }
 
     @Override
@@ -252,6 +325,7 @@ public class VoidRiftEntity extends Projectile {
                 LayeredParticles.emitGroundBurst(serverLevel,
                     new Vec3(center.x, ground.getY() + 1.0, center.z), radius * 0.6f, THEME_ARGB);
             }
+            spawnRimShards(serverLevel);
         }
 
         // Continuous pull on the shared vortex language: inward drag, tangential
