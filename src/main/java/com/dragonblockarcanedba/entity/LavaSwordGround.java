@@ -25,15 +25,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Surface burn left by the lava sword. Fire goes on air that already sits on a
- * solid face. About one of those cells is a real lava source instead. Both are
+ * solid face. Each swing also has a budget of real lava sources, and those are
+ * placed first, on the first surface cells the swing reaches, so using the
+ * sword always leaves some lava on the ground. The rest is fire. Both are
  * put back after a few seconds. The placement skips the fluid's on-place so the
  * source does not flow, and the server tick puts the old block back.
  */
 public final class LavaSwordGround {
     /** Four seconds. Long enough to see, short enough that it does not become the world. */
     private static final int LIFE_TICKS = 80;
-    /** One surface cell in this many is lava. The rest that can hold fire get fire. */
-    private static final int LAVA_ONE_IN = 5;
     /**
      * Clients see the block. Neighbors are not told, and the block's on-place
      * does not run, so lava does not schedule a flow or cook adjacent water
@@ -110,8 +110,45 @@ public final class LavaSwordGround {
         return scorchDisk(level, midX, midY, midZ, radius, lavaBudget);
     }
 
+    /**
+     * Scorch the exact block a cleave landed on. The pile goes in the cell
+     * above that block, on top of it, never under it. Returns 1 when a lava
+     * source was spent, 0 otherwise.
+     */
+    public static int scorchLanding(ServerLevel level, BlockPos hitBlock, int lavaBudget) {
+        ensureHooks();
+        boolean lava = scorchColumn(level, hitBlock.getX(), hitBlock.getZ(), hitBlock.getY() + 1, lavaBudget > 0);
+        return lava ? 1 : 0;
+    }
+
     private static boolean scorchColumn(ServerLevel level, int x, int z, int yHint, boolean allowLava) {
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        // The hint can sit inside a block: a cleave's landing tick ends inside
+        // the block it hit, and an eruption ring climbs rising ground. The old
+        // code gave up on the first solid cell, so the landing block got no
+        // pile at all and the burn showed up on lower ground beside it, under
+        // the block it landed on. Climb to the first air cell above instead.
+        cursor.set(x, yHint, z);
+        if (!level.isLoaded(cursor) || !level.isInWorldBounds(cursor)) {
+            return false;
+        }
+        if (!level.getBlockState(cursor).isAir()) {
+            boolean foundAir = false;
+            for (int up = 1; up <= 4; up++) {
+                cursor.set(x, yHint + up, z);
+                if (!level.isLoaded(cursor) || !level.isInWorldBounds(cursor)) {
+                    return false;
+                }
+                if (level.getBlockState(cursor).isAir()) {
+                    yHint += up;
+                    foundAir = true;
+                    break;
+                }
+            }
+            if (!foundAir) {
+                return false;
+            }
+        }
         for (int dy = 0; dy >= -6; dy--) {
             cursor.set(x, yHint + dy, z);
             if (!level.isLoaded(cursor) || !level.isInWorldBounds(cursor)) {
@@ -143,7 +180,7 @@ public final class LavaSwordGround {
         if (occupiedByPlayer(level, surface)) {
             return false;
         }
-        boolean lava = allowLava && level.getRandom().nextInt(LAVA_ONE_IN) == 0 && !nearWater(level, surface);
+        boolean lava = allowLava && !nearWater(level, surface);
         if (lava) {
             if (!level.setBlock(surface, LAVA_SOURCE, PLACE_FLAGS)) {
                 return false;

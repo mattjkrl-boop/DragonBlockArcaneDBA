@@ -84,6 +84,10 @@ public class LavaCleaveEntity extends Projectile {
             }
             this.lavaLeft -= LavaSwordGround.scorchSegment(server, start, end, 1.35, this.lavaLeft);
             if (blocked) {
+                // The pile belongs on top of the block the cleave landed on.
+                // The path scorch only covers the flight segment, whose last
+                // midpoint sits inside the hit block, so land it explicitly.
+                this.lavaLeft -= LavaSwordGround.scorchLanding(server, block.getBlockPos(), this.lavaLeft);
                 this.discard();
                 return;
             }
