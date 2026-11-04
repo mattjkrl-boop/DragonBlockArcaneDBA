@@ -16,8 +16,8 @@ import net.minecraft.world.phys.Vec3;
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DebrisSpawner;
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 
 import java.util.List;
 
@@ -26,8 +26,8 @@ import java.util.List;
  * expanding shockwave seals, and surging execution pillars triggered during Hell Hunt chain executions.
  *
  * Spectacle pass: the drawn fissures are now backed by real world interaction.
- * On its first tick the impact scars the actual ground (temporary obsidian,
- * restored by GroundScar), throws a themed debris field (DebrisSpawner), and
+ * On its first tick the impact marks the actual ground (permanent obsidian,
+ * plus a real crater on the final form), throws a themed debris field (DebrisSpawner), and
  * fires a layered ground burst. Through its life it emits the shared three
  * layer vortex particles under the FxEnvelope and rains embers while it dies,
  * so the effect settles instead of discarding at visible alpha.
@@ -120,7 +120,7 @@ public class HellHuntImpactEntity extends Projectile {
     /**
      * First tick world interaction (standard points 2 and 3): a layered dust
      * burst at the base, a debris field of hell rock torn out of the impact,
-     * and a real temporary scar where the renderer draws its fissures.
+     * and a real permanent mark where the renderer draws its fissures.
      */
     private void onImpact(ServerLevel level) {
         Vec3 center = new Vec3(this.getX(), this.getY() + 0.1, this.getZ());
@@ -143,16 +143,15 @@ public class HellHuntImpactEntity extends Projectile {
     }
 
     /**
-     * Scar the surface under the impact with obsidian, following each column
-     * to its real surface the way LavaSwordGround does, so slopes scar
-     * correctly and nothing floats. GroundScar restores the originals on
-     * schedule (100 ticks normal, 160 on the final step) and refuses
-     * protected blocks.
+     * Mark the surface under the impact with permanent obsidian, following
+     * each column to its real surface the way LavaSwordGround does, so
+     * slopes mark correctly and nothing floats. On the final form the
+     * impact also punches a shallow crater into the ground at its heart.
+     * PermanentDestruction refuses protected blocks.
      */
     private void scarGround(ServerLevel level) {
         int r = isFinal() ? 2 : 1;
         float chance = isFinal() ? 0.65f : 0.8f;
-        int restoreTicks = isFinal() ? 160 : 100;
         BlockState scar = Blocks.OBSIDIAN.defaultBlockState();
         BlockPos base = BlockPos.containing(this.getX(), this.getY(), this.getZ());
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
@@ -168,12 +167,17 @@ public class HellHuntImpactEntity extends Projectile {
                     if (state.isAir() || !state.getFluidState().isEmpty()) continue;
                     if (!state.getCollisionShape(level, m).isEmpty()
                         && level.getBlockState(m.above()).getCollisionShape(level, m.above()).isEmpty()) {
-                        // Immutable copy: GroundScar stores the position, and
-                        // this mutable cursor keeps moving across the disk.
-                        GroundScar.scar(level, m.immutable(), scar, restoreTicks);
+                        PermanentDestruction.convert(level, m.immutable(), scar);
                         break;
                     }
                 }
+            }
+        }
+        if (isFinal()) {
+            BlockPos air = PermanentDestruction.findSurface(level, base.getX(), base.getZ(), base.getY());
+            if (air != null) {
+                PermanentDestruction.crater(level, air.below(), 2.0, 0.5, false,
+                    PermanentDestruction.TIER_WEAK, 60, level.getRandom());
             }
         }
     }

@@ -27,13 +27,16 @@ import java.util.UUID;
  * is saved with the chunk (owner, absolute expiry, next eruption, blob
  * damage), so a crash or a chunk unload pauses the volcano exactly where
  * it was and it resumes on load; LavaField's site entry mirrors the cell
- * so the world change itself is restored even if this entity is lost.
+ * so the site's record closes on schedule even if this entity is lost.
  *
  * Eruptions lob LavaBlobEntity arcs onto a ring around the cone (the
  * blobs place the cooling crust pools that zone the area) and push a
  * small heat pulse onto anything standing against the cone, credited to
- * the planter when they are in the level. At expiry the volcano asks
- * LavaField to end the site, which removes the block and its entry.
+ * the planter when they are in the level. At expiry the volcano goes
+ * dormant instead of ending: eruptions and breathing stop, and the block
+ * stands on as a permanent dormant volcano. LavaField's site entry
+ * closes its record a little later; LavaField.endVolcano remains the
+ * manual removal path.
  */
 public class VolcanoBlockEntity extends BlockEntity {
     /** Eruption cadence: every 36 to 54 ticks, randomized per eruption. */
@@ -111,7 +114,8 @@ public class VolcanoBlockEntity extends BlockEntity {
         }
         long now = level.getGameTime();
         if (now >= entity.expireAt) {
-            LavaField.endVolcano(server, pos);
+            // Dormant: the volcano is done erupting but the block stands
+            // on permanently. Nothing ticks, nothing breathes.
             return;
         }
         RandomSource rand = level.getRandom();

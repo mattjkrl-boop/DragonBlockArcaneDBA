@@ -171,7 +171,7 @@ public class AzureSonicQuakeEntity extends Projectile {
         com.dragonblockarcanedba.util.DebrisSpawner.spawnField(level, livingOwner, pos,
             count, radius * 0.8, 3.5, 26);
 
-        // Shatter read: grass in the inner disk is torn to dirt for a while.
+        // Shatter read: grass in the inner disk is torn to dirt, permanently.
         int r = Math.max(1, (int) Math.ceil(radius * 0.6));
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
         int cx = (int) Math.floor(pos.x), cz = (int) Math.floor(pos.z);
@@ -183,9 +183,40 @@ public class AzureSonicQuakeEntity extends Projectile {
                 m.set(cx + dx, y, cz + dz);
                 BlockState state = level.getBlockState(m);
                 if (state.is(Blocks.GRASS_BLOCK)) {
-                    com.dragonblockarcanedba.util.GroundScar.scar(level, m, Blocks.DIRT.defaultBlockState(), 200);
+                    com.dragonblockarcanedba.util.PermanentDestruction.convert(level, m.immutable(), Blocks.DIRT.defaultBlockState());
                 }
             }
         }
+
+        // Ring fissures: two cracked rings at radius 3 and 5, cut as
+        // tangential fissure segments so the quake's rings are real cuts,
+        // one block deep at WEAK tier, sharing one budget.
+        int budget = 80;
+        budget -= ringFissure(level, cx, cz, (int) Math.floor(pos.y), 3, budget);
+        ringFissure(level, cx, cz, (int) Math.floor(pos.y), 5, budget);
+    }
+
+    /**
+     * Cut one ring fissure: eight tangential segments around the circle,
+     * each starting at the surface of its own column. Returns how many
+     * blocks were destroyed, bounded by the remaining budget.
+     */
+    private int ringFissure(ServerLevel level, int cx, int cz, int yHint, int ringRadius, int budget) {
+        if (budget <= 0) return 0;
+        int destroyed = 0;
+        int segments = 8;
+        double segLen = 2.0 * Math.PI * ringRadius / segments + 0.5;
+        for (int s = 0; s < segments && destroyed < budget; s++) {
+            double a = s / (double) segments * Math.PI * 2.0;
+            int sx = cx + (int) Math.round(Math.cos(a) * ringRadius);
+            int sz = cz + (int) Math.round(Math.sin(a) * ringRadius);
+            BlockPos air = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(level, sx, sz, yHint + 1);
+            if (air == null) continue;
+            Vec3 tangent = new Vec3(-Math.sin(a), 0, Math.cos(a));
+            destroyed += com.dragonblockarcanedba.util.PermanentDestruction.fissure(level, air, tangent,
+                segLen, 1, 1, false,
+                com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK, budget - destroyed);
+        }
+        return destroyed;
     }
 }

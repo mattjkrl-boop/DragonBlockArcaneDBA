@@ -117,6 +117,16 @@ public class DebrisEntity extends Projectile {
                 if (this.level() instanceof ServerLevel server) {
                     server.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.DUST_PUFF,
                         next.x, next.y + 0.2, next.z, 3, 0.2, 0.08, 0.2, 0.02);
+                    // Monolith-class pieces (the largest size class) dent
+                    // the ground they fall on: a small permanent crater,
+                    // WEAK tier, so only soft ground gives. Ordinary chunks
+                    // land harmlessly, as they always have.
+                    if (this.getScale() >= 1.0f) {
+                        com.dragonblockarcanedba.util.PermanentDestruction.crater(server, below.immutable(),
+                            2.0, 0.5, false,
+                            com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK, 60,
+                            server.getRandom());
+                    }
                 }
             }
         } else {

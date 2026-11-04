@@ -9,7 +9,7 @@ import com.dragonblockarcanedba.util.DbaCompat;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
-import com.dragonblockarcanedba.util.GroundScar;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import com.dragonblockarcanedba.util.VortexPhysics;
 import net.minecraft.core.BlockPos;
@@ -37,8 +37,8 @@ import java.util.List;
  * VortexPhysics language instead of per entity velocity overrides, particles
  * come from LayeredParticles in three layers, the collapse is a staged 30 tick
  * suction (was a 10 tick snap) that drags a DebrisSpawner field of real ground
- * blocks up into the tear before the burst, and the burst scars the ground
- * under the rift through GroundScar. Channel tick damage is distance checked
+ * blocks up into the tear before the burst, and the burst converts the
+ * ground under the rift to permanent obsidian. Channel tick damage is distance checked
  * with falloff; standing at the rim is no longer the same as standing at the
  * core. Loose items and projectiles are still eaten, but the owner's own
  * projectiles are exempt so the rift cannot sabotage its caster.
@@ -321,13 +321,14 @@ public class VoidRiftEntity extends Projectile {
             victim.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 100, 1, false, true), this.getOwner());
         }
 
-        // The burst scars the ground it ate from: a temporary obsidian scar
-        // through GroundScar, restored on schedule, plus dust at both levels.
+        // The burst marks the ground it ate from: a permanent obsidian
+        // conversion, plus dust at both levels. A void rift consumes, it
+        // does not blast, so there is no crater here.
         BlockPos ground = findGround(serverLevel, center, 16);
         if (ground != null) {
-            GroundScar.scarDisk(serverLevel, ground,
+            PermanentDestruction.convertDisk(serverLevel, ground,
                 Math.min(6, Math.max(2, Math.round(radius * 0.6f))),
-                Blocks.OBSIDIAN.defaultBlockState(), 240, 0.45f, serverLevel.getRandom());
+                Blocks.OBSIDIAN.defaultBlockState(), 0.45f, serverLevel.getRandom());
             LayeredParticles.emitGroundBurst(serverLevel,
                 new Vec3(center.x, ground.getY() + 1.0, center.z), radius * 0.7f, THEME_ARGB);
         }

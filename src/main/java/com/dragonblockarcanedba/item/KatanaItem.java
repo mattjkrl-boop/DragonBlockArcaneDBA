@@ -421,6 +421,17 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             // Teleport player to destination
             MovementPhysics.teleport(player, end);
 
+            // The landing cuts the ground: a fissure runs forward from the
+            // landing point along the slash line (length 6, one deep, WEAK),
+            // the one piece of terrain the katana ever touches.
+            net.minecraft.core.BlockPos landAir = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(
+                serverLevel, (int) Math.floor(end.x), (int) Math.floor(end.z), (int) Math.floor(end.y));
+            if (landAir != null) {
+                com.dragonblockarcanedba.util.PermanentDestruction.fissure(serverLevel, landAir, look,
+                    6.0, 1, 1, false,
+                    com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK, 30);
+            }
+
             // The wall entity owns the cut: its damage lands at tick 10 of
             // its 40 tick life, once the wall has fully risen, with falloff
             // toward the far end of the path. Corridor half width grows with

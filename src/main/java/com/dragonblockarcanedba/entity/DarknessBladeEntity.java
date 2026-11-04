@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
@@ -86,11 +86,11 @@ public class DarknessBladeEntity extends Projectile {
                 );
                 serverLevel.addFreshEntity(shatter);
 
-                // World interaction: the impact scars the exact block it landed
-                // on with temporary obsidian, and kicks up a dust burst.
+                // World interaction: the impact converts the ground it landed
+                // on to permanent obsidian, and kicks up a dust burst.
                 if (groundPos != null) {
-                    GroundScar.scarDisk(serverLevel, groundPos, 2,
-                        Blocks.OBSIDIAN.defaultBlockState(), 120, 0.6f, serverLevel.getRandom());
+                    PermanentDestruction.convertDisk(serverLevel, groundPos, 2,
+                        Blocks.OBSIDIAN.defaultBlockState(), 0.6f, serverLevel.getRandom());
                 }
                 LayeredParticles.emitGroundBurst(serverLevel, this.position(), 2.8f, 0xA605F2);
 

@@ -1,8 +1,8 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.util.DebrisSpawner;
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -23,8 +23,8 @@ import net.minecraft.world.phys.Vec3;
  *
  * Spectacle pass: the hold now runs 40 ticks so the array can build, peak,
  * and die properly. The pillar sheds the shared three layer vortex particles
- * every tick, the spawn slams a ground burst with real debris and a short
- * lived crystal scar under the target, and the end is a closing burst with
+ * every tick, the spawn slams a ground burst with real debris and a
+ * permanent crystal mark under the target, and the end is a closing burst with
  * mote rain instead of a silent stop.
  */
 public class SpiritImpaleEntity extends Projectile {
@@ -140,8 +140,8 @@ public class SpiritImpaleEntity extends Projectile {
 
     /**
      * Crystallize the surface cells under the array (center plus cardinals,
-     * each at its own column height so slopes never float glass). Restores
-     * after 60 ticks through GroundScar, which refuses protected blocks.
+     * each at its own column height so slopes never float glass). The
+     * crystal is permanent; PermanentDestruction refuses protected blocks.
      */
     private void scarGround(ServerLevel level, Vec3 center, float scale) {
         var glass = Blocks.STAINED_GLASS.pick(net.minecraft.world.item.DyeColor.LIGHT_BLUE).defaultBlockState();
@@ -156,7 +156,7 @@ public class SpiritImpaleEntity extends Projectile {
             // surface is far below, the target is airborne and the array
             // leaves the distant ground alone.
             if (surface.getY() < (int) Math.floor(center.y) - 3) continue;
-            GroundScar.scar(level, surface, glass, 60);
+            PermanentDestruction.convert(level, surface, glass);
         }
     }
 }

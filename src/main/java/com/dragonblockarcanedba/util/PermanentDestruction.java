@@ -5,6 +5,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -15,13 +16,12 @@ import java.util.Set;
 /**
  * Permanent weapon destruction (destruction expansion, Carter Nov 4
  * 2026): weapons change the world and the world keeps the change.
- * This is the counterpart to GroundScar, whose whole job was putting
- * blocks back; nothing in this class restores, schedules, or records
- * anything. A destroyed block is an ordinary world edit, saved by the
- * chunk system, so crash safety needs no machinery here: there is no
- * pending state to lose.
+ * This class replaced the old restore system; nothing in it restores,
+ * schedules, or records anything. A destroyed block is an ordinary
+ * world edit, saved by the chunk system, so crash safety needs no
+ * machinery here: there is no pending state to lose.
  *
- * The refusal rules are GroundScar's, kept whole: protected blocks
+ * The refusal rules are the old system's, kept whole: protected blocks
  * (anything with a block entity, bedrock, barriers, spawners, portal
  * frames and portals, command and structure blocks, jigsaws) are
  * never touched, and unbreakable blocks (negative destroy speed) are
@@ -46,6 +46,22 @@ public final class PermanentDestruction {
     public static final float TIER_HEAVY = 50.0f;
 
     /**
+     * The protected-block test, moved here verbatim when the restore
+     * system retired: anything with a block entity, plus bedrock,
+     * barriers, spawners, portal frames and portals, command and
+     * structure blocks, and jigsaws are never touched by weapon
+     * terrain work.
+     */
+    public static boolean isProtected(ServerLevel level, BlockPos pos, BlockState state) {
+        if (level.getBlockEntity(pos) != null) return true;
+        Block b = state.getBlock();
+        return b == Blocks.BEDROCK || b == Blocks.BARRIER || b == Blocks.SPAWNER
+            || b == Blocks.END_PORTAL_FRAME || b == Blocks.END_PORTAL || b == Blocks.NETHER_PORTAL
+            || b == Blocks.COMMAND_BLOCK || b == Blocks.CHAIN_COMMAND_BLOCK || b == Blocks.REPEATING_COMMAND_BLOCK
+            || b == Blocks.STRUCTURE_BLOCK || b == Blocks.JIGSAW;
+    }
+
+    /**
      * The refusal test for breaking one cell. Air is not destroyable
      * (nothing to break), fluids are left alone, protected and
      * unbreakable blocks are refused, and anything tougher than the
@@ -56,7 +72,7 @@ public final class PermanentDestruction {
         if (state.isAir()) return false;
         if (!level.isLoaded(pos) || !level.isInWorldBounds(pos)) return false;
         if (state.getBlock() instanceof LiquidBlock) return false;
-        if (GroundScar.isProtected(level, pos, state)) return false;
+        if (isProtected(level, pos, state)) return false;
         if (state.getDestroySpeed(level, pos) < 0.0f) return false;
         return state.getBlock().getExplosionResistance() <= maxBlastResistance;
     }
@@ -145,8 +161,7 @@ public final class PermanentDestruction {
     /**
      * Destroy the top solid block of each column in a disk at the
      * surface, the permanent version of a scour pass. y in center is
-     * the ground level the callers already resolved, as in
-     * GroundScar.scarDisk.
+     * the ground level the callers already resolved.
      */
     public static int destroyDiskSurface(ServerLevel level, BlockPos center, int radius, float chance,
                                          boolean dropItems, float maxBlastResistance, RandomSource rand) {
@@ -164,19 +179,18 @@ public final class PermanentDestruction {
     }
 
     /**
-     * Permanently replace one block with a themed end state (the
-     * permanent analog of GroundScar.scar): obsidian fields, blackstone
-     * scorch, soul soil, cooled crust, crystal. Same refusal rules as
-     * destruction, minus the resistance cap: a conversion is the
-     * weapon's own material claiming the cell, but protected and
-     * unbreakable blocks still refuse, and a cell that already holds
-     * the target state is left alone.
+     * Permanently replace one block with a themed end state: obsidian
+     * fields, blackstone scorch, soul soil, cooled crust, crystal.
+     * Same refusal rules as destruction, minus the resistance cap: a
+     * conversion is the weapon's own material claiming the cell, but
+     * protected and unbreakable blocks still refuse, and a cell that
+     * already holds the target state is left alone.
      */
     public static boolean convert(ServerLevel level, BlockPos pos, BlockState newState) {
         BlockState current = level.getBlockState(pos);
         if (current == newState) return false;
         if (!level.isLoaded(pos) || !level.isInWorldBounds(pos)) return false;
-        if (GroundScar.isProtected(level, pos, current)) return false;
+        if (isProtected(level, pos, current)) return false;
         if (current.getDestroySpeed(level, pos) < 0.0f) return false;
         return level.setBlock(pos.immutable(), newState, Block.UPDATE_ALL);
     }

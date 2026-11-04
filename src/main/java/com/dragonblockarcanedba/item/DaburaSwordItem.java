@@ -14,8 +14,8 @@ import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.AtmosphereServer;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import com.dragonblockarcanedba.util.VortexPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -338,13 +338,16 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
         );
         level.addFreshEntity(shatter);
 
-        // World interaction at the peak: the eclipse scars the ground it
-        // stands on with temporary obsidian, throws the domain's orbiting
+        // World interaction at the peak: the eclipse converts the ground it
+        // stands on to permanent obsidian (reduced disk under the new rule),
+        // eats a crater at the domain center, throws the domain's orbiting
         // debris outward to rain down, and rings itself with real strikes.
         BlockPos ground = findGround(level, player.position());
         if (ground != null) {
-            GroundScar.scarDisk(level, ground, (int) Math.min(12.0, radius * 0.5),
-                Blocks.OBSIDIAN.defaultBlockState(), 240, 0.55f, level.getRandom());
+            PermanentDestruction.convertDisk(level, ground, (int) Math.min(8.0, radius * 0.5),
+                Blocks.OBSIDIAN.defaultBlockState(), 0.45f, level.getRandom());
+            PermanentDestruction.crater(level, ground, 2.0, 0.5, false,
+                PermanentDestruction.TIER_WEAK, 60, level.getRandom());
         }
         LayeredParticles.emitGroundBurst(level, player.position(),
             (float) Math.min(12.0, radius * 0.5), THEME_ARGB);
@@ -446,8 +449,10 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
 
         BlockPos ground = findGround(level, player.position());
         if (ground != null) {
-            GroundScar.scarDisk(level, ground, (int) Math.min(8.0, radius * 0.4),
-                Blocks.OBSIDIAN.defaultBlockState(), 160, 0.4f, level.getRandom());
+            PermanentDestruction.convertDisk(level, ground, (int) Math.min(6.0, radius * 0.4),
+                Blocks.OBSIDIAN.defaultBlockState(), 0.45f, level.getRandom());
+            PermanentDestruction.crater(level, ground, 2.0, 0.5, false,
+                PermanentDestruction.TIER_WEAK, 60, level.getRandom());
         }
         LayeredParticles.emitGroundBurst(level, player.position(),
             (float) Math.min(8.0, radius * 0.4), THEME_ARGB);

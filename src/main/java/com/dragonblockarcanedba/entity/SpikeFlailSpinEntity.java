@@ -9,8 +9,8 @@ import com.dragonblockarcanedba.util.DbaCompat;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -46,7 +46,8 @@ public class SpikeFlailSpinEntity extends Projectile {
     /** Ticks of dissipation after the crack lands, while debris rains and dust settles. */
     public static final int SETTLE_TICKS = 4;
     private static final float ORBIT_RADIUS = 2.55f;
-    private static final int SCAR_RESTORE_TICKS = 100;
+    /** Per spin cap on surface blocks torn up outright (destruction expansion). */
+    private static final int TORN_CAP = 60;
     /** Warm steel dust, the flail's particle theme color. */
     private static final int THEME_DUST = 0xD8C9A3;
 
@@ -263,12 +264,18 @@ public class SpikeFlailSpinEntity extends Projectile {
             DbaSounds.SLAM_THUD, SoundSource.PLAYERS, 0.7f, 0.7f);
     }
 
-    /** Tears the surface inside the crack radius into gravel for a while, then the world restores it. */
+    /**
+     * Tears the surface inside the crack radius apart, permanently. Soft
+     * surface blocks (WEAK tier) are torn up outright with drops, up to a
+     * per spin cap; harder floors fracture into gravel instead. Nothing
+     * restores: the spin really did break this ground.
+     */
     private void scarGround(ServerLevel server, Player player) {
         int r = (int) Math.ceil(this.releaseRadius);
         BlockPos base = player.blockPosition();
         RandomSource rand = server.getRandom();
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        int torn = 0;
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
                 double dist = Math.sqrt(dx * dx + dz * dz);
@@ -279,13 +286,18 @@ public class SpikeFlailSpinEntity extends Projectile {
                 if (rand.nextFloat() > chance) {
                     continue;
                 }
-                // Find this column's floor near the player's level and scar that cell.
+                // Find this column's floor near the player's level and tear that cell.
                 // The floor test is isFaceSturdy: blocksMotion() was removed in 26.3.
                 for (int dy = 2; dy >= -3; dy--) {
                     m.set(base.getX() + dx, base.getY() + dy, base.getZ() + dz);
                     BlockState state = server.getBlockState(m);
                     if (state.isFaceSturdy(server, m, Direction.UP)) {
-                        GroundScar.scar(server, m, Blocks.GRAVEL.defaultBlockState(), SCAR_RESTORE_TICKS);
+                        if (torn < TORN_CAP
+                            && PermanentDestruction.destroy(server, m.immutable(), true, PermanentDestruction.TIER_WEAK)) {
+                            torn++;
+                        } else {
+                            PermanentDestruction.convert(server, m.immutable(), Blocks.GRAVEL.defaultBlockState());
+                        }
                         break;
                     }
                 }

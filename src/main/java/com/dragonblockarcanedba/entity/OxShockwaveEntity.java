@@ -4,8 +4,8 @@ import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -20,7 +20,6 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -37,16 +36,23 @@ import java.util.Set;
  * - 360-degree expanding ring radius scaling with charge (up to 24 blocks max - Tweak A).
  * - Violent upward and outward radial knockback.
  * - Tweak B: Concentric trailing echo waves at >= 50% charge.
- * - Tweak C: Max charge destroys weak terrain (blast resistance <= 2.0) and spawns ground fissures.
+ * - Tweak C: At full charge the wave spawns ground fissures, and the ring
+ *   destroys terrain as it expands (destruction expansion: the resistance
+ *   cap scales with charge, 2.0 uncharged to 6.0 at full charge, three
+ *   blocks deep inside half radius at full charge, capped per wave).
  */
 public class OxShockwaveEntity extends Projectile {
     private static final EntityDataAccessor<Float> CHARGE_RATIO = SynchedEntityData.defineId(OxShockwaveEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> IS_SUB_WAVE = SynchedEntityData.defineId(OxShockwaveEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Float> CURRENT_RADIUS = SynchedEntityData.defineId(OxShockwaveEntity.class, EntityDataSerializers.FLOAT);
 
+    /** Per-wave cap on blocks the ring may destroy (destruction expansion). */
+    private static final int WAVE_DESTROY_CAP = 700;
+
     private float damage = 400.0f;
     private boolean hasSpawnedEcho1 = false;
     private boolean hasSpawnedEcho2 = false;
+    private int destroyedThisWave = 0;
     private List<BlockState> debrisPalette = null;
     private final Set<Integer> hitEntityIds = new HashSet<>();
 
@@ -169,10 +175,15 @@ public class OxShockwaveEntity extends Projectile {
                 }
             }
 
-            // Ground work along the wave path (main wave only): real destruction
-            // at max charge, temporary GroundScar scarring from half charge up.
+            // Ground work along the wave path (main wave only), from half
+            // charge up: the ring destroys as it expands, with the
+            // resistance cap scaling with charge (2.0 uncharged to 6.0 at
+            // full charge), a third block of depth inside half radius at
+            // full charge, and a per-wave destruction cap. The old scar
+            // ring is now a permanent magma and basalt conversion.
             if (charge >= 0.50f && !subWave) {
-                boolean destroy = charge >= 0.95f;
+                float resistCap = 2.0f + 4.0f * charge;
+                boolean deepCut = charge >= 0.95f && currentRadius <= maxRadius * 0.5f;
                 int baseY = (int) Math.floor(center.y);
                 // Honest ring coverage: step along the arc in sub-block steps
                 // (half a block of arc per step) and test every distinct block
@@ -192,17 +203,19 @@ public class OxShockwaveEntity extends Projectile {
                     lastX = px;
                     lastZ = pz;
 
-                    if (destroy) {
-                        mPos.set(px, baseY, pz);
-                        checkAndDestroyWeakBlock(serverLevel, mPos);
-                        mPos.set(px, baseY + 1, pz);
-                        checkAndDestroyWeakBlock(serverLevel, mPos);
+                    if (this.destroyedThisWave < WAVE_DESTROY_CAP) {
+                        int topY = deepCut ? baseY + 2 : baseY + 1;
+                        for (int y = baseY; y <= topY; y++) {
+                            mPos.set(px, y, pz);
+                            tryDestroyRingBlock(serverLevel, mPos, resistCap);
+                        }
                     }
 
-                    // Scar the surface cell of this column: the topmost solid
-                    // block in the wave's height window. Runs after destruction
-                    // in the same pass, so cells the wave just broke are air and
-                    // are skipped; tougher blocks stay standing but scorched.
+                    // Convert the surface cell of this column permanently:
+                    // the topmost solid block in the wave's height window.
+                    // Runs after destruction in the same pass, so cells the
+                    // wave just broke are air and are skipped; tougher blocks
+                    // stay standing but scorched.
                     if (rand.nextFloat() < 0.55f) {
                         for (int y = baseY + 1; y >= baseY - 2; y--) {
                             mPos.set(px, y, pz);
@@ -211,7 +224,7 @@ public class OxShockwaveEntity extends Projectile {
                                 BlockState scarState = rand.nextFloat() < 0.4f
                                     ? Blocks.MAGMA_BLOCK.defaultBlockState()
                                     : Blocks.BASALT.defaultBlockState();
-                                GroundScar.scar(serverLevel, mPos, scarState, destroy ? 300 : 240);
+                                PermanentDestruction.convert(serverLevel, mPos.immutable(), scarState);
                                 break;
                             }
                         }
@@ -368,23 +381,23 @@ public class OxShockwaveEntity extends Projectile {
         }
     }
 
-    private void checkAndDestroyWeakBlock(ServerLevel level, BlockPos pos) {
+    /**
+     * Destroy one ring cell if the wave is strong enough for it. The
+     * refusal rules are PermanentDestruction's (protected and unbreakable
+     * always refused, fluids never touched), the cap is the charge-scaled
+     * resistance for this wave, and broken blocks drop, as the ring's
+     * destruction always has. Successes count against the per-wave cap.
+     */
+    private void tryDestroyRingBlock(ServerLevel level, BlockPos pos, float resistCap) {
         BlockState state = level.getBlockState(pos);
-        if (state.isAir()) return;
-        // Never protected blocks (bedrock, spawners, chests, barrels and
-        // friends), enforced through the same check GroundScar uses.
-        if (GroundScar.isProtected(level, pos, state)) return;
-
-        Block block = state.getBlock();
-        // Check blast resistance <= 2.0 (dirt, grass, flowers, leaves, glass, ice, snow, etc.)
-        float blastRes = block.getExplosionResistance();
-        if (blastRes <= 2.0f && !state.is(Blocks.BEDROCK) && !state.is(Blocks.BARRIER)) {
-            level.sendParticles(
-                new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, state),
-                pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
-                6, 0.2, 0.2, 0.2, 0.05
-            );
-            level.destroyBlock(pos, true);
+        if (!PermanentDestruction.canDestroy(level, pos, state, resistCap)) return;
+        level.sendParticles(
+            new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, state),
+            pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
+            6, 0.2, 0.2, 0.2, 0.05
+        );
+        if (PermanentDestruction.destroy(level, pos, true, resistCap)) {
+            this.destroyedThisWave++;
         }
     }
 }

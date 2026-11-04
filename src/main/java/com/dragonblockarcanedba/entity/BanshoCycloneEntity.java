@@ -4,7 +4,6 @@ import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.util.AtmosphereServer;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import com.dragonblockarcanedba.util.VortexPhysics;
 import net.minecraft.core.BlockPos;
@@ -49,10 +48,13 @@ public class BanshoCycloneEntity extends Projectile {
     private static final int EJECT_LEAD_TICKS = 18;
     private static final int DEBRIS_COUNT = 64;
     private static final int THEME_ARGB = 0x26FFA6;
+    /** Per cyclone cap on surface growth torn off the ground (destruction expansion). */
+    private static final int TORN_CAP = 150;
 
     private float slashDamage = 200.0f;
     private boolean debrisSpawned = false;
     private boolean ejected = false;
+    private int tornBlocks = 0;
 
     public BanshoCycloneEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -202,8 +204,11 @@ public class BanshoCycloneEntity extends Projectile {
 
     /**
      * Wind scouring: only soft ground changes (grass to dirt, dirt and podzol
-     * to coarse dirt), in a radius 3 disk under the funnel, restored by
-     * GroundScar about 12 seconds after the last scour pass.
+     * to coarse dirt), in a radius 3 disk under the funnel. The scour is
+     * permanent: the wind really does strip the land it crosses. On top of
+     * the soil conversion, the funnel tears WEAK surface growth (leaves,
+     * grass, flowers, snow) off the columns it crosses, with drops, up to
+     * a per cyclone budget.
      */
     private void scourGround(ServerLevel level, Vec3 center) {
         int cx = (int) Math.floor(center.x);
@@ -225,9 +230,37 @@ public class BanshoCycloneEntity extends Projectile {
                     scoured = Blocks.COARSE_DIRT.defaultBlockState();
                 }
                 if (scoured != null) {
-                    GroundScar.scar(level, m.immutable(), scoured, 240);
+                    com.dragonblockarcanedba.util.PermanentDestruction.convert(level, m.immutable(), scoured);
+                }
+                // Tear the growth off the top of the column: leaves, grass,
+                // flowers, and snow sitting above the soil go with the wind.
+                // The soil heightmap ignores leaves and plants, so probe the
+                // true top of the column and only tear what sits near it.
+                if (this.tornBlocks < TORN_CAP) {
+                    int topY = level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z) - 1;
+                    if (topY > y && topY - y <= 3) {
+                        m.set(x, topY, z);
+                        BlockState top = level.getBlockState(m);
+                        if (isTearableGrowth(top)
+                            && com.dragonblockarcanedba.util.PermanentDestruction.destroy(level, m.immutable(), true,
+                                com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK)) {
+                            this.tornBlocks++;
+                        }
+                    }
                 }
             }
         }
+    }
+
+    /** Surface growth the funnel tears off: leaves, snow, flowers, and ground plants. */
+    private static boolean isTearableGrowth(BlockState state) {
+        return state.getBlock() instanceof net.minecraft.world.level.block.LeavesBlock
+            || state.is(net.minecraft.tags.BlockTags.FLOWERS)
+            || state.is(Blocks.SNOW)
+            || state.is(Blocks.SHORT_GRASS)
+            || state.is(Blocks.TALL_GRASS)
+            || state.is(Blocks.FERN)
+            || state.is(Blocks.LARGE_FERN)
+            || state.is(Blocks.DEAD_BUSH);
     }
 }

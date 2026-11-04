@@ -24,7 +24,7 @@ import java.util.List;
  * mobs in, lifts them at the core, and flings them out at release; a
  * DebrisSpawner field of real ground blocks orbits the funnel and rains back
  * down; LayeredParticles feed the three particle layers; the ground under
- * the funnel gets torn (grass ripped to dirt through crash safe GroundScar).
+ * the funnel gets torn (top blocks stripped permanently, WEAK tier).
  * maxLifetime is persisted: a restored giant used to keep the 60 tick field
  * default while its renderer faded against 200, so it popped mid fade.
  */
@@ -33,9 +33,13 @@ public class AzureTornadoEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> IS_GIANT = SynchedEntityData.defineId(AzureTornadoEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Long> SEED = SynchedEntityData.defineId(AzureTornadoEntity.class, EntityDataSerializers.LONG);
 
+    /** Per tornado cap on stripped top blocks (destruction expansion). */
+    private static final int TORN_CAP = 200;
+
     private int maxLifetime = 60; // 3s default for mini, 200 (10s) for giant
     private boolean debrisSpawned = false;
     private boolean flungOut = false;
+    private int tornBlocks = 0;
 
     public AzureTornadoEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -174,9 +178,10 @@ public class AzureTornadoEntity extends Projectile {
             }
         }
 
-        // Point 3, ground tearing: grass under the funnel is ripped to dirt,
-        // restored later by GroundScar. Surface height is read per column so
-        // slopes scar at their own level, not at the funnel's base plane.
+        // Point 3, ground tearing: the funnel strips the top block off the
+        // columns under it (WEAK tier, drops on, capped per tornado life).
+        // Surface height is read per column so slopes tear at their own
+        // level, not at the funnel's base plane.
         if (this.tickCount % 10 == 0 && env > 0.3f) {
             scarGround(serverLevel, center, radius);
         }
@@ -213,7 +218,12 @@ public class AzureTornadoEntity extends Projectile {
         }
     }
 
-    /** Rip grass blocks in the inner disk to dirt, restored after 240 ticks. */
+    /**
+     * Strip the top block of each column in the inner disk: at WEAK tier
+     * that is soil, sand, foliage, and plants, torn off with drops. The
+     * strip is permanent and capped per tornado life so a long storm
+     * cannot eat a whole hillside one column at a time forever.
+     */
     private void scarGround(ServerLevel level, Vec3 center, double radius) {
         int r = Math.max(1, (int) Math.ceil(radius * 0.35));
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
@@ -221,12 +231,13 @@ public class AzureTornadoEntity extends Projectile {
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
                 if (dx * dx + dz * dz > r * r) continue;
+                if (this.tornBlocks >= TORN_CAP) return;
                 if (level.getRandom().nextFloat() > 0.3f) continue;
                 int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, cx + dx, cz + dz) - 1;
                 m.set(cx + dx, y, cz + dz);
-                BlockState state = level.getBlockState(m);
-                if (state.is(Blocks.GRASS_BLOCK)) {
-                    com.dragonblockarcanedba.util.GroundScar.scar(level, m, Blocks.DIRT.defaultBlockState(), 240);
+                if (com.dragonblockarcanedba.util.PermanentDestruction.destroy(level, m.immutable(), true,
+                        com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK)) {
+                    this.tornBlocks++;
                 }
             }
         }

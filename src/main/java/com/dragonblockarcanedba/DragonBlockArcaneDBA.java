@@ -89,7 +89,6 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         com.dragonblockarcanedba.wish.DragonWishRitual.register();
         com.dragonblockarcanedba.movement.MovementPhysics.register();
         com.dragonblockarcanedba.movement.MobPhysics.register();
-        com.dragonblockarcanedba.util.GroundScar.register();
         com.dragonblockarcanedba.util.AtmosphereServer.register();
 
         // Register JSON dynamic data loaders using non-deprecated ResourceLoader

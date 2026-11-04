@@ -4,8 +4,8 @@ import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.util.DbaCompat;
 import com.dragonblockarcanedba.util.DebrisSpawner;
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -38,7 +38,8 @@ import java.util.Set;
  * each target is hit on the tick the expanding rim reaches it. The old item
  * code applied all damage instantly at the release tick, so rim targets were
  * launched by a dome that had not visually arrived yet. When the rim reaches
- * full radius the slam also scars the ground at its heart through GroundScar.
+ * full radius the slam also marks the ground at its heart, permanently,
+ * and punches a real crater into it.
  */
 public class KingsSlamEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(KingsSlamEntity.class, EntityDataSerializers.FLOAT);
@@ -47,7 +48,7 @@ public class KingsSlamEntity extends Projectile {
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(KingsSlamEntity.class, EntityDataSerializers.FLOAT);
 
     private final Set<Integer> hitEntityIds = new HashSet<>();
-    private boolean scarred = false;
+    private boolean groundMarked = false;
 
     public KingsSlamEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -145,14 +146,14 @@ public class KingsSlamEntity extends Projectile {
 
             applyRimDamage(serverLevel);
 
-            // Ground scarring (point 3) lands on the rim tick: the moment the
+            // Ground marking (point 3) lands on the rim tick: the moment the
             // dome first reaches full radius (tick 22 normal, tick 31 flawless),
-            // the ground at the slam's heart is torn up temporarily.
-            if (!this.scarred) {
+            // the ground at the slam's heart is torn up for real.
+            if (!this.groundMarked) {
                 float lifeFrac = this.tickCount / (float) Math.max(1, getLifetime());
                 if (lifeFrac / 0.55f >= 1.0f) {
-                    this.scarred = true;
-                    scarGround(serverLevel);
+                    this.groundMarked = true;
+                    markGround(serverLevel);
                 }
             }
 
@@ -228,8 +229,18 @@ public class KingsSlamEntity extends Projectile {
         }
     }
 
-    /** Temporary magma and basalt scarring under the slam's heart, restored by GroundScar. */
-    private void scarGround(ServerLevel serverLevel) {
+    /**
+     * Permanent magma and basalt conversion under the slam's heart, with a
+     * real crater punched at the center first (radius 2, STANDARD, cap
+     * 100) so the conversions pave the crater floor and rim.
+     */
+    private void markGround(ServerLevel serverLevel) {
+        BlockPos heartAir = PermanentDestruction.findSurface(serverLevel,
+            (int) Math.floor(this.getX()), (int) Math.floor(this.getZ()), (int) Math.floor(this.getY()));
+        if (heartAir != null) {
+            PermanentDestruction.crater(serverLevel, heartAir.below(), 2.0, 0.5, false,
+                PermanentDestruction.TIER_STANDARD, 100, serverLevel.getRandom());
+        }
         int scarRadius = isFlawless() ? 7 : 5;
         int baseY = (int) Math.floor(this.getY());
         BlockPos.MutableBlockPos mPos = new BlockPos.MutableBlockPos();
@@ -245,7 +256,7 @@ public class KingsSlamEntity extends Projectile {
                         BlockState scarState = serverLevel.getRandom().nextFloat() < 0.45f
                             ? Blocks.MAGMA_BLOCK.defaultBlockState()
                             : Blocks.BASALT.defaultBlockState();
-                        GroundScar.scar(serverLevel, mPos, scarState, 300);
+                        PermanentDestruction.convert(serverLevel, mPos.immutable(), scarState);
                         break;
                     }
                 }

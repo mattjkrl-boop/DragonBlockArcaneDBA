@@ -116,6 +116,20 @@ public class KiBlastEntity extends ThrowableProjectile {
     protected void onHitBlock(BlockHitResult result) {
         super.onHitBlock(result);
         if (!this.level().isClientSide()) {
+            // A charged blast (fired above the default technique size,
+            // the only charge signal this entity carries) dents the ground
+            // it strikes: a small crater, radius 1.5, one deep, WEAK,
+            // cap 40. Plain blasts stay terrain-free.
+            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel
+                && this.getScale() > 1.0f) {
+                net.minecraft.core.BlockPos struck = result.getBlockPos();
+                net.minecraft.core.BlockPos air = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(
+                    serverLevel, struck.getX(), struck.getZ(), struck.getY() + 1);
+                net.minecraft.core.BlockPos center = air != null ? air.below() : struck;
+                com.dragonblockarcanedba.util.PermanentDestruction.crater(serverLevel, center,
+                    1.5, 0.5, false,
+                    com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK, 40, serverLevel.getRandom());
+            }
             explode();
         }
     }

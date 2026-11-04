@@ -304,17 +304,21 @@ public class GrandSwordItem extends Item implements com.dragonblockarcanedba.ite
 
         // World interaction at the release point: a ground dust burst, a
         // finisher class debris field of torn up ground blocks that orbit and
-        // rain back down, a temporary coarse dirt scar under the player, and
-        // a short dissipation drizzle so the cyclone dies instead of popping.
+        // rain back down, a permanent coarse dirt conversion under the
+        // player, a shallow spin crater, and a short dissipation drizzle so
+        // the cyclone dies instead of popping.
         Vec3 feet = player.position();
         com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(level, feet, 3.0f, VALOR_GOLD_ARGB);
         com.dragonblockarcanedba.util.DebrisSpawner.spawnField(level, player, feet,
             28, 3.2, 3.2, 34);
         net.minecraft.core.BlockPos groundPos = player.blockPosition().below();
         if (!level.getBlockState(groundPos).isAir()) {
-            com.dragonblockarcanedba.util.GroundScar.scarDisk(level, groundPos,
+            com.dragonblockarcanedba.util.PermanentDestruction.convertDisk(level, groundPos,
                 spinRatio > 0.66f ? 2 : 1, net.minecraft.world.level.block.Blocks.COARSE_DIRT.defaultBlockState(),
-                240, 0.45f, level.getRandom());
+                0.45f, level.getRandom());
+            com.dragonblockarcanedba.util.PermanentDestruction.crater(level, groundPos,
+                2.0, 0.5, false,
+                com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK, 60, level.getRandom());
         }
         com.dragonblockarcanedba.util.LayeredParticles.emitRain(level, feet, 3.0f, 2.5f,
             19f, 20f, com.dragonblockarcanedba.particle.DbaParticles.SPARK);

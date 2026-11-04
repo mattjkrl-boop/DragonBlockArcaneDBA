@@ -26,9 +26,10 @@ import java.util.List;
  * Spectacle pass: this entity owns the slam damage now. The hit lands at the
  * visual peak tick (30 percent of life) with distance falloff, not in the
  * release tick before the visual starts. It also throws a real debris field,
- * scars the ground along its trenches through GroundScar (restored, crash
- * safe), pins nearby mobs with a light vortex for the launch window, and
- * persists its state so a chunk unload cannot skip or double the strike.
+ * converts the ground along its trenches to permanent magma, punches a real
+ * crater at the strike tick, pins nearby mobs with a light vortex for the
+ * launch window, and persists its state so a chunk unload cannot skip or
+ * double the strike.
  */
 public class ZGravitySlamEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(ZGravitySlamEntity.class, EntityDataSerializers.FLOAT);
@@ -128,10 +129,10 @@ public class ZGravitySlamEntity extends Projectile {
 
             if (this.tickCount == 1) {
                 // Base interaction on the cast tick: shared slam debris burst,
-                // a layered ground burst, and real scarring along the trenches.
+                // a layered ground burst, and permanent magma along the trenches.
                 com.dragonblockarcanedba.fx.SlamDebris.burst(serverLevel, this.position(), radius, com.dragonblockarcanedba.fx.SlamDebris.Profile.Z_GRAVITY);
                 com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, this.position(), radius * 0.7f, 0xFFD433);
-                scarTrenches(serverLevel, radius, life);
+                convertTrenches(serverLevel, radius);
             }
             if (this.tickCount == 2) {
                 // Debris field (standard point 2): individual ground sampled
@@ -204,17 +205,26 @@ public class ZGravitySlamEntity extends Projectile {
         serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.SLAM_THUD, net.minecraft.sounds.SoundSource.HOSTILE, 1.6f, 0.5f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, this.getX(), this.getY(), this.getZ());
+
+        // The strike punches a real crater at the slam's heart (radius 2.5,
+        // STANDARD tier, cap 120): the dome does not just push mobs, it
+        // breaks the ground they were standing on.
+        BlockPos heartAir = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(serverLevel,
+            (int) Math.floor(this.getX()), (int) Math.floor(this.getZ()), (int) Math.floor(this.getY()));
+        if (heartAir != null) {
+            com.dragonblockarcanedba.util.PermanentDestruction.crater(serverLevel, heartAir.below(), 2.5, 0.5, false,
+                com.dragonblockarcanedba.util.PermanentDestruction.TIER_STANDARD, 120, serverLevel.getRandom());
+        }
     }
 
     /**
-     * Scar the surface along radial trench lines with magma, the way the
-     * renderer draws its glowing fissures. Each column finds its own surface,
-     * protected blocks are refused inside GroundScar, and everything restores
-     * after the slam is gone.
+     * Convert the surface along radial trench lines to magma permanently,
+     * the way the renderer draws its glowing fissures. Each column finds
+     * its own surface, and protected blocks are refused inside
+     * PermanentDestruction.
      */
-    private void scarTrenches(ServerLevel serverLevel, float radius, int life) {
+    private void convertTrenches(ServerLevel serverLevel, float radius) {
         var rand = serverLevel.getRandom();
-        int restoreTicks = life + 60;
         int trenchCount = 14 + (int) (getPowerRatio() * 6);
         BlockPos center = this.blockPosition();
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
@@ -231,8 +241,8 @@ public class ZGravitySlamEntity extends Projectile {
                     m.set(x, center.getY() + dy, z);
                     var state = serverLevel.getBlockState(m);
                     if (!state.isAir() && state.getFluidState().isEmpty()) {
-                        com.dragonblockarcanedba.util.GroundScar.scar(serverLevel, m.immutable(),
-                            Blocks.MAGMA_BLOCK.defaultBlockState(), restoreTicks);
+                        com.dragonblockarcanedba.util.PermanentDestruction.convert(serverLevel, m.immutable(),
+                            Blocks.MAGMA_BLOCK.defaultBlockState());
                         break;
                     }
                 }

@@ -23,7 +23,7 @@ import net.minecraft.world.phys.Vec3;
  * - A dense white and magenta plasma cluster at the tear's heart where
  *   the singularity pearl used to sit
  * - Spatial glass dust and plasma flecks across the ground the entity
- *   scars, over the real crying obsidian GroundScar disk
+ *   marks, over the real permanent crying obsidian conversion disk
  * - Darkness vapor drifting at the boundary, suggesting the torn volume
  * Screen-space distortion stays where it already honestly lives: the
  * entity's own DbaImpactFx burst call at the destination. The renderer
@@ -167,8 +167,8 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
             90f * radiusFactor, 140).tick(delta, envelope);
 
         // Ground cracks: spatial glass dust and violet plasma flecks across
-        // the scarred disk, at the same radius the fissure work covered.
-        // The crack mark itself stays the entity's real GroundScar disk.
+        // the marked disk, at the same radius the fissure work covered.
+        // The crack mark itself stays the entity's real permanent disk.
         new MaterialEmitters.Emitter(level,
             MaterialEmitters.Preset.glassDust(0xD9B3FF, 1.05f, seed ^ 0x08B1, new Vec3(0.0, 0.03, 0.0), 0.02f),
             MaterialEmitters.groundArea(base, radius * 1.02, state.y + 0.05),

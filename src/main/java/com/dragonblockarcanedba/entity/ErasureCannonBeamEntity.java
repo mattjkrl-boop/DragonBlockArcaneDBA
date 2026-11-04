@@ -43,7 +43,11 @@ public class ErasureCannonBeamEntity extends Projectile {
     public static final int PULSE_COUNT = 6;
     public static final int LAST_PULSE_TICK = FIRST_PULSE_TICK + PULSE_INTERVAL * (PULSE_COUNT - 1);
 
+    /** Per beam cap on trench blocks carved at the ground contact. */
+    private static final int TRENCH_CAP = 120;
+
     private float totalDamage = 900.0f;
+    private int trenchUsed = 0;
     // Targets that already received the one-time attribute modifiers. Damage
     // itself is NOT once-only anymore: every pulse re-tests the beam line.
     private final Set<Integer> effectAppliedIds = new HashSet<>();
@@ -151,6 +155,7 @@ public class ErasureCannonBeamEntity extends Projectile {
         // LAST_PULSE_TICK, each worth totalDamage / PULSE_COUNT.
         if (age >= FIRST_PULSE_TICK && age <= LAST_PULSE_TICK && (age - FIRST_PULSE_TICK) % PULSE_INTERVAL == 0) {
             applyDamagePulse(serverLevel, finalCaster, start, look, length, charge);
+            carveTrench(serverLevel, start, look, length);
         }
 
         // Max charge endpoint detonation, moved from tick 1 to the final
@@ -249,6 +254,45 @@ public class ErasureCannonBeamEntity extends Projectile {
         LivingEntity owner = finalCaster instanceof LivingEntity living ? living : null;
         com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, owner, end, 24, 2.2, 3.0, 26);
         com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, end, 2.2f, 0xFF37E6FF);
+
+        // And a real crater where the charge detonates (radius 2.5,
+        // STANDARD, cap 120), when the terminus actually rests on ground.
+        net.minecraft.core.BlockPos endAir = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(
+            serverLevel, (int) Math.floor(end.x), (int) Math.floor(end.z), (int) Math.floor(end.y));
+        net.minecraft.core.BlockPos craterCenter = endAir != null ? endAir.below()
+            : !serverLevel.getBlockState(net.minecraft.core.BlockPos.containing(end.x, end.y, end.z)).isAir()
+                ? net.minecraft.core.BlockPos.containing(end.x, end.y, end.z) : null;
+        if (craterCenter != null) {
+            com.dragonblockarcanedba.util.PermanentDestruction.crater(serverLevel, craterCenter, 2.5, 0.5, false,
+                com.dragonblockarcanedba.util.PermanentDestruction.TIER_STANDARD, 120, serverLevel.getRandom());
+        }
+    }
+
+    /**
+     * While the beam holds, its ground contact carves a trench: each pulse
+     * clips the beam line to its first block hit, and from the surface
+     * there a fissure eats forward along the beam's heading (width 1, one
+     * deep, STANDARD tier), up to a per beam cap. A beam that hits no
+     * block, or whose contact is not ground, carves nothing.
+     */
+    private void carveTrench(ServerLevel serverLevel, Vec3 start, Vec3 look, float length) {
+        if (this.trenchUsed >= TRENCH_CAP) return;
+        Vec3 end = start.add(look.scale(length));
+        net.minecraft.world.phys.HitResult hit = serverLevel.clip(new net.minecraft.world.level.ClipContext(
+            start, end, net.minecraft.world.level.ClipContext.Block.COLLIDER,
+            net.minecraft.world.level.ClipContext.Fluid.NONE, this));
+        if (hit.getType() != net.minecraft.world.phys.HitResult.Type.BLOCK
+            || !(hit instanceof net.minecraft.world.phys.BlockHitResult blockHit)) {
+            return;
+        }
+        net.minecraft.core.BlockPos struck = blockHit.getBlockPos();
+        net.minecraft.core.BlockPos air = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(
+            serverLevel, struck.getX(), struck.getZ(), struck.getY() + 1);
+        if (air == null) return;
+        this.trenchUsed += com.dragonblockarcanedba.util.PermanentDestruction.fissure(
+            serverLevel, air, look, 3.0, 1, 1, false,
+            com.dragonblockarcanedba.util.PermanentDestruction.TIER_STANDARD,
+            TRENCH_CAP - this.trenchUsed);
     }
 
     /**

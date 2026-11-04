@@ -37,24 +37,28 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Surface burn left by the lava sword. Fire goes on air that already sits on a
  * solid face. Each swing also has a budget of real lava sources, and those are
  * placed first, on the first surface cells the swing reaches, so using the
- * sword always leaves some lava on the ground. The rest is fire. Both are
- * put back after a few seconds. The placement skips the fluid's on-place so the
- * source does not flow, and the server tick puts the old block back.
+ * sword always leaves some lava on the ground. The rest is fire.
  *
- * Crash safety: the pending list below is only a working cache. Every pending
- * restore is also written into the level's SavedData the moment it is placed,
- * the same pattern GroundScar uses, so if the server dies mid burn the record
- * survives in the world file. The first level tick after a restart adopts the
- * saved entries back: overdue ones restore at once, live ones resume their
- * tick watch, and the 80 tick restore stays exact across the crash.
+ * Under the destruction expansion the two halves part ways. Placed lava is
+ * real lava now: it is set with full updates so it flows like any lava in
+ * the world, and it is never restored, watched, or recorded. Fire keeps its
+ * 80 tick lifetime, and only fire cells are tracked.
+ *
+ * Crash safety for the fire half: the pending list below is only a working
+ * cache. Every pending fire expiry is also written into the level's
+ * SavedData the moment it is placed, so if the server dies mid burn the
+ * record survives in the world file. The first level tick after a restart
+ * adopts the saved entries back: overdue fire restores at once, live fire
+ * resumes its countdown, and saved lava records from before the expansion
+ * are simply dropped, because that lava belongs to the world now.
  */
 public final class LavaSwordGround {
-    /** Four seconds. Long enough to see, short enough that it does not become the world. */
+    /** Four seconds of fire. Long enough to see, short enough that it does not become the world. */
     private static final int LIFE_TICKS = 80;
     /**
-     * Clients see the block. Neighbors are not told, and the block's on-place
-     * does not run, so lava does not schedule a flow or cook adjacent water
-     * into cobblestone, stone, or obsidian.
+     * Fire placement flags: clients see the block, neighbors are not told,
+     * and the block's on-place does not run. Lava is NOT placed with these
+     * flags anymore; real lava gets full updates so it flows.
      */
     private static final int PLACE_FLAGS =
         Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SKIP_ON_PLACE;
@@ -239,10 +243,12 @@ public final class LavaSwordGround {
         }
         boolean lava = allowLava && !nearWater(level, surface);
         if (lava) {
-            if (!level.setBlock(surface, LAVA_SOURCE, PLACE_FLAGS)) {
+            // Real lava: full updates, so it schedules its flow and cooks
+            // its neighbors exactly like natural lava. It is never
+            // recorded and never restored.
+            if (!level.setBlock(surface, LAVA_SOURCE, Block.UPDATE_ALL)) {
                 return false;
             }
-            remember(level, surface, previous, true);
             return true;
         }
         if (!BaseFireBlock.canBePlacedAt(level, surface, Direction.UP)) {
@@ -257,27 +263,11 @@ public final class LavaSwordGround {
     }
 
     private static void remember(ServerLevel level, BlockPos pos, BlockState previous, boolean lava) {
-        BlockPos[] watch = null;
-        BlockState[] watched = null;
-        if (lava) {
-            watch = new BlockPos[26];
-            watched = new BlockState[26];
-            int n = 0;
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dx = -1; dx <= 1; dx++) {
-                    for (int dz = -1; dz <= 1; dz++) {
-                        if (dx == 0 && dy == 0 && dz == 0) {
-                            continue;
-                        }
-                        BlockPos near = new BlockPos(pos.getX() + dx, pos.getY() + dy, pos.getZ() + dz);
-                        watch[n] = near;
-                        watched[n] = level.getBlockState(near);
-                        n++;
-                    }
-                }
-            }
-        }
-        Pending pending = new Pending(level, pos, previous, level.getGameTime() + LIFE_TICKS, lava, watch, watched);
+        // Only fire is remembered now (lava is real and never tracked); the
+        // watch arrays stay null, and persistAdd writes them empty. The
+        // codec keeps the fields so saves written before the destruction
+        // expansion still decode.
+        Pending pending = new Pending(level, pos, previous, level.getGameTime() + LIFE_TICKS, lava, null, null);
         PENDING.add(pending);
         persistAdd(pending);
         clearTicks(level, pos);
@@ -325,11 +315,12 @@ public final class LavaSwordGround {
 
     /**
      * First tick for a level in this server run: take back whatever the
-     * SavedData kept through a crash or a hard kill. Overdue entries restore
-     * immediately, live ones resume their tick watch with their neighbor
-     * snapshots intact, and entries whose cell no longer holds our burn are
-     * dropped, so a block a player placed while the server was down is never
-     * stomped by a stale restore.
+     * SavedData kept through a crash or a hard kill. Overdue fire entries
+     * restore immediately, live ones resume their countdown, and entries
+     * whose cell no longer holds our burn are dropped, so a block a player
+     * placed while the server was down is never stomped by a stale restore.
+     * Saved lava records are dropped without restoring: that lava is real
+     * now and belongs to the world.
      */
     private static void adoptPersisted(ServerLevel level) {
         if (!ADOPTED.add(level)) {
@@ -345,6 +336,11 @@ public final class LavaSwordGround {
         while (it.hasNext()) {
             Entry entry = it.next();
             if (alreadyPending(level, entry.pos())) {
+                continue;
+            }
+            if (entry.lava()) {
+                it.remove();
+                changed = true;
                 continue;
             }
             Pending pending = rebuild(level, entry);
@@ -399,11 +395,6 @@ public final class LavaSwordGround {
         return !level.getEntitiesOfClass(Player.class, new AABB(pos), Player::isAlive).isEmpty();
     }
 
-    /**
-     * Blocks a burn is never placed on top of, and the neighbor states hold()
-     * never reverts a cell away from. The placed cell itself is always air, so
-     * this list guards the ground under the burn and the lava cells' neighbors.
-     */
     /** The sword's own protected-ground list, exposed for LavaField's placement checks. */
     public static boolean isProtectedGround(BlockState state) {
         return protectedSolid(state);
@@ -457,6 +448,14 @@ public final class LavaSwordGround {
             if (pending.level != level) {
                 continue;
             }
+            if (pending.lava) {
+                // Defensive only: new code never records lava and adopted
+                // old records are dropped at adoption. The record ends and
+                // the lava stays; it must never reach the restore below.
+                persistRemove(level, pending.pos);
+                it.remove();
+                continue;
+            }
             if (now >= pending.until) {
                 restore(pending);
                 persistRemove(level, pending.pos);
@@ -471,7 +470,7 @@ public final class LavaSwordGround {
                 it.remove();
                 continue;
             }
-            hold(level, pending);
+            clearTicks(level, pending.pos);
         }
     }
 
@@ -479,12 +478,22 @@ public final class LavaSwordGround {
         List<Pending> copy = new ArrayList<>(PENDING);
         PENDING.clear();
         for (Pending pending : copy) {
-            if (pending.level.getServer() == server) {
+            if (pending.level.getServer() != server) {
+                PENDING.add(pending);
+                continue;
+            }
+            if (pending.lava) {
+                // The lava is real; only the stale record ends.
+                persistRemove(pending.level, pending.pos);
+                continue;
+            }
+            if (pending.until <= pending.level.getGameTime()) {
                 restore(pending);
                 persistRemove(pending.level, pending.pos);
-            } else {
-                PENDING.add(pending);
             }
+            // A live fire entry stays in the SavedData and is adopted on
+            // the next start, so its 80 tick life stays exact across the
+            // restart instead of burning forever or vanishing early.
         }
     }
 
@@ -496,46 +505,11 @@ public final class LavaSwordGround {
         return current.getBlock() instanceof BaseFireBlock;
     }
 
-    private static void hold(ServerLevel level, Pending pending) {
-        clearTicks(level, pending.pos);
-        if (!pending.lava || pending.watch == null) {
-            return;
-        }
-        for (int i = 0; i < pending.watch.length; i++) {
-            BlockPos near = pending.watch[i];
-            BlockState was = pending.watched[i];
-            if (near == null || was == null || !level.isLoaded(near)) {
-                continue;
-            }
-            BlockState nowState = level.getBlockState(near);
-            boolean flowed = nowState.is(Blocks.LAVA) && !was.is(Blocks.LAVA);
-            boolean cooked = lavaConversion(was, nowState);
-            boolean strayFire = nowState.getBlock() instanceof BaseFireBlock
-                && !(was.getBlock() instanceof BaseFireBlock)
-                && !alreadyPending(level, near);
-            if (flowed || cooked || strayFire) {
-                if (!protectedSolid(was)) {
-                    level.setBlock(near, was, PLACE_FLAGS);
-                    clearTicks(level, near);
-                }
-            }
-        }
-    }
-
-    private static boolean lavaConversion(BlockState was, BlockState nowState) {
-        if (was.is(Blocks.COBBLESTONE) || was.is(Blocks.STONE) || was.is(Blocks.OBSIDIAN) || was.is(Blocks.BASALT)) {
-            return false;
-        }
-        return nowState.is(Blocks.COBBLESTONE) || nowState.is(Blocks.STONE)
-            || nowState.is(Blocks.OBSIDIAN) || nowState.is(Blocks.BASALT);
-    }
-
     private static void restore(Pending pending) {
         ServerLevel level = pending.level;
         if (!level.isInWorldBounds(pending.pos)) {
             return;
         }
-        hold(level, pending);
         // The restore state is the air the burn was placed into, so there is
         // nothing for the protection list to guard here; the only question
         // that matters is whether the cell still holds our burn.

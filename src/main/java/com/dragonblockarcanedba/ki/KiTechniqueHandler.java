@@ -314,6 +314,21 @@ public class KiTechniqueHandler {
         explosion.setRadius((float) radius);
         level.addFreshEntity(explosion);
 
+        // Real crater under the caster (destruction expansion): scaled by
+        // the blast, radius 2 at the floor to 4.5 at the top of the scale,
+        // STANDARD tier, HEAVY once the crater reaches full size, cap 260.
+        // An explosion set off high in the air craters nothing.
+        double craterRadius = 2.0 + Math.min(1.0, radius / 25.0) * 2.5;
+        float craterTier = craterRadius >= 4.5
+            ? com.dragonblockarcanedba.util.PermanentDestruction.TIER_HEAVY
+            : com.dragonblockarcanedba.util.PermanentDestruction.TIER_STANDARD;
+        net.minecraft.core.BlockPos boomAir = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(
+            level, (int) Math.floor(player.getX()), (int) Math.floor(player.getZ()), (int) Math.floor(player.getY()));
+        if (boomAir != null) {
+            com.dragonblockarcanedba.util.PermanentDestruction.crater(level, boomAir.below(),
+                craterRadius, 0.55, false, craterTier, 260, level.getRandom());
+        }
+
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 3.0f, 0.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),

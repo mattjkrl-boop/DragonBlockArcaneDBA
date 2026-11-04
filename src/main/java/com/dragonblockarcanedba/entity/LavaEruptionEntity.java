@@ -47,10 +47,12 @@ public class LavaEruptionEntity extends Projectile {
     /**
      * Redesign budgets: at most 8 crust pools along the lip per eruption
      * (idea 3), and at most 4 geysers per eruption (idea 2), two under
-     * hit targets and two at the lip. The legacy fire ring stays, but it
-     * no longer places real lava sources: the pools are the lava now.
+     * hit targets and two at the lip. The legacy fire ring spends from a
+     * small real lava budget of its own now (lavaLeft below); the pools
+     * remain the main lava.
      */
     private int poolsLeft = 8;
+    private int lavaLeft = 8;
     private int geysers;
     private boolean lipGeysersDone;
 
@@ -178,10 +180,12 @@ public class LavaEruptionEntity extends Projectile {
                 }
             }
         }
-        // The ground the wave crosses: the legacy fire ring first (budget
-        // 0, fire cells only), then the redesign's crust pools along the
-        // same moving lip, from the eruption's pool budget.
-        LavaSwordGround.scorchArc(server, this.getX(), this.getY(), this.getZ(), this.getYRot(), previous, reach, 0, CONE_MIN_DOT);
+        // The ground the wave crosses: the legacy fire ring first, spending
+        // real lava from lavaLeft (spent lava stays in the world), then the
+        // redesign's crust pools along the same moving lip, from the
+        // eruption's pool budget.
+        this.lavaLeft -= LavaSwordGround.scorchArc(server, this.getX(), this.getY(), this.getZ(), this.getYRot(),
+            previous, reach, Math.max(0, this.lavaLeft), CONE_MIN_DOT);
         if (this.poolsLeft > 0) {
             this.poolsLeft -= LavaField.crustArc(server, this.getX(), this.getY(), this.getZ(), this.getYRot(),
                 previous, reach, this.poolsLeft, CONE_MIN_DOT, owner, damage * 0.12f);

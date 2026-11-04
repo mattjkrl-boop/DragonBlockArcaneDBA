@@ -5,7 +5,7 @@ import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
-import com.dragonblockarcanedba.util.GroundScar;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import com.dragonblockarcanedba.util.VortexPhysics;
 import net.minecraft.core.BlockPos;
@@ -38,7 +38,7 @@ import java.util.List;
  * Pull is the shared VortexPhysics (weight classed, swirl plus core lift),
  * particles are the shared LayeredParticles three layer emitter, the cast
  * throws a DebrisSpawner field of soul themed blocks on helical orbits, and
- * the ground under the rift is temporarily scarred to soul soil via GroundScar.
+ * the ground under the rift is permanently converted to soul soil.
  */
 public class DimensionalRiftEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(DimensionalRiftEntity.class, EntityDataSerializers.FLOAT);
@@ -128,7 +128,7 @@ public class DimensionalRiftEntity extends Projectile {
                 this.entityData.set(IS_COLLAPSING, true);
             }
 
-            // Cast beat (tick 1): base dust burst, the debris field, and the ground scar.
+            // Cast beat (tick 1): base dust burst, the debris field, and the ground conversion.
             if (this.tickCount == 1) {
                 LayeredParticles.emitGroundBurst(serverLevel, center, 3.0f, THEME_ARGB);
                 spawnDebrisField(serverLevel, center, livingOwner);
@@ -292,10 +292,10 @@ public class DimensionalRiftEntity extends Projectile {
     }
 
     /**
-     * Temporary ground scarring: the surface under the rift weeps into soul
-     * soil for a while, then GroundScar restores the real ground. Finds the
-     * surface below the rift center first; a rift opened high in the air
-     * scars nothing.
+     * Permanent ground conversion: the surface under the rift weeps into
+     * soul soil for good, and the rift mouth eats a shallow crater at its
+     * heart. Finds the surface below the rift center first; a rift opened
+     * high in the air marks nothing.
      */
     private void scarGround(ServerLevel serverLevel, Vec3 center) {
         BlockPos base = BlockPos.containing(center.x, center.y, center.z);
@@ -305,8 +305,10 @@ public class DimensionalRiftEntity extends Projectile {
             if (state.isAir() || state.getCollisionShape(serverLevel, candidate).isEmpty()) continue;
             BlockState above = serverLevel.getBlockState(candidate.above());
             if (!above.isAir() && !above.getCollisionShape(serverLevel, candidate.above()).isEmpty()) continue;
-            GroundScar.scarDisk(serverLevel, candidate, 4, Blocks.SOUL_SOIL.defaultBlockState(),
-                300, 0.45f, serverLevel.getRandom());
+            PermanentDestruction.convertDisk(serverLevel, candidate, 4, Blocks.SOUL_SOIL.defaultBlockState(),
+                0.45f, serverLevel.getRandom());
+            PermanentDestruction.crater(serverLevel, candidate, 2.0, 0.5, false,
+                PermanentDestruction.TIER_WEAK, 50, serverLevel.getRandom());
             return;
         }
     }

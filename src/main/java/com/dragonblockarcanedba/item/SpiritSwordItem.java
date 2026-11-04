@@ -296,14 +296,13 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
             }
 
             // World mark: once the beam is at full ramp, a sustained strike
-            // on open ground crystallizes the surface cell it lands on.
-            // GroundScar restores it after 120 ticks and refuses protected
-            // blocks; re-scarring the same cell just extends the restore.
+            // on open ground crystallizes the surface cell it lands on,
+            // permanently. PermanentDestruction refuses protected blocks.
             if (blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS
                 && blockHit.getDirection() == net.minecraft.core.Direction.UP
                 && ticksUsed >= 40) {
                 var crystal = net.minecraft.world.level.block.Blocks.STAINED_GLASS.pick(net.minecraft.world.item.DyeColor.LIGHT_BLUE).defaultBlockState();
-                com.dragonblockarcanedba.util.GroundScar.scar(serverLevel, blockHit.getBlockPos(), crystal, 120);
+                com.dragonblockarcanedba.util.PermanentDestruction.convert(serverLevel, blockHit.getBlockPos(), crystal);
                 // Once a second at full ramp the strike point throws crystal
                 // shards off the scar it is burning in (point 2).
                 if (ticksUsed % 20 == 0) {

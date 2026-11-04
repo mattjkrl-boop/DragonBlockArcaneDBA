@@ -5,8 +5,8 @@ import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import com.dragonblockarcanedba.util.VortexPhysics;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -82,7 +82,12 @@ public class BraveShockwaveEntity extends Projectile {
         return (float) (Math.sin(progress * (Math.PI / 2.0)) * getMaxRadius());
     }
 
-    /** Find the surface under the impact and scorch a small disk of it. */
+    /**
+     * Find the surface under the impact, scorch a small disk of it to
+     * permanent magma, and punch a shallow crater at the contact point
+     * (radius 2, WEAK, cap 60). The conversion runs first so the crater
+     * eats the heart of its own disk instead of being refilled by it.
+     */
     private void scarGround(ServerLevel serverLevel, Vec3 center) {
         BlockPos base = BlockPos.containing(center.x, center.y, center.z);
         for (int dy = 0; dy <= 8; dy++) {
@@ -91,8 +96,10 @@ public class BraveShockwaveEntity extends Projectile {
             if (state.isAir() || state.getCollisionShape(serverLevel, candidate).isEmpty()) continue;
             BlockState above = serverLevel.getBlockState(candidate.above());
             if (!above.isAir() && !above.getCollisionShape(serverLevel, candidate.above()).isEmpty()) continue;
-            GroundScar.scarDisk(serverLevel, candidate, 2, Blocks.MAGMA_BLOCK.defaultBlockState(),
-                300, 0.6f, serverLevel.getRandom());
+            PermanentDestruction.convertDisk(serverLevel, candidate, 2, Blocks.MAGMA_BLOCK.defaultBlockState(),
+                0.6f, serverLevel.getRandom());
+            PermanentDestruction.crater(serverLevel, candidate, 2.0, 0.5, false,
+                PermanentDestruction.TIER_WEAK, 60, serverLevel.getRandom());
             return;
         }
     }
@@ -114,9 +121,9 @@ public class BraveShockwaveEntity extends Projectile {
 
             if (this.tickCount == 2) {
                 // The dive strikes earth here: scorch the ground under the
-                // impact into magma for a while (standard point 3). GroundScar
-                // records the real ground and restores it, crash safe. A
-                // shockwave that fires high in the air scars nothing.
+                // impact into permanent magma and crater it (standard
+                // point 3). A shockwave that fires high in the air marks
+                // nothing.
                 scarGround(serverLevel, center);
             }
 

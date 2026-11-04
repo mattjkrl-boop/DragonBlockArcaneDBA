@@ -5,7 +5,7 @@ import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
-import com.dragonblockarcanedba.util.GroundScar;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -240,9 +240,9 @@ public class DimensionalSlashEntity extends Projectile {
 
     /**
      * The strike, shared by entity and block hits: the crescent stops, bursts,
-     * throws shards of cut space, and (on a block) cuts a temporary scar into
-     * the exact block it struck, which the world heals on GroundScar's clock.
-     * The entity then lingers for the renderer's tear fade instead of dying here.
+     * throws shards of cut space, and (on a block) cuts a permanent mark into
+     * the exact block it struck. The entity then lingers for the renderer's
+     * tear fade instead of dying here.
      */
     private void beginImpact(ServerLevel serverLevel, HitResult result) {
         this.entityData.set(FADE_START, this.tickCount);
@@ -255,8 +255,8 @@ public class DimensionalSlashEntity extends Projectile {
             at, 10, 1.6, 2.2, 24, VOID_PALETTE);
 
         if (result instanceof BlockHitResult blockHit) {
-            GroundScar.scar(serverLevel, blockHit.getBlockPos(),
-                Blocks.CRYING_OBSIDIAN.defaultBlockState(), 140);
+            PermanentDestruction.convert(serverLevel, blockHit.getBlockPos(),
+                Blocks.CRYING_OBSIDIAN.defaultBlockState());
             serverLevel.playSound(null, at.x, at.y, at.z,
                 DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 1.4f, 1.5f);
         }

@@ -7,7 +7,7 @@ import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
-import com.dragonblockarcanedba.util.GroundScar;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import com.dragonblockarcanedba.util.LayeredParticles;
 import com.dragonblockarcanedba.util.VortexPhysics;
 import net.minecraft.core.BlockPos;
@@ -263,16 +263,23 @@ public class DimensionalWarpRiftEntity extends Projectile {
 
         if (isDest) {
             // The arrival tears the ground it lands on: debris field of the
-            // real terrain, a temporary scar disk, a base burst, camera weight.
+            // real terrain, a permanent conversion disk, a shallow crater
+            // the rift mouth eats at its heart, a base burst, camera weight.
             DebrisSpawner.spawnField(serverLevel, livingOwner, center, 24, radius, 3.5, 36);
-            scarGroundDisk(serverLevel, center, 2, 240);
+            convertGroundDisk(serverLevel, center, 2);
+            BlockPos mouthAir = PermanentDestruction.findSurface(serverLevel,
+                (int) Math.floor(center.x), (int) Math.floor(center.z), (int) Math.floor(center.y));
+            if (mouthAir != null) {
+                PermanentDestruction.crater(serverLevel, mouthAir.below(), 2.0, 0.5, false,
+                    PermanentDestruction.TIER_WEAK, 50, serverLevel.getRandom());
+            }
             LayeredParticles.emitGroundBurst(serverLevel, center, radius, THEME_ARGB);
             com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, center.x, center.y, center.z);
         } else {
             // Departure: the ground around the tear cracks as the player is
             // pulled out of the world, and void shards swirl into the closing cut.
             DebrisSpawner.spawnField(serverLevel, livingOwner, center, 12, radius * 0.8, 2.4, 28, VOID_PALETTE);
-            scarGroundDisk(serverLevel, center, 1, 200);
+            convertGroundDisk(serverLevel, center, 1);
             LayeredParticles.emitGroundBurst(serverLevel, center, radius * 0.7f, THEME_ARGB);
         }
 
@@ -310,12 +317,11 @@ public class DimensionalWarpRiftEntity extends Projectile {
     }
 
     /**
-     * Scar a disk of real ground cells to crying obsidian, following the
-     * terrain column by column so nothing floats on slopes. GroundScar
-     * restores every cell on its own crash-safe clock and refuses protected
-     * blocks itself.
+     * Convert a disk of real ground cells to crying obsidian permanently,
+     * following the terrain column by column so nothing floats on slopes.
+     * PermanentDestruction refuses protected blocks itself.
      */
-    private void scarGroundDisk(ServerLevel level, Vec3 center, int radius, int restoreTicks) {
+    private void convertGroundDisk(ServerLevel level, Vec3 center, int radius) {
         BlockState scarState = Blocks.CRYING_OBSIDIAN.defaultBlockState();
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
@@ -323,7 +329,7 @@ public class DimensionalWarpRiftEntity extends Projectile {
                 if (level.getRandom().nextFloat() > 0.6f) continue;
                 BlockPos surface = findSurface(level, center.x + dx, center.y, center.z + dz);
                 if (surface != null) {
-                    GroundScar.scar(level, surface, scarState, restoreTicks);
+                    PermanentDestruction.convert(level, surface, scarState);
                 }
             }
         }

@@ -26,13 +26,17 @@ import java.util.Set;
  * Piercing glowing golden-white crescent energy wave that cuts through lines of enemies.
  *
  * On block contact the wave no longer discards at full brightness: it bursts
- * into a finisher class debris field with a ground burst and a temporary
- * scar, then hangs for DISSIPATE_TICKS while the renderer fades it out.
- * Flying low over ground it sheds ground bursts along its path.
+ * into a finisher class debris field with a ground burst and a permanent
+ * conversion, then hangs for DISSIPATE_TICKS while the renderer fades it out.
+ * Flying low over ground it sheds ground bursts along its path and carves a
+ * real fissure into the ground track under it.
  */
 public class GrandCrescentWaveEntity extends Projectile {
     private float damage = 600.0f;
     private final Set<Integer> hitEntityIds = new HashSet<>();
+    /** Per wave cap on fissure blocks carved along the ground track. */
+    private static final int CARVE_CAP = 90;
+    private int carvedBlocks = 0;
 
     public static final int MAX_LIFE_TICKS = 80;
     public static final int DISSIPATE_TICKS = 12;
@@ -123,7 +127,9 @@ public class GrandCrescentWaveEntity extends Projectile {
             }
 
             // Ground contact: flying low over solid ground, the wave's
-            // underside tears dust off the surface as it passes.
+            // underside tears dust off the surface as it passes, and every
+            // second tick its ground track is carved into a real fissure
+            // (width 1, one deep, WEAK tier, capped per wave).
             if (this.tickCount % 4 == 0) {
                 net.minecraft.core.BlockPos belowPos = net.minecraft.core.BlockPos.containing(
                     this.getX(), this.getY() - 1.4, this.getZ());
@@ -132,6 +138,18 @@ public class GrandCrescentWaveEntity extends Projectile {
                     com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel,
                         new Vec3(this.getX(), belowPos.getY() + 1.0, this.getZ()),
                         1.6f, 0xFFD833);
+                }
+            }
+            if (this.tickCount % 2 == 0 && this.carvedBlocks < CARVE_CAP && movement.lengthSqr() > 0.001) {
+                net.minecraft.core.BlockPos belowPos = net.minecraft.core.BlockPos.containing(
+                    this.getX(), this.getY() - 1.4, this.getZ());
+                if (!serverLevel.getBlockState(belowPos).isAir()
+                    && serverLevel.getBlockState(belowPos.above()).isAir()) {
+                    this.carvedBlocks += com.dragonblockarcanedba.util.PermanentDestruction.fissure(
+                        serverLevel, belowPos.above(), movement, movement.length() * 2.0,
+                        1, 1, false,
+                        com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK,
+                        CARVE_CAP - this.carvedBlocks);
                 }
             }
 
@@ -168,9 +186,9 @@ public class GrandCrescentWaveEntity extends Projectile {
                 com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
             }
 
-            // Block contact: burst into debris, scar the struck ground, and
-            // dissipate over DISSIPATE_TICKS instead of discarding at full
-            // brightness in one tick.
+            // Block contact: burst into debris, convert the struck ground,
+            // and dissipate over DISSIPATE_TICKS instead of discarding at
+            // full brightness in one tick.
             Vec3 start = this.position();
             Vec3 end = start.add(movement);
             HitResult blockHit = this.level().clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
@@ -184,9 +202,9 @@ public class GrandCrescentWaveEntity extends Projectile {
                 com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, hitPos, 2.4f, 0xFFD833);
                 net.minecraft.core.BlockPos scarPos = net.minecraft.core.BlockPos.containing(hitPos.x, hitPos.y - 1.0, hitPos.z);
                 if (!serverLevel.getBlockState(scarPos).isAir()) {
-                    com.dragonblockarcanedba.util.GroundScar.scarDisk(serverLevel, scarPos, 1,
+                    com.dragonblockarcanedba.util.PermanentDestruction.convertDisk(serverLevel, scarPos, 1,
                         net.minecraft.world.level.block.Blocks.COARSE_DIRT.defaultBlockState(),
-                        200, 0.5f, serverLevel.getRandom());
+                        0.5f, serverLevel.getRandom());
                 }
                 serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z,
                     DbaSounds.RELEASE_BLAST, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 1.3f);

@@ -274,8 +274,9 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                 // World interaction at the strike point (SPECTACLE-STANDARD
                 // points 2 and 3): a dust burst where the pole lands, real
                 // debris pieces torn from the ground at the hit that orbit,
-                // fall, and rain back down, and torn turf when the pole comes
-                // down on grass from above (temporary, restored by GroundScar).
+                // fall, and rain back down, torn turf when the pole comes
+                // down on grass from above (permanent), and a small crater
+                // punched into the ground under the strike.
                 com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(
                     serverLevel, hitVec, 1.6f, 0xF2C14E);
                 com.dragonblockarcanedba.util.DebrisSpawner.spawnField(
@@ -289,11 +290,16 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                             net.minecraft.core.BlockPos cell = groundPos.offset(dx, 0, dz);
                             if (serverLevel.getBlockState(cell).is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK)
                                 && rand.nextFloat() < 0.7f) {
-                                com.dragonblockarcanedba.util.GroundScar.scar(serverLevel, cell,
-                                    net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(), 120);
+                                com.dragonblockarcanedba.util.PermanentDestruction.convert(serverLevel, cell,
+                                    net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState());
                             }
                         }
                     }
+                    // The descending strike punches a shallow crater into
+                    // the ground it landed on (radius 2, one deep, WEAK).
+                    com.dragonblockarcanedba.util.PermanentDestruction.crater(serverLevel, groundPos,
+                        2.0, 0.5, false,
+                        com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK, 50, rand);
                 }
 
                 serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,

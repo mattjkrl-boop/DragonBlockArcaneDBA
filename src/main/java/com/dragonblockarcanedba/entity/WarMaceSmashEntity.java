@@ -5,8 +5,8 @@ import com.dragonblockarcanedba.item.WarMaceItem;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
-import com.dragonblockarcanedba.util.GroundScar;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -37,9 +37,9 @@ import java.util.Set;
  *
  * A heavy smash is cast mid fall, so the volume follows the falling owner
  * until the owner lands or the shell first connects; only then does it plant.
- * On impact the ground answers: a dust burst, a fracture disk scarred into
- * the surface through GroundScar (restored later), and a field of real ground
- * debris thrown up by DebrisSpawner.
+ * On impact the ground answers: a dust burst, a real crater punched into
+ * the surface with a permanent fracture ring around it, and a field of
+ * real ground debris thrown up by DebrisSpawner.
  */
 public class WarMaceSmashEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> HEAVY = SynchedEntityData.defineId(WarMaceSmashEntity.class, EntityDataSerializers.BOOLEAN);
@@ -234,9 +234,10 @@ public class WarMaceSmashEntity extends Projectile {
 
     /**
      * The impact beat: base dust burst always; when the smash truly reached
-     * the ground, also a fracture scar disk and a debris field of the real
-     * ground, plus (heavy only) a landing shake, because the cast time shake
-     * fired up at the cast height where nobody felt the landing.
+     * the ground, also a real crater with a permanent fracture ring and a
+     * debris field of the real ground, plus (heavy only) a landing shake,
+     * because the cast time shake fired up at the cast height where nobody
+     * felt the landing.
      */
     private void doImpact(ServerLevel server, double x, double y, double z, boolean grounded) {
         this.impacted = true;
@@ -248,7 +249,17 @@ public class WarMaceSmashEntity extends Projectile {
         if (heavy) {
             DbaImpactFx.shake(server, x, y, z, 2.4f, 14, 3);
         }
-        this.scarFractureDisk(server, x, y, z, heavy ? 5 : 3, heavy ? 300 : 200);
+        // The crater flagship: a real bowl at STANDARD tier (radius 3, or 4
+        // on the heavy smash, cap 220, no drops), then the fracture ring
+        // converts permanently one ring wider than the crater.
+        int craterRadius = heavy ? 4 : 3;
+        BlockPos surfaceAir = PermanentDestruction.findSurface(server,
+            (int) Math.floor(x), (int) Math.floor(z), (int) Math.floor(y) + 1);
+        if (surfaceAir != null) {
+            PermanentDestruction.crater(server, surfaceAir.below(), craterRadius, 0.6, false,
+                PermanentDestruction.TIER_STANDARD, 220, server.getRandom());
+        }
+        this.fractureDisk(server, x, y, z, craterRadius + 1, craterRadius);
         Entity owner = this.getOwner();
         DebrisSpawner.spawnField(server, owner instanceof LivingEntity living ? living : null,
             new Vec3(x, y + 0.25, z),
@@ -256,13 +267,14 @@ public class WarMaceSmashEntity extends Projectile {
     }
 
     /**
-     * Fractures the surface inside a disk: dirt family tears up into coarse
-     * dirt, stone family crushes to gravel, brick and deepslate variants swap
-     * to their cracked forms. GroundScar restores every cell afterwards and
-     * refuses protected blocks. Columns scan a few blocks up and down so the
-     * disk follows sloped ground instead of floating at one height.
+     * Fractures the surface in the ring outside the crater: dirt family
+     * tears up into coarse dirt, stone family crushes to gravel, brick and
+     * deepslate variants swap to their cracked forms. The conversion is
+     * permanent and refuses protected blocks. Columns scan a few blocks up
+     * and down so the ring follows sloped ground instead of floating at
+     * one height.
      */
-    private void scarFractureDisk(ServerLevel server, double x, double y, double z, int radius, int restoreTicks) {
+    private void fractureDisk(ServerLevel server, double x, double y, double z, int radius, int innerRadius) {
         int cx = (int) Math.floor(x);
         int cz = (int) Math.floor(z);
         int baseY = (int) Math.floor(y);
@@ -270,7 +282,7 @@ public class WarMaceSmashEntity extends Projectile {
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
                 double dist = Math.sqrt(dx * dx + dz * dz);
-                if (dist > radius) {
+                if (dist > radius || dist <= innerRadius) {
                     continue;
                 }
                 float chance = 0.9f - 0.45f * (float) (dist / radius);
@@ -285,7 +297,7 @@ public class WarMaceSmashEntity extends Projectile {
                     }
                     BlockState fracture = fractureFor(state);
                     if (fracture != null) {
-                        GroundScar.scar(server, m, fracture, restoreTicks);
+                        PermanentDestruction.convert(server, m.immutable(), fracture);
                     }
                     break;
                 }

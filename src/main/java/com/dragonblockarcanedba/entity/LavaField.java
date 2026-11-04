@@ -7,7 +7,7 @@ import com.dragonblockarcanedba.block.entity.VolcanoBlockEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.DbaDamage;
-import com.dragonblockarcanedba.util.GroundScar;
+import com.dragonblockarcanedba.util.PermanentDestruction;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -49,19 +49,26 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * own material: magma crust blocks that cool through stages, channels
  * that flow downhill cell by cell, and planted mini volcanoes.
  *
- * The safety contract is LavaSwordGround's, kept whole: every change is
- * temporary and restores; placement only ever replaces air above sturdy,
- * unprotected ground (the GroundScar list plus the sword's own list);
- * every pending change is mirrored into the level's SavedData the moment
- * it is made, so a crash or a hard kill cannot leave the world scarred;
- * shutdown restores everything; and hard caps bound how much field one
- * level and one player can hold at once.
+ * The safety contract under the destruction expansion: placement only
+ * ever replaces air above sturdy, unprotected ground (the shared
+ * protection list plus the sword's own list); every pending change is
+ * mirrored into the level's SavedData the moment it is made, so a crash
+ * or a hard kill cannot lose a live schedule; and hard caps bound how
+ * much field one level and one player can hold at once. What changed is
+ * the ending: crust no longer restores. At the end of its schedule a POOL
+ * cell settles into permanent basalt, a CHANNEL cell into basalt with a
+ * quarter of the flown centerline settling as magma block instead, a
+ * WAVE cell still vanishes (a permanent stripe under every cleave path
+ * would paint the world), and a volcano site ends as a permanent dormant
+ * volcano block. The serialized field is still named restoreAt, kept for
+ * save compatibility; it now means the settle tick.
  *
  * Entry kinds: CRUST (a placed magma crust cell with a stage schedule),
  * CHANNEL (a cell scheduled to be placed as a channel's flow front
  * reaches it; its stage1At field is the placement tick), VOLCANO (the
  * site mirror for a planted mini volcano; the block entity drives the
- * eruptions, the entry guarantees the cell is restored).
+ * eruptions, and the entry's end now just closes the record, leaving the
+ * dormant block standing).
  */
 public final class LavaField {
     public static final int PROFILE_POOL = 0;
@@ -98,7 +105,7 @@ public final class LavaField {
     private LavaField() {}
 
     public record Entry(BlockPos pos, String original, long stage1At, long stage2At, long restoreAt,
-                        int kind, int profile, String owner, float damage) {
+                        int kind, int profile, String owner, float damage, boolean centerline) {
         public static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
             BlockPos.CODEC.fieldOf("pos").forGetter(Entry::pos),
             Codec.STRING.fieldOf("original").forGetter(Entry::original),
@@ -108,7 +115,10 @@ public final class LavaField {
             Codec.INT.fieldOf("kind").forGetter(Entry::kind),
             Codec.INT.fieldOf("profile").forGetter(Entry::profile),
             Codec.STRING.fieldOf("owner").forGetter(Entry::owner),
-            Codec.FLOAT.fieldOf("damage").forGetter(Entry::damage)
+            Codec.FLOAT.fieldOf("damage").forGetter(Entry::damage),
+            // Optional so entries written before the destruction expansion
+            // still decode; they settle as non-centerline cells.
+            Codec.BOOL.optionalFieldOf("centerline", false).forGetter(Entry::centerline)
         ).apply(i, Entry::new));
     }
 
@@ -198,10 +208,11 @@ public final class LavaField {
         if (!ground.isFaceSturdy(level, groundPos, Direction.UP)) {
             return false;
         }
-        // Protected ground, both lists: the scar system's (block entities,
-        // bedrock, portals, command and structure blocks) and the sword's
-        // own (chests, barrels, spawners under the burn).
-        if (GroundScar.isProtected(level, groundPos, ground)) {
+        // Protected ground, both lists: the shared destruction list
+        // (block entities, bedrock, portals, command and structure
+        // blocks) and the sword's own (chests, barrels, spawners under
+        // the burn).
+        if (PermanentDestruction.isProtected(level, groundPos, ground)) {
             return false;
         }
         return !LavaSwordGround.isProtectedGround(ground);
@@ -230,6 +241,16 @@ public final class LavaField {
     /** Place one crust cell at a known surface position. */
     public static boolean placeCrust(ServerLevel level, BlockPos surface, int profile,
                                      UUID ownerId, float touchDamage) {
+        return placeCrust(level, surface, profile, ownerId, touchDamage, false);
+    }
+
+    /**
+     * Place one crust cell, optionally flagged as a channel centerline
+     * cell (the flag only matters at settle time, where a quarter of
+     * centerline channel cells end as magma block instead of basalt).
+     */
+    public static boolean placeCrust(ServerLevel level, BlockPos surface, int profile,
+                                     UUID ownerId, float touchDamage, boolean centerline) {
         ensureHooks();
         if (!canOccupy(level, surface) || !capsAllow(level, ownerId)) {
             return false;
@@ -243,7 +264,7 @@ public final class LavaField {
         int[] ticks = STAGE_TICKS[profile];
         Pending pending = new Pending(level, surface.immutable(), previous,
             now + ticks[0], now + ticks[1], now + ticks[2],
-            KIND_CRUST, profile, ownerId != null ? ownerId.toString() : "", touchDamage);
+            KIND_CRUST, profile, ownerId != null ? ownerId.toString() : "", touchDamage, centerline);
         PENDING.add(pending);
         persistAdd(pending);
         return true;
@@ -357,15 +378,17 @@ public final class LavaField {
             BlockPos cell = centerline.get(i);
             Pending existing = pendingAt(level, cell);
             if (existing != null && existing.kind == KIND_CRUST) {
-                // Upgrade in place: same cell, longer channel schedule.
+                // Upgrade in place: same cell, longer channel schedule, and
+                // the centerline flag so it can settle as magma block.
                 existing.profile = PROFILE_CHANNEL;
+                existing.centerline = true;
                 existing.stage1At = now + ticks[0];
                 existing.stage2At = now + ticks[1];
                 existing.restoreAt = now + ticks[2];
                 existing.damage = touchDamage;
                 syncEntry(existing);
             } else if (existing == null) {
-                scheduleChannelCell(level, cell, now + i, ownerText, touchDamage);
+                scheduleChannelCell(level, cell, now + i, ownerText, touchDamage, true);
             }
         }
         // Downhill flow from the end of the path.
@@ -388,18 +411,18 @@ public final class LavaField {
             if (best == null) {
                 break;
             }
-            scheduleChannelCell(level, best, now + (step + 1) * 2L, ownerText, touchDamage);
+            scheduleChannelCell(level, best, now + (step + 1) * 2L, ownerText, touchDamage, false);
             current = best;
         }
     }
 
     private static void scheduleChannelCell(ServerLevel level, BlockPos cell, long placeAt,
-                                            String ownerText, float touchDamage) {
+                                            String ownerText, float touchDamage, boolean centerline) {
         if (!capsAllow(level, ownerText.isEmpty() ? null : UUID.fromString(ownerText))) {
             return;
         }
         Pending pending = new Pending(level, cell.immutable(), Blocks.AIR.defaultBlockState(),
-            placeAt, 0, 0, KIND_CHANNEL, PROFILE_CHANNEL, ownerText, touchDamage);
+            placeAt, 0, 0, KIND_CHANNEL, PROFILE_CHANNEL, ownerText, touchDamage, centerline);
         PENDING.add(pending);
         persistAdd(pending);
     }
@@ -421,7 +444,8 @@ public final class LavaField {
     /**
      * Plant a mini volcano with its base in the air cell above groundPos.
      * The block entity drives the eruptions; the field entry mirrors the
-     * site so the cell restores even if the entity is lost.
+     * site so the volcano's record closes on schedule, leaving the
+     * dormant block standing even if the entity is lost.
      */
     public static boolean plantVolcano(ServerLevel level, BlockPos groundPos, UUID ownerId, float blobDamage) {
         if (!canPlantVolcano(level, groundPos, ownerId)) {
@@ -440,7 +464,7 @@ public final class LavaField {
         volcano.initialize(ownerId, now + VOLCANO_LIFE_TICKS, now + 30, blobDamage);
         Pending pending = new Pending(level, surface, previous, 0, 0,
             now + VOLCANO_LIFE_TICKS + VOLCANO_ENTRY_GRACE,
-            KIND_VOLCANO, PROFILE_POOL, ownerId.toString(), blobDamage);
+            KIND_VOLCANO, PROFILE_POOL, ownerId.toString(), blobDamage, false);
         PENDING.add(pending);
         persistAdd(pending);
         return true;
@@ -534,7 +558,7 @@ public final class LavaField {
         Data data = pending.level.getDataStorage().computeIfAbsent(TYPE);
         data.entries.add(new Entry(pending.pos, BlockStateParser.serialize(pending.restore),
             pending.stage1At, pending.stage2At, pending.restoreAt,
-            pending.kind, pending.profile, pending.owner, pending.damage));
+            pending.kind, pending.profile, pending.owner, pending.damage, pending.centerline));
         data.setDirty();
     }
 
@@ -559,7 +583,7 @@ public final class LavaField {
             if (e.pos().equals(pending.pos) && e.kind() == pending.kind) {
                 data.entries.set(i, new Entry(pending.pos, e.original(),
                     pending.stage1At, pending.stage2At, pending.restoreAt,
-                    pending.kind, pending.profile, pending.owner, pending.damage));
+                    pending.kind, pending.profile, pending.owner, pending.damage, pending.centerline));
                 data.setDirty();
                 return;
             }
@@ -606,7 +630,7 @@ public final class LavaField {
             }
             Pending pending = new Pending(level, entry.pos().immutable(), parseState(level, entry.original()),
                 entry.stage1At(), entry.stage2At(), entry.restoreAt(),
-                entry.kind(), entry.profile(), entry.owner(), entry.damage());
+                entry.kind(), entry.profile(), entry.owner(), entry.damage(), entry.centerline());
             if (entry.kind() == KIND_CHANNEL) {
                 // A flow front that had not arrived when the server died
                 // still arrives; one long overdue is placed at once by
@@ -615,7 +639,12 @@ public final class LavaField {
                 continue;
             }
             if (now >= entry.restoreAt()) {
-                restoreCell(pending);
+                // Overdue at adoption: a crust cell settles at once
+                // (basalt, magma block, or vanish per profile); a volcano
+                // entry just closes, the dormant block stays.
+                if (entry.kind() == KIND_CRUST) {
+                    settleCell(pending);
+                }
                 it.remove();
                 changed = true;
                 continue;
@@ -641,13 +670,36 @@ public final class LavaField {
         };
     }
 
-    private static void restoreCell(Pending pending) {
+    /**
+     * The end of a crust cell's schedule, under the destruction expansion.
+     * POOL cells settle into permanent basalt; CHANNEL cells settle into
+     * basalt, with a quarter of the flown centerline settling as magma
+     * block instead; WAVE cells vanish back to the air they replaced, the
+     * one deliberate exception, because a permanent stripe under every
+     * cleave path would paint the world. The settle goes through the
+     * shared refusal rules; the cell provably still holds our own crust
+     * (stillOurs above), so if the shared convert ever refuses it, writing
+     * our own cell directly is safe.
+     */
+    private static void settleCell(Pending pending) {
         ServerLevel level = pending.level;
         if (!level.isInWorldBounds(pending.pos)) {
             return;
         }
-        if (stillOurs(level, pending)) {
+        if (!stillOurs(level, pending)) {
+            return;
+        }
+        if (pending.profile == PROFILE_WAVE) {
             level.setBlock(pending.pos, pending.restore, PLACE_FLAGS);
+            return;
+        }
+        BlockState end = Blocks.BASALT.defaultBlockState();
+        if (pending.profile == PROFILE_CHANNEL && pending.centerline
+            && level.getRandom().nextDouble() < 0.25) {
+            end = Blocks.MAGMA_BLOCK.defaultBlockState();
+        }
+        if (!PermanentDestruction.convert(level, pending.pos, end)) {
+            level.setBlock(pending.pos, end, PLACE_FLAGS);
         }
     }
 
@@ -670,8 +722,10 @@ public final class LavaField {
                         persistRemove(level, pending.pos, KIND_CHANNEL);
                         // The restore state recorded for a channel front is
                         // a placeholder; placement re-reads the live cell.
+                        // The centerline flag rides along into the crust.
                         placeCrust(level, pending.pos, PROFILE_CHANNEL,
-                            pending.owner.isEmpty() ? null : UUID.fromString(pending.owner), pending.damage);
+                            pending.owner.isEmpty() ? null : UUID.fromString(pending.owner),
+                            pending.damage, pending.centerline);
                     }
                 }
                 case KIND_CRUST -> {
@@ -684,7 +738,7 @@ public final class LavaField {
                         continue;
                     }
                     if (now >= pending.restoreAt) {
-                        restoreCell(pending);
+                        settleCell(pending);
                         persistRemove(level, pending.pos, KIND_CRUST);
                         it.remove();
                         continue;
@@ -698,10 +752,12 @@ public final class LavaField {
                         continue;
                     }
                     if (now >= pending.restoreAt) {
-                        // Backstop: the block entity normally ends the
-                        // site itself; if it is gone or stuck, the field
-                        // guarantees the cell.
-                        endVolcano(level, pending.pos);
+                        // The site's record ends here. The block entity
+                        // went dormant at its own expiry a little earlier;
+                        // the dormant volcano block is permanent now and
+                        // stays standing.
+                        persistRemove(level, pending.pos, KIND_VOLCANO);
+                        it.remove();
                     }
                 }
                 default -> {
@@ -734,13 +790,30 @@ public final class LavaField {
         List<Pending> copy = new ArrayList<>(PENDING);
         PENDING.clear();
         for (Pending pending : copy) {
-            if (pending.level.getServer() == server) {
-                if (pending.kind != KIND_CHANNEL) {
-                    restoreCell(pending);
-                }
-                persistRemove(pending.level, pending.pos, pending.kind);
-            } else {
+            if (pending.level.getServer() != server) {
                 PENDING.add(pending);
+                continue;
+            }
+            // Shutdown settles only what is already overdue and otherwise
+            // leaves the SavedData records in place, so live schedules are
+            // adopted and finish on time after the restart instead of
+            // being torn out early.
+            long now = pending.level.getGameTime();
+            switch (pending.kind) {
+                case KIND_CRUST -> {
+                    if (now >= pending.restoreAt) {
+                        settleCell(pending);
+                        persistRemove(pending.level, pending.pos, pending.kind);
+                    }
+                }
+                case KIND_VOLCANO -> {
+                    if (now >= pending.restoreAt) {
+                        persistRemove(pending.level, pending.pos, pending.kind);
+                    }
+                }
+                default -> {
+                    // Channel fronts and unknown kinds keep their records.
+                }
             }
         }
     }
@@ -756,9 +829,10 @@ public final class LavaField {
         int profile;
         final String owner;
         float damage;
+        boolean centerline;
 
         Pending(ServerLevel level, BlockPos pos, BlockState restore, long stage1At, long stage2At,
-                long restoreAt, int kind, int profile, String owner, float damage) {
+                long restoreAt, int kind, int profile, String owner, float damage, boolean centerline) {
             this.level = level;
             this.pos = pos;
             this.restore = restore;
@@ -769,6 +843,7 @@ public final class LavaField {
             this.profile = profile;
             this.owner = owner;
             this.damage = damage;
+            this.centerline = centerline;
         }
     }
 }

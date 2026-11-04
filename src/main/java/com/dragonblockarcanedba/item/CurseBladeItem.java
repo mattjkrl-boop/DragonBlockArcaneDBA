@@ -317,10 +317,11 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                             serverLevel.setBlockAndUpdate(firePos, net.minecraft.world.level.block.Blocks.FIRE.defaultBlockState());
                         }
 
-                        // Scorched ground (point 3): the strike blackens the
-                        // earth around the hit for a while, then GroundScar
-                        // restores it. Torn up blocks orbit the hit briefly.
-                        scorchGround(serverLevel, targetPos.x, targetPos.z, 1, 0.7f, 160);
+                        // Scorched ground (point 3): the charged strike
+                        // blackens the earth around the hit permanently,
+                        // over a radius 2 patch. Torn up blocks orbit the
+                        // hit briefly.
+                        scorchGround(serverLevel, targetPos.x, targetPos.z, 2, 0.7f);
                         com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, player,
                             new Vec3(targetPos.x, targetPos.y, targetPos.z), 12, 2.5, 3.0, 25);
                         com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel,
@@ -371,7 +372,7 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                     victim.hurtServer(serverLevel, com.dragonblockarcanedba.util.DbaDamage.curse(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(ambientDamage));
                     victim.igniteForSeconds(3);
                 }
-                scorchGround(serverLevel, rx, rz, 0, 1.0f, 120);
+                scorchGround(serverLevel, rx, rz, 0, 1.0f);
                 com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, new Vec3(rx, ry, rz), 1.4f, 0xFFE61230);
             }
 
@@ -415,9 +416,18 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
 
                         // The slam tears the ground up for real now (points 2
                         // and 3): orbiting debris pieces, a scorched patch
-                        // under the victim, and a dust burst at the impact.
+                        // under the victim, a shallow crater punched into
+                        // the ground at the shatter point, and a dust burst
+                        // at the impact.
                         com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, player, enemy.position(), 12, 3.0, 4.0, 30);
-                        scorchGround(serverLevel, enemy.getX(), enemy.getZ(), 2, 0.5f, 200);
+                        scorchGround(serverLevel, enemy.getX(), enemy.getZ(), 2, 0.5f);
+                        BlockPos shatterAir = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(serverLevel,
+                            (int) Math.floor(enemy.getX()), (int) Math.floor(enemy.getZ()), (int) Math.floor(enemy.getY()));
+                        if (shatterAir != null) {
+                            com.dragonblockarcanedba.util.PermanentDestruction.crater(serverLevel, shatterAir.below(),
+                                2.0, 0.5, false,
+                                com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK, 60, serverLevel.getRandom());
+                        }
                         com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, enemy.position(), 2.2f, 0xFFE61230);
                     }
                 }
@@ -476,7 +486,7 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                 // a scorched patch where it stood (points 2, 3, and 5).
                 com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, player, player.position(),
                     24 + (int) (36 * stormRatio), domainRadius * 0.8, 6.0 + 6.0 * stormRatio, 50);
-                scorchGround(serverLevel, player.getX(), player.getZ(), Math.min(8, (int) (domainRadius * 0.5)), 0.45f, 240);
+                scorchGround(serverLevel, player.getX(), player.getZ(), Math.min(8, (int) (domainRadius * 0.5)), 0.45f);
                 com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, player.position(), (float) domainRadius * 0.5f, 0xFFE61230);
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.THUNDER_DARK, SoundSource.WEATHER, 3.0f, 0.6f);
@@ -488,11 +498,11 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
     }
 
     /**
-     * Scorch the real top block of each column around a point through
-     * GroundScar, so the blackened ground sits on the terrain on any slope
-     * and is restored on schedule. Air columns (cliff edges) are skipped.
+     * Scorch the real top block of each column around a point to permanent
+     * blackstone, so the blackened ground sits on the terrain on any slope
+     * and stays. Air columns (cliff edges) are skipped.
      */
-    private static void scorchGround(ServerLevel serverLevel, double cx, double cz, int radius, float chance, int restoreTicks) {
+    private static void scorchGround(ServerLevel serverLevel, double cx, double cz, int radius, float chance) {
         int baseX = (int) Math.floor(cx);
         int baseZ = (int) Math.floor(cz);
         for (int dx = -radius; dx <= radius; dx++) {
@@ -502,8 +512,8 @@ public class CurseBladeItem extends Item implements com.dragonblockarcanedba.ite
                 int topY = serverLevel.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, baseX + dx, baseZ + dz) - 1;
                 BlockPos pos = new BlockPos(baseX + dx, topY, baseZ + dz);
                 if (serverLevel.getBlockState(pos).isAir()) continue;
-                com.dragonblockarcanedba.util.GroundScar.scar(serverLevel, pos,
-                    net.minecraft.world.level.block.Blocks.BLACKSTONE.defaultBlockState(), restoreTicks);
+                com.dragonblockarcanedba.util.PermanentDestruction.convert(serverLevel, pos,
+                    net.minecraft.world.level.block.Blocks.BLACKSTONE.defaultBlockState());
             }
         }
     }

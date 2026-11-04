@@ -27,10 +27,11 @@ import java.util.List;
  *
  * Spectacle pass: the slam now does what its art always promised. On the impact
  * tick it bursts dust and throws real ground debris; as the seal forms it tears a
- * temporary brimstone scar into the ground through GroundScar; and at tick 8,
- * when the spikes stand and the seal has grown in, the damage lands with a launch
- * instead of the old downward pin. Nothing is instant: the telegraph grows first,
- * the hit lands at the visual's peak, and the scar and embers fade after.
+ * permanent brimstone scar into the ground and punches a real crater at its
+ * heart; and at tick 8, when the spikes stand and the seal has grown in, the
+ * damage lands with a launch instead of the old downward pin. Nothing is
+ * instant: the telegraph grows first, the hit lands at the visual's peak, and
+ * the embers fade after.
  */
 public class DevilSlamShockwaveEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(DevilSlamShockwaveEntity.class, EntityDataSerializers.FLOAT);
@@ -43,8 +44,8 @@ public class DevilSlamShockwaveEntity extends Projectile {
     private static final int SCAR_TICK = 3;
     /** Headline slam damage at point blank, before falloff. */
     private static final float SLAM_DAMAGE = 750.0f;
-    /** How long the brimstone scar stays before GroundScar restores the ground. */
-    private static final int SCAR_RESTORE_TICKS = 240;
+    /** Crater the slam punches at its heart (destruction expansion). */
+    private static final int CRATER_CAP = 160;
     /** Crimson of the pillar and seal, as a dust color for the layered particles. */
     private static final int THEME_ARGB = 0xFFFF3319;
 
@@ -140,10 +141,18 @@ public class DevilSlamShockwaveEntity extends Projectile {
     /**
      * Brimstone scar (standard point 3): the fissure art made real. A torn disk
      * under the slam, magma near the heart, blackstone mid, soul soil at the rim,
-     * thinner with distance, restored by GroundScar after 12 seconds. The cell the
-     * owner stands on is never scarred, so the slam never burns its own caster.
+     * thinner with distance, all of it permanent, with a real crater punched
+     * through the heart first so the conversions pave the crater floor and
+     * rim. The cell the owner stands on is never scarred, so the slam never
+     * burns its own caster.
      */
     private void tearGround(ServerLevel level, Vec3 center, float radius) {
+        BlockPos heartAir = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(level,
+            (int) Math.floor(center.x), (int) Math.floor(center.z), (int) Math.floor(center.y));
+        if (heartAir != null) {
+            com.dragonblockarcanedba.util.PermanentDestruction.crater(level, heartAir.below(), 3.0, 0.5, false,
+                com.dragonblockarcanedba.util.PermanentDestruction.TIER_STANDARD, CRATER_CAP, level.getRandom());
+        }
         int r = (int) Math.ceil(radius);
         int baseY = (int) Math.floor(center.y);
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
@@ -170,7 +179,7 @@ public class DevilSlamShockwaveEntity extends Projectile {
                 }
                 BlockPos surface = findSurface(level, m, center.x + dx, center.z + dz, baseY);
                 if (surface != null) {
-                    com.dragonblockarcanedba.util.GroundScar.scar(level, surface, state, SCAR_RESTORE_TICKS);
+                    com.dragonblockarcanedba.util.PermanentDestruction.convert(level, surface, state);
                 }
             }
         }

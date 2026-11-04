@@ -359,6 +359,16 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
                     level.addFreshEntity(impact);
                     level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.CRIT_HIT, SoundSource.PLAYERS, 1.6f, 0.5f);
                 }
+                // The landing itself cuts the ground: a short fissure along
+                // the lunge line (length 4, one deep, WEAK), whether or not
+                // the lunge found a victim.
+                net.minecraft.core.BlockPos lungeAir = com.dragonblockarcanedba.util.PermanentDestruction.findSurface(
+                    level, (int) Math.floor(player.getX()), (int) Math.floor(player.getZ()), (int) Math.floor(player.getY()));
+                if (lungeAir != null) {
+                    com.dragonblockarcanedba.util.PermanentDestruction.fissure(level, lungeAir, player.getLookAngle(),
+                        4.0, 1, 1, false,
+                        com.dragonblockarcanedba.util.PermanentDestruction.TIER_WEAK, 24);
+                }
             }
         }
     }

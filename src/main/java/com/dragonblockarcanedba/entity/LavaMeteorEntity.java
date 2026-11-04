@@ -134,9 +134,11 @@ public class LavaMeteorEntity extends Projectile {
         LayeredParticles.emitGroundBurst(server, at, 2.2f, 0xFF5A00);
         LivingEntity livingOwner = owner instanceof LivingEntity living ? living : null;
         DebrisSpawner.spawnField(server, livingOwner, at, 10, 2.4, 2.2, 14, DEBRIS_PALETTE);
-        // The scorch ring: the legacy ground system's fire cells (budget 0
-        // means fire only, no real lava sources), ring radius 3.
-        LavaSwordGround.scorchDisk(server, at.x, at.y, at.z, 3.0, 0);
+        // The scorch ring: the legacy ground system's burn, ring radius 3,
+        // with a small real lava budget of 3 sources. Under the destruction
+        // expansion that lava is real and permanent; the fire cells still
+        // burn out on the shared 80 tick clock.
+        LavaSwordGround.scorchDisk(server, at.x, at.y, at.z, 3.0, 3);
         // The crater pools: center first, then a seeded ring, capped so
         // one meteor can never paint more than five crust cells.
         float touch = damage * 0.12f;
