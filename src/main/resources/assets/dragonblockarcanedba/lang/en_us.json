@@ -188,5 +188,8 @@
   "item.dragonblockarcanedba.dragon_radar.dir.northeast": "northeast",
   "item.dragonblockarcanedba.dragon_radar.dir.northwest": "northwest",
   "item.dragonblockarcanedba.dragon_radar.dir.southeast": "southeast",
-  "item.dragonblockarcanedba.dragon_radar.dir.southwest": "southwest"
+  "item.dragonblockarcanedba.dragon_radar.dir.southwest": "southwest",
+  "item.dragonblockarcanedba.war_mace": "War Mace",
+  "item.dragonblockarcanedba.spike_flail": "Spike Flail",
+  "item.dragonblockarcanedba.lava_sword": "Lava Sword"
 }

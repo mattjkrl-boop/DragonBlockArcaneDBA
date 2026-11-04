@@ -30,7 +30,8 @@ public final class DbaGeoWeaponRenderers {
         "katana", "z_sword", "brave_sword", "grand_sword", "azure_dragon_sword",
         "dabura_sword", "cursed_blade", "hollows_edge", "saber",
         "evil_spear", "devil_trident", "power_pole", "sickle_of_sorrow", "ox_kings_ax",
-        "dimensional_sword", "spirit_sword", "whis_staff", "bansho_fan", "blaster_gun");
+        "dimensional_sword", "spirit_sword", "whis_staff", "bansho_fan", "blaster_gun",
+        "war_mace", "spike_flail", "lava_sword");
 
     public static void init() {
         DbaGeoWeapon.Hooks.PROVIDER = DbaGeoWeaponRenderers::provider;
@@ -51,6 +52,11 @@ public final class DbaGeoWeaponRenderers {
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static <T extends Item & GeoAnimatable> GeoItemRenderer<T> build(Item item) {
         String path = BuiltInRegistries.ITEM.getKey(item).getPath();
+        if ("lava_sword".equals(path)) {
+            GeoItemRenderer<T> lava = new DbaWeaponRenderer<>(new LavaSwordGeoModel<T>());
+            lava.withRenderLayer(new AutoGlowingGeoLayer(lava));
+            return lava;
+        }
         DefaultedItemGeoModel<T> model = new DefaultedItemGeoModel<T>(DragonBlockArcaneDBA.id(path));
         if (MIGRATED.contains(path)) {
             model = model.withAltTexture(DragonBlockArcaneDBA.id(path + "_geo"));

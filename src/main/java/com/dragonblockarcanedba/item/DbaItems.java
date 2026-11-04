@@ -216,6 +216,15 @@ public class DbaItems {
     public static final ResourceKey<Item> Z_SWORD_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("z_sword")
     );
+    public static final ResourceKey<Item> WAR_MACE_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("war_mace")
+    );
+    public static final ResourceKey<Item> SPIKE_FLAIL_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("spike_flail")
+    );
+    public static final ResourceKey<Item> LAVA_SWORD_KEY = ResourceKey.create(
+        Registries.ITEM, DragonBlockArcaneDBA.id("lava_sword")
+    );
     public static final ResourceKey<Item> EVIL_SPEAR_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("evil_spear")
     );
@@ -464,6 +473,15 @@ public class DbaItems {
     public static final Item Z_SWORD = new ZSwordItem(
         new Item.Properties().setId(Z_SWORD_KEY).stacksTo(1)
     );
+    public static final Item WAR_MACE = new WarMaceItem(
+        new Item.Properties().setId(WAR_MACE_KEY).stacksTo(1)
+    );
+    public static final Item SPIKE_FLAIL = new SpikeFlailItem(
+        new Item.Properties().setId(SPIKE_FLAIL_KEY).stacksTo(1)
+    );
+    public static final Item LAVA_SWORD = new LavaSwordItem(
+        new Item.Properties().setId(LAVA_SWORD_KEY).stacksTo(1)
+    );
     public static final Item EVIL_SPEAR = new EvilSpearItem(
         new Item.Properties().setId(EVIL_SPEAR_KEY).stacksTo(1)
     );
@@ -529,6 +547,9 @@ public class DbaItems {
             output.accept(GRAND_SWORD);
             output.accept(DABURA_SWORD);
             output.accept(Z_SWORD);
+            output.accept(WAR_MACE);
+            output.accept(SPIKE_FLAIL);
+            output.accept(LAVA_SWORD);
             output.accept(EVIL_SPEAR);
             output.accept(BRAVE_SWORD);
             output.accept(KATANA);
@@ -703,6 +724,9 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, GRAND_SWORD_KEY, GRAND_SWORD);
         Registry.register(BuiltInRegistries.ITEM, DABURA_SWORD_KEY, DABURA_SWORD);
         Registry.register(BuiltInRegistries.ITEM, Z_SWORD_KEY, Z_SWORD);
+        Registry.register(BuiltInRegistries.ITEM, WAR_MACE_KEY, WAR_MACE);
+        Registry.register(BuiltInRegistries.ITEM, SPIKE_FLAIL_KEY, SPIKE_FLAIL);
+        Registry.register(BuiltInRegistries.ITEM, LAVA_SWORD_KEY, LAVA_SWORD);
         Registry.register(BuiltInRegistries.ITEM, EVIL_SPEAR_KEY, EVIL_SPEAR);
         Registry.register(BuiltInRegistries.ITEM, BRAVE_SWORD_KEY, BRAVE_SWORD);
         Registry.register(BuiltInRegistries.ITEM, KATANA_KEY, KATANA);

@@ -874,6 +874,66 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("patrol_robot")))
     );
 
+    public static final EntityType<WarMaceSmashEntity> WAR_MACE_SMASH = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("war_mace_smash"),
+            EntityType.Builder.<WarMaceSmashEntity>of(WarMaceSmashEntity::new, MobCategory.MISC)
+                    .sized(1.2f, 0.6f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("war_mace_smash")))
+    );
+
+    public static final EntityType<WarMaceRiseEntity> WAR_MACE_RISE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("war_mace_rise"),
+            EntityType.Builder.<WarMaceRiseEntity>of(WarMaceRiseEntity::new, MobCategory.MISC)
+                    .sized(1.2f, 1.2f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("war_mace_rise")))
+    );
+
+    public static final EntityType<SpikeFlailSwingEntity> SPIKE_FLAIL_SWING = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("spike_flail_swing"),
+            EntityType.Builder.<SpikeFlailSwingEntity>of(SpikeFlailSwingEntity::new, MobCategory.MISC)
+                    .sized(0.8f, 0.8f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("spike_flail_swing")))
+    );
+
+    public static final EntityType<SpikeFlailSpinEntity> SPIKE_FLAIL_SPIN = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("spike_flail_spin"),
+            EntityType.Builder.<SpikeFlailSpinEntity>of(SpikeFlailSpinEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("spike_flail_spin")))
+    );
+
+    public static final EntityType<LavaCleaveEntity> LAVA_CLEAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("lava_cleave"),
+            EntityType.Builder.<LavaCleaveEntity>of(LavaCleaveEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 0.8f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("lava_cleave")))
+    );
+
+    public static final EntityType<LavaEruptionEntity> LAVA_ERUPTION = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("lava_eruption"),
+            EntityType.Builder.<LavaEruptionEntity>of(LavaEruptionEntity::new, MobCategory.MISC)
+                    .sized(2.4f, 1.4f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("lava_eruption")))
+    );
+
     public static void register() {
         DragonBlockArcaneDBA.LOGGER.info("Registering Entities for " + DragonBlockArcaneDBA.MOD_ID);
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(OTHERWORLD_GUIDE, OtherworldGuideEntity.createMobAttributes());

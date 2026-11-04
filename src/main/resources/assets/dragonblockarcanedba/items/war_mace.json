@@ -1,0 +1,26 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui",
+          "fixed",
+          "ground"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "dragonblockarcanedba:item/war_mace"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "dragonblockarcanedba:item/war_mace_geo_base",
+      "model": {
+        "type": "geckolib:geckolib"
+      }
+    }
+  }
+}

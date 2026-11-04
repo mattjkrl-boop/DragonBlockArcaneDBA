@@ -137,7 +137,10 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem ||
                     stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.WarMaceItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.SpikeFlailItem ||
+                    stack.getItem() instanceof com.dragonblockarcanedba.item.LavaSwordItem) {
                     return net.minecraft.world.InteractionResult.FAIL;
                 }
 
@@ -180,7 +183,10 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                                       heldItem instanceof com.dragonblockarcanedba.item.KatanaItem ||
                                       heldItem instanceof com.dragonblockarcanedba.item.BlasterGunItem ||
                                       heldItem instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.WhisStaffItem;
+                                      heldItem instanceof com.dragonblockarcanedba.item.WhisStaffItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.WarMaceItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.SpikeFlailItem ||
+                                      heldItem instanceof com.dragonblockarcanedba.item.LavaSwordItem;
 
                 if (!isDbaWeapon) {
                     com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
@@ -367,6 +373,9 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             com.dragonblockarcanedba.item.KatanaItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.item.OxKingsAxeItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.item.ZSwordItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.WarMaceItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.SpikeFlailItem.onPlayerDisconnect(playerUuid);
+            com.dragonblockarcanedba.item.LavaSwordItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.ki.KiTechniqueHandler.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.ki.KiBarrier.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.util.DbaPhysicsAttributes.onPlayerDisconnect(playerUuid);

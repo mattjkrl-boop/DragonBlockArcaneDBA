@@ -539,6 +539,12 @@ public class DbaNetwork {
                     com.dragonblockarcanedba.item.BanshoFanItem.performGaleSwing(player, stack);
                 } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
                     com.dragonblockarcanedba.item.WhisStaffItem.performTemporalStrike(player, stack);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.WarMaceItem) {
+                    com.dragonblockarcanedba.item.WarMaceItem.performSmash(player, stack);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SpikeFlailItem) {
+                    com.dragonblockarcanedba.item.SpikeFlailItem.performSwing(player, stack);
+                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.LavaSwordItem) {
+                    com.dragonblockarcanedba.item.LavaSwordItem.performCleave(player, stack);
                 }
 
             });

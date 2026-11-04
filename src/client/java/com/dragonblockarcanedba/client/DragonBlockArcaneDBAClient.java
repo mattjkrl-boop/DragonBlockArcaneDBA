@@ -243,6 +243,30 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.SpiritCleaveRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.WAR_MACE_SMASH,
+            com.dragonblockarcanedba.client.render.WarMaceSmashRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.WAR_MACE_RISE,
+            com.dragonblockarcanedba.client.render.WarMaceRiseRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SPIKE_FLAIL_SWING,
+            com.dragonblockarcanedba.client.render.SpikeFlailSwingRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.SPIKE_FLAIL_SPIN,
+            com.dragonblockarcanedba.client.render.SpikeFlailSpinRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.LAVA_CLEAVE,
+            com.dragonblockarcanedba.client.render.LavaCleaveRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.LAVA_ERUPTION,
+            com.dragonblockarcanedba.client.render.LavaEruptionRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.BANSHO_GALE,
             com.dragonblockarcanedba.client.render.BanshoGaleRenderer::new
         );
@@ -860,7 +884,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                         ((com.dragonblockarcanedba.attribute.PlayerStatsAccessor) client.player).dba$isSickleActive() ||
                         stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem ||
                         stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
-                        stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
+                        stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem ||
+                        stack.getItem() instanceof com.dragonblockarcanedba.item.WarMaceItem ||
+                        stack.getItem() instanceof com.dragonblockarcanedba.item.SpikeFlailItem ||
+                        stack.getItem() instanceof com.dragonblockarcanedba.item.LavaSwordItem) {
                         // Vanilla only repeats a swing while a block is inside attack reach.
                         // The press itself is the ability, including a miss and open sky.
                         // The swing that follows that press must not send a second packet.
@@ -883,6 +910,12 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                                 com.dragonblockarcanedba.network.C2SWeaponLeftClickPayload.ACTION_CLICK,
                                 0
                             ));
+                            if (!client.player.swinging && (
+                                stack.getItem() instanceof com.dragonblockarcanedba.item.WarMaceItem ||
+                                stack.getItem() instanceof com.dragonblockarcanedba.item.SpikeFlailItem ||
+                                stack.getItem() instanceof com.dragonblockarcanedba.item.LavaSwordItem)) {
+                                com.dragonblockarcanedba.util.DbaCompat.swing(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
+                            }
                         }
                     }
                 }
