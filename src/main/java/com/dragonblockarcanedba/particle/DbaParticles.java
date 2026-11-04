@@ -35,6 +35,26 @@ public final class DbaParticles {
     public static final SimpleParticleType DAMAGE_SPARK = FabricParticleTypes.simple(true);
     public static final SimpleParticleType HAPPY_SPARKLE = FabricParticleTypes.simple(true);
 
+    // No-shapes material family: one complex options record, eight registered
+    // types. Each type owns a detailed flipbook set and a client behavior
+    // profile (turbulence, buoyancy, density fade, ground response).
+    public static final ParticleType<DbaMaterialOptions> PLASMA = FabricParticleTypes.complex(
+            DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
+    public static final ParticleType<DbaMaterialOptions> SMOKE = FabricParticleTypes.complex(
+            DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
+    public static final ParticleType<DbaMaterialOptions> VAPOR = FabricParticleTypes.complex(
+            DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
+    public static final ParticleType<DbaMaterialOptions> DUST = FabricParticleTypes.complex(
+            DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
+    public static final ParticleType<DbaMaterialOptions> MIST = FabricParticleTypes.complex(
+            DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
+    public static final ParticleType<DbaMaterialOptions> SOUL = FabricParticleTypes.complex(
+            DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
+    public static final ParticleType<DbaMaterialOptions> DARKNESS = FabricParticleTypes.complex(
+            DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
+    public static final ParticleType<DbaMaterialOptions> GLASS_DUST = FabricParticleTypes.complex(
+            DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
+
     /** Colored soft dust, tinted per particle. Replaces DustParticleOptions in weapon scope. */
     public static final ParticleType<DbaDustOptions> THEME_DUST = FabricParticleTypes.complex(
             DbaDustOptions.CODEC, DbaDustOptions.STREAM_CODEC);
@@ -59,6 +79,14 @@ public final class DbaParticles {
         reg("cloud_puff", CLOUD_PUFF);
         reg("damage_spark", DAMAGE_SPARK);
         reg("happy_sparkle", HAPPY_SPARKLE);
+        reg("plasma", PLASMA);
+        reg("smoke", SMOKE);
+        reg("vapor", VAPOR);
+        reg("dust", DUST);
+        reg("mist", MIST);
+        reg("soul", SOUL);
+        reg("darkness", DARKNESS);
+        reg("glass_dust", GLASS_DUST);
         reg("theme_dust", THEME_DUST);
         reg("block_chunks", BLOCK_CHUNKS);
     }

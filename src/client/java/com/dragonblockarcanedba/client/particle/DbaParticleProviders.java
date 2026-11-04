@@ -1,8 +1,10 @@
 package com.dragonblockarcanedba.client.particle;
 
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import net.fabricmc.fabric.api.client.particle.v1.ParticleProviderRegistry;
 import net.minecraft.client.particle.TerrainParticle;
+import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.particles.SimpleParticleType;
 
 public final class DbaParticleProviders {
@@ -24,6 +26,14 @@ public final class DbaParticleProviders {
         reg(DbaParticles.CLOUD_PUFF, DbaGlowParticle.CLOUD_PUFF);
         reg(DbaParticles.DAMAGE_SPARK, DbaGlowParticle.DAMAGE_SPARK);
         reg(DbaParticles.HAPPY_SPARKLE, DbaGlowParticle.HAPPY_SPARKLE);
+        regMaterial(DbaParticles.PLASMA, DbaMaterialOptions.PLASMA);
+        regMaterial(DbaParticles.SMOKE, DbaMaterialOptions.SMOKE);
+        regMaterial(DbaParticles.VAPOR, DbaMaterialOptions.VAPOR);
+        regMaterial(DbaParticles.DUST, DbaMaterialOptions.DUST);
+        regMaterial(DbaParticles.MIST, DbaMaterialOptions.MIST);
+        regMaterial(DbaParticles.SOUL, DbaMaterialOptions.SOUL);
+        regMaterial(DbaParticles.DARKNESS, DbaMaterialOptions.DARKNESS);
+        regMaterial(DbaParticles.GLASS_DUST, DbaMaterialOptions.GLASS_DUST);
         // Theme dust: tinted per particle by its options.
         ParticleProviderRegistry.getInstance().register(DbaParticles.THEME_DUST, sprites ->
             (options, level, x, y, z, dx, dy, dz, random) -> new DbaDustParticle(level, x, y, z, dx, dy, dz, sprites, options));
@@ -36,5 +46,12 @@ public final class DbaParticleProviders {
     private static void reg(SimpleParticleType type, DbaGlowParticle.Style style) {
         ParticleProviderRegistry.getInstance().register(type, sprites ->
             (options, level, x, y, z, dx, dy, dz, random) -> new DbaGlowParticle(level, x, y, z, dx, dy, dz, sprites, style));
+    }
+
+    private static void regMaterial(ParticleType<DbaMaterialOptions> type, int material) {
+        DbaMaterialParticle.Profile profile = DbaMaterialParticle.profileFor(material);
+        ParticleProviderRegistry.getInstance().register(type, sprites ->
+            (options, level, x, y, z, dx, dy, dz, random) ->
+                new DbaMaterialParticle(level, x, y, z, dx, dy, dz, sprites, options, profile));
     }
 }
