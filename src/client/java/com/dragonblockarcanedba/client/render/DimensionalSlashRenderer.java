@@ -1,30 +1,32 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.DimensionalSlashEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Dimensional Slash in Minecraft 26.2.
- * Renders a physical 3D reality severance crescent, built entirely from the
- * bespoke toolkit (BESPOKE-STANDARD rule 1), all seeded from the entity's
- * synced seed so every client draws the same torn shape:
- * - A nicked, noise-profiled blade arc in three stops (abyssal violet,
- *   neon blood-magenta, pure white reality tear) plus an additive halo arc
- * - Shard bursts at the pinched tips where the cut frays
- * - A displaced-dome singularity pearl at the belly, front magenta and
- *   white, back void black, ringed by broken accretion bands
- * - Torn ribbons streaming backward along the trajectory
+ * No-shapes conversion: this renderer draws no geometry at all. The slash
+ * is carried entirely by material particles emitted through the shared
+ * MaterialEmitters toolkit, sampled across the cut plane the entity is
+ * actually travelling on (emission points are data, not a mesh):
+ * - Void plasma in the crescent's three theme stops (abyssal violet, neon
+ *   blood-magenta, white tear) streaming backward off the cut
+ * - A dense white plasma core where the singularity pearl used to sit
+ * - Darkness vapor wrapping the cut and spatial glass dust fraying off the
+ *   two tips
+ * Lifecycle, tilt, spin wobble timing, first-person scale-in, and the
+ * lingering tear fade are the same numbers the geometry version used; only
+ * the presentation material changed.
  */
 public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEntity, DimensionalSlashRenderer.SlashRenderState> {
 
@@ -73,28 +75,38 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
             mc.options.getCameraType().isFirstPerson());
     }
 
+    /**
+     * Emission points across the slash plane: u runs along the cut, v across
+     * its thickness, with the belly bow the old crescent had. The sample
+     * velocity streams backward along the flight path and slightly outward
+     * at the tips, so the plasma sheds off the cut instead of hovering.
+     */
+    private static MaterialEmitters.Source cutPlane(Vec3 center, Vec3 right, Vec3 up, Vec3 forward,
+                                                    float halfWidth, float thickness, float belly, float backSpeed) {
+        return random -> {
+            double u = (random.nextDouble() * 2.0 - 1.0) * halfWidth;
+            double bow = (1.0 - (u * u) / (halfWidth * halfWidth)) * belly;
+            double v = (random.nextDouble() * 2.0 - 1.0) * thickness + bow;
+            Vec3 pos = center.add(right.scale(u)).add(up.scale(v));
+            Vec3 vel = forward.scale(-backSpeed).add(right.scale(u * 0.035));
+            return new MaterialEmitters.Sample(pos, vel);
+        };
+    }
+
     @Override
     public void submit(SlashRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-
-        if (state.tiltRight) {
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(35.0f)));
-        } else {
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(-35.0f)));
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
         }
 
-        float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
-
-        // Lifecycle, reconciled with the entity (point 5): one shared envelope
-        // over the real flight life, so the old fade out window (ages 70 to
-        // 100) is exactly the envelope's last 30 percent. On a hit the entity
-        // now lingers instead of discarding, and the tear fades shut across
-        // the linger while swelling slightly, like cut space straining open
-        // before it closes.
+        // Lifecycle, reconciled with the entity: one shared envelope over
+        // the real flight life, so the old fade out window (ages 70 to 100)
+        // is exactly the envelope's last 30 percent. On a hit the entity
+        // lingers instead of discarding, and the tear fades shut across the
+        // linger while swelling slightly, like cut space straining open
+        // before it closes. Same numbers as the geometry version.
         float distScale = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
         float fade = FxEnvelope.envelope(state.age, DimensionalSlashEntity.MAX_LIFE_TICKS, 0.05f, 0.30f);
         float lingerT = -1.0f;
@@ -104,136 +116,83 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
             fade *= 1.0f - FxEnvelope.smoothstep(lingerT);
         }
         float tearScale = lingerT >= 0.0f ? 1.0f + 0.22f * FxEnvelope.smoothstep(lingerT) : 1.0f;
-        poseStack.scale(fpScale * tearScale, fpScale * tearScale, fpScale * tearScale);
-        final float fFade = fade;
-        final float fDist = distScale;
-        final long fSeed = state.seed;
-        final float age = state.age;
+        float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
+        float envelope = fade * distScale;
+        if (envelope <= 0.01f) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
-        // Forward spin along movement vector
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees((float) Math.sin(state.age * 0.4f) * 6.0f)));
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float yaw = (float) Math.toRadians(state.yRot);
+        float pitch = (float) Math.toRadians(state.xRot);
+        Vec3 forward = new Vec3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+        Vec3 rightRaw = new Vec3(-Math.cos(yaw), 0.0, -Math.sin(yaw));
+        Vec3 upRaw = rightRaw.cross(forward).normalize();
+        // The old blade tilt (plus or minus 35 degrees) applied to the
+        // emission plane, plus the forward spin wobble (sin of age x 0.4,
+        // 6 degrees) the geometry version posed with.
+        double tilt = Math.toRadians((state.tiltRight ? 35.0 : -35.0) + Math.sin(state.age * 0.4f) * 6.0);
+        double cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+        Vec3 right = rightRaw.scale(cosT).add(upRaw.scale(sinT));
+        Vec3 up = upRaw.scale(cosT).add(rightRaw.scale(-sinT));
 
-        float span = 3.4f;
         float pulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f);
-        float body = 0.45f + 0.55f * fade;
+        float scaleAll = fpScale * tearScale;
+        float halfWidth = 2.20f * scaleAll;
+        int seed = state.seed;
+        // During the linger the plasma dies down while the glass dust and
+        // darkness of the closing tear take over.
+        float plasmaEnv = envelope * (lingerT >= 0.0f ? 1.0f - 0.55f * lingerT : 1.0f);
+        float residueEnv = envelope * (lingerT >= 0.0f ? 0.65f + 0.35f * (1.0f - lingerT) : 1.0f);
+        float delta = 1.0f / 60.0f;
 
-        // The crescent body: blade arcs from the bespoke toolkit. The pose
-        // block turns the builder's flat XZ arc into the slash's XY blade
-        // (belly up, tips spread across X) and flattens it to the old wide,
-        // shallow crescent proportions. Three stops, outer to core, then the
-        // additive halo under the same pose.
-        poseStack.pushPose();
-        poseStack.translate(0, -1.02f, 0.12f);
-        poseStack.scale(1.22f, 0.50f, 1.0f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, fSeed,
-                span * 1.30f, 132.0f, 0.65f, 0.05f, 0.95f, 0.82f, fFade, fDist);
-            BespokeGeometry.bladeArc(pose, buffer, fSeed ^ 0xA53AL,
-                span * 1.22f, 126.0f, 1.0f, 0.10f, 0.35f, 0.96f, fFade, fDist);
-            BespokeGeometry.bladeArc(pose, buffer, fSeed ^ 0x7E44L,
-                span * 0.86f, 118.0f, 1.0f, 1.0f, 1.0f, 1.0f, fFade, fDist);
-        });
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) ->
-            BespokeGeometry.bladeArc(pose, buffer, fSeed ^ 0x4A10L,
-                span * 1.38f, 136.0f, 0.55f, 0.05f, 0.30f, 0.28f, fFade, fDist));
-        poseStack.popPose();
+        // The cut body: three plasma stops sampled across the cut plane.
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xA60DF2, 1.50f, seed ^ 0xA53A, Vec3.ZERO, 0.05f),
+            cutPlane(center, right, up, forward, halfWidth, 0.30f * scaleAll, 0.55f * scaleAll, 0.30f),
+            300f, 320).tick(delta, plasmaEnv);
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFF1A59, 1.25f, seed ^ 0x7E44, Vec3.ZERO, 0.04f),
+            cutPlane(center, right, up, forward, halfWidth * 0.82f, 0.20f * scaleAll, 0.45f * scaleAll, 0.34f),
+            240f, 260).tick(delta, plasmaEnv);
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFFFFF, 0.95f, seed ^ 0x4A10, Vec3.ZERO, 0.03f),
+            cutPlane(center, right, up, forward, halfWidth * 0.50f, 0.10f * scaleAll, 0.30f * scaleAll, 0.38f),
+            170f, 190).tick(delta, plasmaEnv);
 
-        // The singularity at the belly: displaced domes back to back (magenta
-        // and a white core toward the front, void black toward the back),
-        // ringed by two broken accretion bands turning against each other.
-        poseStack.pushPose();
-        poseStack.translate(0, 0.42f, 0.30f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.displacedDome(pose, buffer, fSeed ^ 0x51E6L,
-                0.40f * pulse, 1.0f, 0.15f, 0.85f, 0.95f, fFade, fDist);
-            BespokeGeometry.brokenVortexBand(pose, buffer, fSeed ^ 0xBEEFL,
-                0.72f * pulse, -0.05f, 0.05f, (float) Math.toRadians(age * 22.0f),
-                0.60f, 0.05f, 0.95f, 0.80f * fFade, fDist);
-            BespokeGeometry.brokenVortexBand(pose, buffer, fSeed ^ 0xF00DL,
-                0.46f * pulse, -0.04f, 0.04f, (float) Math.toRadians(-age * 30.0f),
-                1.0f, 0.15f, 0.35f, 0.92f * fFade, fDist);
-        });
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0.42f, 0.44f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, fSeed ^ 0xC04EL,
-                0.17f * pulse, 1.0f, 1.0f, 1.0f, 1.0f, fFade, fDist));
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0.42f, 0.30f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, fSeed ^ 0xB01DL,
-                0.40f * pulse, 0.02f, 0.0f, 0.05f, 0.99f, fFade, fDist));
-        poseStack.popPose();
+        // The singularity core: a dense white and magenta plasma cluster
+        // where the pearl sat, forward of the cut's belly.
+        Vec3 core = center.add(up.scale(0.38f * scaleAll)).add(forward.scale(0.30f));
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFFFFF, 0.80f, seed ^ 0xC04E, Vec3.ZERO, 0.02f),
+            MaterialEmitters.sphereVolume(core, 0.30f * pulse * scaleAll),
+            130f, 150).tick(delta, plasmaEnv);
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFF26D9, 1.05f, seed ^ 0x51E6, Vec3.ZERO, 0.03f),
+            MaterialEmitters.sphereVolume(core, 0.48f * pulse * scaleAll),
+            120f, 140).tick(delta, plasmaEnv);
 
-        // Tip spurs: shard bursts where the cut frays at the pinched ends,
-        // stood up into the blade plane.
+        // Darkness vapor wrapping the whole cut, drifting backward.
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.darkness(0x0D0018, 1.50f, seed ^ 0xB01D, forward.scale(-0.10), 0.03f),
+            MaterialEmitters.sphereVolume(center, 1.15f * scaleAll),
+            110f, 130).tick(delta, residueEnv);
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.vapor(0x5E0B99, 1.80f, seed ^ 0xD15C, forward.scale(-0.06), 0.03f),
+            MaterialEmitters.sphereVolume(center, 1.45f * scaleAll),
+            80f, 100).tick(delta, residueEnv);
+
+        // Spatial glass dust fraying off the two pinched tips.
         for (int s = -1; s <= 1; s += 2) {
-            poseStack.pushPose();
-            poseStack.translate(s * span * 0.74f, -0.45f, 0.12f);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            final long spurSeed = fSeed ^ (s < 0 ? 0x5911L : 0x5912L);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.shardFan(pose, buffer, spurSeed,
-                    0.55f, 1.0f, 0.15f, 0.45f, 0.95f, fFade, fDist));
-            poseStack.popPose();
+            Vec3 tip = center.add(right.scale(s * halfWidth * 0.92f)).add(up.scale(0.05f));
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.glassDust(0xE8CCFF, 1.00f, seed ^ (s < 0 ? 0x5911 : 0x5912),
+                    forward.scale(-0.22).add(right.scale(s * 0.10)), 0.05f),
+                MaterialEmitters.sphereVolume(tip, 0.30f * scaleAll),
+                80f, 95).tick(delta, residueEnv);
         }
 
-        // Trailing fissure ribbons: torn ribbons streaming backward off the
-        // crescent, the center one longest where the belly bows furthest.
-        float[] ribbonX = {-1.7f, 0.0f, 1.7f};
-        float[] ribbonY = {0.05f, 0.50f, 0.05f};
-        float[] ribbonArc = {0.55f, 1.0f, 0.55f};
-        for (int i = 0; i < 3; i++) {
-            final float len = (0.9f + 1.3f * fFade) * ribbonArc[i];
-            final float wid = 0.05f + 0.13f * body;
-            final long ribSeed = fSeed ^ (0x81B0L + i * 131L);
-            final float rr = i == 1 ? 1.0f : 0.75f;
-            final float rg = 0.15f;
-            final float rb = i == 1 ? 0.45f : 0.90f;
-            poseStack.pushPose();
-            poseStack.translate(ribbonX[i], ribbonY[i], 0.35f);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.tornRibbon(pose, buffer, ribSeed,
-                    len, wid, 0.22f, rr, rg, rb, 0.75f, fFade, fDist));
-            poseStack.popPose();
-        }
-
-        // Lingering tear (point 1 and 5): while the struck crescent fades shut,
-        // the cut itself swirls in the shared three layer bands, centered on
-        // the crescent, so the hole in space reads as a closing vortex and not
-        // a sprite dying.
-        if (lingerT >= 0.0f && fade > 0.01f) {
-            final float bandFade = fade;
-            final float bandAge = age;
-            final float bandDist = distScale;
-            poseStack.pushPose();
-            poseStack.translate(0, -0.95f, 0);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                LayeredRender.drawVortexBands(pose, buffer, 1.05f, 1.9f, bandAge,
-                    0.62f, 0.10f, 0.92f, bandFade, bandDist));
-            poseStack.popPose();
-
-            // The tear mark the cut leaves behind: a bespoke crack star in
-            // the blade plane, fading with the linger.
-            poseStack.pushPose();
-            poseStack.translate(0, 0.10f, 0.10f);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.crackStar(pose, buffer, fSeed ^ 0xC4ACL,
-                    1.5f, 0.85f, 0.15f, 0.95f, 0.80f, bandFade, bandDist));
-            poseStack.popPose();
-        }
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 }

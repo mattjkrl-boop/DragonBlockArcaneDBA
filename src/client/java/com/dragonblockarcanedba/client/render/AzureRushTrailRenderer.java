@@ -1,38 +1,38 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.AzureRushTrailEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Held azure rush wind. One wake follows the flyer's chest: a curved cyan
- * shell, a bright core tube, a shock lip, and two ribbons with thickness.
- * The tail keeps its width and fades out. Older puff entities do not each
- * stamp another cone.
+ * Held azure rush wind. One wake follows the flyer's chest. Older puff
+ * entities do not each stamp another wake.
  *
- * Bespoke pass: the wake sampling, centerline, and frame math are unchanged,
- * but the mesh is no longer hand built from equal side rings. The core is a
- * chain of BespokeGeometry.branch ribbons down the centerline, the shell is
- * six helical branch strands riding the old shell radius profile, the shock
- * lip is branch segments around the shell mouth, and the nose is a short
- * bright branch. Seeds derive from the trail entity's synced caster id, the
- * same key the wake maps already use. The toolkit has no swept tube builder;
- * that gap is filed as a change request in the bespoke report.
+ * No-shapes pass: this renderer draws no geometry. The wake sampling,
+ * centerline, and frame math are unchanged, but the wake itself is now
+ * sprayed material along that centerline: a bright plasma core stream,
+ * vapor shed through the old shell volume, rain sprayed off the moving
+ * wake, and a brighter plasma stream inside the old shock lip station
+ * window. The centerline and its radius profile are data only; nothing
+ * is rendered from them. Seeds derive from the trail entity's synced
+ * caster id, the same key the wake maps already use.
  */
 public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity, AzureRushTrailRenderer.TrailRenderState> {
 
@@ -181,6 +181,96 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
         return new Nose(x, y, z, yaw, pitch, entity.level().getGameTime(), entity.isDoubleRush(), entity.getTrailScale(), firstPerson);
     }
 
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        List<Vec3> points = List.of();
+        List<Vec3> tangents = List.of();
+        float[] shellRadius = new float[STATIONS];
+        float[] coreRadius = new float[STATIONS];
+    }
+
+    private static final class Emission {
+        final Frame frame = new Frame();
+        ClientLevel level;
+        boolean doubleRush;
+        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        float lastAge = -1f;
+    }
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
+
+    /**
+     * Points along the wake centerline. Mode 0 hugs the core, mode 1 fills
+     * the shell volume, and mode 2 rides the shock lip station window at
+     * 1.22 times the shell radius. The sample velocity follows the wake
+     * direction, from the flyer toward the tail.
+     */
+    private static MaterialEmitters.Source wake(Frame frame, int mode) {
+        return random -> {
+            int last = STATIONS - 1;
+            float t;
+            if (mode == 2) {
+                t = 0.28f + random.nextFloat() * 0.20f;
+            } else {
+                t = random.nextFloat();
+            }
+            float sf = t * last;
+            int i = Math.min(last - 1, (int) sf);
+            float frac = sf - i;
+            Vec3 a = frame.points.get(i);
+            Vec3 b = frame.points.get(i + 1);
+            Vec3 point = a.add(b.subtract(a).scale(frac));
+            Vec3 tangent = frame.tangents.get(i);
+            float shell = frame.shellRadius[i] + (frame.shellRadius[i + 1] - frame.shellRadius[i]) * frac;
+            float core = frame.coreRadius[i] + (frame.coreRadius[i + 1] - frame.coreRadius[i]) * frac;
+
+            double u = random.nextDouble() * 2.0 - 1.0;
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double flat = Math.sqrt(Math.max(0.0, 1.0 - u * u));
+            Vec3 dir = new Vec3(Math.cos(ang) * flat, u, Math.sin(ang) * flat);
+            double offsetLen;
+            if (mode == 0) {
+                offsetLen = core * Math.sqrt(random.nextDouble());
+            } else if (mode == 2) {
+                offsetLen = shell * 1.22 * (0.85 + random.nextDouble() * 0.30);
+            } else {
+                offsetLen = shell * Math.sqrt(random.nextDouble());
+            }
+            Vec3 pos = point.add(dir.scale(offsetLen));
+            Vec3 vel = tangent.scale(0.06).add(dir.scale(0.03));
+            return new MaterialEmitters.Sample(pos, vel);
+        };
+    }
+
+    private Emission buildEmission(ClientLevel level, long seed, boolean doubleRush) {
+        Emission emission = new Emission();
+        emission.level = level;
+        emission.doubleRush = doubleRush;
+        Frame frame = emission.frame;
+        int seedInt = (int) seed;
+        // Shell colors from the bespoke wake: azure, or green on a double rush.
+        int shellColor = doubleRush ? 0x14FF94 : 0x05CCFF;
+        emission.emitters = new MaterialEmitters.Emitter[]{
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0xC7FFFF, 1.1f, seedInt ^ 0xC02E,
+                                Vec3.ZERO, 0.01f),
+                        wake(frame, 0), 230f, 320),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.vapor(shellColor, 2.0f, seedInt ^ 0x57AA,
+                                Vec3.ZERO, 0.02f),
+                        wake(frame, 1), 260f, 380),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.RAIN,
+                                new Vec3(0.0, -0.8, 0.0), 0.03f),
+                        wake(frame, 1), 150f, 230),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0xFFFFFF, 1.0f, seedInt ^ 0x11B0,
+                                Vec3.ZERO, 0.01f),
+                        wake(frame, 2), 90f, 140),
+        };
+        return emission;
+    }
+
     @Override
     public void submit(TrailRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         Integer drawer = WRITER.get(state.casterKey);
@@ -207,19 +297,53 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
         final float scale = Math.max(0.35F, newest.scale);
         final boolean doubleRush = newest.doubleRush;
         final boolean firstPerson = newest.firstPerson;
-        final float spin = state.spin * 0.22F;
-        final float fadeLife = life;
         final float[] cx = new float[STATIONS];
         final float[] cy = new float[STATIONS];
         final float[] cz = new float[STATIONS];
         buildCenterline(noses, state.renderX, state.renderY, state.renderZ, firstPerson, scale, cx, cy, cz);
 
-        RenderType renderType = KiRenderHelper.kiRenderType();
         final long seed = (long) state.casterKey * 0x9E3779B97F4A7C15L ^ 0xA20E57L;
-        poseStack.pushPose();
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                emitWake(pose, buffer, cx, cy, cz, scale, spin, fadeLife, doubleRush, firstPerson, seed));
-        poseStack.popPose();
+        float ds = MaterialEmitters.distanceScale(new Vec3(state.renderX, state.renderY, state.renderZ));
+        float envelope = life * (firstPerson ? 0.55f : 1.0f) * ds;
+
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level != null && envelope > 0.01f) {
+            Emission emission = emissions.get(seed);
+            if (emission == null || emission.level != level || emission.doubleRush != doubleRush
+                    || state.age < emission.lastAge - 1.0f) {
+                emission = buildEmission(level, seed, doubleRush);
+                emissions.put(seed, emission);
+                if (emissions.size() > 64) emissions.clear();
+            }
+            Frame frame = emission.frame;
+            List<Vec3> points = new ArrayList<>(STATIONS);
+            List<Vec3> tangents = new ArrayList<>(STATIONS);
+            float fp = firstPerson ? 0.5F : 1.0F;
+            for (int s = 0; s < STATIONS; s++) {
+                points.add(new Vec3(state.renderX + cx[s], state.renderY + cy[s], state.renderZ + cz[s]));
+                float t = s / (float) (STATIONS - 1);
+                float open = smooth(0.0F, 0.40F, t);
+                float settle = 1.0F - 0.38F * smooth(0.62F, 1.0F, t);
+                frame.shellRadius[s] = (0.26F + 1.35F * (float) Math.sqrt(open)) * settle * scale * fp;
+                frame.coreRadius[s] = (0.11F + 0.10F * open) * (1.0F - 0.62F * t) * scale * fp;
+            }
+            for (int s = 0; s < STATIONS; s++) {
+                Vec3 a = points.get(Math.max(0, s - 1));
+                Vec3 b = points.get(Math.min(STATIONS - 1, s + 1));
+                Vec3 tangent = b.subtract(a);
+                double len = tangent.length();
+                tangents.add(len < 1e-6 ? new Vec3(0, 0, 1) : tangent.scale(1.0 / len));
+            }
+            frame.points = points;
+            frame.tangents = tangents;
+            float delta = emission.lastAge < 0f ? 0.05f
+                    : Math.min(0.05f, Math.max(0.0f, (state.age - emission.lastAge) / 20.0f));
+            emission.lastAge = state.age;
+            for (MaterialEmitters.Emitter emitter : emission.emitters) {
+                emitter.tick(delta, envelope);
+            }
+        }
         super.submit(state, poseStack, collector, cameraState);
     }
 
@@ -311,198 +435,6 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
         double pr = Math.toRadians(pitch);
         double cp = Math.cos(pr);
         return new double[] {-Math.sin(yr) * cp, -Math.sin(pr), Math.cos(yr) * cp};
-    }
-
-    private static void emitWake(PoseStack.Pose pose, VertexConsumer buffer, float[] cx, float[] cy, float[] cz,
-                                 float scale, float spin, float life, boolean doubleRush, boolean firstPerson, long seed) {
-        int stations = cx.length;
-        int last = stations - 1;
-        float shellCr = doubleRush ? 0.08F : 0.02F;
-        float shellCg = doubleRush ? 1.0F : 0.80F;
-        float shellCb = doubleRush ? 0.58F : 1.0F;
-        float hotR = 0.78F;
-        float hotG = 1.0F;
-        float hotB = 1.0F;
-        float fp = firstPerson ? 0.5F : 1.0F;
-
-        float[] shellRadius = new float[stations];
-        float[] coreRadius = new float[stations];
-        float[] along = new float[stations];
-        float[] sideX = new float[stations];
-        float[] sideY = new float[stations];
-        float[] sideZ = new float[stations];
-        float[] binX = new float[stations];
-        float[] binY = new float[stations];
-        float[] binZ = new float[stations];
-        float[] tanX = new float[stations];
-        float[] tanY = new float[stations];
-        float[] tanZ = new float[stations];
-
-        float prevSx = 0.0F;
-        float prevSy = 0.0F;
-        float prevSz = 0.0F;
-        boolean hasSide = false;
-        for (int s = 0; s < stations; s++) {
-            float t = s / (float) last;
-            along[s] = t;
-            float open = smooth(0.0F, 0.40F, t);
-            float settle = 1.0F - 0.38F * smooth(0.62F, 1.0F, t);
-            shellRadius[s] = (0.26F + 1.35F * (float) Math.sqrt(open)) * settle * scale * fp;
-            coreRadius[s] = (0.11F + 0.10F * open) * (1.0F - 0.62F * t) * scale * fp;
-            float tx;
-            float ty;
-            float tz;
-            if (s == 0) {
-                tx = cx[1] - cx[0];
-                ty = cy[1] - cy[0];
-                tz = cz[1] - cz[0];
-            } else if (s == last) {
-                tx = cx[s] - cx[s - 1];
-                ty = cy[s] - cy[s - 1];
-                tz = cz[s] - cz[s - 1];
-            } else {
-                tx = cx[s + 1] - cx[s - 1];
-                ty = cy[s + 1] - cy[s - 1];
-                tz = cz[s + 1] - cz[s - 1];
-            }
-            float tlen = (float) Math.sqrt(tx * tx + ty * ty + tz * tz);
-            if (tlen < 1.0e-4F) {
-                tx = 0.0F;
-                ty = 0.0F;
-                tz = 1.0F;
-                tlen = 1.0F;
-            }
-            tx /= tlen;
-            ty /= tlen;
-            tz /= tlen;
-            float sx;
-            float sy;
-            float sz;
-            if (!hasSide) {
-                sx = -tz;
-                sy = 0.0F;
-                sz = tx;
-            } else {
-                float dot = prevSx * tx + prevSy * ty + prevSz * tz;
-                sx = prevSx - tx * dot;
-                sy = prevSy - ty * dot;
-                sz = prevSz - tz * dot;
-            }
-            float sl = (float) Math.sqrt(sx * sx + sy * sy + sz * sz);
-            if (sl < 1.0e-4F) {
-                sx = -tz;
-                sy = 0.0F;
-                sz = tx;
-                sl = (float) Math.sqrt(sx * sx + sz * sz);
-                if (sl < 1.0e-4F) {
-                    sx = 1.0F;
-                    sy = 0.0F;
-                    sz = 0.0F;
-                    sl = 1.0F;
-                }
-            }
-            sx /= sl;
-            sy /= sl;
-            sz /= sl;
-            float bx = ty * sz - tz * sy;
-            float by = tz * sx - tx * sz;
-            float bz = tx * sy - ty * sx;
-            tanX[s] = tx;
-            tanY[s] = ty;
-            tanZ[s] = tz;
-            sideX[s] = sx;
-            sideY[s] = sy;
-            sideZ[s] = sz;
-            binX[s] = bx;
-            binY[s] = by;
-            binZ[s] = bz;
-            prevSx = sx;
-            prevSy = sy;
-            prevSz = sz;
-            hasSide = true;
-        }
-
-        // Bespoke emission. Per segment the old tube's numbers are kept
-        // exactly: the same fade curve, the same hot to shell color blend,
-        // and the same shell and core alphas. What changed is the mesh: the
-        // core is a chain of branch ribbons down the centerline, the shell
-        // is six helical branch strands riding the shell radius profile
-        // (the old ribbons' twist rate), the shock lip is branch segments
-        // around the shell mouth inside its old station window, and the
-        // nose cap is one short bright branch into the first station.
-        for (int s = 0; s < last; s++) {
-            float t = (s + 0.5F) / last;
-            float fade = (1.0F - smooth(0.55F, 1.0F, t)) * life;
-            float hot = 1.0F - smooth(0.05F, 0.55F, t);
-            float r = hot * hotR + (1.0F - hot) * shellCr;
-            float g = hot * hotG + (1.0F - hot) * shellCg;
-            float b = hot * hotB + (1.0F - hot) * shellCb;
-            float shellA = fade * (firstPerson ? 0.22F : 0.34F);
-            float coreA = fade * (firstPerson ? 0.55F : 0.88F);
-
-            Vec3 c0 = new Vec3(cx[s], cy[s], cz[s]);
-            Vec3 c1 = new Vec3(cx[s + 1], cy[s + 1], cz[s + 1]);
-            float coreW = Math.max(0.05F, coreRadius[s] + coreRadius[s + 1]);
-            BespokeGeometry.branch(pose, buffer, seed ^ (0xC02EL + s * 17L), c0, c1, coreW,
-                    hotR, hotG, hotB, coreA, 1.0F, 1.0F);
-
-            int strands = 6;
-            for (int k = 0; k < strands; k++) {
-                float phase = k * (float) (Math.PI * 2.0 / strands);
-                Vec3 p0 = strandPoint(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, shellRadius, along, s, phase, spin);
-                Vec3 p1 = strandPoint(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, shellRadius, along, s + 1, phase, spin);
-                float w = Math.max(0.08F, (shellRadius[s] + shellRadius[s + 1]) * 0.55F);
-                BespokeGeometry.branch(pose, buffer, seed ^ (0x57AA1L + k * 131L + s * 17L), p0, p1, w,
-                        r, g, b, shellA, 1.0F, 1.0F);
-            }
-
-            // Shock lip: branch segments around the mouth at 1.22 times the
-            // shell radius, across the old lip's station window only.
-            float tMid = (along[s] + along[s + 1]) * 0.5F;
-            if (tMid >= 0.28F && tMid <= 0.48F) {
-                float lipA = life * (firstPerson ? 0.4F : 0.78F);
-                int lipPoints = 8;
-                for (int k = 0; k < lipPoints; k++) {
-                    float a0 = (float) (k / (double) lipPoints * Math.PI * 2.0);
-                    float a1 = (float) ((k + 1) / (double) lipPoints * Math.PI * 2.0);
-                    Vec3 q0 = ringVec(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, s, a0, shellRadius[s] * 1.22F);
-                    Vec3 q1 = ringVec(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, s, a1, shellRadius[s] * 1.22F);
-                    BespokeGeometry.branch(pose, buffer, seed ^ (0x11B0L + k * 31L + s * 17L), q0, q1, 0.30F * scale * fp,
-                            hotR, hotG, hotB, lipA, 1.0F, 1.0F);
-                }
-            }
-        }
-
-        // Rounded core nose: a short bright branch reaching ahead of the
-        // first station by twice the old cap reach, at the old cap alpha.
-        float capReach = 0.2F * scale * fp;
-        float capA = life * (firstPerson ? 0.45F : 0.8F);
-        BespokeGeometry.branch(pose, buffer, seed ^ 0xCA91L,
-                new Vec3(cx[0] - tanX[0] * capReach * 2.0F, cy[0] - tanY[0] * capReach * 2.0F, cz[0] - tanZ[0] * capReach * 2.0F),
-                new Vec3(cx[0], cy[0], cz[0]),
-                Math.max(0.08F, coreRadius[0] * 2.4F), 1.0F, 1.0F, 1.0F, capA, 1.0F, 1.0F);
-    }
-
-    /** A point on a helical shell strand for one station. */
-    private static Vec3 strandPoint(float[] cx, float[] cy, float[] cz,
-                                    float[] sideX, float[] sideY, float[] sideZ,
-                                    float[] binX, float[] binY, float[] binZ,
-                                    float[] shellRadius, float[] along, int s, float phase, float spin) {
-        float ang = phase + along[s] * 4.4F + spin;
-        return ringVec(cx, cy, cz, sideX, sideY, sideZ, binX, binY, binZ, s, ang, shellRadius[s]);
-    }
-
-    /** A point on the ring around one station, in the station's frame. */
-    private static Vec3 ringVec(float[] cx, float[] cy, float[] cz,
-                                float[] sideX, float[] sideY, float[] sideZ,
-                                float[] binX, float[] binY, float[] binZ,
-                                int s, float angle, float radius) {
-        float cs = (float) Math.cos(angle);
-        float sn = (float) Math.sin(angle);
-        return new Vec3(
-                cx[s] + (sideX[s] * cs + binX[s] * sn) * radius,
-                cy[s] + (sideY[s] * cs + binY[s] * sn) * radius,
-                cz[s] + (sideZ[s] * cs + binZ[s] * sn) * radius);
     }
 
     private static float smooth(float edge0, float edge1, float t) {

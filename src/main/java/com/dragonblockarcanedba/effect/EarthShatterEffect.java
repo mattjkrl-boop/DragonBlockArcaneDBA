@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import net.minecraft.core.particles.BlockParticleOption;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -60,7 +61,12 @@ public class EarthShatterEffect extends MobEffect {
             level.sendParticles(
                 new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, Blocks.DIRT.defaultBlockState()),
                 px, py, pz,
-                2, 0.1, 0.1, 0.1, 0.05
+                1, 0.1, 0.1, 0.1, 0.05
+            );
+            level.sendParticles(
+                DbaMaterialOptions.of(DbaMaterialOptions.DUST, 0x8B4513, 1.0f, entity.getId() * 31 + entity.tickCount),
+                px, py, pz,
+                1, 0.1, 0.1, 0.1, 0.05
             );
         }
         return true;

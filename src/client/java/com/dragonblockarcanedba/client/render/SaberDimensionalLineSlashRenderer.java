@@ -1,34 +1,35 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.SaberDimensionalLineSlashEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Saber Dimensional Line Slash in Minecraft 26.2.
  *
- * <p>Bespoke pass: the hand-rolled tapered tube beam, equal segment shock
- * rings, diamond ribs and the helix edge strip are deleted. The beam is
- * two crossed pairs of {@link BespokeGeometry} torn ribbons (cyan sheath
- * and white core, one pair flat and one pair upright, so the cut has
- * volume from any angle), the traveling bands and the impact ring are
- * broken vortex bands riding the beam, and the transversal ribs are
- * shard fans. The helix is gone by design: the ribbons' torn, jittered
- * edges replace it. Cut growth, envelope fade, colors and alphas are
- * unchanged from the spectacle pass.</p>
+ * <p>No-shapes pass: the crossed ribbon beam, traveling bands, impact
+ * ring, and shard ribs are no longer drawn as geometry. The renderer
+ * emits void plasma densely along the cut path, a white plasma core on
+ * the same path, spatial glass dust at the old rib stations and along
+ * the cut, and darkness vapor hugging the path. The line is sampled as
+ * data only. Cut growth, envelope fade, colors, and the strike window
+ * are unchanged.</p>
  */
 public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimensionalLineSlashEntity, SaberDimensionalLineSlashRenderer.LineSlashRenderState> {
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
 
     public SaberDimensionalLineSlashRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -73,7 +74,7 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
         state.ey = entity.getY();
         state.ez = entity.getZ();
         // Synced seed: entity id plus the synced direction and length, so
-        // every client tears the beam's edges the same way.
+        // every client seeds the same material variation along the cut.
         Vec3 dir = entity.getLineDirection();
         state.seed = entity.getId() * 0x9E3779B97F4A7C15L
             ^ Float.floatToIntBits((float) dir.x) * 31L
@@ -85,117 +86,150 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
     @Override
     public void submit(LineSlashRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
-        if (progress >= 1.0f) return;
+        long key = state.seed;
+        if (progress >= 1.0f) {
+            emissions.remove(key);
+            return;
+        }
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
 
+        pruneEmissions();
         float cut = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.40f));
-        // The shared envelope folds into the fade so beam alpha, the entity's
-        // particle sheath, and the split damage window all share one curve.
         float env = FxEnvelope.envelope(state.age, (float) state.maxLifetime, 0.15f, 0.35f);
         float fade = (1.0f - FxEnvelope.smoothstep(progress)) * Math.min(1.0f, env * 1.5f);
         float impact = strike(progress);
-        float scale = state.scale;
-        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-        long seed = state.seed;
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        float ds = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
 
-        Vec3 dir = state.direction.normalize();
-        double horiz = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
-        float yaw = (float) (Math.atan2(dir.z, dir.x) * (180.0 / Math.PI)) - 90.0f;
-        float pitch = (float) -(Math.atan2(dir.y, horiz) * (180.0 / Math.PI));
-
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-yaw)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(pitch)));
-
-        float halfLen = ((state.lineLength * 0.5f) + 1.0f) * cut;
-        float beamLen = halfLen * 2.0f;
-
-        // Beam, flat pair. tornRibbon runs along +X in its own frame; the
-        // Y rotation maps +X onto the beam's +Z and the translate centers
-        // the ribbon on the snap point, so it spans -halfLen to +halfLen.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90f)));
-        poseStack.translate(-halfLen, 0, 0);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed, beamLen, 0.32f * scale, 0.0f,
-                0.0f, 0.75f, 1.0f, 0.72f * fade, 1.0f, ds);
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0xC03EL, beamLen, 0.09f * scale, 0.0f,
-                1.0f, 1.0f, 1.0f, fade, 1.0f, ds);
-        });
-        poseStack.popPose();
-
-        // Beam, upright pair: the extra Z rotation turns the ribbons'
-        // width vertical, so the cut reads as a cross, not a flat sheet.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90f)));
-        poseStack.translate(-halfLen, 0, 0);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x9E37L, beamLen, 0.32f * scale, 0.0f,
-                0.0f, 0.75f, 1.0f, 0.72f * fade, 1.0f, ds);
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x9E38L, beamLen, 0.09f * scale, 0.0f,
-                1.0f, 1.0f, 1.0f, fade, 1.0f, ds);
-        });
-        poseStack.popPose();
-
-        // Three traveling shock bands riding the beam, as broken vortex
-        // bands. The bands circle the Y axis in their own frame; the
-        // translate seats each at its z along the beam and the X rotation
-        // wraps it around the beam axis.
-        int bands = 3;
-        for (int b = 0; b < bands; b++) {
-            final float bandProg = (state.age * 0.08f + (b / (float) bands)) % 1.0f;
-            final float bandZ = -halfLen + bandProg * beamLen;
-            final float bandAlpha = fade * 0.5f * (1.0f - bandProg * 0.35f);
-            final float bandTwist = state.age * 2.2f + b * 2.094f;
-            final long bandSeed = seed + b * 77L;
-            if (bandAlpha <= 0.01f) continue;
-            poseStack.pushPose();
-            poseStack.translate(0, 0, bandZ);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.brokenVortexBand(pose, buffer, bandSeed,
-                    0.38f * scale, 0.0f, 0.10f * scale, bandTwist,
-                    0.55f, 0.95f, 1.0f, bandAlpha, ds));
-            poseStack.popPose();
+        Emission emission = emissions.get(key);
+        if (emission == null || emission.level != level || state.age < emission.lastAge - 0.01f) {
+            emission = new Emission(level, state);
+            emissions.put(key, emission);
+        }
+        emission.update(state, cut);
+        float delta = emission.delta(state.age);
+        float strength = fade * ds;
+        if (strength > 0.01f) {
+            for (MaterialEmitters.Emitter emitter : emission.emitters) {
+                emitter.tick(delta, strength);
+            }
+        }
+        if (impact > 0.02f && !emission.flashDone) {
+            emission.flashDone = true;
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, 0.85f, (int) (state.seed ^ 0x19ACL), Vec3.ZERO, 0.38f),
+                MaterialEmitters.point(emission.origin), Math.max(5, Math.round(18 * ds)));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.glassDust(0xBFEFFF, 0.95f, (int) (state.seed ^ 0xFA11L), Vec3.ZERO, 0.55f),
+                MaterialEmitters.point(emission.origin), Math.max(4, Math.round(14 * ds)));
         }
 
-        // Impact ring at the snap center, same strike window as before.
-        if (impact > 0.02f) {
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x19ACL,
-                    0.55f * scale * impact, 0.0f, 0.10f * scale, state.age * 3.0f,
-                    1.0f, 1.0f, 1.0f, impact, ds));
-            poseStack.popPose();
-        }
-
-        // Transversal reality-crack ribs across the beam: five shard fans
-        // spaced along the cut, brightest at the center where the snap
-        // converged, on the same sine profile as the old diamond ribs.
-        int ribs = 5;
-        for (int ri = 0; ri < ribs; ri++) {
-            final float rt = 0.12f + 0.76f * (ri / (float) (ribs - 1));
-            final float ribZ = -halfLen + beamLen * rt;
-            final float ribA = fade * 0.45f * (float) Math.sin(rt * Math.PI);
-            final long ribSeed = seed + 500L + ri * 13L;
-            if (ribA <= 0.01f) continue;
-            poseStack.pushPose();
-            poseStack.translate(0, 0, ribZ);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.shardFan(pose, buffer, ribSeed,
-                    0.55f * scale, 0.55f, 0.90f, 1.0f, ribA, 1.0f, ds));
-            poseStack.popPose();
-        }
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private void pruneEmissions() {
+        long now = System.nanoTime();
+        emissions.values().removeIf(e -> now - e.lastSeenNanos > 5_000_000_000L);
     }
 
     private static float strike(float progress) {
         if (progress <= 0.32f || progress >= 0.62f) return 0.0f;
         return (float) Math.sin(((progress - 0.32f) / 0.30f) * Math.PI);
+    }
+
+    /**
+     * Per-effect emitter set, keyed by the synced seed on the renderer
+     * instance because render states are recreated on every extraction.
+     * Sources sample the cut path and its rib stations as data only.
+     */
+    private static final class Emission {
+        final ClientLevel level;
+        final MaterialEmitters.Emitter[] emitters;
+        float lastAge = -1.0f;
+        long lastSeenNanos = System.nanoTime();
+        boolean flashDone = false;
+        Vec3 origin = Vec3.ZERO;
+        Vec3 dir = new Vec3(1, 0, 0);
+        Vec3 side = new Vec3(0, 0, 1);
+        Vec3 up = new Vec3(0, 1, 0);
+        float halfLen = 1.0f;
+        float scale = 1.0f;
+
+        Emission(ClientLevel level, LineSlashRenderState state) {
+            this.level = level;
+            update(state, 0.0f);
+            int seed = (int) state.seed;
+            float baseRate = Math.max(320.0f, Math.min(720.0f, 260.0f + state.lineLength * 18.0f));
+
+            MaterialEmitters.Source sheath = random -> {
+                double along = (random.nextDouble() * 2.0 - 1.0) * halfLen;
+                Vec3 offset = jitter(random, 0.13 * scale);
+                Vec3 pos = origin.add(dir.scale(along)).add(offset);
+                return new MaterialEmitters.Sample(pos, dir.scale(0.05));
+            };
+            MaterialEmitters.Source core = random -> {
+                double along = (random.nextDouble() * 2.0 - 1.0) * halfLen;
+                Vec3 offset = jitter(random, 0.045 * scale);
+                Vec3 pos = origin.add(dir.scale(along)).add(offset);
+                return new MaterialEmitters.Sample(pos, dir.scale(0.05));
+            };
+            MaterialEmitters.Source glass = random -> {
+                float[] stations = {0.12f, 0.31f, 0.50f, 0.69f, 0.88f};
+                float station = stations[random.nextInt(stations.length)];
+                double along = (station * 2.0 - 1.0) * halfLen
+                    + (random.nextDouble() - 0.5) * 0.30 * scale;
+                Vec3 pos = origin.add(dir.scale(along)).add(jitter(random, 0.10 * scale));
+                Vec3 outward = side.scale(random.nextDouble() - 0.5)
+                    .add(up.scale(random.nextDouble() - 0.5)).normalize().scale(0.42);
+                return new MaterialEmitters.Sample(pos, outward);
+            };
+            MaterialEmitters.Source darkness = random -> {
+                double along = (random.nextDouble() * 2.0 - 1.0) * halfLen;
+                Vec3 offset = jitter(random, 0.42 * scale);
+                Vec3 pos = origin.add(dir.scale(along)).add(offset);
+                return new MaterialEmitters.Sample(pos, offset.scale(-0.18));
+            };
+
+            this.emitters = new MaterialEmitters.Emitter[] {
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(0x4DD8FF, 1.10f * state.scale, seed, Vec3.ZERO, 0.04f),
+                    sheath, baseRate, Math.round(baseRate * 1.30f)),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(0xFFFFFF, 0.75f * state.scale, seed ^ 0xC03E, Vec3.ZERO, 0.03f),
+                    core, baseRate * 0.45f, Math.round(baseRate * 0.60f)),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.glassDust(0xBFEFFF, 0.95f * state.scale, seed ^ 0xFA11, Vec3.ZERO, 0.08f),
+                    glass, baseRate * 0.55f, Math.round(baseRate * 0.72f)),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.darkness(0x3D1A78, 1.35f * state.scale, seed ^ 0x19AC, Vec3.ZERO, 0.04f),
+                    darkness, baseRate * 0.35f, Math.round(baseRate * 0.46f))
+            };
+        }
+
+        void update(LineSlashRenderState state, float cut) {
+            this.origin = new Vec3(state.ex, state.ey, state.ez);
+            this.dir = state.direction.normalize();
+            Vec3 helper = Math.abs(this.dir.y) > 0.90 ? new Vec3(1, 0, 0) : new Vec3(0, 1, 0);
+            this.side = this.dir.cross(helper).normalize();
+            this.up = this.side.cross(this.dir).normalize();
+            this.halfLen = ((state.lineLength * 0.5f) + 1.0f) * cut;
+            this.scale = state.scale;
+        }
+
+        Vec3 jitter(net.minecraft.util.RandomSource random, double radius) {
+            return side.scale((random.nextDouble() * 2.0 - 1.0) * radius)
+                .add(up.scale((random.nextDouble() * 2.0 - 1.0) * radius));
+        }
+
+        float delta(float age) {
+            this.lastSeenNanos = System.nanoTime();
+            if (this.lastAge < 0.0f) {
+                this.lastAge = age;
+                return 1.0f / 60.0f;
+            }
+            float d = Math.min(0.05f, Math.max(0.0f, (age - this.lastAge) / 20.0f));
+            this.lastAge = age;
+            return d;
+        }
     }
 }

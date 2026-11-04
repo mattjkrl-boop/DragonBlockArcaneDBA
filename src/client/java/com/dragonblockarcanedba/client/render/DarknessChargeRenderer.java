@@ -1,31 +1,26 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.DarknessChargeEntity;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Darkness Sword Abyssal Slash Charge-up in Minecraft 26.2.
  *
- * Bespoke pass: the hand-rolled ring, shard, and octahedron helpers are
- * gone. The ground seals are brokenVortexBand rings turning at the old
- * speeds, the converging shards are BespokeGeometry.branch crystals on
- * the unchanged orbit math, the twin helices are tall twisted
- * brokenVortexBand tubes, and the nested octahedron core is rebuilt from
- * displacedDome pairs (a noise-displaced dome and its flipped twin read
- * as a lumpy diamond core; the toolkit has no true octahedron builder,
- * noted as a gap in the bespoke report). The seed comes from the entity
- * UUID so every client draws the same shapes.
+ * No-shapes pass: the seal rings, converging shards, helical ribbons, and
+ * nested core geometry are gone. Darkness, plasma, soul vapor, and vapor
+ * are sampled on inward paths around the caster, so the charge reads as
+ * material gathering into the weapon instead of constructed shapes. The
+ * charge ratio, pulse, radius growth, and core position are unchanged.
  */
 public class DarknessChargeRenderer extends EntityRenderer<DarknessChargeEntity, DarknessChargeRenderer.ChargeRenderState> {
 
@@ -38,6 +33,10 @@ public class DarknessChargeRenderer extends EntityRenderer<DarknessChargeEntity,
         public float age = 0;
         public double px = 0, py = 0, pz = 0;
         public long seed = 0;
+        public MaterialEmitters.Emitter[] emitters;
+        public long emitterSeed = Long.MIN_VALUE;
+        public ClientLevel emitterLevel;
+        public float lastEmissionAge = Float.NaN;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -68,144 +67,139 @@ public class DarknessChargeRenderer extends EntityRenderer<DarknessChargeEntity,
 
     @Override
     public void submit(ChargeRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-        final float charge = state.chargeRatio;
-        final float age = state.age;
-        final float ds = LayeredRender.distScale(cameraState, state.px, state.py, state.pz);
-        final long seed = state.seed;
-
-        final float baseRadius = 1.3f + (charge * 1.5f);
-        final float baseAlpha = 0.65f + (charge * 0.35f);
-        final float pulse = 0.90f + 0.10f * (float) Math.sin(age * 0.5f);
-
-        // 1. Ground demonic seals: three broken vortex bands turning at
-        // the old counter-rotating speeds (-14, +22, -32 degrees per tick).
-        final float[] sealRadii = { baseRadius * 1.065f, baseRadius * 0.75f, baseRadius * 0.43f };
-        final float[] sealSpeeds = { -14.0f, 22.0f, -32.0f };
-        final float[] sealTwists = { 1.6f, -2.0f, 2.4f };
-        final float[][] sealColors = {
-            { 0.12f, 0.0f, 0.25f, 0.85f },
-            { 0.55f, 0.05f, 0.85f, 0.92f },
-            { 0.95f, 0.05f, 0.35f, 0.95f }
-        };
-        for (int i = 0; i < 3; i++) {
-            final int idx = i;
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * sealSpeeds[idx])));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ (0x5EA1L + idx * 131L),
-                    sealRadii[idx], 0.02f + idx * 0.03f, 0.05f + idx * 0.03f, sealTwists[idx],
-                    sealColors[idx][0], sealColors[idx][1], sealColors[idx][2],
-                    baseAlpha * sealColors[idx][3], ds);
-            });
-            poseStack.popPose();
-        }
-
-        // 2. Inward-converging shadow shards on the unchanged orbit math,
-        // each a branch crystal from its base to its inward-tipped point.
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            int shardCount = 8 + (int) (charge * 6);
-            float orbitRadius = (2.2f - charge * 0.65f) * pulse;
-            float orbitSpeed = 18.0f + (charge * 50.0f);
-            float shardLen = 0.55f + (charge * 0.25f);
-            for (int i = 0; i < shardCount; i++) {
-                double shardAngle = (i / (double) shardCount) * Math.PI * 2.0 + Math.toRadians(age * orbitSpeed);
-                float sy = 0.4f + (float) Math.sin(age * 0.35f + i * 1.3f) * 0.5f + (i % 2 == 0 ? 0.3f : 0.0f);
-                float sx = (float) Math.cos(shardAngle) * orbitRadius;
-                float sz = (float) Math.sin(shardAngle) * orbitRadius;
-
-                float toCenterX = -sx;
-                float toCenterZ = -sz;
-                float toCenterY = 0.9f - sy;
-                float toCenterLen = (float) Math.sqrt(toCenterX * toCenterX + toCenterZ * toCenterZ + toCenterY * toCenterY);
-                if (toCenterLen > 0.001f) {
-                    toCenterX /= toCenterLen;
-                    toCenterY /= toCenterLen;
-                    toCenterZ /= toCenterLen;
-                }
-                BespokeGeometry.branch(pose, buffer, seed ^ (0x51A9DL + i * 57L),
-                    new Vec3(sx, sy, sz),
-                    new Vec3(sx + toCenterX * shardLen, sy + toCenterY * shardLen, sz + toCenterZ * shardLen),
-                    0.15f, 0.65f, 0.05f, 0.95f, baseAlpha * 0.95f, 1.0f, ds);
-            }
-        });
-
-        // 3. The core: nested displaced domes and their flipped twins
-        // standing in for the old octahedron stack, slowly turning.
-        final float coreSize = (0.70f - charge * 0.20f) * pulse;
-        poseStack.pushPose();
-        poseStack.translate(0, 0.85f, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 20.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xC09E1L, coreSize,
-                0.15f, 0.0f, 0.30f, baseAlpha * 0.80f, 1.0f, ds);
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xC09E2L, coreSize * 0.58f,
-                0.60f, 0.05f, 0.90f, baseAlpha * 0.95f, 1.0f, ds);
-            if (charge >= 0.4f) {
-                BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xC09E3L, coreSize * 0.28f,
-                    0.95f, 0.15f, 0.45f, 1.0f, 1.0f, ds);
-            }
-        });
-        poseStack.popPose();
-
-        poseStack.pushPose();
-        poseStack.translate(0, 0.85f, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(180.0f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-age * 20.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xC09E1L, coreSize,
-                0.15f, 0.0f, 0.30f, baseAlpha * 0.56f, 1.0f, ds);
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xC09E2L, coreSize * 0.58f,
-                0.60f, 0.05f, 0.90f, baseAlpha * 0.66f, 1.0f, ds);
-            if (charge >= 0.4f) {
-                BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xC09E3L, coreSize * 0.28f,
-                    0.95f, 0.15f, 0.45f, 0.7f, 1.0f, ds);
-            }
-        });
-        poseStack.popPose();
-
-        // 4. Twin helical ribbons: tall twisted vortex bands, one violet
-        // and one crimson, a half turn apart, winding as the charge ages.
-        for (int strand = 0; strand < 2; strand++) {
-            final boolean violet = strand == 0;
-            final float strandRot = (float) Math.toDegrees(strand * Math.PI + age * 0.18);
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(strandRot)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ (violet ? 0x4E11L : 0x4E12L),
-                    baseRadius * 0.62f, 0f, 2.3f, 8.2f,
-                    violet ? 0.45f : 0.95f, 0.02f, violet ? 0.85f : 0.25f,
-                    baseAlpha * 0.8f, ds);
-            });
-            poseStack.popPose();
-        }
-
-        // Additive pass: a halo dome pair around the core and the shared
-        // ground anchor glow under the seals.
-        final float haloCoreSize = coreSize * 1.35f;
-        poseStack.pushPose();
-        poseStack.translate(0, 0.85f, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 20.0f)));
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0x4A11L, haloCoreSize,
-                0.35f, 0.03f, 0.50f, baseAlpha * 0.25f, 1.0f, ds);
-        });
-        poseStack.popPose();
-
-        poseStack.pushPose();
-        poseStack.translate(0, 0.85f, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(180.0f)));
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0x4A11L, haloCoreSize,
-                0.35f, 0.03f, 0.50f, baseAlpha * 0.18f, 1.0f, ds);
-        });
-        poseStack.popPose();
-
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            LayeredRender.drawAnchorGlow(pose, buffer, baseRadius * 1.25f, 0.04f,
-                0.30f, 0.02f, 0.45f, baseAlpha * 0.22f, ds);
-        });
-
+        emitMaterials(state);
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void emitMaterials(ChargeRenderState state) {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            return;
+        }
+        float charge = Math.max(0.0f, Math.min(1.0f, state.chargeRatio));
+        float distance = MaterialEmitters.distanceScale(new Vec3(state.px, state.py, state.pz));
+        float envelope = (0.30f + 0.70f * charge)
+            * (0.35f + 0.65f * (float) Math.sqrt(Math.max(0.0f, distance)));
+
+        if (state.emitters == null || state.emitterSeed != state.seed || state.emitterLevel != level
+                || Float.isNaN(state.lastEmissionAge) || state.age < state.lastEmissionAge) {
+            state.emitters = createEmitters(state, level);
+            state.emitterSeed = state.seed;
+            state.emitterLevel = level;
+            for (MaterialEmitters.Emitter emitter : state.emitters) {
+                emitter.tick(0.05f, envelope);
+            }
+            state.lastEmissionAge = state.age;
+            return;
+        }
+
+        float delta = Math.min(0.05f, Math.max(0.0f, (state.age - state.lastEmissionAge) / 20.0f));
+        state.lastEmissionAge = state.age;
+        if (delta > 0.0f) {
+            for (MaterialEmitters.Emitter emitter : state.emitters) {
+                emitter.tick(delta, envelope);
+            }
+        }
+    }
+
+    private static MaterialEmitters.Emitter[] createEmitters(ChargeRenderState state, ClientLevel level) {
+        int seed = (int) state.seed;
+        return new MaterialEmitters.Emitter[] {
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.DARKNESS, 0x1F0040, 3.0f,
+                    seed ^ 0xC401, Vec3.ZERO, 0.008f),
+                ringSource(state, 0.85, 1.30, 0.06, 0.105), 125.0f, 140),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0x8C0DD9, 1.85f,
+                    seed ^ 0xC402, Vec3.ZERO, 0.010f),
+                ringSource(state, 0.55, 1.05, 0.10, 0.135), 100.0f, 115),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.SOUL, 0xD8B4FE, 1.60f,
+                    seed ^ 0xC403, Vec3.ZERO, 0.010f),
+                sphereSource(state, 0.85, 1.05, 0.045), 85.0f, 95),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.DARKNESS, 0x0D0217, 3.45f,
+                    seed ^ 0xC404, Vec3.ZERO, 0.014f),
+                sphereSource(state, 1.05, 1.30, 0.018), 70.0f, 80),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0x7C3AED, 2.45f,
+                    seed ^ 0xC405, Vec3.ZERO, 0.008f),
+                coreSource(state, 1.35), 75.0f, 85),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0xF21459, 1.50f,
+                    seed ^ 0xC406, Vec3.ZERO, 0.006f),
+                coreSource(state, 0.95), 115.0f, 130),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.VAPOR, 0x7C3AED, 3.05f,
+                    seed ^ 0xC407, Vec3.ZERO, 0.014f),
+                helixSource(state), 80.0f, 90)
+        };
+    }
+
+    private static MaterialEmitters.Source ringSource(ChargeRenderState state,
+                                                      double minFactor, double maxFactor,
+                                                      double y, double inwardSpeed) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double radius = baseRadius(state) * (minFactor + random.nextDouble() * (maxFactor - minFactor));
+            double x = Math.cos(angle) * radius;
+            double z = Math.sin(angle) * radius;
+            Vec3 pos = new Vec3(state.px + x, state.py + y, state.pz + z);
+            Vec3 velocity = new Vec3(-Math.cos(angle) * inwardSpeed, 0.010, -Math.sin(angle) * inwardSpeed);
+            return new MaterialEmitters.Sample(pos, velocity);
+        };
+    }
+
+    private static MaterialEmitters.Source sphereSource(ChargeRenderState state,
+                                                        double centerY, double radiusFactor,
+                                                        double inwardFactor) {
+        return random -> {
+            Vec3 center = new Vec3(state.px, state.py + centerY, state.pz);
+            double u = random.nextDouble() * 2.0 - 1.0;
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double radius = baseRadius(state) * radiusFactor * Math.cbrt(random.nextDouble());
+            double flat = Math.sqrt(Math.max(0.0, 1.0 - u * u)) * radius;
+            Vec3 pos = new Vec3(center.x + Math.cos(angle) * flat,
+                center.y + u * radius, center.z + Math.sin(angle) * flat);
+            Vec3 velocity = center.subtract(pos).scale(inwardFactor).add(0, 0.006, 0);
+            return new MaterialEmitters.Sample(pos, velocity);
+        };
+    }
+
+    private static MaterialEmitters.Source coreSource(ChargeRenderState state, double scaleFactor) {
+        return random -> {
+            Vec3 center = new Vec3(state.px, state.py + 0.85, state.pz);
+            double u = random.nextDouble() * 2.0 - 1.0;
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double radius = coreRadius(state) * scaleFactor * Math.cbrt(random.nextDouble());
+            double flat = Math.sqrt(Math.max(0.0, 1.0 - u * u)) * radius;
+            Vec3 pos = new Vec3(center.x + Math.cos(angle) * flat,
+                center.y + u * radius, center.z + Math.sin(angle) * flat);
+            return new MaterialEmitters.Sample(pos, Vec3.ZERO);
+        };
+    }
+
+    private static MaterialEmitters.Source helixSource(ChargeRenderState state) {
+        return random -> {
+            int strand = random.nextInt(2);
+            double angle = strand * Math.PI + state.age * 0.18 + (random.nextDouble() - 0.5) * 0.22;
+            double radius = baseRadius(state) * 0.62;
+            double x = Math.cos(angle) * radius;
+            double z = Math.sin(angle) * radius;
+            Vec3 pos = new Vec3(state.px + x, state.py + random.nextDouble() * 2.3, state.pz + z);
+            Vec3 velocity = new Vec3(-Math.sin(angle) * 0.055, 0.028, Math.cos(angle) * 0.055);
+            return new MaterialEmitters.Sample(pos, velocity);
+        };
+    }
+
+    private static float baseRadius(ChargeRenderState state) {
+        float charge = Math.max(0.0f, Math.min(1.0f, state.chargeRatio));
+        return 1.3f + charge * 1.5f;
+    }
+
+    private static float coreRadius(ChargeRenderState state) {
+        float charge = Math.max(0.0f, Math.min(1.0f, state.chargeRatio));
+        float pulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.5f);
+        return (0.70f - charge * 0.20f) * pulse;
     }
 }

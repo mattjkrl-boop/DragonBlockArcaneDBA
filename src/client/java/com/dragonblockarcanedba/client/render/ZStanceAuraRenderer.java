@@ -1,32 +1,43 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.ZStanceAuraEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
 
-import java.util.Random;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Entity Renderer for Z-Sword Katchin Weight & Gravity Stance in Minecraft 26.2.
+ * Entity Renderer for Z-Sword Katchin Weight and Gravity Stance in Minecraft 26.2.
  *
- * Bespoke pass: the gravity well is a stack of broken vortex bands widening
- * with height (the stance well builder named in the standard), the ground
- * disc and singularity eye are glow fans with flat broken bands, the
- * contracting event horizon rings are broken bands shrinking on the same
- * phase math, the monoliths are torn ribbons stood upright and leaned
- * outward, and the runes above them are small shard fans. All shapes take
- * the entity's synced seed and stay frame stable.
+ * No-shapes pass: the stance draws no geometry. The gravity well is a
+ * volume of violet plasma and pale vapor pulled toward the axis and
+ * downward. The old monolith ring is not rebuilt as slabs or ribbons:
+ * each anchor position carries a dense falling column of stone dust,
+ * deep gravity plasma, and gold glints at its top, so the anchors read
+ * as heavy material hanging in the well rather than as objects. Ground
+ * dust gathers inward under the caster, and the singularity stays a
+ * tight bright plasma concentration at the center.
  */
 public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStanceAuraRenderer.ZStanceRenderState> {
+
+    private static final int VIOLET = 0x661ACC;
+    private static final int DEEP_VIOLET = 0x5914A6;
+    private static final int PALE_VIOLET = 0xC9B8FF;
+    private static final int EYE = 0xE6D8FF;
+    private static final int GOLD = 0xFFD133;
+    private static final int STONE_DUST = 0x9A8668;
+    private static final int DARK_STONE = 0x77675A;
+
+    private final Map<Integer, Emission> emissions = new HashMap<>();
 
     public ZStanceAuraRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -38,6 +49,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
         public float age = 0;
         public long seed = 0;
         public int fadeTicks = -1;
+        public int entityId = -1;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -63,135 +75,182 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getSeed();
         state.fadeTicks = entity.getFadeTicks();
+        state.entityId = entity.getId();
     }
 
     @Override
     public void submit(ZStanceRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        Minecraft minecraft = Minecraft.getInstance();
+        ClientLevel level = minecraft == null ? null : minecraft.level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
+
         float power = state.powerRatio;
         float age = state.age;
-        float dist = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float dist = MaterialEmitters.distanceScale(center);
 
         float baseRadius = 2.0f + (power * 3.5f);
-        // The alpha used to have no age term at all: the field appeared at 0.70
-        // alpha on its first tick and vanished whole on release. Fade in over
-        // 5 ticks, fade out over the entity's FADE_LENGTH ticks.
         float fadeOut = state.fadeTicks < 0 ? 1.0f
             : Math.max(0.0f, 1.0f - state.fadeTicks / (float) ZStanceAuraEntity.FADE_LENGTH);
         float baseAlpha = (0.70f + (power * 0.28f)) * Math.min(1.0f, age / 5.0f) * fadeOut;
-        float pulse = 0.94f + 0.06f * (float) Math.sin(age * 0.40f);
-        float tremble = (float) Math.sin(age * 3.2f) * (0.015f + power * 0.05f);
-
-        // 1. Gravitational Compression Ground Disc & Singularity Eye, plus
-        // the inward-contracting event horizon rings on their phase math.
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.glowFan(pose, buffer, state.seed, baseRadius * 1.05f, 0.04f,
-                0.40f, 0.10f, 0.80f, baseAlpha * 0.6f, dist);
-            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0xD15CL, baseRadius * 0.92f,
-                0.02f, 0.09f, -age * 0.14f, 0.20f, 0.05f, 0.45f, baseAlpha * 0.70f, dist);
-            // Dense inner singularity eye: dark glow fan, bright rim band.
-            BespokeGeometry.glowFan(pose, buffer, state.seed ^ 0xE7EL, 0.75f, 0.05f,
-                0.10f, 0.0f, 0.25f, baseAlpha * 0.95f, dist);
-            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0xB1A1L, 0.42f,
-                0.05f, 0.14f, -age * 0.52f, 0.85f, 0.75f, 1.0f, baseAlpha, dist);
-
-            // 2. Inward-Contracting Event Horizon Rings (gravity suction)
-            int contractingRings = 4;
-            for (int k = 0; k < contractingRings; k++) {
-                float ringPhase = (age * 0.35f + k * (baseRadius / contractingRings)) % baseRadius;
-                float currentR = baseRadius - ringPhase;
-                if (currentR > 0.3f && currentR < baseRadius) {
-                    float fade = (currentR / baseRadius) * baseAlpha * 0.85f;
-                    float ringY = 0.06f + (1.0f - currentR / baseRadius) * 0.8f;
-                    BespokeGeometry.brokenVortexBand(pose, buffer, state.seed + k * 13L, currentR,
-                        ringY, ringY + 0.25f, age * 0.21f + k * 0.78f,
-                        0.55f, 0.15f, 0.95f, fade, dist);
-                }
-            }
-        });
-
-        // 3. Katchin Weight Monoliths: torn ribbons stood upright, leaned
-        // radially outward, with a shard fan rune levitating above each.
-        // Placement math is unchanged from the spectacle pass.
-        int monolithCount = 6 + (int) (power * 2); // 6 to 8 monoliths
-        Random rng = new Random(state.seed);
-        for (int m = 0; m < monolithCount; m++) {
-            double mAng = (m / (double) monolithCount) * Math.PI * 2.0 + Math.toRadians(age * 3.0f);
-            float mDist = 1.6f + (power * 1.8f);
-
-            float mx = (float) Math.cos(mAng) * mDist + (rng.nextFloat() - 0.5f) * tremble;
-            float mz = (float) Math.sin(mAng) * mDist + (rng.nextFloat() - 0.5f) * tremble;
-
-            // Per monolith size variety: they used to share one height and
-            // one width formula, a ring of identical slabs.
-            float mHeight = (1.4f + power * 1.6f) * pulse * (0.75f + rng.nextFloat() * 0.6f);
-            float mWidth = (0.35f + power * 0.15f) * (0.8f + rng.nextFloat() * 0.5f);
-
-            // Outward lean for heavy anchor feel (absolute tip offset).
-            float lean = 0.20f + power * 0.15f;
-            float lx = (float) Math.cos(mAng) * lean;
-            float lz = (float) Math.sin(mAng) * lean;
-
-            long rockSeed = state.seed + m * 149L;
-            float yawDeg = 180.0f - (float) Math.toDegrees(mAng);
-            poseStack.pushPose();
-            poseStack.translate(mx, 0.05f, mz);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(yawDeg)));
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.tornRibbon(pose, buffer, rockSeed, mHeight, mWidth * 1.1f,
-                    lean, 0.15f, 0.08f, 0.30f, 1.0f, baseAlpha, dist);
-                BespokeGeometry.tornRibbon(pose, buffer, rockSeed + 1L, mHeight * 0.94f, mWidth * 0.44f,
-                    lean, 0.55f, 0.20f, 0.95f, 0.90f, baseAlpha, dist);
-            });
-            poseStack.popPose();
-
-            // Levitating Golden Gravity Rune above the anchor.
-            float runeY = mHeight + 0.25f + 0.1f * (float) Math.sin(age * 0.5f + m);
-            poseStack.pushPose();
-            poseStack.translate(mx + lx, runeY, mz + lz);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.shardFan(pose, buffer, rockSeed + 7L, 0.26f,
-                    1.0f, 0.85f, 0.20f, 1.0f, baseAlpha * 0.95f, dist));
-            poseStack.popPose();
+        if (baseAlpha <= 0.01f || dist <= 0.01f) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
         }
 
-        // 4. Inward Dimensional Gravity Funnel (the stance well): stacked
-        // broken vortex bands widening with height on the old radius and
-        // twist profile, with two strongly twisted gold stream bands woven
-        // through them where the spiral stream ribbons used to run.
-        float funnelH = 3.0f + power * 2.0f;
-        float streamH = 2.8f + power * 1.5f;
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            for (int i = 0; i < 4; i++) {
-                float frac = (i + 0.5f) / 4.0f;
-                float bandRadius = (0.3f + frac * baseRadius) * pulse;
-                float y0 = 0.1f + funnelH * (i / 4.0f);
-                float y1 = 0.1f + funnelH * ((i + 1) / 4.0f + 0.06f);
-                float cr = 0.35f + (0.15f - 0.35f) * frac;
-                float cg = 0.05f + (0.02f - 0.05f) * frac;
-                float cb = 0.70f + (0.40f - 0.70f) * frac;
-                BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ (0xEE11L + i * 19L), bandRadius,
-                    y0, y1, age * 0.12f + frac * 1.5f, cr, cg, cb,
-                    baseAlpha * 0.35f * (1.0f - frac * 0.6f) * 0.75f, dist);
-            }
-            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0x57EAL, (0.2f + 0.5f * baseRadius * 0.8f),
-                0.05f, streamH, age * 0.25f + (float) Math.PI * 3.0f,
-                1.0f, 0.80f, 0.20f, baseAlpha * 0.55f, dist);
-            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0x57EBL, (0.2f + 0.35f * baseRadius * 0.8f),
-                0.05f, streamH * 0.9f, age * 0.25f + (float) Math.PI * 1.5f,
-                1.0f, 0.80f, 0.20f, baseAlpha * 0.45f, dist);
-        });
+        Emission emission = emissionFor(state, level);
+        emission.frame.center = center;
+        emission.frame.baseRadius = baseRadius;
+        emission.frame.funnelHeight = 3.0f + power * 2.0f;
+        emission.frame.power = power;
+        emission.frame.age = age;
+        emission.frame.pulse = 0.94f + 0.06f * (float) Math.sin(age * 0.40f);
+        emission.frame.monolithCount = 6 + (int) (power * 2);
 
-        // Additive halo pass: the singularity eye and the field footprint
-        // get a faint bloom anchored to the ground under the caster.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.glowFan(pose, buffer, state.seed ^ 0xAA10L, 0.95f, 0.05f,
-                0.55f, 0.20f, 0.95f, baseAlpha * 0.22f, dist);
-            BespokeGeometry.glowFan(pose, buffer, state.seed ^ 0xAA11L, baseRadius * 1.16f, 0.04f,
-                0.40f, 0.10f, 0.80f, baseAlpha * 0.12f, dist);
-        });
+        float delta = emission.nextDelta();
+        float envelope = baseAlpha * dist;
+        emission.wellPlasma.tick(delta, envelope);
+        emission.wellVapor.tick(delta, envelope * 0.80f);
+        emission.groundDust.tick(delta, envelope * 0.78f);
+        emission.columnDust.tick(delta, envelope);
+        emission.columnPlasma.tick(delta, envelope * 0.92f);
+        emission.glints.tick(delta, envelope * 0.90f);
+        emission.eye.tick(delta, envelope);
 
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private Emission emissionFor(ZStanceRenderState state, ClientLevel level) {
+        long now = System.nanoTime();
+        emissions.entrySet().removeIf(entry -> now - entry.getValue().lastSeenNanos > 5_000_000_000L);
+        Emission emission = emissions.get(state.entityId);
+        if (emission == null || emission.seed != state.seed) {
+            emission = new Emission(level, state.seed);
+            emissions.put(state.entityId, emission);
+        }
+        emission.lastSeenNanos = now;
+        return emission;
+    }
+
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        float baseRadius = 2.0f;
+        float funnelHeight = 3.0f;
+        float power = 0.0f;
+        float age = 0.0f;
+        float pulse = 1.0f;
+        int monolithCount = 6;
+
+        Vec3 columnAnchor(int index) {
+            double angle = (index / (double) Math.max(1, monolithCount)) * Math.PI * 2.0
+                + Math.toRadians(age * 3.0f);
+            float dist = 1.6f + (power * 1.8f);
+            return new Vec3(center.x + Math.cos(angle) * dist, center.y,
+                center.z + Math.sin(angle) * dist);
+        }
+
+        float columnHeight() {
+            return (1.4f + power * 1.6f) * pulse;
+        }
+
+        float columnWidth() {
+            return 0.35f + power * 0.15f;
+        }
+    }
+
+    private static final class Emission {
+        final long seed;
+        final Frame frame = new Frame();
+        final MaterialEmitters.Emitter wellPlasma;
+        final MaterialEmitters.Emitter wellVapor;
+        final MaterialEmitters.Emitter groundDust;
+        final MaterialEmitters.Emitter columnDust;
+        final MaterialEmitters.Emitter columnPlasma;
+        final MaterialEmitters.Emitter glints;
+        final MaterialEmitters.Emitter eye;
+        long lastSeenNanos = System.nanoTime();
+        long lastTickNanos = 0L;
+
+        Emission(ClientLevel level, long seed) {
+            this.seed = seed;
+            int baseSeed = (int) seed;
+            Frame f = frame;
+
+            MaterialEmitters.Source well = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double flat = Math.sqrt(random.nextDouble()) * f.baseRadius;
+                double y = random.nextDouble() * f.funnelHeight;
+                Vec3 pos = f.center.add(Math.cos(angle) * flat, y, Math.sin(angle) * flat);
+                Vec3 inward = new Vec3(-Math.cos(angle), 0.0, -Math.sin(angle)).scale(0.16);
+                Vec3 swirl = new Vec3(-Math.sin(angle), 0.0, Math.cos(angle)).scale(0.055);
+                return new MaterialEmitters.Sample(pos, inward.add(swirl).add(0.0, -0.045, 0.0));
+            };
+            MaterialEmitters.Source ground = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double flat = Math.sqrt(random.nextDouble()) * f.baseRadius * 1.05;
+                Vec3 pos = f.center.add(Math.cos(angle) * flat, 0.06, Math.sin(angle) * flat);
+                Vec3 inward = new Vec3(-Math.cos(angle), 0.0, -Math.sin(angle))
+                    .scale(0.13 + random.nextDouble() * 0.08).add(0.0, 0.025, 0.0);
+                return new MaterialEmitters.Sample(pos, inward);
+            };
+            MaterialEmitters.Source columns = random -> {
+                int index = random.nextInt(Math.max(1, f.monolithCount));
+                Vec3 anchor = f.columnAnchor(index);
+                double local = (random.nextDouble() * 2.0 - 1.0) * f.columnWidth() * 0.58;
+                double localZ = (random.nextDouble() * 2.0 - 1.0) * f.columnWidth() * 0.58;
+                double y = random.nextDouble() * f.columnHeight();
+                Vec3 pos = anchor.add(local, y, localZ);
+                Vec3 fall = new Vec3((random.nextDouble() - 0.5) * 0.03,
+                    -(0.16 + random.nextDouble() * 0.20), (random.nextDouble() - 0.5) * 0.03);
+                return new MaterialEmitters.Sample(pos, fall);
+            };
+            MaterialEmitters.Source tops = random -> {
+                int index = random.nextInt(Math.max(1, f.monolithCount));
+                Vec3 anchor = f.columnAnchor(index);
+                double local = (random.nextDouble() * 2.0 - 1.0) * f.columnWidth() * 0.40;
+                double localZ = (random.nextDouble() * 2.0 - 1.0) * f.columnWidth() * 0.40;
+                double y = f.columnHeight() + 0.22 + 0.10 * Math.sin(f.age * 0.5f + index);
+                return new MaterialEmitters.Sample(anchor.add(local, y, localZ),
+                    new Vec3(0.0, -0.018, 0.0));
+            };
+            MaterialEmitters.Source eyeSource = random -> new MaterialEmitters.Sample(
+                f.center.add(0.0, 0.12, 0.0), Vec3.ZERO);
+
+            wellPlasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(VIOLET, 2.05f, baseSeed ^ 0x9E11, Vec3.ZERO, 0.012f),
+                well, 150.0f, 300);
+            wellVapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(PALE_VIOLET, 2.65f, baseSeed ^ 0x9A90, Vec3.ZERO, 0.010f),
+                well, 76.0f, 165);
+            groundDust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(STONE_DUST, 1.55f, baseSeed ^ 0xD057, Vec3.ZERO, 0.010f),
+                ground, 72.0f, 155);
+            columnDust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(DARK_STONE, 1.85f, baseSeed ^ 0xC010, Vec3.ZERO, 0.008f),
+                columns, 138.0f, 290);
+            columnPlasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(DEEP_VIOLET, 1.95f, baseSeed ^ 0xC011, Vec3.ZERO, 0.008f),
+                columns, 84.0f, 190);
+            glints = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(GOLD, 1.25f, baseSeed ^ 0x6117, Vec3.ZERO, 0.055f),
+                tops, 38.0f, 95);
+            eye = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(EYE, 1.55f, baseSeed ^ 0xE7E1, Vec3.ZERO, 0.085f),
+                eyeSource, 44.0f, 105);
+        }
+
+        float nextDelta() {
+            long now = System.nanoTime();
+            if (lastTickNanos == 0L) {
+                lastTickNanos = now;
+                return 1.0f / 60.0f;
+            }
+            float delta = Math.min(0.05f, (now - lastTickNanos) / 1_000_000_000.0f);
+            lastTickNanos = now;
+            return Math.max(0.001f, delta);
+        }
     }
 }

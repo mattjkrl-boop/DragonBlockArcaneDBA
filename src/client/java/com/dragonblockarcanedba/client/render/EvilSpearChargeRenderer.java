@@ -1,33 +1,36 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.EvilSpearChargeEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Entity Renderer for Evil Spear Left-Click (Evil Impale) Charge-up in Minecraft 26.2.
- * Renders physical 3D demonic crimson ground seals, contracting energy gathering rings,
- * orbiting blood shards, and a pulsating demonic core matrix.
+ * Entity renderer for the Evil Spear charge presentation in Minecraft 26.2.
  *
- * Bespoke pass (standard rule 1): every shape comes from BespokeGeometry or
- * LayeredRender, seeded from the entity UUID so all clients draw the same
- * silhouette. The old per-renderer regular helpers (equal-segment rings, the
- * octahedron, the shard crystal) are gone: seals and gathering rings are
- * broken vortex bands, the orbiting shards are shard fans, and the core is a
- * pair of noise-displaced domes per layer.
+ * No-shapes pass: this renderer draws no geometry. The charge is carried by
+ * material emission around the caster: darkness smoke gathering at ground
+ * level, hellfire embers and flame moving through the column, a crimson
+ * plasma core at spear height, and pale soul vapor drifting through the same
+ * volume. The entity still owns the charge ratio, release timing, sounds,
+ * and server side particles; this class only replaces the old drawn seals,
+ * bands, fans, and dome core with shared material emitters.
  */
 public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntity, EvilSpearChargeRenderer.ChargeRenderState> {
+
+    private final Map<Long, EmissionRig> rigs = new HashMap<>();
 
     public EvilSpearChargeRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -62,144 +65,152 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
         state.age = entity.tickCount + partialTicks;
         state.releaseTicks = entity.getReleaseTicks();
         // Synced state hash: the entity UUID is assigned on the server and
-        // networked, so every client seeds the same shapes.
+        // networked, so every client uses the same material seed family.
         state.seed = entity.getUUID().getMostSignificantBits();
     }
 
     @Override
     public void submit(ChargeRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-        final float charge = state.chargeRatio;
-        final float age = state.age;
-        final long seed = state.seed;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null && mc.level != null) {
+            ClientLevel level = mc.level;
+            Vec3 center = new Vec3(state.x, state.y, state.z);
+            float charge = state.chargeRatio;
+            float age = state.age;
 
-        // Lifecycle (standard point 5): the seal builds in over its first 6
-        // ticks instead of popping in at alpha 0.65 or more, and after the
-        // throw releases it expands and dissipates over the release window
-        // the entity reports, instead of cutting out in one frame.
-        float spawnEnv = FxEnvelope.smoothstep(Math.min(1.0f, age / 6.0f));
-        float releaseFade = 1.0f;
-        float releaseExpand = 1.0f;
-        if (state.releaseTicks >= 0) {
-            float rt = Math.min(1.0f, state.releaseTicks / (float) EvilSpearChargeEntity.RELEASE_FADE_TICKS);
-            releaseFade = 1.0f - rt;
-            releaseExpand = 1.0f + rt * 0.35f;
-        }
-        final float lifecycle = spawnEnv * releaseFade;
-        final float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-
-        final float baseRadius = (1.35f + (charge * 1.55f)) * releaseExpand;
-        final float baseAlpha = (0.65f + (charge * 0.35f)) * lifecycle;
-        final float pulse = 0.90f + 0.10f * (float) Math.sin(age * 0.55f);
-
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // Shared layered column (standard point 1): three counter
-            // rotating bands around the seal heart, breathing with the
-            // charge and with the same lifecycle as the rest of the seal.
-            LayeredRender.drawVortexBands(pose, buffer,
-                baseRadius * 0.55f, 2.6f, age, 1.0f, 0.06f, 0.18f,
-                (0.30f + 0.70f * charge) * lifecycle, ds);
-
-            // 1. Demonic ground seals: three broken bands hugging the ground
-            // where the equal-segment runic rings used to be, counter
-            // rotating at the old ring speeds.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x5EA11L,
-                baseRadius * 1.09f, 0.03f, 0.16f, (float) Math.toRadians(age * -18.0),
-                0.80f, 0.0f, 0.10f, baseAlpha * 0.85f, ds);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x5EA12L,
-                baseRadius * 0.76f, 0.05f, 0.18f, (float) Math.toRadians(age * 28.0),
-                1.0f, 0.05f, 0.20f, baseAlpha * 0.92f, ds);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x5EA13L,
-                baseRadius * 0.42f, 0.07f, 0.20f, (float) Math.toRadians(age * -42.0),
-                1.0f, 0.65f, 0.75f, baseAlpha * 0.98f, ds);
-
-            // 2. Inward-gathering energy rings: four broken bands that
-            // contract and climb toward the spear tip (y = 0.9) on the old
-            // ring phase cycle.
-            for (int r = 0; r < 4; r++) {
-                float ringPhase = (age * 0.08f + (r / 4.0f)) % 1.0f;
-                float currentR = (2.6f * (1.0f - ringPhase) + 0.35f * ringPhase) * pulse * (1.0f - charge * 0.3f);
-                float currentY = 0.3f + ringPhase * 0.9f;
-                float ringAlpha = (float) Math.sin(ringPhase * Math.PI) * baseAlpha * 0.85f;
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ (0x6A77L + r * 131L),
-                    currentR, currentY, currentY + 0.13f, (float) Math.toRadians(age * (30.0 + r * 15.0)),
-                    1.0f, 0.05f + ringPhase * 0.4f, 0.15f + ringPhase * 0.5f, ringAlpha, ds);
+            float spawnEnv = FxEnvelope.smoothstep(Math.min(1.0f, age / 6.0f));
+            float releaseFade = 1.0f;
+            float releaseExpand = 1.0f;
+            if (state.releaseTicks >= 0) {
+                float rt = Math.min(1.0f, state.releaseTicks / (float) EvilSpearChargeEntity.RELEASE_FADE_TICKS);
+                releaseFade = 1.0f - rt;
+                releaseExpand = 1.0f + rt * 0.35f;
             }
+            float lifecycle = spawnEnv * releaseFade;
+            float radius = (1.35f + charge * 1.55f) * releaseExpand;
+            float distance = MaterialEmitters.distanceScale(center);
+            float envelope = lifecycle * distance;
 
-            // A thin filament band tightens onto the seals while held.
-            float filament = baseRadius * (1.02f - charge * 0.42f);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xF11A7L,
-                filament, 0.12f, 0.25f, (float) Math.toRadians(age * 48.0),
-                1.0f, 0.82f, 0.90f, baseAlpha * 0.72f, ds);
-
-            // 3. Twin plasma vortex strands: two tall broken bands twisting
-            // up the column where the helical ribbon pair used to climb.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x57AA1L,
-                baseRadius * 0.65f, 0.0f, 2.4f, age * 0.22f,
-                1.0f, 0.08f, 0.22f, baseAlpha * 0.80f, ds);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x57AA2L,
-                baseRadius * 0.62f, 0.0f, 2.4f, (float) Math.PI + age * 0.22f,
-                0.85f, 0.0f, 0.40f, baseAlpha * 0.70f, ds);
-        });
-
-        // 4. Orbiting blood shards: seeded shard fans circling the core at
-        // spear height, one flat, one vertical, counter rotating. The fans
-        // replace the eight to fourteen hand-aimed crystal needles.
-        final float orbitRadius = (2.3f - charge * 0.75f) * pulse;
-        final float orbitDeg = age * (25.0f + charge * 60.0f);
-        poseStack.pushPose();
-        poseStack.translate(0, 0.9, 0);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(orbitDeg)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0xB1001L,
-                orbitRadius, 0.75f, 0.0f, 0.12f, baseAlpha * 0.85f, 1.0f, ds);
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0xB1002L,
-                orbitRadius * 0.7f, 1.0f, 0.75f, 0.85f, baseAlpha * 0.98f, 1.0f, ds);
-        });
-        poseStack.popPose();
-
-        poseStack.pushPose();
-        poseStack.translate(0, 0.9, 0);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(-orbitDeg * 0.7f)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0xB1003L,
-                orbitRadius * 0.85f, 0.85f, 0.05f, 0.20f, baseAlpha * 0.80f, 1.0f, ds);
-        });
-        poseStack.popPose();
-
-        // 5. The core matrix: three nested layers, each a pair of displaced
-        // domes (one up, one flipped) where the octahedra used to sit.
-        // Dark shell, blood mid, and a heart that brightens as charge fills.
-        float coreSize = (0.62f + charge * 0.18f) * pulse;
-        drawCoreLayer(collector, poseStack, renderType, seed ^ 0xC0DE1L,
-            coreSize, age * 24.0f, 0.85f, 0.0f, 0.12f, baseAlpha * 0.82f, ds);
-        drawCoreLayer(collector, poseStack, renderType, seed ^ 0xC0DE2L,
-            coreSize * 0.58f, -age * 36.0f, 1.0f, 0.10f, 0.28f, baseAlpha * 0.95f, ds);
-        float heart = Math.min(1.0f, charge);
-        drawCoreLayer(collector, poseStack, renderType, seed ^ 0xC0DE3L,
-            coreSize * 0.26f, age * 60.0f,
-            0.85f + 0.15f * heart, 0.12f + 0.78f * heart, 0.22f + 0.73f * heart, baseAlpha, ds);
+            if (envelope > 0.01f) {
+                EmissionRig rig = rigFor(level, state.seed, center, age);
+                rig.tick(center, charge, radius, envelope, age);
+            }
+            pruneRigs();
+        }
 
         super.submit(state, poseStack, collector, cameraState);
     }
 
+    private EmissionRig rigFor(ClientLevel level, long seed, Vec3 center, float age) {
+        EmissionRig rig = rigs.get(seed);
+        if (rig != null && (rig.level != level || age + 0.01f < rig.lastAge
+                || rig.center.distanceToSqr(center) > 64.0 * 64.0)) {
+            rigs.remove(seed);
+            rig = null;
+        }
+        if (rig == null) {
+            rig = new EmissionRig(level, seed, center);
+            rigs.put(seed, rig);
+        }
+        return rig;
+    }
+
+    private void pruneRigs() {
+        long now = System.nanoTime();
+        rigs.entrySet().removeIf(entry -> now - entry.getValue().lastSeenNanos > 5_000_000_000L);
+    }
+
     /**
-     * One core layer at spear height: a displaced dome opening up and its
-     * flipped twin opening down, spun together. Orchestration only; all
-     * geometry comes from BespokeGeometry.
+     * Accumulator storage for one charge entity. The emitters themselves are
+     * the shared MaterialEmitters emitters; the sources only sample current
+     * points inside the charge area and column as data.
      */
-    private static void drawCoreLayer(SubmitNodeCollector collector, PoseStack poseStack, RenderType renderType,
-                                      long seed, float size, float rotDeg,
-                                      float r, float g, float b, float alpha, float ds) {
-        poseStack.pushPose();
-        poseStack.translate(0, 0.85, 0);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(rotDeg)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, seed, size, r, g, b, alpha, 1.0f, ds));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(180.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xF1119L, size, r, g, b, alpha, 1.0f, ds));
-        poseStack.popPose();
+    private static final class EmissionRig {
+        private final ClientLevel level;
+        private Vec3 center;
+        private float charge = 0f;
+        private float radius = 1.35f;
+        private float lastAge = 0f;
+        private long lastSeenNanos = System.nanoTime();
+
+        private final MaterialEmitters.Emitter darkness;
+        private final MaterialEmitters.Emitter embers;
+        private final MaterialEmitters.Emitter flame;
+        private final MaterialEmitters.Emitter plasma;
+        private final MaterialEmitters.Emitter soul;
+
+        private EmissionRig(ClientLevel level, long seed, Vec3 center) {
+            this.level = level;
+            this.center = center;
+            int seedBase = (int) seed;
+
+            MaterialEmitters.Source ground = this::sampleGround;
+            MaterialEmitters.Source column = this::sampleColumn;
+            MaterialEmitters.Source core = this::sampleCore;
+
+            this.darkness = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.darkness(0x26030B, 2.7f, seedBase ^ 0x0D01,
+                            new Vec3(0.0, 0.015, 0.0), 0.015f),
+                    column, 64f, 84);
+            this.embers = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.ember(new Vec3(0.0, 0.055, 0.0), 0.060f),
+                    ground, 52f, 76);
+            this.flame = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.flame(new Vec3(0.0, 0.105, 0.0), 0.035f),
+                    core, 36f, 56);
+            this.plasma = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(0xF20D33, 1.30f, seedBase ^ 0x0D31,
+                            new Vec3(0.0, 0.030, 0.0), 0.025f),
+                    core, 66f, 88);
+            this.soul = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.soul(0xFFD9E6, 1.15f, seedBase ^ 0x0D47,
+                            new Vec3(0.0, 0.020, 0.0), 0.020f),
+                    column, 30f, 48);
+        }
+
+        private void tick(Vec3 center, float charge, float radius, float envelope, float age) {
+            float delta = Math.min(0.05f, Math.max(0.0f, (age - lastAge) / 20.0f));
+            this.center = center;
+            this.charge = charge;
+            this.radius = radius;
+            this.lastAge = age;
+            this.lastSeenNanos = System.nanoTime();
+
+            float gathering = 0.45f + charge * 0.75f;
+            darkness.tick(delta, envelope);
+            embers.tick(delta, envelope * gathering);
+            flame.tick(delta, envelope * (0.35f + charge * 0.85f));
+            plasma.tick(delta, envelope * (0.45f + charge * 0.80f));
+            soul.tick(delta, envelope * (0.55f + charge * 0.45f));
+        }
+
+        private MaterialEmitters.Sample sampleGround(RandomSource random) {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = radius * Math.sqrt(random.nextDouble());
+            return new MaterialEmitters.Sample(new Vec3(
+                    center.x + Math.cos(angle) * rr,
+                    center.y + 0.08,
+                    center.z + Math.sin(angle) * rr), Vec3.ZERO);
+        }
+
+        private MaterialEmitters.Sample sampleColumn(RandomSource random) {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = radius * (0.20 + random.nextDouble() * 0.80);
+            return new MaterialEmitters.Sample(new Vec3(
+                    center.x + Math.cos(angle) * rr,
+                    center.y + random.nextDouble() * 2.45,
+                    center.z + Math.sin(angle) * rr), Vec3.ZERO);
+        }
+
+        private MaterialEmitters.Sample sampleCore(RandomSource random) {
+            double u = random.nextDouble() * 2.0 - 1.0;
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = (0.34 + charge * 0.30) * Math.cbrt(random.nextDouble());
+            double flat = Math.sqrt(Math.max(0.0, 1.0 - u * u)) * rr;
+            return new MaterialEmitters.Sample(new Vec3(
+                    center.x + Math.cos(angle) * flat,
+                    center.y + 0.88 + u * rr,
+                    center.z + Math.sin(angle) * flat), Vec3.ZERO);
+        }
     }
 }

@@ -1,33 +1,36 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.HellHuntImpactEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Entity Renderer for Hell Hunt Impact in MC 26.2.
- * Renders physical 3D demonic ground-shatter fissure trenches, erupting jagged blood/obsidian impalement spikes,
- * expanding shockwave execution seals, and surging vertical demonic execution pillars.
+ * Entity renderer for Hell Hunt impacts in Minecraft 26.2.
  *
- * Bespoke pass (standard rule 1): every shape comes from BespokeGeometry or
- * LayeredRender, seeded from the entity UUID. The old renderer seeded a
- * client side random generator from the same bits inside the draw code;
- * the seed now flows through the standard path instead. The equal-segment rings are
- * broken vortex bands, the trench ribbons are crack stars, the spike ring
- * is a pair of shard fans, and the tapered cone pillar is a plume. The
- * local geometry helpers (drawGroundRing, drawTrenchRibbon, drawSpike,
- * face, drawConePillar) are deleted.
+ * No-shapes pass: this renderer draws no geometry. The impact is carried by
+ * material emission over the real scar, debris, and server side particles
+ * that the entity already creates: darkness smoke across the ground,
+ * hellfire embers thrown from the impact area, flame and pale soul vapor in
+ * the short execution column, and crimson plasma close to the ground. The
+ * old shock bands, crack stars, shard fans, anchor glow, vortex bands, and
+ * plume pillar are gone.
  */
 public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity, HellHuntImpactRenderer.HellHuntRenderState> {
+
+    private final Map<Long, EmissionRig> rigs = new HashMap<>();
 
     public HellHuntImpactRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -67,7 +70,7 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
         // constants, not from the entity's server side countdown field.
         state.lifetime = state.isFinal ? HellHuntImpactEntity.LIFE_FINAL : HellHuntImpactEntity.LIFE_NORMAL;
         // The entity UUID is assigned on the server and networked, so every
-        // client seeds the same band breaks, cracks, and shards.
+        // client uses the same material seed family.
         state.seed = entity.getUUID().getMostSignificantBits();
     }
 
@@ -75,104 +78,159 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
     public void submit(HellHuntRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
-        final float radius = state.radius;
-        final float age = state.age;
-        final long seed = state.seed;
-        final boolean isFinal = state.isFinal;
-        // Shared lifecycle envelope (standard point 5): builds over the
-        // first fifth of life, peaks, then dissipates over the last third,
-        // so the renderer agrees with the entity side particles and scar.
-        float lifeT = Math.min(1.0f, age / (float) state.lifetime);
-        final float fade = FxEnvelope.envelope(age, state.lifetime);
-        final float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.level == null) return;
+        ClientLevel level = mc.level;
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float age = state.age;
+        float fade = FxEnvelope.envelope(age, state.lifetime);
+        float opening = age < 2.0f ? 0.78f : 0.0f;
+        float envelope = Math.max(fade, opening) * MaterialEmitters.distanceScale(center);
+        if (envelope <= 0.01f) return;
 
-        // Spike ring timing, unchanged from the old spike draw: rise over
-        // the first 8 ticks, then sink away over the last 45 percent of
-        // life. The fans carry the same factor through their radius.
+        float growT = Math.min(1.0f, age / 10.0f);
+        float grow = 1.0f - (1.0f - growT) * (1.0f - growT) * (1.0f - growT);
+        float spreadRadius = state.radius * 1.35f * Math.max(0.25f, grow);
+
+        float lifeT = Math.min(1.0f, age / (float) state.lifetime);
         float riseT = Math.min(1.0f, age / 8.0f);
         float rise = 1.0f - (1.0f - riseT) * (1.0f - riseT) * (1.0f - riseT);
         float sinkRaw = lifeT < 0.55f ? 0.0f : (lifeT - 0.55f) / 0.45f;
-        float sinkT = sinkRaw * sinkRaw * (3.0f - 2.0f * sinkRaw);
-        final float spikeScale = rise * (1.0f - sinkT);
+        float sink = FxEnvelope.smoothstep(sinkRaw);
+        float eruptionPulse = rise * (1.0f - sink);
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // 1. Expanding Demonic Ground Impact Shockwave Seals.
-            // The seals counter-rotate slowly; the broken bands keep the
-            // old ring radii (band at each ring's mid radius), heights,
-            // colors, alphas, and spin speeds.
-            float growT = Math.min(1.0f, age / 10.0f);
-            float grow = 1.0f - (1.0f - growT) * (1.0f - growT) * (1.0f - growT);
-            float shockR = radius * 1.35f * grow;
-            if (fade > 0.05f) {
-                // Outer Shock Seal: Dark Crimson
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xA101L,
-                    shockR * 0.91f, 0.03f, 0.15f, (float) Math.toRadians(age * 10.0),
-                    0.85f, 0.0f, 0.15f, fade * 0.85f, ds);
-                // Inner Blood Seal
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xA102L,
-                    shockR * 0.52f, 0.04f, 0.16f, (float) Math.toRadians(age * -14.0),
-                    1.0f, 0.05f, 0.25f, fade * 0.75f, ds);
-                // Tight bright core
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xA103L,
-                    shockR * 0.17f, 0.06f, 0.18f, (float) Math.toRadians(age * 22.0),
-                    1.0f, 0.88f, 0.92f, fade * 0.90f, ds);
-                if (isFinal) {
-                    // Extra Halo on Final Finisher Impact
-                    BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xA104L,
-                        shockR * 1.05f, 0.05f, 0.17f, (float) Math.toRadians(age * 6.0),
-                        1.0f, 0.85f, 0.90f, fade * 0.90f, ds);
-                }
+        EmissionRig rig = rigFor(level, state.seed, center, state.radius, state.isFinal, age);
+        rig.tick(spreadRadius, envelope, eruptionPulse, age, state.isFinal);
+        pruneRigs();
+    }
 
-                // Shared layered language (standard point 1): an anchor glow
-                // grounding the seal, and a three band vortex column while
-                // the execution pillar stands, so the impact reads with the
-                // same depth as every other spectacle effect.
-                LayeredRender.drawAnchorGlow(pose, buffer,
-                    shockR * 0.95f, 0.02f, 1.0f, 0.10f, 0.22f, 0.50f * fade, ds);
-                float bandEnv = fade * (age <= 14f ? 1.0f : Math.max(0f, 1.0f - (age - 14f) / 10f));
-                LayeredRender.drawVortexBands(pose, buffer,
-                    radius * 0.5f, isFinal ? 4.2f : 3.0f, age, 1.0f, 0.07f, 0.16f, bandEnv, ds);
-            }
+    private EmissionRig rigFor(ClientLevel level, long seed, Vec3 center, float radius, boolean isFinal, float age) {
+        EmissionRig rig = rigs.get(seed);
+        if (rig != null && (rig.level != level || age + 0.01f < rig.lastAge
+                || rig.center.distanceToSqr(center) > 16.0)) {
+            rigs.remove(seed);
+            rig = null;
+        }
+        if (rig == null) {
+            rig = new EmissionRig(level, seed, center, radius, isFinal);
+            rigs.put(seed, rig);
+            rig.burstOpening();
+        }
+        return rig;
+    }
 
-            // 2. Radiating fissures: layered crack stars where the straight
-            // trench ribbons used to run, dark cracks below a bright branch
-            // layer in the old trench colors, growing with the shock.
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0xC101L,
-                radius * 1.15f * grow, 0.45f, 0.0f, 0.08f, 0.95f, fade, ds);
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0xC102L,
-                radius * 0.8f * grow, 1.0f, 0.35f, 0.40f, 0.80f, fade, ds);
+    private void pruneRigs() {
+        long now = System.nanoTime();
+        rigs.entrySet().removeIf(entry -> now - entry.getValue().lastSeenNanos > 5_000_000_000L);
+    }
 
-            // 3. Eruption shards: two seeded shard fans radiating where the
-            // regular spike ring used to stand, dark sheath outside and
-            // blood core inside, on the old rise and sink timing.
-            if (spikeScale > 0.02f && fade > 0.01f) {
-                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x5101L,
-                    radius * 0.95f * spikeScale, 0.20f, 0.0f, 0.05f, 0.95f, fade, ds);
-                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x5102L,
-                    radius * 0.75f * spikeScale, 1.0f, 0.10f, 0.25f, 0.90f, fade, ds);
-            }
+    /**
+     * Accumulator storage for one impact. Sources sample the ground area and
+     * the short column volume as data; the shared emitters own the particle
+     * rates, budgets, density scaling, and seed progression.
+     */
+    private static final class EmissionRig {
+        private final ClientLevel level;
+        private final Vec3 center;
+        private final float radius;
+        private final boolean finalImpact;
+        private float spreadRadius;
+        private float lastAge = 0f;
+        private long lastSeenNanos = System.nanoTime();
 
-            // 4. Surging Vertical Demonic Execution Pillar.
+        private final MaterialEmitters.Preset darknessPreset;
+        private final MaterialEmitters.Preset emberPreset;
+        private final MaterialEmitters.Preset flamePreset;
+        private final MaterialEmitters.Preset plasmaPreset;
+        private final MaterialEmitters.Preset soulPreset;
+
+        private final MaterialEmitters.Source ground;
+        private final MaterialEmitters.Source fullGround;
+        private final MaterialEmitters.Source column;
+
+        private final MaterialEmitters.Emitter darkness;
+        private final MaterialEmitters.Emitter embers;
+        private final MaterialEmitters.Emitter flame;
+        private final MaterialEmitters.Emitter plasma;
+        private final MaterialEmitters.Emitter soul;
+
+        private EmissionRig(ClientLevel level, long seed, Vec3 center, float radius, boolean finalImpact) {
+            this.level = level;
+            this.center = center;
+            this.radius = radius;
+            this.finalImpact = finalImpact;
+            this.spreadRadius = radius;
+            int seedBase = (int) seed;
+
+            this.darknessPreset = MaterialEmitters.Preset.darkness(0x20030A, 3.0f, seedBase ^ 0xA101,
+                    new Vec3(0.0, 0.012, 0.0), 0.020f);
+            this.emberPreset = MaterialEmitters.Preset.ember(new Vec3(0.0, 0.165, 0.0), 0.120f);
+            this.flamePreset = MaterialEmitters.Preset.flame(new Vec3(0.0, 0.150, 0.0), 0.040f);
+            this.plasmaPreset = MaterialEmitters.Preset.plasma(0xF20D33, 1.45f, seedBase ^ 0xA131,
+                    new Vec3(0.0, 0.035, 0.0), 0.040f);
+            this.soulPreset = MaterialEmitters.Preset.soul(0xFFD9E6, 1.20f, seedBase ^ 0xA147,
+                    new Vec3(0.0, 0.060, 0.0), 0.020f);
+
+            this.ground = this::sampleGround;
+            this.fullGround = this::sampleFullGround;
+            this.column = this::sampleColumn;
+
+            this.darkness = new MaterialEmitters.Emitter(level, darknessPreset, ground, 72f, 96);
+            this.embers = new MaterialEmitters.Emitter(level, emberPreset, ground, 68f, 92);
+            this.flame = new MaterialEmitters.Emitter(level, flamePreset, column, 58f, 78);
+            this.plasma = new MaterialEmitters.Emitter(level, plasmaPreset, ground, 62f, 84);
+            this.soul = new MaterialEmitters.Emitter(level, soulPreset, column, 36f, 54);
+        }
+
+        private void burstOpening() {
+            MaterialEmitters.burst(level, flamePreset, column, finalImpact ? 22 : 14);
+            MaterialEmitters.burst(level, emberPreset, fullGround, finalImpact ? 30 : 20);
+            MaterialEmitters.burst(level, darknessPreset, fullGround, finalImpact ? 18 : 12);
+            MaterialEmitters.burst(level, plasmaPreset, fullGround, finalImpact ? 16 : 10);
+        }
+
+        private void tick(float spreadRadius, float envelope, float eruptionPulse, float age, boolean isFinal) {
+            float delta = Math.min(0.05f, Math.max(0.0f, (age - lastAge) / 20.0f));
+            this.spreadRadius = spreadRadius;
+            this.lastAge = age;
+            this.lastSeenNanos = System.nanoTime();
+
             float pillarLife = isFinal ? 18.0f : 12.0f;
-            if (age < pillarLife) {
-                float pillarProgress = age / pillarLife;
-                // The pillar is an instant strike visual, so it builds over
-                // 3 ticks instead of the full envelope build, but it no
-                // longer appears at full alpha on frame one either.
-                float pillarBuild = FxEnvelope.smoothstep(Math.min(1.0f, age / 3.0f));
-                float pillarAlpha = (1.0f - pillarProgress) * (isFinal ? 1.0f : 0.85f) * pillarBuild;
-                float pillarHeight = (isFinal ? 8.5f : 5.5f) * Math.min(1.0f, age * 0.4f);
-                float pillarRadius = (isFinal ? 0.85f : 0.55f) * (1.0f + pillarProgress * 0.3f);
+            float columnEnvelope = envelope * (age < pillarLife ? 1.0f : 0.14f);
+            float groundEnvelope = envelope * (0.55f + 0.45f * eruptionPulse);
 
-                // The column in two plume layers: crimson sheath, pale
-                // core, same heights, radii, and alpha curve as the old
-                // tapered cone pair.
-                BespokeGeometry.plume(pose, buffer, seed ^ 0x9101L,
-                    pillarRadius, pillarHeight, 0.85f, 0.0f, 0.15f, pillarAlpha * 0.65f, 1.0f, ds);
-                BespokeGeometry.plume(pose, buffer, seed ^ 0x9102L,
-                    pillarRadius * 0.38f, pillarHeight * 1.04f, 1.0f, 0.85f, 0.90f, pillarAlpha * 0.95f, 1.0f, ds);
-            }
-        });
+            darkness.tick(delta, groundEnvelope);
+            embers.tick(delta, envelope * (0.45f + 0.65f * eruptionPulse));
+            flame.tick(delta, columnEnvelope);
+            plasma.tick(delta, groundEnvelope);
+            soul.tick(delta, columnEnvelope * 0.85f);
+        }
+
+        private MaterialEmitters.Sample sampleGround(RandomSource random) {
+            return sampleDisc(random, spreadRadius);
+        }
+
+        private MaterialEmitters.Sample sampleFullGround(RandomSource random) {
+            return sampleDisc(random, radius * 1.15);
+        }
+
+        private MaterialEmitters.Sample sampleDisc(RandomSource random, double sampleRadius) {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = sampleRadius * Math.sqrt(random.nextDouble());
+            return new MaterialEmitters.Sample(new Vec3(
+                    center.x + Math.cos(angle) * rr,
+                    center.y + 0.07,
+                    center.z + Math.sin(angle) * rr), Vec3.ZERO);
+        }
+
+        private MaterialEmitters.Sample sampleColumn(RandomSource random) {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = radius * 0.42 * Math.sqrt(random.nextDouble());
+            double height = finalImpact ? 4.2 : 3.0;
+            return new MaterialEmitters.Sample(new Vec3(
+                    center.x + Math.cos(angle) * rr,
+                    center.y + 0.10 + random.nextDouble() * height,
+                    center.z + Math.sin(angle) * rr), Vec3.ZERO);
+        }
     }
 }

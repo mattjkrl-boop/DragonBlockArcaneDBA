@@ -1,29 +1,45 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.ZShockwaveEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Z-Sword Massive Kinetic Shockwave in Minecraft 26.2.
  *
- * Bespoke pass: the crescent is a seeded BespokeGeometry blade arc stood
- * upright (the builder's flat arc is rotated into the vertical plane and
- * squashed to the spectacle pass span and height), with a narrower bright
- * core arc inside it, a dimmer trailing arc as the wake, and a shard fan
- * starburst as the apex solar core. Every layer takes the entity's synced
- * seed, so the nick pattern is frame stable and identical for every viewer.
+ * No-shapes pass: the wave draws no geometry. Its span, chord, and
+ * height survive only as emission data in the entity orientation
+ * frame. Dense gold gravity plasma carries the front, a narrower
+ * near-white plasma stream carries the hot center, pale vapor trails
+ * in the wake, and stone dust is compressed along the lower edge. The
+ * old apex burst becomes a short plasma concentration at the chord
+ * point on the strike envelope. Fade, growth, first-person scaling,
+ * orientation, and seed behavior carry over from the bespoke renderer.
  */
 public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockwaveRenderer.ZShockwaveRenderState> {
+
+    private static final int GOLD = 0xFFD133;
+    private static final int CORE = 0xFFFFEB;
+    private static final int PALE_GOLD = 0xFFE9A8;
+    private static final int STONE_DUST = 0x9A8668;
+
+    private final Map<Integer, Emission> emissions = new HashMap<>();
+
     public ZShockwaveRenderer(EntityRendererProvider.Context context) {
         super(context);
     }
@@ -36,6 +52,7 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         public float age = 0;
         public long seed = 0;
         public boolean isFirstPersonOwner = false;
+        public int entityId = -1;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -62,8 +79,9 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getSeed();
+        state.entityId = entity.getId();
 
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null &&
             (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) &&
             mc.options.getCameraType().isFirstPerson());
@@ -71,101 +89,171 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
 
     @Override
     public void submit(ZShockwaveRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
+        Minecraft minecraft = Minecraft.getInstance();
+        ClientLevel level = minecraft == null ? null : minecraft.level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
         float charge = state.chargeRatio;
         boolean sub = state.isSubWave;
         float age = state.age;
 
-        // Lifetime fade: the wave lives up to 80 ticks and used to vanish at full
-        // opacity on discard. Fade in over the first 6 ticks, hold, then ease out
-        // over the final 25 ticks.
         float fadeIn = smooth(Math.min(1.0f, age / 6.0f));
         float fadeOut = age <= 55.0f ? 1.0f : 1.0f - smooth((age - 55.0f) / 25.0f);
         float fade = fadeIn * Math.max(0.0f, fadeOut);
         float impact = strike(Math.min(1.0f, age / 18.0f));
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float dist = MaterialEmitters.distanceScale(center);
+        if (fade <= 0.01f || dist <= 0.01f) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
         float fpScale = (state.isFirstPersonOwner && state.age < 6.0f) ? (0.55f + (state.age / 6.0f) * 0.45f) : 1.0f;
-        // Mild growth across the fade in window: the crescent used to appear at
-        // full 22 block span on its first tick. It now opens from 80 percent
-        // while it leaves the caster; the damage band uses the full span, and
-        // the core covers the small early gap at point blank range.
         float grow = 0.8f + 0.2f * fadeIn;
         float span = (sub ? (3.2f + charge * 3.2f) : (4.8f + charge * 6.2f)) * fpScale * grow;
         float chord = (sub ? (1.0f + charge * 0.6f) : (1.6f + charge * 1.4f)) * fpScale;
         float height = (sub ? (0.9f + charge * 0.8f) : (1.5f + charge * 1.8f)) * fpScale;
-        float dist = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
-        // Blade arc fitting: with a 150 degree sweep the builder's band spans
-        // about 0.61 of its radius sideways and about 0.98 of its radius
-        // vertically, centred about 0.62 of its radius up. Solve the radius
-        // from the span, squash Y so the band is exactly 2 * height tall, and
-        // recenter it on the entity origin. The band sits at 60 percent of the
-        // chord so it stays inside the damage band tolerance front and back.
-        float arcRadius = span * 1.64f;
-        float arcScaleY = (2.0f * height) / (0.98f * arcRadius);
-        float arcCenterY = 0.62f * arcRadius * arcScaleY;
-        float bandZ = chord * 0.6f;
+        Matrix4f rotation = new Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot));
+        rotation.mul(new Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
+        Vector3f rightV = rotation.transformDirection(new Vector3f(1.0f, 0.0f, 0.0f));
+        Vector3f upV = rotation.transformDirection(new Vector3f(0.0f, 1.0f, 0.0f));
+        Vector3f forwardV = rotation.transformDirection(new Vector3f(0.0f, 0.0f, 1.0f));
 
-        // Outer crescent: the golden blade itself.
-        poseStack.pushPose();
-        poseStack.translate(0.0f, -arcCenterY, bandZ);
-        poseStack.scale(1.0f, arcScaleY, 1.0f);
-        standArcUpright(poseStack);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.bladeArc(pose, buffer, state.seed, arcRadius, 150.0f,
-                1.0f, 0.88f, 0.20f, 0.95f, fade, dist));
-        poseStack.popPose();
+        Emission emission = emissionFor(state, level);
+        emission.frame.center = center;
+        emission.frame.right = new Vec3(rightV.x, rightV.y, rightV.z);
+        emission.frame.up = new Vec3(upV.x, upV.y, upV.z);
+        emission.frame.forward = new Vec3(forwardV.x, forwardV.y, forwardV.z);
+        emission.frame.span = span;
+        emission.frame.chord = chord;
+        emission.frame.height = height;
+        emission.frame.bandZ = chord * 0.6f;
 
-        // Inner core: a narrow near white arc, the incandescent heart.
-        poseStack.pushPose();
-        poseStack.translate(0.0f, -arcCenterY * 0.78f, bandZ + 0.05f);
-        poseStack.scale(0.30f, arcScaleY * 0.78f, 1.0f);
-        standArcUpright(poseStack);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.bladeArc(pose, buffer, state.seed ^ 0xC0DEL, arcRadius, 150.0f,
-                1.0f, 1.0f, 0.92f, 1.0f, fade, dist));
-        poseStack.popPose();
+        float delta = emission.nextDelta();
+        float envelope = fade * dist;
+        emission.front.tick(delta, envelope);
+        emission.core.tick(delta, envelope);
+        emission.wake.tick(delta, envelope * 0.78f);
+        emission.dust.tick(delta, envelope * 0.72f);
+        emission.apex.tick(delta, impact * envelope);
 
-        // Wake: the same blade, flatter and dimmer, trailing behind.
-        poseStack.pushPose();
-        poseStack.translate(0.0f, -arcCenterY * 0.48f, bandZ - 0.85f);
-        poseStack.scale(0.92f, arcScaleY * 0.48f, 1.0f);
-        standArcUpright(poseStack);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.bladeArc(pose, buffer, state.seed ^ 0xACE1L, arcRadius, 150.0f,
-                1.0f, 0.80f, 0.15f, 0.40f, fade, dist));
-        poseStack.popPose();
-
-        // Apex solar core: a shard fan starburst facing forward at the chord.
-        if (impact > 0.02f) {
-            float coreRadius = (0.28f + charge * 0.16f) * Math.max(0.05f, impact) * 1.6f;
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, chord);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.shardFan(pose, buffer, state.seed ^ 0xA9E5L, coreRadius,
-                    1.0f, 1.0f, 0.95f, 0.95f, impact, dist));
-            poseStack.popPose();
-        }
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    /**
-     * Rotates the flat blade arc (XZ plane, opening around +X) into the
-     * vertical XY plane: +X becomes up, +Z becomes the span direction.
-     * Applied after the caller's translate and scale, so the squash and
-     * recentering happen in world axes, not arc axes.
-     */
-    private static void standArcUpright(PoseStack poseStack) {
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
+    private Emission emissionFor(ZShockwaveRenderState state, ClientLevel level) {
+        long now = System.nanoTime();
+        emissions.entrySet().removeIf(entry -> now - entry.getValue().lastSeenNanos > 5_000_000_000L);
+        Emission emission = emissions.get(state.entityId);
+        if (emission == null || emission.seed != state.seed) {
+            emission = new Emission(level, state.seed);
+            emissions.put(state.entityId, emission);
+        }
+        emission.lastSeenNanos = now;
+        return emission;
+    }
+
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        Vec3 right = new Vec3(1.0, 0.0, 0.0);
+        Vec3 up = new Vec3(0.0, 1.0, 0.0);
+        Vec3 forward = new Vec3(0.0, 0.0, 1.0);
+        float span = 1.0f;
+        float chord = 1.0f;
+        float height = 1.0f;
+        float bandZ = 0.0f;
+    }
+
+    private static final class Emission {
+        final long seed;
+        final Frame frame = new Frame();
+        final MaterialEmitters.Emitter front;
+        final MaterialEmitters.Emitter core;
+        final MaterialEmitters.Emitter wake;
+        final MaterialEmitters.Emitter dust;
+        final MaterialEmitters.Emitter apex;
+        long lastSeenNanos = System.nanoTime();
+        long lastTickNanos = 0L;
+
+        Emission(ClientLevel level, long seed) {
+            this.seed = seed;
+            int baseSeed = (int) seed;
+
+            MaterialEmitters.Source frontSource = random -> sampleFront(random);
+            MaterialEmitters.Source coreSource = random -> sampleCore(random);
+            MaterialEmitters.Source wakeSource = random -> sampleWake(random);
+            MaterialEmitters.Source dustSource = random -> sampleDust(random);
+            MaterialEmitters.Source apexSource = random -> new MaterialEmitters.Sample(
+                local(0.0, 0.0, frame.chord), frame.forward.scale(0.10));
+
+            front = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(GOLD, 2.85f, baseSeed, Vec3.ZERO, 0.010f),
+                frontSource, 188.0f, 380);
+            core = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(CORE, 1.75f, baseSeed ^ 0xC0DE, Vec3.ZERO, 0.008f),
+                coreSource, 96.0f, 210);
+            wake = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(PALE_GOLD, 3.30f, baseSeed ^ 0xACE1, Vec3.ZERO, 0.010f),
+                wakeSource, 84.0f, 180);
+            dust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(STONE_DUST, 1.75f, baseSeed ^ 0xD057, Vec3.ZERO, 0.010f),
+                dustSource, 60.0f, 135);
+            apex = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(CORE, 2.05f, baseSeed ^ 0xA9E5, Vec3.ZERO, 0.16f),
+                apexSource, 126.0f, 260);
+        }
+
+        Vec3 local(double x, double y, double z) {
+            return frame.center.add(frame.right.scale(x)).add(frame.up.scale(y)).add(frame.forward.scale(z));
+        }
+
+        Vec3 localVelocity(double x, double y, double z) {
+            return frame.right.scale(x).add(frame.up.scale(y)).add(frame.forward.scale(z));
+        }
+
+        MaterialEmitters.Sample sampleFront(RandomSource random) {
+            double x = (random.nextDouble() * 2.0 - 1.0) * frame.span * 0.50;
+            double y = random.nextDouble() * frame.height;
+            double z = frame.bandZ + (random.nextDouble() - 0.5) * 0.38;
+            Vec3 velocity = localVelocity(x / Math.max(0.01, frame.span) * 0.10, 0.020, 0.22);
+            return new MaterialEmitters.Sample(local(x, y, z), velocity);
+        }
+
+        MaterialEmitters.Sample sampleCore(RandomSource random) {
+            double x = (random.nextDouble() * 2.0 - 1.0) * frame.span * 0.15;
+            double y = random.nextDouble() * frame.height * 0.78;
+            double z = frame.bandZ + 0.05 + (random.nextDouble() - 0.5) * 0.25;
+            return new MaterialEmitters.Sample(local(x, y, z), localVelocity(0.0, 0.012, 0.28));
+        }
+
+        MaterialEmitters.Sample sampleWake(RandomSource random) {
+            double x = (random.nextDouble() * 2.0 - 1.0) * frame.span * 0.46;
+            double y = random.nextDouble() * frame.height * 0.48;
+            double z = frame.bandZ - 0.85 + (random.nextDouble() - 0.5) * 0.55;
+            return new MaterialEmitters.Sample(local(x, y, z), localVelocity(0.0, 0.015, 0.10));
+        }
+
+        MaterialEmitters.Sample sampleDust(RandomSource random) {
+            double x = (random.nextDouble() * 2.0 - 1.0) * frame.span * 0.50;
+            double y = random.nextDouble() * 0.28;
+            double z = frame.bandZ + (random.nextDouble() - 0.5) * 0.70;
+            Vec3 velocity = localVelocity(x / Math.max(0.01, frame.span) * 0.16, 0.030, 0.25);
+            return new MaterialEmitters.Sample(local(x, y, z), velocity);
+        }
+
+        float nextDelta() {
+            long now = System.nanoTime();
+            if (lastTickNanos == 0L) {
+                lastTickNanos = now;
+                return 1.0f / 60.0f;
+            }
+            float delta = Math.min(0.05f, (now - lastTickNanos) / 1_000_000_000.0f);
+            lastTickNanos = now;
+            return Math.max(0.001f, delta);
+        }
     }
 
     private static float smooth(float t) {

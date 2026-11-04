@@ -1,30 +1,26 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.BraveRushTrailEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Brave Sword Piercing Heroic Dash Flight Trail in Minecraft 26.2.
- * Bespoke pass: the hand-built Mach cones, helical streamline quads, and
- * wake ring are rebuilt as BespokeGeometry torn ribbons. Crossed ribbon
- * sheets (horizontal, vertical, and two diagonal) carry the old cone
- * layers (gold body, cyan inner, white-gold core beam) and the twin
- * streamline strands with their white cores, and a broken vortex band
- * replaces the expanding wake ring in the strike window. The seed comes
- * from the entity UUID, which is synced state, so every client draws the
- * same trail.
+ * No-shapes pass: the renderer draws no geometry at all. The trail reads
+ * as valor plasma and vapor shed along the real dash path, emitted
+ * through MaterialEmitters in the Brave gold theme, with gold dust at
+ * the ground contacts. Emission follows the same opening envelope,
+ * strike window, first person owner scaling, and 30 tick life the old
+ * trail used.
  */
 public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity, BraveRushTrailRenderer.TrailRenderState> {
 
@@ -41,7 +37,17 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         public int maxLifetime = 30;
         public boolean isFirstPersonOwner = false;
         public long seed = 0;
+        public MaterialEmitters.Emitter plasmaEmitter;
+        public MaterialEmitters.Emitter coreEmitter;
+        public MaterialEmitters.Emitter vaporEmitter;
+        public MaterialEmitters.Emitter dustEmitter;
+        public long emitterSeed = Long.MIN_VALUE;
+        public ClientLevel emitterLevel;
+        public float lastAge = -1f;
+        public boolean burstFired = false;
     }
+
+    private record Basis(Vec3 forward, Vec3 right, Vec3 up) {}
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(BraveRushTrailEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -77,101 +83,119 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
 
     @Override
     public void submit(TrailRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        // The lifetime comes from the entity, not a second hardcoded copy:
-        // the trail now lives 30 ticks, long enough for the dash to read.
         float maxLife = (float) state.maxLifetime;
         float progress = Math.min(1.0f, state.age / maxLife);
         if (progress >= 1.0f) return;
 
-        float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.25f));
-        float alpha = FxEnvelope.envelope(state.age, maxLife, 0.25f, 0.4f) * 0.90f;
-        float impact = strike(progress);
-        float scale = state.trailScale * (state.isFirstPersonOwner ? 0.45f : 1.0f);
-        float len = state.trailLength * (0.35f + 0.65f * open);
-        float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
-        float coneBase = (state.isFirstPersonOwner ? 1.05f : 0.90f) * scale;
-        // The old cones drew at this fraction of the lifecycle alpha.
-        float coneRatio = state.isFirstPersonOwner ? 0.32f : 0.72f;
-        float age = state.age;
-        long seed = state.seed;
-
-        RenderType renderType = KiRenderHelper.kiRenderType();
-        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-
-        // Cone body sheets. A torn ribbon runs along +X in its own frame;
-        // a quarter turn about Y lays it back along the flight line from
-        // the tip, and rolls about Z cross the sheets into the old cone's
-        // horizontal, vertical, and diagonal planes.
-        // Horizontal sheet: gold body with the white-gold core beam.
-        sheet(poseStack, collector, renderType, 0.0f, tipZ, (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed, len, coneBase * 1.9f, 0.30f * scale,
-                1.0f, 0.84f, 0.0f, coneRatio, alpha, distScale);
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x2B992DDFL, len * 0.72f, coneBase * 0.24f, 0.12f * scale,
-                1.0f, 0.98f, 0.85f, 1.0f, alpha, distScale);
-        });
-        // Vertical sheet: cyan inner cone with the white-gold core beam.
-        sheet(poseStack, collector, renderType, 90.0f, tipZ, (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x51ED2701L, len * 0.85f, coneBase * 0.84f, 0.30f * scale,
-                0.0f, 0.95f, 1.0f, coneRatio, alpha, distScale);
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x85EBCA6BL, len * 0.72f, coneBase * 0.24f, 0.12f * scale,
-                1.0f, 0.98f, 0.85f, 1.0f, alpha, distScale);
-        });
-        // Diagonal sheets: the twin streamline strands, gold and cyan,
-        // each with its white core, as the header promises.
-        sheet(poseStack, collector, renderType, 45.0f, tipZ, (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x27D4EB2FL, len, 0.20f * scale, 0.50f * scale,
-                1.0f, 0.84f, 0.0f, 1.0f, alpha, distScale);
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x165667B1L, len, 0.056f * scale, 0.50f * scale,
-                1.0f, 0.98f, 0.9f, 1.0f, alpha, distScale);
-        });
-        sheet(poseStack, collector, renderType, -45.0f, tipZ, (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x3C6EF362L, len, 0.20f * scale, 0.50f * scale,
-                0.0f, 0.95f, 1.0f, 1.0f, alpha, distScale);
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x1B56C4E9L, len, 0.056f * scale, 0.50f * scale,
-                1.0f, 0.98f, 0.9f, 1.0f, alpha, distScale);
-        });
-
-        // Strike wake: a broken vortex band standing across the flight
-        // line at the tip, expanding with the strike bump, in place of the
-        // old flat wake ring.
-        if (impact > 0.02f) {
-            float ringR = coneBase * (0.55f + 0.65f * impact);
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, tipZ);
-            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x9E3779B9L, ringR,
-                    -0.07f, 0.07f, age * 0.5f, 1.0f, 0.96f, 0.7f, impact * 0.85f, distScale);
-            });
-            poseStack.popPose();
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
         }
 
-        poseStack.popPose();
+        float alpha = FxEnvelope.envelope(state.age, maxLife, 0.25f, 0.4f) * 0.90f;
+        if (alpha > 0.01f) {
+            float dist = MaterialEmitters.distanceScale(new Vec3(state.x, state.y, state.z));
+            ensureEmitters(state, level);
+            float delta = frameDelta(state);
+            float e = alpha * dist * (state.isFirstPersonOwner ? 0.6f : 1.0f);
+            state.plasmaEmitter.tick(delta, e);
+            state.coreEmitter.tick(delta, e * 0.80f);
+            state.vaporEmitter.tick(delta, e * 0.70f);
+            state.dustEmitter.tick(delta, e * 0.75f);
+        }
+
+        // Strike wake: a one-shot burst at the trail tip during the same
+        // early strike window the old wake ring expanded in.
+        float impact = strike(progress);
+        if (impact > 0.02f && !state.burstFired) {
+            state.burstFired = true;
+            int seed = (int) (state.seed ^ (state.seed >>> 32));
+            Basis b = basis(state);
+            float scale = state.trailScale * (state.isFirstPersonOwner ? 0.45f : 1.0f);
+            float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
+            Vec3 tip = new Vec3(state.x, state.y, state.z).add(b.forward().scale(tipZ));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, 1.9f, seed ^ 0x9E3779B9, Vec3.ZERO, 0.20f),
+                MaterialEmitters.point(tip), Math.round(10 * impact));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.vapor(0xFFD700, 2.4f, seed ^ 0x27D4EB2F, Vec3.ZERO, 0.24f),
+                MaterialEmitters.point(tip), Math.round(8 * impact));
+        } else if (impact <= 0.02f) {
+            state.burstFired = false;
+        }
+
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    /**
-     * Submits one ribbon sheet: positioned at the trail tip, run laid back
-     * along the flight line, rolled rollDeg about the flight axis. The
-     * roll is composed outside the quarter turn so it acts on the flight
-     * axis itself. The geometry is supplied by the caller from
-     * BespokeGeometry builders only.
-     */
-    private static void sheet(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                              float rollDeg, float tipZ,
-                              net.minecraft.client.renderer.SubmitNodeCollector.CustomGeometryRenderer geometry) {
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, tipZ);
-        if (rollDeg != 0.0f) {
-            poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(rollDeg)));
+    private static void ensureEmitters(TrailRenderState state, ClientLevel level) {
+        if (state.plasmaEmitter != null && state.emitterSeed == state.seed && state.emitterLevel == level) {
+            return;
         }
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, geometry);
-        poseStack.popPose();
+        int seed = (int) (state.seed ^ (state.seed >>> 32));
+
+        // Plasma and vapor shed along the dash path itself, widest at the
+        // tip and narrowing down the trail, exactly where the old cone
+        // volume sat. The path is data; nothing is drawn from it.
+        MaterialEmitters.Source path = random -> {
+            Basis b = basis(state);
+            float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
+            float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.25f));
+            float scale = state.trailScale * (state.isFirstPersonOwner ? 0.45f : 1.0f);
+            float len = state.trailLength * (0.35f + 0.65f * open);
+            float tipZ = state.isFirstPersonOwner ? (-0.6f * scale) : (0.6f * scale);
+            float coneBase = (state.isFirstPersonOwner ? 1.05f : 0.90f) * scale;
+            double t = random.nextDouble();
+            double width = coneBase * (1.15 - 0.65 * t);
+            Vec3 center = new Vec3(state.x, state.y, state.z);
+            Vec3 pos = center.add(b.forward().scale(tipZ - len * t))
+                .add(b.right().scale((random.nextDouble() - 0.5) * width))
+                .add(b.up().scale((random.nextDouble() - 0.5) * width));
+            return new MaterialEmitters.Sample(pos, b.forward().scale(-0.01));
+        };
+        // Gold dust kicked up along the ground under the dash.
+        MaterialEmitters.Source ground = random -> {
+            Basis b = basis(state);
+            float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
+            float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.25f));
+            float scale = state.trailScale * (state.isFirstPersonOwner ? 0.45f : 1.0f);
+            float len = state.trailLength * (0.35f + 0.65f * open);
+            float coneBase = (state.isFirstPersonOwner ? 1.05f : 0.90f) * scale;
+            Vec3 mid = new Vec3(state.x, state.y, state.z).add(b.forward().scale(-len * 0.5));
+            return MaterialEmitters.groundArea(mid, coneBase * 1.1, state.y - 0.70).sample(random);
+        };
+
+        state.plasmaEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFD700, 2.6f, seed, Vec3.ZERO, 0.04f),
+            path, 175f, 300);
+        state.coreEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFFFFF, 1.7f, seed ^ 0x2B992DDF, Vec3.ZERO, 0.03f),
+            path, 85f, 150);
+        state.vaporEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.vapor(0x00F2FF, 2.4f, seed ^ 0x51ED2701, Vec3.ZERO, 0.05f),
+            path, 60f, 110);
+        state.dustEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.dust(0xFFD700, 1.9f, seed ^ 0x85EBCA6B, new Vec3(0, 0.01, 0), 0.015f),
+            ground, 30f, 60);
+        state.emitterSeed = state.seed;
+        state.emitterLevel = level;
+    }
+
+    private static Basis basis(TrailRenderState state) {
+        Vec3 forward = Vec3.directionFromRotation(state.xRot, state.yRot);
+        Vec3 right = forward.cross(new Vec3(0, 1, 0));
+        right = right.lengthSqr() < 1e-6 ? new Vec3(1, 0, 0) : right.normalize();
+        Vec3 up = right.cross(forward).normalize();
+        return new Basis(forward, right, up);
+    }
+
+    private static float frameDelta(TrailRenderState state) {
+        float prev = state.lastAge;
+        state.lastAge = state.age;
+        if (prev < 0f) return 1f / 20f;
+        float d = state.age - prev;
+        if (d <= 0f || d > 3f) return 1f / 20f;
+        return d / 20f;
     }
 
     private static float strike(float progress) {

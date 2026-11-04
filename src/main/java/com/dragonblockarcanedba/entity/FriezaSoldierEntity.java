@@ -1,6 +1,6 @@
 package com.dragonblockarcanedba.entity;
 
-import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
@@ -51,7 +51,10 @@ public class FriezaSoldierEntity extends DbaHostileEntity {
         this.swing(InteractionHand.MAIN_HAND);
         target.hurtServer(server, DbaDamage.ki(this, this), 5.0f);
         server.playSound(null, this.getX(), this.getY(), this.getZ(), DbaSounds.FIRE_SHOT, SoundSource.HOSTILE, 0.7f, 1.5f);
-        server.sendParticles(DbaParticles.CRIT_SPARK, target.getX(), target.getEyeY(), target.getZ(), 8, 0.2, 0.25, 0.2, 0.02);
+        server.sendParticles(DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0xFFD98A, 0.95f, target.getId() * 31 + 17),
+                target.getX(), target.getEyeY(), target.getZ(), 5, 0.2, 0.25, 0.2, 0.02);
+        server.sendParticles(DbaMaterialOptions.of(DbaMaterialOptions.VAPOR, 0xE8E2D6, 0.8f, target.getId() * 31 + 18),
+                target.getX(), target.getEyeY(), target.getZ(), 3, 0.2, 0.25, 0.2, 0.02);
     }
 
     @Override

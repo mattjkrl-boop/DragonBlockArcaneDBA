@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -64,7 +64,7 @@ public class OxBraceEffect extends MobEffect {
             double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
 
             level.sendParticles(
-                new DbaDustOptions(0xFF4500, 1.2f),
+                DbaMaterialOptions.of(DbaMaterialOptions.DUST, 0xFF4500, 1.2f, entity.getId() * 31 + entity.tickCount),
                 px, py, pz,
                 1, 0.0, 0.02, 0.0, 0.01
             );

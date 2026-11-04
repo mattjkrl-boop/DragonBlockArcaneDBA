@@ -1,27 +1,24 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.BanshoWindProjectileEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Entity Renderer for Bansho Wind Projectile in Minecraft 26.2.
- * A spinning wind drill drawn entirely from bespoke toolkit geometry seeded
- * by the entity's synced id: two counter-posed plumes form the drill body,
- * 4 blade arc scythes orbit it, a double torn ribbon helix wraps the body,
- * two glow fan wakes trail behind, and a jagged branch spike is the luminous
- * tip. The age envelope (in over the first ticks, out at the range cap) and
- * the first-person owner scale are unchanged.
+ * Material presentation for the Bansho wind projectile. The renderer draws
+ * no geometry. A dense emerald vapor cluster is sampled along the flight
+ * path, a pale plasma core rides the axis, airborne dust trails behind,
+ * and mist forms the wake. The age envelope and first-person owner scale
+ * are unchanged; the old drill, scythe, helix, and wake meshes are gone.
  */
 public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProjectileEntity, BanshoWindProjectileRenderer.WindProjectileRenderState> {
 
@@ -36,6 +33,67 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
         public boolean isFirstPersonOwner = false;
         public double ex, ey, ez;
         public long seed;
+        public float drillRadius;
+        public Emission emission;
+    }
+
+    static final class Emission {
+        private final WindProjectileRenderState state;
+        private ClientLevel level;
+        private long seed;
+        private boolean firstPersonOwner;
+        private float lastAge = Float.NaN;
+        private MaterialEmitters.Emitter vapor;
+        private MaterialEmitters.Emitter plasma;
+        private MaterialEmitters.Emitter dust;
+        private MaterialEmitters.Emitter mist;
+
+        Emission(WindProjectileRenderState state) {
+            this.state = state;
+        }
+
+        void tick(ClientLevel level, float envelope) {
+            if (this.level != level || this.seed != state.seed
+                    || this.firstPersonOwner != state.isFirstPersonOwner) {
+                create(level);
+            }
+            float delta;
+            if (Float.isNaN(lastAge) || state.ageInTicks < lastAge) {
+                delta = 1.0f / 60.0f;
+            } else {
+                delta = Math.min(0.05f, (state.ageInTicks - lastAge) / 20.0f);
+            }
+            lastAge = state.ageInTicks;
+            vapor.tick(delta, envelope);
+            plasma.tick(delta, envelope);
+            dust.tick(delta, envelope);
+            mist.tick(delta, envelope);
+        }
+
+        private void create(ClientLevel level) {
+            this.level = level;
+            this.seed = state.seed;
+            this.firstPersonOwner = state.isFirstPersonOwner;
+            this.lastAge = Float.NaN;
+            int seed = (int) state.seed;
+            float ownerScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
+            vapor = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.vapor(0x26FFA6, 0.95f * ownerScale,
+                            seed ^ 31, Vec3.ZERO, 0.008f),
+                    random -> bodySample(state, random, false), 135.0f, 170);
+            plasma = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(0xD8FFF2, 0.58f * ownerScale,
+                            seed ^ 41, Vec3.ZERO, 0.004f),
+                    random -> bodySample(state, random, true), 55.0f, 80);
+            dust = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.dust(0x86C9A6, 0.75f * ownerScale,
+                            seed ^ 53, Vec3.ZERO, 0.012f),
+                    random -> dustTrailSample(state, random), 38.0f, 60);
+            mist = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.mist(0x9FFFE0, 1.35f * ownerScale,
+                            seed ^ 67, Vec3.ZERO, 0.006f),
+                    random -> mistSample(state, random), 26.0f, 45);
+        }
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -72,139 +130,86 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
 
     @Override
     public void submit(WindProjectileRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
         float age = state.ageInTicks;
-        float fpScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
-        float distScale = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-        final long seed = state.seed;
+        float ownerScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
+        state.drillRadius = 0.32f * ownerScale
+                * (1.0f + 0.05f * (float) Math.sin(age * 1.5f));
 
         // Age envelope: in over the first 3 ticks, out over the last 8 before
-        // the 50 tick range cap, so the drill never pops in or vanishes.
+        // the 50 tick range cap, so the projectile never pops in or vanishes.
         float inT = Math.min(1.0f, age / 3.0f);
         float inEase = 1.0f - (1.0f - inT) * (1.0f - inT) * (1.0f - inT);
         float outT = age <= 42.0f ? 0.0f : Math.min(1.0f, (age - 42.0f) / 8.0f);
-        final float envelope = inEase * (1.0f - outT * outT * (3.0f - 2.0f * outT));
+        float envelope = inEase * (1.0f - outT * outT * (3.0f - 2.0f * outT));
 
-        float drillLength = 1.35f * fpScale;
-        // Secondary motion (T4): the drill radius breathes as it spins.
-        float drillRadius = 0.32f * fpScale * (1.0f + 0.05f * (float) Math.sin(age * 1.5f));
-        float tipZ = drillLength * 0.5f;
-
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-
-        // The luminous tip: a jagged branch spike of wind past the drill
-        // point, a wide emerald sheath and a white core branch inside it.
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.branch(pose, buffer, seed ^ 31L,
-                new Vec3(0, 0, tipZ - 0.06f), new Vec3(0, 0, tipZ + 0.45f), 0.16f * fpScale,
-                0.45f, 1.0f, 0.82f, 0.75f, envelope, distScale);
-            BespokeGeometry.branch(pose, buffer, seed ^ 37L,
-                new Vec3(0, 0, tipZ - 0.06f), new Vec3(0, 0, tipZ + 0.45f), 0.07f * fpScale,
-                1.0f, 1.0f, 1.0f, 1.0f, envelope, distScale);
-        });
-
-        // The drill body: two bespoke plumes rotated onto the flight axis and
-        // spun by the same 45 degrees per tick the old cone rotated. An
-        // emerald outer plume and a brighter, thinner spindle plume inside.
-        poseStack.pushPose();
-        poseStack.translate(0, 0, -drillLength * 0.5f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(age * 45.0f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.plume(pose, buffer, seed ^ 41L,
-                drillRadius * 0.9f, drillLength, 0.0f, 0.82f, 0.42f, 0.85f, envelope, distScale);
-            BespokeGeometry.plume(pose, buffer, seed ^ 43L,
-                drillRadius * 0.5f, drillLength * 0.96f, 0.7f, 1.0f, 0.9f, 0.95f, envelope, distScale);
-        });
-        poseStack.popPose();
-
-        // Revolving razor scythes (4): bespoke blade arcs in the plane across
-        // the flight axis, centered on the tangent at each orbit point, on
-        // the old counter-rotation of 36 degrees per tick.
-        int bladeCount = 4;
-        float bladeOrbitR = drillRadius * 1.35f;
-        float bladeRot = -age * 36.0f * (float) (Math.PI / 180.0);
-        for (int b = 0; b < bladeCount; b++) {
-            double bAngle = (b / (double) bladeCount) * Math.PI * 2.0 + bladeRot;
-            float bx = (float) Math.cos(bAngle) * bladeOrbitR;
-            float by = (float) Math.sin(bAngle) * bladeOrbitR;
-            final long bladeSeed = seed ^ (53L + b * 7L);
-            poseStack.pushPose();
-            poseStack.translate(bx, by, 0.06f);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees((float) Math.toDegrees(bAngle) + 90.0f)));
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.bladeArc(pose, buffer, bladeSeed,
-                    0.34f * fpScale, 120f, 0.05f, 0.72f, 0.38f, 0.85f, envelope, distScale);
-                BespokeGeometry.bladeArc(pose, buffer, bladeSeed ^ 5L,
-                    0.24f * fpScale, 120f, 0.82f, 1.0f, 0.92f, 0.92f, envelope, distScale);
-            });
-            poseStack.popPose();
-        }
-
-        // The double helix wrapped on the drill: torn ribbon segments chorded
-        // along the same helix curve, 5 segments per strand, each posed to
-        // its chord (yaw, then pitch) so the ribbon follows the wrap.
-        int helixSegments = 5;
-        float helixRot = age * 28.0f * (float) (Math.PI / 180.0);
-        for (int helix = 0; helix < 2; helix++) {
-            float phase = helix * (float) Math.PI;
-            for (int s = 0; s < helixSegments; s++) {
-                float t0 = s / (float) helixSegments;
-                float t1 = (s + 1) / (float) helixSegments;
-                float[] p0 = helixPoint(helixRot, phase, t0, drillLength, drillRadius);
-                float[] p1 = helixPoint(helixRot, phase, t1, drillLength, drillRadius);
-                float dx = p1[0] - p0[0];
-                float dy = p1[1] - p0[1];
-                float dz = p1[2] - p0[2];
-                float chord = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-                if (chord < 0.001f) continue;
-                float horiz = (float) Math.sqrt(dx * dx + dz * dz);
-                final long segSeed = seed ^ (131L + helix * 17L + s);
-                final float segAlpha = 0.70f - t0 * 0.35f;
-                final float segWidth = 0.075f * fpScale * (1.0f - t0 * 0.35f);
-                final float cr = helix == 0 ? 0.15f : 0.75f;
-                final float cb = helix == 0 ? 0.62f : 0.92f;
-                poseStack.pushPose();
-                poseStack.translate(p0[0], p0[1], p0[2]);
-                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees((float) Math.toDegrees(Math.atan2(-dz, dx)))));
-                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees((float) Math.toDegrees(Math.atan2(dy, horiz)))));
-                collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                    BespokeGeometry.tornRibbon(pose, buffer, segSeed,
-                        chord, segWidth, 0.0f, cr, 1.0f, cb, segAlpha, envelope, distScale));
-                poseStack.popPose();
+        if (envelope > 0.01f) {
+            ClientLevel level = Minecraft.getInstance().level;
+            if (level != null) {
+                if (state.emission == null) state.emission = new Emission(state);
+                float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
+                state.emission.tick(level, envelope * distanceScale);
             }
         }
-
-        // The tapered wake: two glow fan splashes facing backward down the
-        // flight axis where the ruled vapor rings used to sit.
-        float wakeR = drillRadius * 0.85f;
-        poseStack.pushPose();
-        poseStack.translate(0, 0, -drillLength * 0.55f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.glowFan(pose, buffer, seed ^ 151L,
-                wakeR, 0.0f, 0.15f, 1.0f, 0.75f, 0.55f * envelope, distScale));
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, -drillLength * 1.15f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.glowFan(pose, buffer, seed ^ 157L,
-                wakeR * 0.45f, 0.0f, 0.55f, 1.0f, 0.88f, 0.22f * envelope, distScale));
-        poseStack.popPose();
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static float[] helixPoint(float helixRot, float phase, float t, float drillLength, float drillRadius) {
-        double a = helixRot + phase + t * Math.PI * 4.5;
-        float rad = drillRadius * (1.08f - t * 0.30f);
-        float z = -drillLength * 0.42f + t * drillLength * 0.85f;
-        return new float[] { (float) Math.cos(a) * rad, (float) Math.sin(a) * rad, z };
+    private static MaterialEmitters.Sample bodySample(WindProjectileRenderState state, RandomSource random, boolean core) {
+        float ownerScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
+        float t = random.nextFloat();
+        Vec3 center = new Vec3(state.ex, state.ey, state.ez);
+        Vec3 axisPoint = center.add(forward(state).scale((-0.72f + t * 1.50f) * ownerScale));
+        float profile = core
+                ? 0.30f
+                : 0.38f + 0.62f * (float) Math.sin(Math.PI * t);
+        float radius = state.drillRadius * profile
+                * (core ? (float) random.nextDouble() : 0.35f + 0.65f * (float) random.nextDouble());
+        double angle = random.nextDouble() * Math.PI * 2.0 + state.ageInTicks * 0.80;
+        Vec3 radial = right(state).scale(Math.cos(angle)).add(up(state).scale(Math.sin(angle)));
+        Vec3 tangent = right(state).scale(-Math.sin(angle)).add(up(state).scale(Math.cos(angle)));
+        Vec3 pos = axisPoint.add(radial.scale(radius));
+        Vec3 velocity = forward(state).scale(core ? 0.035 : 0.018)
+                .add(tangent.scale(core ? 0.025 : 0.055))
+                .add(radial.scale(0.008));
+        return new MaterialEmitters.Sample(pos, velocity);
+    }
+
+    private static MaterialEmitters.Sample dustTrailSample(WindProjectileRenderState state, RandomSource random) {
+        float ownerScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
+        float t = random.nextFloat();
+        Vec3 center = new Vec3(state.ex, state.ey, state.ez);
+        Vec3 axisPoint = center.add(forward(state).scale(-(0.55f + 1.60f * t) * ownerScale));
+        double angle = random.nextDouble() * Math.PI * 2.0;
+        Vec3 radial = right(state).scale(Math.cos(angle)).add(up(state).scale(Math.sin(angle)));
+        Vec3 tangent = right(state).scale(-Math.sin(angle)).add(up(state).scale(Math.cos(angle)));
+        Vec3 pos = axisPoint.add(radial.scale(state.drillRadius * (0.30f + random.nextDouble() * 0.55f)));
+        Vec3 velocity = forward(state).scale(-0.005).add(tangent.scale(0.02));
+        return new MaterialEmitters.Sample(pos, velocity);
+    }
+
+    private static MaterialEmitters.Sample mistSample(WindProjectileRenderState state, RandomSource random) {
+        float ownerScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
+        Vec3 center = new Vec3(state.ex, state.ey, state.ez)
+                .add(forward(state).scale(-0.85f * ownerScale));
+        MaterialEmitters.Sample base = MaterialEmitters.sphereVolume(center, 0.38f * ownerScale).sample(random);
+        return new MaterialEmitters.Sample(base.pos(), forward(state).scale(0.006));
+    }
+
+    private static Vec3 right(WindProjectileRenderState state) {
+        double yaw = Math.toRadians(state.yRot);
+        return new Vec3(Math.cos(yaw), 0.0, Math.sin(yaw));
+    }
+
+    private static Vec3 up(WindProjectileRenderState state) {
+        double yaw = Math.toRadians(state.yRot);
+        double pitch = Math.toRadians(state.xRot);
+        return new Vec3(-Math.sin(pitch) * Math.sin(yaw), Math.cos(pitch),
+                Math.sin(pitch) * Math.cos(yaw));
+    }
+
+    private static Vec3 forward(WindProjectileRenderState state) {
+        double yaw = Math.toRadians(state.yRot);
+        double pitch = Math.toRadians(state.xRot);
+        return new Vec3(-Math.cos(pitch) * Math.sin(yaw), -Math.sin(pitch),
+                Math.cos(pitch) * Math.cos(yaw));
     }
 }

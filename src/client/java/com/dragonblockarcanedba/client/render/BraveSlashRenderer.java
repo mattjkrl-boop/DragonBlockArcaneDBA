@@ -1,29 +1,25 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.BraveSlashEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Brave Slash in MC 26.2.
- * Bespoke pass: the cut is drawn with BespokeGeometry blade arcs, seeded
- * crescents with nicked, noise-bitten edges, in three nested layers (gold
- * body, cyan core, white edge), replacing the hand-built parabola crescent
- * and its local draw helpers. A shard fan flashes inside the crescent
- * during the strike window where the old diamond flash sat. The seed comes
- * from the entity UUID, which is synced state, so every client draws the
- * same crescent.
+ * No-shapes pass: the renderer draws no geometry at all. The cut reads as
+ * valor plasma shed across the swing width and along the real flight path,
+ * emitted through MaterialEmitters in the Brave gold theme with a white
+ * core stream and cyan vapor in the wake. Emission follows the same
+ * lifecycle envelope and strike window the old cut used.
  */
 public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSlashRenderer.BraveSlashRenderState> {
     public BraveSlashRenderer(EntityRendererProvider.Context context) {
@@ -36,7 +32,16 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
         public float age = 0;
         public int maxLifetime = BraveSlashEntity.MAX_LIFE;
         public long seed = 0;
+        public MaterialEmitters.Emitter plasmaEmitter;
+        public MaterialEmitters.Emitter coreEmitter;
+        public MaterialEmitters.Emitter vaporEmitter;
+        public long emitterSeed = Long.MIN_VALUE;
+        public ClientLevel emitterLevel;
+        public float lastAge = -1f;
+        public boolean burstFired = false;
     }
+
+    private record Basis(Vec3 forward, Vec3 right, Vec3 up) {}
 
     @Override
     public BraveSlashRenderState createRenderState() {
@@ -55,61 +60,109 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
 
     @Override
     public void submit(BraveSlashRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-
-        // Shared lifecycle: the cut builds over the first fifth of its real
-        // life, peaks, then dissipates over the last third, the same envelope
-        // the entity emits its wake particles with.
         float life = (float) state.maxLifetime;
         float progress = Math.min(1.0f, state.age / life);
         float fade = FxEnvelope.envelope(state.age, life, 0.2f, 0.35f);
-        float open = FxEnvelope.smoothstep(Math.min(1.0f, state.age / (life * 0.2f)));
-        float span = 3.2f * (0.82f + 0.22f * open);
-        float impact = strike(progress);
-        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        long seed = state.seed;
-        float radius = span * 1.35f;
-
-        // The blade arc is centered on +X in its own frame; a quarter turn
-        // about Y centers it on +Z, the crescent belly facing the flight
-        // direction with its tips swept back, as the old cut read. The arc
-        // band is centered on its own origin, so the whole crescent is
-        // pulled back to straddle the flight line like the old cut did
-        // instead of floating ahead of the hitbox.
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, -span * 0.55f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed, radius, 140.0f,
-                1.0f, 0.84f, 0.0f, 0.90f, fade, distScale);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x2B992DDFL, radius * 0.8f, 140.0f,
-                0.0f, 0.95f, 1.0f, 0.95f, fade, distScale);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x51ED2701L, radius * 0.62f, 140.0f,
-                1.0f, 1.0f, 1.0f, 1.0f, fade, distScale);
-        });
-        poseStack.popPose();
-
-        // Strike flash: a two tone shard fan standing in the crescent plane
-        // at the belly, where the old diamond flash pulsed.
-        if (impact > 0.02f) {
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, span * 0.55f);
-            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x85EBCA6BL, 0.38f * impact,
-                    1.0f, 1.0f, 1.0f, 1.0f, impact, distScale);
-                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x27D4EB2FL, 0.24f * impact,
-                    1.0f, 0.96f, 0.75f, 1.0f, impact, distScale);
-            });
-            poseStack.popPose();
+        if (fade > 0.01f) {
+            float dist = MaterialEmitters.distanceScale(new Vec3(state.x, state.y, state.z));
+            ensureEmitters(state, level);
+            float delta = frameDelta(state);
+            float e = fade * dist;
+            state.plasmaEmitter.tick(delta, e);
+            state.coreEmitter.tick(delta, e * 0.80f);
+            state.vaporEmitter.tick(delta, e * 0.65f);
         }
 
-        poseStack.popPose();
+        // Strike flash: a one-shot plasma burst at the belly of the cut
+        // during the same early strike window the old flash pulsed in.
+        float impact = strike(progress);
+        if (impact > 0.02f && !state.burstFired) {
+            state.burstFired = true;
+            int seed = (int) (state.seed ^ (state.seed >>> 32));
+            Basis b = basis(state);
+            Vec3 belly = new Vec3(state.x, state.y, state.z).add(b.forward().scale(0.6));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, 2.0f, seed ^ 0x85EBCA6B, Vec3.ZERO, 0.22f),
+                MaterialEmitters.point(belly), Math.round(14 * impact));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.plasma(0xFFD700, 2.4f, seed ^ 0x27D4EB2F, Vec3.ZERO, 0.26f),
+                MaterialEmitters.point(belly), Math.round(10 * impact));
+        } else if (impact <= 0.02f) {
+            state.burstFired = false;
+        }
+
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void ensureEmitters(BraveSlashRenderState state, ClientLevel level) {
+        if (state.plasmaEmitter != null && state.emitterSeed == state.seed && state.emitterLevel == level) {
+            return;
+        }
+        int seed = (int) (state.seed ^ (state.seed >>> 32));
+
+        // Plasma shed across the swing width at the cut's leading belly,
+        // sampled across the same opening span the old cut drew.
+        MaterialEmitters.Source cut = random -> {
+            Basis b = basis(state);
+            float span = span(state);
+            double t = random.nextDouble() * 2.0 - 1.0;
+            Vec3 center = new Vec3(state.x, state.y, state.z);
+            Vec3 pos = center.add(b.right().scale(t * span * 0.5))
+                .add(b.forward().scale(0.30 - 0.20 * t * t))
+                .add(b.up().scale((random.nextDouble() - 0.5) * 0.55));
+            return new MaterialEmitters.Sample(pos, b.forward().scale(0.03));
+        };
+        // Vapor and loose plasma trailing behind the flight line.
+        MaterialEmitters.Source wake = random -> {
+            Basis b = basis(state);
+            float span = span(state);
+            double t = random.nextDouble();
+            Vec3 center = new Vec3(state.x, state.y, state.z);
+            Vec3 pos = center.add(b.forward().scale(-1.5 + t * 1.8))
+                .add(b.right().scale((random.nextDouble() - 0.5) * span * 0.72))
+                .add(b.up().scale((random.nextDouble() - 0.5) * 0.85));
+            return new MaterialEmitters.Sample(pos, b.forward().scale(0.012));
+        };
+
+        state.plasmaEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFD700, 2.6f, seed, Vec3.ZERO, 0.05f),
+            cut, 135f, 240);
+        state.coreEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFFFFF, 1.8f, seed ^ 0x51ED2701, Vec3.ZERO, 0.04f),
+            cut, 75f, 140);
+        state.vaporEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.vapor(0x00F2FF, 2.3f, seed ^ 0x2B992DDF, Vec3.ZERO, 0.03f),
+            wake, 48f, 90);
+        state.emitterSeed = state.seed;
+        state.emitterLevel = level;
+    }
+
+    private static float span(BraveSlashRenderState state) {
+        float open = FxEnvelope.smoothstep(Math.min(1.0f, state.age / ((float) state.maxLifetime * 0.2f)));
+        return 3.2f * (0.82f + 0.22f * open);
+    }
+
+    private static Basis basis(BraveSlashRenderState state) {
+        Vec3 forward = Vec3.directionFromRotation(state.xRot, state.yRot);
+        Vec3 right = forward.cross(new Vec3(0, 1, 0));
+        right = right.lengthSqr() < 1e-6 ? new Vec3(1, 0, 0) : right.normalize();
+        Vec3 up = right.cross(forward).normalize();
+        return new Basis(forward, right, up);
+    }
+
+    private static float frameDelta(BraveSlashRenderState state) {
+        float prev = state.lastAge;
+        state.lastAge = state.age;
+        if (prev < 0f) return 1f / 20f;
+        float d = state.age - prev;
+        if (d <= 0f || d > 3f) return 1f / 20f;
+        return d / 20f;
     }
 
     private static float strike(float progress) {

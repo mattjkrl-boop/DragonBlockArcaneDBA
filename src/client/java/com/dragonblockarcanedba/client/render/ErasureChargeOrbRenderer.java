@@ -1,35 +1,38 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.ErasureChargeOrbEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Entity Renderer for Erasure Cannon Muzzle Charge Orb in MC 26.2.
- * Bespoke pass: all geometry comes from BespokeGeometry (rule 1), seeded
- * from the orb entity's synced seed. The regular solids are gone:
- * - The rotating octahedron core is replaced by an irregular bespoke
- *   core: a small displaced dome pair (a noise-lumpy energy ball, so it
- *   still reads as a singularity and still turns with age) wrapped in a
- *   cluster of shard fans in three planes, a jagged crystalline cage.
- * - The geodesic sphere shells are now displaced dome pairs, one cap up
- *   and one flipped, counter-rotating per layer, with the same 3-stop
- *   color journey carried by layer choice instead of latitude bands.
- * - The three gyroscope rings are broken vortex bands in three planes:
- *   jittered radii, seeded gaps, no equal segments anywhere.
- * - The 8 intake spikes are BespokeGeometry branches, jagged ribbons
- *   spiraling into the core, each with a thin white core pass.
+ * No-shapes pass: this renderer draws no geometry. The orb is a dense,
+ * churning cluster of ki plasma particles at the muzzle: a white-hot
+ * core volume, a cyan plasma body, vapor drifting at the boundary,
+ * and gathering motes streamed inward from the old intake radius so
+ * the charge still reads as contained energy being pulled in. Past
+ * 0.75 charge the cluster sheds embers and its hot layer shifts
+ * toward red-hot, carrying the old shell color journey. Emission
+ * runs through persistent per-entity MaterialEmitters Emitter
+ * channels, so the accumulator and per-second budgets survive across
+ * frames; the channels rebuild only when the charge bucket changes.
+ * Position, scale, pulse, and charge growth are unchanged; the
+ * entity's own server charge particles are untouched.
  */
 public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEntity, ErasureChargeOrbRenderer.ErasureChargeRenderState> {
+    private static final Map<Integer, Emission> EMISSIONS = new ConcurrentHashMap<>();
 
     public ErasureChargeOrbRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -43,6 +46,22 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         public int seed = 0;
         public boolean isFirstPersonOwner = false;
         public boolean onRight = true;
+        public int entityId = -1;
+        public Vec3 origin = Vec3.ZERO;
+        public Vec3 direction = new Vec3(0, 0, 1);
+        public Vec3 right = new Vec3(1, 0, 0);
+        public Vec3 up = new Vec3(0, 1, 0);
+    }
+
+    /** Per-entity emission channels plus the live frame they sample from. */
+    private static final class Emission {
+        float lastAge = Float.NaN;
+        String signature = "";
+        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        Vec3 center = Vec3.ZERO;
+        float orbRadius = 0.0f;
+        float intakeRadius = 0.0f;
+        double pull = 0.0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -68,8 +87,14 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getSeed();
+        state.entityId = entity.getId();
+        state.origin = entity.getPosition(partialTicks);
+        state.direction = directionFromRotation(state.xRot, state.yRot);
+        Vec3 right = state.direction.cross(new Vec3(0, 1, 0));
+        state.right = right.lengthSqr() < 1.0e-6 ? new Vec3(1, 0, 0) : right.normalize();
+        state.up = state.right.cross(state.direction).normalize();
 
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null &&
             (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) &&
             mc.options.getCameraType().isFirstPerson());
@@ -85,6 +110,10 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
     public void submit(ErasureChargeRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc.level;
+        if (level == null) return;
+
         float charge = state.chargeRatio;
         float age = state.age;
         float pulse = 0.92f + 0.08f * (float) Math.sin(age * 0.65f);
@@ -92,144 +121,104 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         // Scaled down smaller in first person
         float chargeEase = charge * charge * (3.0f - 2.0f * charge);
         float orbRadius = (0.22f + chargeEase * 0.95f) * pulse * (state.isFirstPersonOwner ? 0.45f : 1.0f);
-        float alpha = 0.10f + chargeEase * 0.90f;
         float hot = charge <= 0.75f ? 0.0f : (charge - 0.75f) / 0.25f;
 
-        double camDist = cameraState.pos.distanceTo(new Vec3(state.x, state.y, state.z));
-        final float distScale = com.dragonblockarcanedba.util.FxEnvelope.distScale(camDist);
-        final long seed = state.seed;
+        Vec3 center = state.isFirstPersonOwner
+            ? localPoint(state, (state.onRight ? -1.0f : 1.0f) * 0.42f, -0.48f, -0.60f)
+            : state.origin;
 
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        float distScale = MaterialEmitters.distanceScale(center);
+        float envelope = (0.25f + chargeEase * 0.75f) * distScale * (state.isFirstPersonOwner ? 0.75f : 1.0f);
+        if (envelope <= 0.01f) return;
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
+        Emission em = EMISSIONS.computeIfAbsent(state.entityId, id -> new Emission());
+        em.center = center;
+        em.orbRadius = orbRadius;
+        em.intakeRadius = orbRadius * (2.3f - chargeEase * 0.95f);
+        em.pull = 0.07 + charge * 0.09;
 
-        if (state.isFirstPersonOwner) {
-            // Anchor orb realistically to the Blaster Gun muzzle: way lower and on the weapon hand side
-            float sideSign = state.onRight ? -1.0f : 1.0f;
-            poseStack.translate(sideSign * 0.42f, -0.48f, -0.60f);
+        float delta;
+        if (Float.isNaN(em.lastAge) || age < em.lastAge) {
+            delta = 1.0f / 60.0f;
+        } else {
+            delta = Math.min(0.10f, Math.max(0.0f, (age - em.lastAge) / 20.0f));
         }
+        em.lastAge = age;
+        if (delta <= 0f) return;
 
-        // Core: a displaced dome pair (irregular lumpy ball) in near white,
-        // turning with age like the octahedron did, plus a shard cluster
-        // cage in three planes at a slightly larger radius.
-        float coreRadius = orbRadius * 0.38f;
-        float coreAlpha = 0.98f * (0.25f + chargeEase * 0.75f);
-        domeShell(poseStack, collector, renderType, seed ^ 0xC0E1L, coreRadius, age * 36.0f, false,
-            1.0f, 1.0f, 1.0f, coreAlpha, distScale);
-        domeShell(poseStack, collector, renderType, seed ^ 0xC0E1L, coreRadius, age * 36.0f, true,
-            1.0f, 1.0f, 1.0f, coreAlpha, distScale);
-        shardCluster(poseStack, collector, renderType, seed ^ 0x51A7L, coreRadius * 1.7f,
-            1.0f, 1.0f, 1.0f, coreAlpha * 0.85f, distScale);
-
-        // Shells: displaced dome pairs, counter-rotating per layer. Colors
-        // keep the old journey: the mid shell whitens toward red-hot as the
-        // charge passes 0.75, the inner shell runs pale cyan, and the outer
-        // wispy shell sits at the standard outer band alpha.
-        float shellR = hot * 0.85f;
-        domeShell(poseStack, collector, renderType, seed ^ 0x5E11L, orbRadius * 0.82f, age * -18.0f, false,
-            shellR, 0.95f, 1.0f, alpha * 0.72f, distScale);
-        domeShell(poseStack, collector, renderType, seed ^ 0x5E11L, orbRadius * 0.82f, age * -18.0f, true,
-            shellR, 0.95f, 1.0f, alpha * 0.72f, distScale);
-        domeShell(poseStack, collector, renderType, seed ^ 0x5E22L, orbRadius * 0.48f, age * 26.0f, false,
-            0.85f + hot * 0.15f, 0.96f, 1.0f, alpha * (0.40f + hot * 0.45f), distScale);
-        domeShell(poseStack, collector, renderType, seed ^ 0x5E22L, orbRadius * 0.48f, age * 26.0f, true,
-            0.85f + hot * 0.15f, 0.96f, 1.0f, alpha * (0.40f + hot * 0.45f), distScale);
-        domeShell(poseStack, collector, renderType, seed ^ 0x5E33L, orbRadius * 1.18f, age * 9.0f, false,
-            0.35f, 0.90f, 1.0f, alpha * 0.18f, distScale);
-        domeShell(poseStack, collector, renderType, seed ^ 0x5E33L, orbRadius * 1.18f, age * 9.0f, true,
-            0.35f, 0.90f, 1.0f, alpha * 0.18f, distScale);
-
-        // Three gyroscope rings as broken vortex bands in three planes.
-        float ringR = orbRadius * (1.48f - chargeEase * 0.28f);
-        float bandT = Math.max(0.012f, ringR * 0.06f);
-        ringBand(poseStack, collector, renderType, seed ^ 0xB111L, ringR, bandT,
-            (float) Math.toRadians(age * 22.0f), 0, hot, 0.90f, 1.0f, alpha * 0.90f, distScale);
-        ringBand(poseStack, collector, renderType, seed ^ 0xB222L, ringR * 0.94f, bandT,
-            (float) Math.toRadians(age * -16.0f), 1, hot * 0.6f, 0.85f, 1.0f, alpha * 0.60f, distScale);
-        ringBand(poseStack, collector, renderType, seed ^ 0xB333L, ringR * 0.88f, bandT,
-            (float) Math.toRadians(age * 27.0f), 2, hot * 0.6f, 0.85f, 1.0f, alpha * 0.50f, distScale);
-
-        // Intake spikes: jagged branches spiraling into the core, positions
-        // and convergence exactly as the old lash spikes, drawn as seeded
-        // branch ribbons with a thin white core pass per spike.
-        final float spikeAlpha = alpha * 0.92f;
-        final float spikeWidth = 0.05f + charge * 0.03f;
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            int spikeCount = 8;
-            float intakeRadius = orbRadius * (2.3f - chargeEase * 0.95f);
-            float intakeSpeed = 30.0f + (charge * 60.0f);
-            for (int s = 0; s < spikeCount; s++) {
-                double angle = (s / (double) spikeCount) * Math.PI * 2.0 + Math.toRadians(age * intakeSpeed);
-                float sx = (float) Math.cos(angle) * intakeRadius;
-                float sy = (float) Math.sin(angle) * intakeRadius;
-                float sz = (float) Math.sin(age * 0.4f + s * 1.2f) * (orbRadius * 0.6f);
-                Vec3 toCenter = new Vec3(-sx, -sy, -sz).normalize();
-                Vec3 tip = new Vec3(sx, sy, sz).add(toCenter.scale(orbRadius * 0.7f));
-                long spikeSeed = seed ^ (0x59L + s * 977L);
-                BespokeGeometry.branch(pose, buffer, spikeSeed, new Vec3(sx, sy, sz), tip,
-                    spikeWidth, 0.0f, 0.72f, 1.0f, spikeAlpha, 1.0f, distScale);
-                BespokeGeometry.branch(pose, buffer, spikeSeed ^ 0x11L, new Vec3(sx, sy, sz), tip,
-                    spikeWidth * 0.35f, 0.90f, 0.98f, 1.0f, Math.min(1.0f, spikeAlpha * 1.1f), 1.0f, distScale);
-            }
-        });
-
-        poseStack.popPose();
+        float chargeBucket = Math.round(charge * 20.0f) / 20.0f;
+        String signature = System.identityHashCode(level) + "|" + Math.round(charge * 20.0f)
+            + "|" + state.isFirstPersonOwner;
+        if (!signature.equals(em.signature)) {
+            em.signature = signature;
+            em.emitters = buildEmitters(level, em, state.seed, chargeBucket, hot);
+        }
+        for (MaterialEmitters.Emitter emitter : em.emitters) {
+            emitter.tick(delta, envelope);
+        }
+        if (EMISSIONS.size() > 256) EMISSIONS.clear();
     }
 
-    /**
-     * One displaced dome cap. The toolkit dome is a hemisphere (rim in the
-     * XZ plane, cap toward +Y); flip turns it downward so a pair of caps
-     * forms the full irregular shell, and rotDeg spins it around Y.
-     */
-    private static void domeShell(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                                  long seed, float radius, float rotDeg, boolean flip,
-                                  float r, float g, float b, float alpha, float distScale) {
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(rotDeg)));
-        if (flip) {
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(180f)));
+    private static MaterialEmitters.Emitter[] buildEmitters(ClientLevel level, Emission em, int seed,
+                                                            float charge, float hot) {
+        MaterialEmitters.Source coreVolume = random -> MaterialEmitters.sphereVolume(em.center,
+            Math.max(0.05, em.orbRadius * 0.85)).sample(random);
+        MaterialEmitters.Source bodyVolume = random -> MaterialEmitters.sphereVolume(em.center,
+            Math.max(0.06, em.orbRadius * 1.05)).sample(random);
+        MaterialEmitters.Source boundaryVolume = random -> MaterialEmitters.sphereVolume(em.center,
+            Math.max(0.08, em.orbRadius * 1.28)).sample(random);
+        // Intake: motes spawn around the intake radius, jittered so no
+        // clean shell forms, and stream inward toward the core.
+        MaterialEmitters.Source intake = random -> {
+            double u = random.nextDouble() * 2.0 - 1.0;
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = em.intakeRadius * (0.85 + random.nextDouble() * 0.30);
+            double flat = Math.sqrt(Math.max(0.0, 1.0 - u * u)) * rr;
+            Vec3 p = new Vec3(em.center.x + Math.cos(ang) * flat,
+                em.center.y + u * rr, em.center.z + Math.sin(ang) * flat);
+            Vec3 vel = em.center.subtract(p);
+            vel = vel.lengthSqr() < 1.0e-6 ? Vec3.ZERO : vel.normalize().scale(em.pull);
+            return new MaterialEmitters.Sample(p, vel);
+        };
+
+        java.util.List<MaterialEmitters.Emitter> out = new java.util.ArrayList<>();
+        out.add(new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFFFFF, Math.max(0.4f, em.orbRadius * 5.2f), seed ^ 0xC0E1, Vec3.ZERO, 0.03f),
+            coreVolume, 210f + charge * 340f, 620));
+        out.add(new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0x37E6FF, Math.max(0.5f, em.orbRadius * 7.2f), seed ^ 0x5E11, Vec3.ZERO, 0.04f),
+            bodyVolume, 180f + charge * 280f, 520));
+        if (hot > 0.0f) {
+            out.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFFE8E0, Math.max(0.5f, em.orbRadius * 6.0f), seed ^ 0x5E22, Vec3.ZERO, 0.04f),
+                bodyVolume, hot * 150f, 200));
         }
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, seed, radius, r, g, b, alpha, 1.0f, distScale));
-        poseStack.popPose();
+        out.add(new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.vapor(0x59F2FF, Math.max(0.8f, em.orbRadius * 10.5f), seed ^ 0x5E33, Vec3.ZERO, 0.03f),
+            boundaryVolume, 95f + charge * 125f, 260));
+        out.add(new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xA5F7FF, Math.max(0.35f, em.orbRadius * 4.5f), seed ^ 0x59, Vec3.ZERO, 0.004f),
+            intake, 150f + charge * 260f, 460));
+        out.add(new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.ember(Vec3.ZERO, 0.06f),
+            bodyVolume, charge >= 0.75f ? 130f : 35f, 160));
+        out.add(new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.07f),
+            bodyVolume, 55f + charge * 105f, 190));
+        return out.toArray(new MaterialEmitters.Emitter[0]);
     }
 
-    /** A shard fan in each of the three planes through the center: the core's jagged cage. */
-    private static void shardCluster(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                                     long seed, float radius, float r, float g, float b, float alpha, float distScale) {
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.shardFan(pose, buffer, seed, radius, r, g, b, alpha, 1.0f, distScale));
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x77L, radius, r, g, b, alpha, 1.0f, distScale));
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0xEEL, radius, r, g, b, alpha, 1.0f, distScale));
-        poseStack.popPose();
+    private static Vec3 directionFromRotation(float xRot, float yRot) {
+        double pitch = Math.toRadians(xRot);
+        double yaw = Math.toRadians(yRot);
+        double cosPitch = Math.cos(pitch);
+        return new Vec3(-Math.sin(yaw) * cosPitch, -Math.sin(pitch), Math.cos(yaw) * cosPitch).normalize();
     }
 
-    /**
-     * One gyroscope ring as a broken vortex band. Plane selects the ring's
-     * plane: 0 for the muzzle (XY) plane, 1 for horizontal (XZ), 2 for the
-     * side (ZY) plane. The band's twist carries the ring's spin.
-     */
-    private static void ringBand(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                                 long seed, float radius, float halfThickness, float twist,
-                                 int plane, float r, float g, float b, float alpha, float distScale) {
-        poseStack.pushPose();
-        if (plane == 0) {
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        } else if (plane == 2) {
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90f)));
-        }
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed, radius, -halfThickness, halfThickness,
-                twist, r, g, b, alpha, distScale));
-        poseStack.popPose();
+    private static Vec3 localPoint(ErasureChargeRenderState state, float x, float y, float z) {
+        return state.origin
+            .add(state.right.scale(-x))
+            .add(state.up.scale(y))
+            .add(state.direction.scale(z));
     }
 }

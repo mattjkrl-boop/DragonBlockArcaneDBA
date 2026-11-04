@@ -22,11 +22,13 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 
 /**
- * Temporal Rift Entity: Physical 3D Translucent Celestial Dome & Rotating Ground Astrolabe
- * spawned on Right-Click (Temporal Rift) with the Whis Staff.
+ * Temporal Rift Entity: the material based time suspension field spawned on
+ * Right-Click (Temporal Rift) with the Whis Staff. The client renderer
+ * draws no geometry for it; the field reads as temporal plasma, soul
+ * material, glass dust, mist, and darkness streaming inward.
  *
  * The rift is a time suspension field, not a storm. For its whole life it runs
- * the shared lifecycle envelope: layered particles in three bands, a debris
+ * the shared lifecycle envelope: layered particles in three layers, a debris
  * field caught hanging in the air on slow helical paths, and a gentle vortex
  * drift that makes everything inside orbit slowly instead of sitting dead
  * still. The item applies the first half of the burst and the freeze at cast;
@@ -72,8 +74,8 @@ public class TemporalRiftEntity extends Projectile {
         this.peakDamage = peakDamage;
         this.entityData.set(CASTER_ID, caster != null ? caster.getId() : -1);
         this.entityData.set(MAX_LIFE, lifetime);
-        // Bespoke geometry seed: rolled once at cast on the server and synced,
-        // so the renderer's procedural shapes are identical on every client.
+        // Material seed: rolled once at cast on the server and synced,
+        // so the renderer's material variation is identical on every client.
         this.entityData.set(SEED, level.getRandom().nextLong());
     }
 
@@ -101,7 +103,7 @@ public class TemporalRiftEntity extends Projectile {
         return this.entityData.get(MAX_LIFE);
     }
 
-    /** Synced bespoke geometry seed (0 until the cast constructor sets it). */
+    /** Synced material seed (0 until the cast constructor sets it). */
     public long getSeed() {
         return this.entityData.get(SEED);
     }
@@ -139,9 +141,9 @@ public class TemporalRiftEntity extends Projectile {
 
             // Point 1: layered particles at standard density. The shared
             // emitter lays down a bright KI_MOTE core, a celestial cyan mid
-            // band on a helical path, and wispy motes at the rim, all scaled
+            // layer on a helical path, and wispy motes at the rim, all scaled
             // by this rift's envelope, replacing the old single ring of about
-            // 2 motes every 3 ticks (about 13 per second over a 24 block dome).
+            // 2 motes every 3 ticks (about 13 per second over a 24 block field).
             LayeredParticles.emitVortex(serverLevel, center, radius * 0.92f, radius * 0.85f,
                 this.tickCount, life, THEME_RGB,
                 com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE);
@@ -157,7 +159,7 @@ public class TemporalRiftEntity extends Projectile {
             // Point 2: the ground the rift stands on, caught mid-air. Sixty
             // pieces rise only a little and hang on slow helical paths for
             // most of the rift's life, then release and rain back down while
-            // the dome dissipates. Spawned once, just after the build starts.
+            // the field dissipates. Spawned once, just after the build starts.
             if (!this.debrisSpawned && this.tickCount >= 2) {
                 this.debrisSpawned = true;
                 DebrisSpawner.spawnField(serverLevel, ownerLiving, center,
@@ -166,7 +168,7 @@ public class TemporalRiftEntity extends Projectile {
 
             // Point 5: the second half of the burst lands at the envelope
             // peak, inside the visual's active window, on everything the
-            // dome covers at that moment. The item dealt the first half at
+            // field covers at that moment. The item dealt the first half at
             // cast; the total is unchanged.
             if (this.tickCount == PEAK_TICK && this.peakDamage > 0f) {
                 AABB aoe = this.getBoundingBox().inflate(radius);
@@ -199,7 +201,7 @@ public class TemporalRiftEntity extends Projectile {
                 }
             }
 
-            // Point 5: dissipation drizzle of motes falling as the dome dies.
+            // Point 5: dissipation drizzle of motes falling as the field dies.
             if (this.tickCount > life * 0.65f) {
                 LayeredParticles.emitRain(serverLevel, center, radius * 0.9f, radius * 0.8f,
                     this.tickCount, life,

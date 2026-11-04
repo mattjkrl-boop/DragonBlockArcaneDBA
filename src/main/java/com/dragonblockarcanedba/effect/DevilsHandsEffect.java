@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -71,7 +71,7 @@ public class DevilsHandsEffect extends MobEffect {
             
             // Dark red flames
             level.sendParticles(
-                new DbaDustOptions(0x8B0000, 1.5F), // Dark Red
+                DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0x8B0000, 1.5F, entity.getId() * 31 + entity.tickCount), // Dark Red
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * width * 1.5,
                 entity.getY() + level.getRandom().nextFloat() * height,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width * 1.5,
@@ -82,7 +82,7 @@ public class DevilsHandsEffect extends MobEffect {
             
             // Black ash/smoke
             level.sendParticles(
-                new DbaDustOptions(0x111111, 1.0F), // Near Black
+                DbaMaterialOptions.of(DbaMaterialOptions.DARKNESS, 0x111111, 1.0F, entity.getId() * 31 + entity.tickCount + 1), // Near Black
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * width,
                 entity.getY() + level.getRandom().nextFloat() * height,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width,

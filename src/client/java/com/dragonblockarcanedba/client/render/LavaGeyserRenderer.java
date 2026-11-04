@@ -1,30 +1,38 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.LavaGeyserEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
- * The geyser pillar (redesign idea 2): a bright bespoke plume core inside
- * a darker, wider plume, wrapped in a rising broken vortex band, over a
- * cracked and glowing base. All geometry comes from BespokeGeometry off
- * the entity's synced seed, so the pillar is the same for every client.
+ * The geyser pillar is a sampled column of material data. Flame and
+ * embers rise through it, ash spreads at its base, and smoke and heat
+ * vapor leave from the upper column as the eruption burns down.
  */
 public class LavaGeyserRenderer extends EntityRenderer<LavaGeyserEntity, LavaGeyserRenderer.GeyserState> {
+    private final Map<Integer, Emission> emissions = new HashMap<>();
+
     public LavaGeyserRenderer(EntityRendererProvider.Context context) {
         super(context);
     }
 
     public static class GeyserState extends EntityRenderState {
+        public int entityId;
         public float age;
         public int seed;
         public double posX;
@@ -48,6 +56,7 @@ public class LavaGeyserRenderer extends EntityRenderer<LavaGeyserEntity, LavaGey
     @Override
     public void extractRenderState(LavaGeyserEntity entity, GeyserState state, float partialTick) {
         super.extractRenderState(entity, state, partialTick);
+        state.entityId = entity.getId();
         state.age = entity.tickCount + partialTick;
         state.seed = entity.getSeed();
         state.posX = entity.getX();
@@ -57,23 +66,89 @@ public class LavaGeyserRenderer extends EntityRenderer<LavaGeyserEntity, LavaGey
 
     @Override
     public void submit(GeyserState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float scale = LayeredRender.distScale(cameraState, state.posX, state.posY, state.posZ);
-        float env = FxEnvelope.envelope(state.age, LavaGeyserEntity.LIFE_TICKS);
-        // The pillar is at full height almost at once, then burns down.
-        float height = 4.4f * Math.min(1.0f, state.age / 2.5f);
-        long seed = state.seed;
-        RenderType type = KiRenderHelper.kiRenderType();
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-            BespokeGeometry.plume(pose, buffer, seed ^ 0x6A11L, 1.18f, height * 0.82f,
-                0.85f, 0.22f, 0.02f, LayeredRender.ALPHA_MID, env, scale);
-            BespokeGeometry.plume(pose, buffer, seed, 0.8f, height,
-                1.0f, 0.44f, 0.05f, LayeredRender.ALPHA_CORE, env, scale);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBEEFL, 1.3f, 0.1f, height * 0.85f,
-                state.age * 0.22f, 1.0f, 0.5f, 0.08f, LayeredRender.ALPHA_OUTER * env, scale);
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0xC4ACL, 2.3f,
-                1.0f, 0.5f, 0.1f, LayeredRender.ALPHA_MID, env, scale);
-            BespokeGeometry.glowFan(pose, buffer, seed ^ 0x610FL, 2.1f, 0.07f,
-                1.0f, 0.45f, 0.05f, LayeredRender.ALPHA_MID * env, scale);
-        });
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level != null && state.entityId != 0) {
+            Vec3 center = new Vec3(state.posX, state.posY, state.posZ);
+            float distance = MaterialEmitters.distanceScale(center);
+            float env = FxEnvelope.envelope(state.age, LavaGeyserEntity.LIFE_TICKS);
+            float height = 4.4f * Math.min(1.0f, state.age / 2.5f);
+            Emission emission = emissions.get(state.entityId);
+            if (emission == null || emission.level != level || emission.seed != state.seed
+                    || state.age + 0.001f < emission.lastAge) {
+                emission = new Emission(level, state);
+                emissions.put(state.entityId, emission);
+            }
+            emission.update(state, env * distance, height);
+        }
+        super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static final class Emission {
+        private final ClientLevel level;
+        private final int seed;
+        private final List<MaterialEmitters.Emitter> emitters = new ArrayList<>();
+        private Vec3 center;
+        private double height = 0.25;
+        private float lastAge;
+
+        private Emission(ClientLevel level, GeyserState state) {
+            this.level = level;
+            this.seed = state.seed;
+            this.center = position(state);
+            this.lastAge = state.age;
+
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.flame(Vec3.ZERO, 0.020f),
+                    random -> sampleColumn(random, 0.0, 1.0, 1.05), 820f, 980));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.ember(Vec3.ZERO, 0.030f),
+                    random -> sampleColumn(random, 0.0, 1.0, 1.25), 340f, 430));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.ash(new Vec3(0.0, 0.010, 0.0), 0.026f),
+                    this::sampleBase, 105f, 140));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.smoke(0x2B130B, 1.00f, seed ^ 0x6A11,
+                            new Vec3(0.0, 0.028, 0.0), 0.024f),
+                    random -> sampleColumn(random, 0.42, 1.0, 1.30), 145f, 200));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.vapor(0x9E4A18, 0.92f, seed ^ 0xBEEF,
+                            new Vec3(0.0, 0.014, 0.0), 0.020f),
+                    random -> sampleColumn(random, 0.0, 1.0, 1.20), 85f, 120));
+        }
+
+        private void update(GeyserState state, float strength, double newHeight) {
+            float delta = Math.max(0.0f, Math.min(0.05f, (state.age - lastAge) / 20.0f));
+            lastAge = state.age;
+            center = position(state);
+            height = Math.max(0.25, newHeight);
+            for (MaterialEmitters.Emitter emitter : emitters) {
+                emitter.tick(delta, strength);
+            }
+        }
+
+        private MaterialEmitters.Sample sampleColumn(RandomSource random, double minFrac, double maxFrac, double radius) {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = radius * Math.sqrt(random.nextDouble());
+            double yFrac = minFrac + random.nextDouble() * Math.max(0.01, maxFrac - minFrac);
+            Vec3 pos = new Vec3(center.x + Math.cos(angle) * rr,
+                    center.y + height * yFrac,
+                    center.z + Math.sin(angle) * rr);
+            Vec3 velocity = new Vec3(0.0, 0.050 + random.nextDouble() * 0.045, 0.0);
+            return new MaterialEmitters.Sample(pos, velocity);
+        }
+
+        private MaterialEmitters.Sample sampleBase(RandomSource random) {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = 2.3 * Math.sqrt(random.nextDouble());
+            Vec3 pos = new Vec3(center.x + Math.cos(angle) * rr,
+                    center.y + 0.04,
+                    center.z + Math.sin(angle) * rr);
+            Vec3 velocity = new Vec3(Math.cos(angle) * 0.018, 0.006, Math.sin(angle) * 0.018);
+            return new MaterialEmitters.Sample(pos, velocity);
+        }
+
+        private static Vec3 position(GeyserState state) {
+            return new Vec3(state.posX, state.posY, state.posZ);
+        }
     }
 }

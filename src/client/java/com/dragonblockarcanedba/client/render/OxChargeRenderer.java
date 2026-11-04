@@ -1,32 +1,34 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.OxChargeEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 
-import java.util.Random;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Ox King's Groundbreaker Charging in Minecraft 26.2.
- * Bespoke pass: every shape comes from BespokeGeometry or LayeredRender.
- * The ground shatter is layered crack stars, the compression rings are low
- * broken vortex bands, the tapered heart is the shared vortex bands, the
- * levitating chunks are tumbling displaced domes with branch heat cores,
- * and the ascending tendrils are branch ribbons. Counts, radii, heights,
- * the fade in, and the tremble are unchanged from the spectacle build. The
- * dead drawAscendingTendril helper from the old build is gone.
+ * No-shapes pass: this renderer draws no geometry. The charge reads as
+ * material being pulled in and compressed: plasma motes drifting toward the
+ * brace point, ground dust across the shatter radius, vapor, rising ember
+ * tendrils above 25 percent charge, and occasional physical debris chunks
+ * of the actual ground block knocked loose by the pressure. Radius growth,
+ * the fade in, and the charge envelope are unchanged from the bespoke build.
  */
 public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRenderer.OxChargeRenderState> {
 
@@ -38,6 +40,9 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
         public float chargeRatio = 0.0f;
         public float age = 0;
         public long seed = 0;
+        public double wx = 0;
+        public double wy = 0;
+        public double wz = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -61,146 +66,128 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
         state.chargeRatio = entity.getChargeRatio();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
+    }
+
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        float radius = 1.0f;
+        float columnHeight = 1.0f;
+    }
+
+    private static final class Emission {
+        final Frame frame = new Frame();
+        MaterialEmitters.Emitter plasma;
+        MaterialEmitters.Emitter vapor;
+        MaterialEmitters.Emitter dust;
+        MaterialEmitters.Emitter ember;
+        MaterialEmitters.Emitter chunks;
+        float lastAge = -1f;
+    }
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
+
+    /** Points across a ground disc at a low height band. */
+    private static MaterialEmitters.Source disc(Frame frame, float radiusScale, float yBase, float yRange) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = frame.radius * radiusScale * Math.sqrt(random.nextDouble());
+            return new MaterialEmitters.Sample(new Vec3(
+                    frame.center.x + Math.cos(angle) * rr,
+                    frame.center.y + yBase + random.nextDouble() * yRange,
+                    frame.center.z + Math.sin(angle) * rr), Vec3.ZERO);
+        };
+    }
+
+    /** Points in the charge column with an inward drift velocity. */
+    private static MaterialEmitters.Source gathering(Frame frame) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = frame.radius * (0.35 + random.nextDouble() * 0.75);
+            Vec3 pos = new Vec3(
+                    frame.center.x + Math.cos(angle) * rr,
+                    frame.center.y + 0.10 + random.nextDouble() * frame.columnHeight,
+                    frame.center.z + Math.sin(angle) * rr);
+            Vec3 vel = new Vec3(
+                    (frame.center.x - pos.x) * 0.10,
+                    0.015,
+                    (frame.center.z - pos.z) * 0.10);
+            return new MaterialEmitters.Sample(pos, vel);
+        };
+    }
+
+    private static BlockState groundState(ClientLevel level, Vec3 center) {
+        BlockState state = level.getBlockState(BlockPos.containing(center.x, center.y - 0.5, center.z));
+        return state.isAir() ? Blocks.STONE.defaultBlockState() : state;
+    }
+
+    private Emission buildEmission(ClientLevel level, OxChargeRenderState state) {
+        Emission emission = new Emission();
+        Frame frame = emission.frame;
+        frame.center = new Vec3(state.wx, state.wy, state.wz);
+        int seed = (int) state.seed;
+        BlockState ground = groundState(level, frame.center);
+        emission.plasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFF7A1A, 1.1f, seed ^ 0xB1A6,
+                        Vec3.ZERO, 0.01f),
+                gathering(frame), 210f, 280);
+        emission.vapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0xD8C6A8, 1.9f, seed ^ 0xB1A7,
+                        new Vec3(0.0, 0.05, 0.0), 0.03f),
+                disc(frame, 1.0f, 0.08f, 0.50f), 46f, 80);
+        emission.dust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(0xA0825F, 1.5f, seed ^ 0xD057,
+                        new Vec3(0.0, 0.03, 0.0), 0.03f),
+                disc(frame, 1.0f, 0.04f, 0.16f), 120f, 170);
+        emission.ember = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.ember(new Vec3(0.0, 0.42, 0.0), 0.05f),
+                disc(frame, 0.70f, 0.05f, 0.05f), 55f, 90);
+        emission.chunks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, ground),
+                        new Vec3(0.0, 0.24, 0.0), 0.08f),
+                disc(frame, 0.95f, 0.05f, 0.05f), 20f, 40);
+        return emission;
     }
 
     @Override
     public void submit(OxChargeRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
         float charge = state.chargeRatio;
         float age = state.age;
 
         float chargeEase = charge * charge * (3.0f - 2.0f * charge);
         float baseRadius = 1.2f + (chargeEase * 2.6f);
-        // Lifecycle (point 5): the charge visual used to appear at full alpha
-        // on frame one. It now builds in over the first 6 ticks.
+        // Lifecycle: the emission still builds in over the first 6 ticks,
+        // matching the bespoke fade in.
         float fadeIn = FxEnvelope.smoothstep(Math.min(1.0f, age / 6.0f));
-        float baseAlpha = (0.70f + (chargeEase * 0.30f)) * fadeIn;
-        float tremble = (float) Math.sin(age * 2.5f) * (0.02f + charge * 0.06f);
         float distScale = FxEnvelope.distScale(Math.sqrt(state.distanceToCameraSq));
-        long seed = state.seed;
+        float envelope = fadeIn * (0.25f + 0.75f * chargeEase) * distScale;
 
-        Random rng = new Random(seed);
-
-        // Levitating tumbling rock chunks: positions, float heights, spins.
-        int rockCount = FxEnvelope.segments(10 + (int) (charge * 8), distScale, 6); // 10 to 18 rocks near
-        float[] rockX = new float[rockCount];
-        float[] rockY = new float[rockCount];
-        float[] rockZ = new float[rockCount];
-        float[] rockH = new float[rockCount];
-        float[] rockW = new float[rockCount];
-        float[] rockSpin = new float[rockCount];
-        float[] rockTipX = new float[rockCount];
-        float[] rockTipZ = new float[rockCount];
-        for (int r = 0; r < rockCount; r++) {
-            double rockAngle = (r / (double) rockCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.4);
-            float rockDist = 0.6f + rng.nextFloat() * (baseRadius * 0.85f);
-
-            float rx = (float) Math.cos(rockAngle) * rockDist + (rng.nextFloat() - 0.5f) * tremble;
-            float rz = (float) Math.sin(rockAngle) * rockDist + (rng.nextFloat() - 0.5f) * tremble;
-
-            float floatPhase = age * 0.25f + r * 1.4f;
-            float ry = 0.08f + (chargeEase * 1.4f) * (0.5f + 0.5f * (float) Math.sin(floatPhase)) + (rng.nextFloat() * 0.2f * chargeEase);
-
-            float slabHeight = 0.25f + rng.nextFloat() * 0.35f + charge * 0.25f;
-            float slabWidth = 0.20f + rng.nextFloat() * 0.25f;
-
-            double spin = age * 0.55 + r * 2.1;
-            float leanMag = 0.15f + charge * 0.2f;
-            double leanAng = rockAngle + age * 0.4 + r * 1.3;
-
-            rockX[r] = rx;
-            rockY[r] = ry;
-            rockZ[r] = rz;
-            rockH[r] = slabHeight;
-            rockW[r] = slabWidth;
-            rockSpin[r] = (float) Math.toDegrees(spin);
-            rockTipX[r] = rx + (float) Math.cos(leanAng) * leanMag;
-            rockTipZ[r] = rz + (float) Math.sin(leanAng) * leanMag;
-        }
-
-        // Ascending heat tendrils above 25 percent charge: branch ribbons
-        // from a ground point spiraling in to a tip above the brace heart.
-        int tendrils = charge >= 0.25f ? 6 + (int) (charge * 6) : 0;
-        float[] tendrilFrom = new float[tendrils * 3];
-        float[] tendrilTo = new float[tendrils * 3];
-        for (int i = 0; i < tendrils; i++) {
-            double tAng = (i / (double) tendrils) * Math.PI * 2.0 + (age * 0.08);
-            float tDist = 0.4f + (float) (rng.nextDouble() * 0.8);
-            float tx1 = (float) Math.cos(tAng) * tDist;
-            float tz1 = (float) Math.sin(tAng) * tDist;
-            float tHeight = 0.5f + chargeEase * 1.5f;
-            tendrilFrom[i * 3] = tx1;
-            tendrilFrom[i * 3 + 1] = 0.05f;
-            tendrilFrom[i * 3 + 2] = tz1;
-            tendrilTo[i * 3] = tx1 * 0.22f;
-            tendrilTo[i * 3 + 1] = tHeight;
-            tendrilTo[i * 3 + 2] = tz1 * 0.22f;
-        }
-
-        float baseAlphaF = baseAlpha;
-        float distScaleF = distScale;
-        float colH = 0.35f + chargeEase * 2.4f;
-        float ringTwist = (float) Math.toRadians(age * 8.0f);
-
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // 1. Ground shatter: layered crack stars (magma base, hot core).
-            BespokeGeometry.crackStar(pose, buffer, seed, baseRadius * 0.95f,
-                0.95f, 0.25f, 0.02f, baseAlphaF * 0.95f, 1.0f, distScaleF);
-            BespokeGeometry.crackStar(pose, buffer, seed, baseRadius * 0.88f,
-                1.0f, 0.85f, 0.20f, baseAlphaF, 1.0f, distScaleF);
-
-            // 2. Compression rings: dark basalt lip outside, molten gold
-            // along the inner edge, both as low broken vortex bands.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB1A6L,
-                baseRadius * 0.97f, 0.03f, 0.08f, ringTwist,
-                0.55f, 0.16f, 0.02f, baseAlphaF * 0.85f, distScaleF);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB1A7L,
-                baseRadius * 0.905f, 0.045f, 0.095f, ringTwist,
-                1.0f, 0.78f, 0.18f, baseAlphaF * 0.95f, distScaleF);
-
-            // 3. Tapered heart of the brace: the shared vortex bands rising
-            // with the charge.
-            LayeredRender.drawVortexBands(pose, buffer, 0.30f, colH, age,
-                1.0f, 0.55f, 0.08f, baseAlphaF * 0.90f, distScaleF);
-
-            // 4. Molten cores of the levitating chunks.
-            for (int r = 0; r < rockCount; r++) {
-                BespokeGeometry.branch(pose, buffer, seed ^ (0xBE10L + r * 131L),
-                    new Vec3(rockX[r], rockY[r] + 0.02f, rockZ[r]),
-                    new Vec3(rockTipX[r], rockY[r] + rockH[r], rockTipZ[r]),
-                    0.07f,
-                    1.0f, 0.40f, 0.05f, baseAlphaF * 0.95f, 1.0f, distScaleF);
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level != null && envelope > 0.01f) {
+            Emission emission = emissions.get(state.seed);
+            if (emission == null || age < emission.lastAge - 1.0f) {
+                emission = buildEmission(level, state);
+                emissions.put(state.seed, emission);
+                if (emissions.size() > 64) emissions.clear();
             }
-
-            // 5. Ascending heat tendrils: edge pass and hot core pass.
-            for (int i = 0; i < tendrils; i++) {
-                Vec3 from = new Vec3(tendrilFrom[i * 3], tendrilFrom[i * 3 + 1], tendrilFrom[i * 3 + 2]);
-                Vec3 to = new Vec3(tendrilTo[i * 3], tendrilTo[i * 3 + 1], tendrilTo[i * 3 + 2]);
-                BespokeGeometry.branch(pose, buffer, seed ^ (0x7EADL + i * 137L),
-                    from, to, 0.13f,
-                    1.0f, 0.42f, 0.05f, baseAlphaF * 0.80f, 1.0f, distScaleF);
-                BespokeGeometry.branch(pose, buffer, seed ^ (0x7EAEL + i * 137L),
-                    from, new Vec3(to.x, to.y * 0.92f, to.z), 0.045f,
-                    1.0f, 0.92f, 0.40f, baseAlphaF * 0.95f, 1.0f, distScaleF);
+            emission.frame.center = new Vec3(state.wx, state.wy, state.wz);
+            emission.frame.radius = baseRadius;
+            emission.frame.columnHeight = 0.35f + chargeEase * 2.4f;
+            float delta = emission.lastAge < 0f ? 0.05f
+                    : Math.min(0.05f, Math.max(0.0f, (age - emission.lastAge) / 20.0f));
+            emission.lastAge = age;
+            emission.plasma.tick(delta, envelope);
+            emission.vapor.tick(delta, envelope);
+            emission.dust.tick(delta, envelope);
+            emission.chunks.tick(delta, envelope);
+            // Rising heat tendrils only exist above 25 percent charge, as before.
+            if (charge >= 0.25f) {
+                emission.ember.tick(delta, envelope);
             }
-        });
-
-        // Chunk bodies: squashed displaced domes tumbling on their own spins.
-        for (int r = 0; r < rockCount; r++) {
-            float domeRadius = Math.max(0.06f, rockW[r] * 0.5f);
-            float heightScale = rockH[r] / domeRadius;
-            long rockSeed = seed ^ (0x9A40L + r * 0x9E37L);
-            float tumble = (float) Math.sin(age * 0.4f + r * 1.3f) * 18.0f;
-            poseStack.pushPose();
-            poseStack.translate(rockX[r], rockY[r], rockZ[r]);
-            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(rockSpin[r])));
-            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(tumble)));
-            poseStack.scale(1.0f, heightScale, 1.0f);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.displacedDome(pose, buffer, rockSeed, domeRadius,
-                    0.25f, 0.18f, 0.12f, baseAlphaF, 1.0f, distScaleF);
-            });
-            poseStack.popPose();
         }
 
         super.submit(state, poseStack, collector, cameraState);

@@ -1,32 +1,28 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.AbyssalDomainEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * The Abyssal Tempest Domain: a storm volume that reads as weather, not a
- * spell circle. The bespoke pass rebuilds every piece on BespokeGeometry:
- * the dome is two displacedDomes (outer and inner, counter-seeded so the
- * shells never align), the whirlpool floor and rim bands are
- * brokenVortexBands turning on rotated poses, the sixteen perimeter spires
- * are tornRibbons stood on end and leaning inward, the opening at the top
- * is a small bright displacedDome, and the interior strikes are branch
- * bolts flashing on an eight tick cycle. The shared LayeredRender vortex
- * bands and anchor glow stay exactly as the spectacle standard set them.
- * The envelope runs a forty tick build and the entity's thirty tick fade
- * so the domain gathers and dissipates instead of popping.
+ * The Abyssal Tempest Domain as weather and cursed material, not a drawn
+ * volume. The no-shapes conversion removes the dome, bands, spires, and bolt
+ * geometry entirely: the domain volume is sampled as data and filled with
+ * darkness, smoke, curse plasma, and ground dust through the shared material
+ * emitters. A sparse shell source suggests the boundary with large vapor and
+ * plasma sprites, interior strikes are plasma emitted along seeded paths,
+ * and the bright opening at the top is a dense point emission. The envelope
+ * still runs the forty tick build and the entity's thirty tick fade, and the
+ * radius, colors, and lifecycle are unchanged.
  */
 public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, AbyssalDomainRenderer.AbyssalDomainRenderState> {
 
@@ -39,6 +35,7 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
         public float age = 0;
         public long seed = 0;
         public int fadeRemaining = -1;
+        public float lastEmitAge = -1f;
     }
 
     // Rendering stays camera relative: the domain must be visible from the
@@ -74,10 +71,11 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
     public void submit(AbyssalDomainRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
+
         float radius = state.radius;
-        long seed = state.seed;
-        // Lifecycle envelope: forty tick build, then the fade comes from the
-        // entity's own synced countdown once the item stops refreshing it.
+        int seed = (int) (state.seed ^ (state.seed >>> 32));
         float build = FxEnvelope.smoothstep(Math.min(1.0f, state.age / 40.0f));
         float fadeFrac;
         if (state.fadeRemaining < 0) {
@@ -87,134 +85,88 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
         }
         float alpha = build * fadeFrac;
         if (alpha <= 0.01f) return;
-        float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float ds = MaterialEmitters.distanceScale(center);
+        float env = alpha * ds;
+        float delta = emissionDelta(state, state.age);
         float age = state.age;
         float open = FxEnvelope.smoothstep(Math.min(1.0f, Math.max(0.0f, (age - 20.0f) / 40.0f)));
+        double height = radius * 1.7;
+        Vec3 volumeCenter = center.add(0, height * 0.30, 0);
 
-        RenderType glowType = KiRenderHelper.kiRenderType();
-        RenderType addType = KiRenderHelper.kiAdditiveType();
+        // The standing volume: darkness and smoke carry the storm body, with
+        // curse plasma motes drifting through it and dust creeping at ground.
+        emit(level, MaterialEmitters.Preset.darkness(0x16030C, 2.0f, seed + 11, Vec3.ZERO, 0.010f),
+            MaterialEmitters.sphereVolume(volumeCenter, radius * 0.95), 300f, delta, env);
+        emit(level, MaterialEmitters.Preset.smoke(0x2A0714, 2.4f, seed + 23, new Vec3(0, 0.010, 0), 0.010f),
+            MaterialEmitters.volume(volumeCenter, new Vec3(radius, height * 0.34, radius)), 180f, delta, env);
+        emit(level, MaterialEmitters.Preset.plasma(0xF20D33, 1.25f, seed + 37, Vec3.ZERO, 0.030f),
+            MaterialEmitters.sphereVolume(volumeCenter, radius * 0.92), 240f, delta, env);
+        emit(level, MaterialEmitters.Preset.plasma(0x8C1AF2, 1.05f, seed + 41, Vec3.ZERO, 0.030f),
+            MaterialEmitters.sphereVolume(volumeCenter, radius * 0.80), 150f, delta, env);
+        emit(level, MaterialEmitters.Preset.dust(0x6E625E, 1.15f, seed + 53, Vec3.ZERO, 0.020f),
+            MaterialEmitters.groundArea(center, radius * 1.18, center.y + 0.06), 120f, delta, env);
 
-        // ---------------------------------------------------------------
-        // Translucent pass: dome shells, whirlpool, rim, spires, bolts.
-        // ---------------------------------------------------------------
-        collector.submitCustomGeometry(poseStack, glowType, (pose, buffer) -> {
-            // DOUBLE DOME: two displaced shells, inner denser and violet,
-            // outer crimson and wider. The displacement is seeded, so the
-            // dome wall is storm-torn instead of a smooth bubble.
-            BespokeGeometry.displacedDome(pose, buffer, seed, radius,
-                0.55f, 0.02f, 0.10f, 0.28f, alpha, ds);
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0x1D3EL, radius * 0.93f,
-                0.45f, 0.02f, 0.65f, 0.38f, alpha, ds);
+        // The boundary is only suggested: sparse large vapor and plasma
+        // sprites sampled on the dome shell, never a drawn shell.
+        MaterialEmitters.Source shell = shellSource(center, radius, radius);
+        emit(level, MaterialEmitters.Preset.vapor(0x5A1230, 3.6f, seed + 67, Vec3.ZERO, 0.006f),
+            shell, 60f, delta, env);
+        emit(level, MaterialEmitters.Preset.plasma(0xD90D4D, 2.1f, seed + 71, Vec3.ZERO, 0.010f),
+            shell, 90f, delta, env);
+        emit(level, MaterialEmitters.Preset.darkness(0x0D0208, 3.0f, seed + 73, Vec3.ZERO, 0.006f),
+            shell, 60f, delta, env);
 
-            // THE OPENING: a small bright dome cap riding the dome's top
-            // point as the storm matures.
-            if (open > 0.01f) {
-                PoseStack.Pose cap = pose.copy();
-                cap.translate(0, radius, 0);
-                BespokeGeometry.displacedDome(cap, buffer, seed ^ 0xCA9L, radius * 0.25f,
-                    0.45f, 0.85f, 0.95f, 0.45f, alpha * open, ds);
+        // Interior strikes: plasma along seeded paths on the same eight tick
+        // flash cycle the branch bolts used.
+        int cycleIndex = (int) (age / 8.0f);
+        float boltFlash = (age % 8.0f) < 4.0f ? 1.0f - ((age % 8.0f) / 4.0f) * 0.4f : 0.0f;
+        if (boltFlash > 0.01f) {
+            java.util.Random boltRandom = new java.util.Random(state.seed + cycleIndex * 1000L);
+            for (int b = 0; b < 3; b++) {
+                float a1 = boltRandom.nextFloat() * (float) (Math.PI * 2.0);
+                float a2 = boltRandom.nextFloat() * (float) (Math.PI * 2.0);
+                Vec3 from = center.add(Math.cos(a1) * radius * 0.45f, radius * 0.75f, Math.sin(a1) * radius * 0.45f);
+                Vec3 to = center.add(Math.cos(a2) * radius * 0.20f, 0.2f, Math.sin(a2) * radius * 0.20f);
+                emit(level, MaterialEmitters.Preset.plasma(0xF24059, 1.15f, seed + cycleIndex * 131 + b * 17, Vec3.ZERO, 0.025f),
+                    MaterialEmitters.path(from, to, 0.0), 240f, delta, env * boltFlash);
             }
+        }
 
-            // STORM VORTEX BANDS: shared layered vortex language, same
-            // radius, height, age, color, and envelope as the spectacle
-            // pass (the toolkit now derives its own seeds from radius and
-            // height, so no seed argument remains).
-            LayeredRender.drawVortexBands(pose, buffer, radius * 1.05f, radius * 1.7f,
-                age, 0.85f, 0.05f, 0.30f, alpha * 0.9f, ds);
-            LayeredRender.drawAnchorGlow(pose, buffer, radius * 0.8f, 0.06f,
-                0.85f, 0.05f, 0.20f, alpha * 0.5f * open, ds);
+        // The opening and eye at the top: a bright dense point emission that
+        // strengthens as the storm matures.
+        if (open > 0.01f) {
+            Vec3 top = center.add(0, radius, 0);
+            emit(level, MaterialEmitters.Preset.plasma(0xDFF6FF, 1.8f, seed + 97, Vec3.ZERO, 0.020f),
+                MaterialEmitters.point(top), 120f, delta, env * open);
+            emit(level, MaterialEmitters.Preset.plasma(0x7303A6, 2.4f, seed + 101, Vec3.ZERO, 0.015f),
+                MaterialEmitters.point(top), 60f, delta, env * open);
+        }
+    }
 
-            // WHIRLPOOL FLOOR: four broken bands turning on rotated poses,
-            // shrinking and rising toward the center.
-            float[] fracs = {1.00f, 0.82f, 0.64f, 0.46f};
-            float[][] palette = {
-                {1.00f, 0.18f, 0.30f},
-                {0.85f, 0.35f, 0.90f},
-                {0.55f, 0.05f, 0.75f},
-                {0.30f, 0.55f, 0.95f}
-            };
-            for (int b = 0; b < 4; b++) {
-                PoseStack.Pose bandPose = pose.copy();
-                bandPose.rotate(Axis.YP.rotation(-age * (0.05f + b * 0.02f)));
-                BespokeGeometry.brokenVortexBand(bandPose, buffer, seed + b * 17L,
-                    radius * fracs[b], 0.05f + b * 0.06f, 0.17f + b * 0.06f, -(0.9f + b * 0.35f),
-                    palette[b][0], palette[b][1], palette[b][2], alpha * 0.85f, ds);
-            }
+    /** Points sampled on the dome shell surface. Data only; draws nothing. */
+    private static MaterialEmitters.Source shellSource(Vec3 center, double radius, double top) {
+        return random -> {
+            double yFrac = random.nextDouble();
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = radius * Math.sqrt(Math.max(0.0, 1.0 - yFrac * yFrac)) * (0.94 + random.nextDouble() * 0.06);
+            return new MaterialEmitters.Sample(new Vec3(
+                center.x + Math.cos(ang) * rr, center.y + yFrac * top, center.z + Math.sin(ang) * rr), Vec3.ZERO);
+        };
+    }
 
-            // MID-HEIGHT WIND RINGS: slow counter-turning broken bands.
-            PoseStack.Pose midA = pose.copy();
-            midA.rotate(Axis.YP.rotation(age * 0.06f));
-            BespokeGeometry.brokenVortexBand(midA, buffer, seed ^ 0xA1DAL, radius * 1.02f,
-                3.6f, 4.5f, 0.9f, 0.95f, 0.05f, 0.20f, alpha * 0.55f, ds);
-            PoseStack.Pose midB = pose.copy();
-            midB.rotate(Axis.YP.rotation(-age * 0.05f));
-            BespokeGeometry.brokenVortexBand(midB, buffer, seed ^ 0xB1DBL, radius * 1.08f,
-                radius * 0.42f, radius * 0.42f + 0.9f, -0.9f, 0.45f, 0.02f, 0.65f, alpha * 0.55f, ds);
+    private static void emit(ClientLevel level, MaterialEmitters.Preset preset, MaterialEmitters.Source source,
+                             float ratePerSecond, float delta, float envelope) {
+        if (level == null || envelope <= 0.01f || ratePerSecond <= 0f) return;
+        int budget = Math.max(1, Math.round(ratePerSecond));
+        new MaterialEmitters.Emitter(level, preset, source, ratePerSecond, budget).tick(delta, envelope);
+    }
 
-            // GROUND RIM: two broken bands marking the domain's reach.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xE1A1L, radius * 1.25f,
-                0.0f, 0.3f, 0.8f, 0.68f, 0.02f, 0.14f, alpha * 0.5f, ds);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xE1A2L, radius * 1.5f,
-                0.0f, 0.15f, -0.6f, 0.35f, 0.02f, 0.55f, alpha * 0.4f, ds);
-
-            // PERIMETER SPIRES: sixteen torn ribbons stood on end, leaning
-            // inward over the domain, breathing with the storm.
-            int spires = 16;
-            for (int i = 0; i < spires; i++) {
-                float ang = (float) ((i / (double) spires) * Math.PI * 2.0);
-                float sx = (float) Math.cos(ang) * radius * 1.02f;
-                float sz = (float) Math.sin(ang) * radius * 1.02f;
-                float spireMul = 0.95f + 0.25f * (float) Math.sin(seed * 0.13f + i * 2.39996f);
-                float top = radius * 1.15f * spireMul * (1.0f + 0.05f * (float) Math.sin(age * 1.5f + i));
-                PoseStack.Pose spire = pose.copy();
-                spire.translate(sx, 0.2f, sz);
-                spire.rotate(Axis.YP.rotation(-ang));
-                spire.rotate(Axis.ZP.rotation((float) (Math.PI / 2.0 + 0.18)));
-                BespokeGeometry.tornRibbon(spire, buffer, seed + i * 389L, Math.max(0.5f, top - 0.2f), 0.55f, 0.35f,
-                    0.25f, 0.02f, 0.35f, 0.55f, alpha, ds);
-            }
-
-            // INTERIOR BOLTS: branch strikes flashing on an eight tick
-            // cycle, seeded per cycle so the pattern never repeats within
-            // a cast.
-            int cycleIndex = (int) (age / 8.0f);
-            float boltFlash = (age % 8.0f) < 4.0f ? 1.0f - ((age % 8.0f) / 4.0f) * 0.4f : 0.0f;
-            if (boltFlash > 0.01f) {
-                for (int b = 0; b < 3; b++) {
-                    long boltSeed = seed + cycleIndex * 1000L + b * 7L;
-                    BespokeGeometry.Rng brng = new BespokeGeometry.Rng(boltSeed);
-                    float a1 = brng.nextFloat() * (float) (Math.PI * 2.0);
-                    float a2 = brng.nextFloat() * (float) (Math.PI * 2.0);
-                    Vec3 from = new Vec3(Math.cos(a1) * radius * 0.45f, radius * 0.75f, Math.sin(a1) * radius * 0.45f);
-                    Vec3 to = new Vec3(Math.cos(a2) * radius * 0.2f, 0.2f, Math.sin(a2) * radius * 0.2f);
-                    BespokeGeometry.branch(pose, buffer, boltSeed, from, to, 0.22f,
-                        0.95f, 0.25f, 0.45f, alpha * boltFlash, 1.0f, ds);
-                }
-            }
-        });
-
-        // ---------------------------------------------------------------
-        // Additive pass: the funnel halo, rim glow, and the storm's eye.
-        // ---------------------------------------------------------------
-        collector.submitCustomGeometry(poseStack, addType, (pose, buffer) -> {
-            // Funnel: two counter-winding broken bands rising to the top.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xF011L, radius * 0.80f,
-                radius * 0.55f, radius * 1.05f, -age * 0.35f, 0.42f, 0.01f, 0.57f, alpha * 0.35f, ds);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xF022L, radius * 0.62f,
-                radius * 0.60f, radius * 1.10f, age * 0.30f, 0.95f, 0.40f, 0.50f, alpha * 0.25f, ds);
-
-            // Rim glow echo.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xE1A1L, radius * 1.18f,
-                0.0f, 0.2f, 0.8f, 0.55f, 0.03f, 0.15f, alpha * 0.30f, ds);
-
-            // The eye: a bright small dome at the dome's top point.
-            PoseStack.Pose eyePose = pose.copy();
-            eyePose.translate(0, radius, 0);
-            BespokeGeometry.displacedDome(eyePose, buffer, seed ^ 0xE7E9L, radius * 0.18f,
-                0.70f, 0.90f, 1.0f, 0.50f, alpha, ds);
-
-            LayeredRender.drawAnchorGlow(pose, buffer, radius * 1.1f, 0.05f,
-                0.85f, 0.05f, 0.20f, alpha * 0.35f, ds);
-        });
+    private static float emissionDelta(AbyssalDomainRenderState state, float age) {
+        float prev = state.lastEmitAge;
+        state.lastEmitAge = age;
+        if (prev < 0f || age < prev) return 1.0f / 60.0f;
+        return Math.max(0.001f, Math.min(0.05f, (age - prev) / 20.0f));
     }
 }

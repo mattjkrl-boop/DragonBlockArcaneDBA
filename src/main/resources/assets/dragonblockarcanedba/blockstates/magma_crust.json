@@ -1,1 +1,55 @@
-{"variants":{"stage=0":{"model":"dragonblockarcanedba:block/magma_crust_stage0"},"stage=1":{"model":"dragonblockarcanedba:block/magma_crust_stage1"},"stage=2":{"model":"dragonblockarcanedba:block/magma_crust_stage2"}}}
+{
+  "variants": {
+    "stage=0": [
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage0"
+      },
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage0",
+        "y": 90
+      },
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage0",
+        "y": 180
+      },
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage0",
+        "y": 270
+      }
+    ],
+    "stage=1": [
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage1"
+      },
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage1",
+        "y": 90
+      },
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage1",
+        "y": 180
+      },
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage1",
+        "y": 270
+      }
+    ],
+    "stage=2": [
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage2"
+      },
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage2",
+        "y": 90
+      },
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage2",
+        "y": 180
+      },
+      {
+        "model": "dragonblockarcanedba:block/magma_crust_stage2",
+        "y": 270
+      }
+    ]
+  }
+}

@@ -1,45 +1,47 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.ValorFieldEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Entity Renderer for Grand Sword's Valor Field in Minecraft 26.2.
- * Bespoke pass: every shape comes from BespokeGeometry builders or the
- * shared LayeredRender blocks, with fixed theme seeds (the field's radius
- * never changes, so its silhouette is identical on every client, the same
- * convention LayeredRender uses).
- * - displacedDome shell in valor gold with a pale inner shell standing in
- *   for the old three-stop gradient, squashed by the spawn rise factor
- * - LayeredRender.drawVortexBands for the interior energy banding
- * - brokenVortexBand ground mandala rings, lip band, and tilted orbitals
- * - crackStar for the eight ground rays
- * - Crossed shardFans as stasis cages around suspended projectiles
+ * No-shapes conversion: this renderer draws no geometry. The field reads
+ * as a living volume of valor plasma motes, sparse large vapor sprites
+ * sampled at its boundary, ground dust across its base, and steel spark
+ * accents. Suspended projectiles are marked by dense plasma motes around
+ * their actual positions instead of a cage. The field radius, rise, fade
+ * out, buffs, pressure, and projectile stasis are unchanged; only the
+ * presentation moved to material emission.
  */
 public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFieldRenderer.ValorFieldRenderState> {
 
-    // Fixed theme seeds: a Valor Field always has the same radius, so a
-    // constant seed keeps the dome silhouette stable and client-identical.
+    // Fixed theme seeds: a Valor Field always has the same radius, so these
+    // keep each material stream's variation stable and client-identical.
     private static final long SEED_DOME = 0xD09E5L;
     private static final long SEED_RING_OUTER = 0xB111L;
     private static final long SEED_RING_INNER = 0xB222L;
     private static final long SEED_RAYS = 0xBA75L;
     private static final long SEED_LIP = 0x1115L;
+
+    private final Map<String, Stream> streams = new HashMap<>();
 
     public ValorFieldRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -49,6 +51,7 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
         public float radius = 9.0f;
         public float ageInTicks = 0;
         public float fadeStart = -1;
+        public int entityId = -1;
         public final List<Vec3> suspendedRelPositions = new ArrayList<>();
     }
 
@@ -73,11 +76,12 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
         state.radius = ValorFieldEntity.FIELD_RADIUS;
         state.ageInTicks = entity.tickCount + partialTicks;
         state.fadeStart = entity.getFadeStart();
+        state.entityId = entity.getId();
 
         state.suspendedRelPositions.clear();
-        // Cages only around projectiles the field actually suspended: the ids
+        // Motes only around projectiles the field actually suspended: the ids
         // come from the entity's own suspended map, synced to the client.
-        // This used to cage any projectile moving slowly inside the radius,
+        // This used to mark any projectile moving slowly inside the radius,
         // including ones the field never touched.
         java.util.Set<Integer> suspendedIds = entity.getSuspendedIds();
         if (suspendedIds.isEmpty()) return;
@@ -102,124 +106,120 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
 
     @Override
     public void submit(ValorFieldRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
         float radius = state.radius;
         float age = state.ageInTicks;
-        // Spawn fade-in over the first 10 ticks: the 9 block dome used to appear
-        // at full strength in a single tick when cast.
+        // Spawn fade-in over the first 10 ticks, matching the field's rise.
         float spawnIn = Math.min(1.0f, age / 10.0f);
         float rise = smooth(spawnIn);
-        // Fade out over FADE_OUT_TICKS once the entity starts dissipating, so
-        // the dome leaves the same way it arrived instead of vanishing in one
-        // tick on release, Ki exhaustion, death, or disconnect.
+        // Fade out over FADE_OUT_TICKS once the entity starts dissipating.
         float fadeOut = 1.0f;
         if (state.fadeStart >= 0) {
             fadeOut = 1.0f - smooth(Math.min(1.0f,
                 (age - state.fadeStart) / (float) ValorFieldEntity.FADE_OUT_TICKS));
         }
         float pulse = (0.88f + 0.12f * (float) Math.sin(age * 0.18f)) * rise * fadeOut;
-        float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
-            cameraState, state.x, state.y, state.z);
-        // Same dome height formula as the spectacle pass: the dome grows out
-        // of the ground over the spawn rise instead of snapping to full size.
-        float domeHeight = radius * 1.05f * (0.22f + 0.78f * rise);
-        float heightScale = 1.05f * (0.22f + 0.78f * rise);
 
-        poseStack.pushPose();
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level != null && pulse > 0.01f) {
+            final Vec3 center = new Vec3(state.x, state.y, state.z);
+            float distScale = MaterialEmitters.distanceScale(center);
+            float envelope = pulse * distScale;
+            // Same height profile as the old field volume: it grows out of
+            // the ground over the spawn rise instead of snapping to full size.
+            final float domeHeight = radius * 1.05f * (0.22f + 0.78f * rise);
+            String base = state.entityId + ":";
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // 0. Ground anchor glow (shared LayeredRender block): a soft gold
-            // disc grounding the dome to the world at its base.
-            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawAnchorGlow(pose, buffer,
-                radius * 0.95f, 0.06f, 1.0f, 0.85f, 0.20f, 0.35f * pulse, distScale);
+            emit(level, base + "plasma",
+                MaterialEmitters.Preset.plasma(0xFFD833, 1.50f, (int) SEED_DOME,
+                    new Vec3(0.0, 0.030, 0.0), 0.016f),
+                MaterialEmitters.sphereVolume(center.add(0.0, domeHeight * 0.45, 0.0), radius * 0.88),
+                320f, 400, age, envelope);
+            emit(level, base + "boundary",
+                MaterialEmitters.Preset.vapor(0xFFE9A8, 4.6f, (int) SEED_LIP,
+                    Vec3.ZERO, 0.006f),
+                random -> sampleBoundary(random, center, radius, domeHeight),
+                70f, 96, age, envelope * 0.82f);
+            emit(level, base + "dust",
+                MaterialEmitters.Preset.dust(0x8A7D68, 1.30f, (int) SEED_RAYS,
+                    new Vec3(0.0, 0.010, 0.0), 0.012f),
+                MaterialEmitters.groundArea(center, radius * 0.98, center.y + 0.07),
+                95f, 140, age, envelope * 0.86f);
+            emit(level, base + "sparks",
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.030f),
+                MaterialEmitters.sphereVolume(center.add(0.0, 1.0, 0.0), radius * 0.80),
+                48f, 72, age, envelope * 0.72f);
 
-            // 1. Dome shell: displacedDome squashed by the rise factor, plus
-            // a paler inner shell so the shell still reads two-tone.
-            PoseStack domeStack = new PoseStack();
-            domeStack.last().pose().set(pose.pose());
-            domeStack.last().normal().set(pose.normal());
-            domeStack.translate(0.0f, 0.1f, 0.0f);
-            domeStack.scale(1.0f, heightScale, 1.0f);
-            BespokeGeometry.displacedDome(domeStack.last(), buffer, SEED_DOME, radius,
-                1.0f, 0.88f, 0.25f, 0.30f, pulse, distScale);
-            BespokeGeometry.displacedDome(domeStack.last(), buffer, SEED_DOME ^ 0x1L, radius * 0.97f,
-                1.0f, 0.97f, 0.70f, 0.13f, pulse, distScale);
-
-            // 2. Interior energy banding (shared LayeredRender block): three
-            // stacked broken bands twisting up the inside of the shell,
-            // standing in for the old eight meridian ribs.
-            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawVortexBands(pose, buffer,
-                radius * 0.92f, domeHeight * 0.92f, age,
-                1.0f, 0.88f, 0.25f, pulse, distScale);
-
-            // 3. Ground sanctum mandala: two counter-twisting broken rings
-            // (twist rates match the old 6 and -12 degrees per tick rings).
-            BespokeGeometry.brokenVortexBand(pose, buffer, SEED_RING_OUTER,
-                radius * 0.98f, 0.05f, 0.30f, age * 0.10f,
-                1.0f, 0.85f, 0.20f, 0.75f * pulse, distScale);
-            BespokeGeometry.brokenVortexBand(pose, buffer, SEED_RING_INNER,
-                radius * 0.62f, 0.08f, 0.26f, -age * 0.20f,
-                1.0f, 0.95f, 0.40f, 0.82f * pulse, distScale);
-
-            // Eight ground rays: one seeded crack star at field radius.
-            BespokeGeometry.crackStar(pose, buffer, SEED_RAYS, radius,
-                1.0f, 0.90f, 0.30f, 0.62f, pulse, distScale);
-
-            // Lip band at 45 percent of the dome height, as before.
-            float lipY = 0.1f + domeHeight * 0.45f;
-            BespokeGeometry.brokenVortexBand(pose, buffer, SEED_LIP,
-                radius * 0.88f, lipY - 0.10f, lipY + 0.10f, age * 0.06f,
-                1.0f, 0.96f, 0.62f, 0.80f * pulse, distScale);
-
-            // 4. Dual tilted orbital rings, plus and minus 35 degrees,
-            // precessing in opposite directions as before.
-            drawOrbital(pose, buffer, radius, 35.0f, age * 0.31f,
-                1.0f, 0.90f, 0.30f, pulse, distScale);
-            drawOrbital(pose, buffer, radius, -35.0f, -age * 0.31f,
-                1.0f, 0.95f, 0.40f, pulse, distScale);
-
-            // 5. Stasis cages: crossed shard fans around each suspended
-            // projectile, seeded from its synced relative position so every
-            // client draws the same cage.
-            for (Vec3 relPos : state.suspendedRelPositions) {
-                float sx = (float) relPos.x;
-                float sy = (float) relPos.y;
-                float sz = (float) relPos.z;
-                long cageSeed = ((long) (sx * 1000.0f) * 73856093L)
-                    ^ ((long) (sy * 1000.0f) * 19349663L)
-                    ^ ((long) (sz * 1000.0f) * 83492791L);
-                PoseStack cageStack = new PoseStack();
-                cageStack.last().pose().set(pose.pose());
-                cageStack.last().normal().set(pose.normal());
-                cageStack.translate(sx, sy, sz);
-                BespokeGeometry.shardFan(cageStack.last(), buffer, cageSeed, 0.70f,
-                    1.0f, 0.88f, 0.20f, 0.85f * pulse, 1.0f, distScale);
-                cageStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(180.0f)));
-                BespokeGeometry.shardFan(cageStack.last(), buffer, cageSeed, 0.70f,
-                    1.0f, 0.88f, 0.20f, 0.85f * pulse, 1.0f, distScale);
+            if (!state.suspendedRelPositions.isEmpty()) {
+                final List<Vec3> suspended = state.suspendedRelPositions;
+                emit(level, base + "stasis",
+                    MaterialEmitters.Preset.plasma(0xFFF3B0, 1.40f, (int) SEED_RING_INNER,
+                        Vec3.ZERO, 0.020f),
+                    random -> sampleSuspended(random, center, suspended),
+                    135f, 180, age, envelope);
             }
-        });
+        }
 
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    /**
-     * Pose glue only: tilts one brokenVortexBand into an orbital ring at
-     * head height, then calls the builder. Emits no vertices of its own.
-     */
-    private static void drawOrbital(PoseStack.Pose pose, com.mojang.blaze3d.vertex.VertexConsumer buffer,
-                                    float radius, float tiltDeg, float twist,
-                                    float r, float g, float b, float envelope, float distScale) {
-        PoseStack orbital = new PoseStack();
-        orbital.last().pose().set(pose.pose());
-        orbital.last().normal().set(pose.normal());
-        orbital.translate(0.0f, 1.0f, 0.0f);
-        orbital.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(tiltDeg)));
-        BespokeGeometry.brokenVortexBand(orbital.last(), buffer, SEED_RING_OUTER ^ (long) tiltDeg,
-            radius * 0.96f, -0.12f, 0.12f, twist,
-            r, g, b, 0.68f * envelope, distScale);
+    private static MaterialEmitters.Sample sampleBoundary(RandomSource random, Vec3 center,
+                                                          float radius, float domeHeight) {
+        double y = random.nextDouble();
+        double ang = random.nextDouble() * Math.PI * 2.0;
+        double flat = Math.sqrt(Math.max(0.0, 1.0 - y * y)) * radius * (0.90 + 0.10 * random.nextDouble());
+        Vec3 pos = new Vec3(
+            center.x + Math.cos(ang) * flat,
+            center.y + 0.10 + y * domeHeight * 0.92,
+            center.z + Math.sin(ang) * flat);
+        return new MaterialEmitters.Sample(pos, Vec3.ZERO);
+    }
+
+    private static MaterialEmitters.Sample sampleSuspended(RandomSource random, Vec3 center,
+                                                           List<Vec3> suspendedRelPositions) {
+        Vec3 rel = suspendedRelPositions.get(random.nextInt(suspendedRelPositions.size()));
+        Vec3 pos = center.add(rel).add(
+            (random.nextDouble() * 2.0 - 1.0) * 0.72,
+            (random.nextDouble() * 2.0 - 1.0) * 0.72,
+            (random.nextDouble() * 2.0 - 1.0) * 0.72);
+        return new MaterialEmitters.Sample(pos, Vec3.ZERO);
+    }
+
+    private void emit(ClientLevel level, String key, MaterialEmitters.Preset preset,
+                      MaterialEmitters.Source source, float ratePerSecond, int budgetPerSecond,
+                      float age, float envelope) {
+        if (envelope <= 0.01f) return;
+        long now = System.nanoTime();
+        streams.entrySet().removeIf(entry -> now - entry.getValue().lastSeenNanos > 30_000_000_000L);
+        Stream stream = streams.computeIfAbsent(key, ignored -> new Stream());
+        if (stream.emitter == null || stream.level != level) {
+            stream.emitter = new MaterialEmitters.Emitter(level, preset, stream.source, ratePerSecond, budgetPerSecond);
+            stream.level = level;
+            stream.lastAge = Float.NaN;
+        }
+        stream.source.delegate = source;
+        float delta = Float.isNaN(stream.lastAge) || age < stream.lastAge
+            ? 1.0f / 60.0f
+            : Math.min(0.10f, Math.max(0.0f, (age - stream.lastAge) / 20.0f));
+        stream.lastAge = age;
+        stream.lastSeenNanos = now;
+        stream.emitter.tick(delta, envelope);
+    }
+
+    private static final class Stream {
+        private final MutableSource source = new MutableSource();
+        private MaterialEmitters.Emitter emitter;
+        private ClientLevel level;
+        private float lastAge = Float.NaN;
+        private long lastSeenNanos;
+    }
+
+    private static final class MutableSource implements MaterialEmitters.Source {
+        private MaterialEmitters.Source delegate = MaterialEmitters.point(Vec3.ZERO);
+
+        @Override
+        public MaterialEmitters.Sample sample(RandomSource random) {
+            return delegate.sample(random);
+        }
     }
 
     private static float smooth(float t) {

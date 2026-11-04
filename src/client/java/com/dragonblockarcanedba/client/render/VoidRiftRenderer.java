@@ -1,32 +1,35 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.VoidRiftEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Void Rift in Minecraft 26.2.
- * Bespoke pass: the renderer no longer hand-builds its tear from polygon
- * cuts, arc bands and halo fans. The tear body is two nested
- * BespokeGeometry displaced domes (a near-black throat dome recessed
- * behind a violet shell dome, both noise-displaced so no two clients
- * disagree: the seed is the entity UUID), the accretion bands are broken
- * vortex bands with seeded gaps, the back halo is a jittered glow fan,
- * the seam is a torn ribbon, the lip flare is two torn ribbons trailing
- * off the mouth, and the crystal shards are shard fans planted along the
- * lips. The fade-in envelope, the implosion alpha choreography (body
- * first, then rim, then seam, shards collapsing earliest) and the
- * distance segment scaling are unchanged from the spectacle pass.
+ * No-shapes pass: the tear is no longer drawn. The billboard plane, the
+ * tall mouth proportions, and the implosion choreography survive only as
+ * emission data. Void plasma streams inward across the mouth plane with a
+ * velocity toward the core, darkness fills the throat volume, soul wisps
+ * ride the rim with a tangential accretion drift, sparse vapor suggests
+ * the old back halo, the seven lip crystal anchors shed soul plasma as
+ * they are sucked toward the throat, and at peak collapse a white plasma
+ * seam burns down the center column. The fade-in envelope, the implosion
+ * alpha windows (body first, then rim, then seam, shards collapsing
+ * earliest), and the distance scaling are unchanged from the spectacle
+ * pass, and the seed is still the entity UUID.
  */
 public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRenderer.RiftRenderState> {
     private static final int SHARDS = 7;
@@ -72,10 +75,112 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         state.ez = entity.getZ();
     }
 
+    /** Per-entity emission streams, keyed by the entity seed. Emission points are data only. */
+    private static final class Streams {
+        final ClientLevel level;
+        final MaterialEmitters.Emitter halo;
+        final MaterialEmitters.Emitter inward;
+        final MaterialEmitters.Emitter throat;
+        final MaterialEmitters.Emitter rim;
+        final MaterialEmitters.Emitter seam;
+        final MaterialEmitters.Emitter shards;
+        long lastNanos = 0L;
+        long lastSeenNanos = 0L;
+        Vec3 center = Vec3.ZERO;
+        Vec3 right = new Vec3(1, 0, 0);
+        Vec3 up = new Vec3(0, 1, 0);
+        Vec3 view = new Vec3(0, 0, 1);
+        float radius = 2.5f;
+        float halfH = 2.8f;
+        float bellyX = 1.4f;
+        float depthBase = 0.7f;
+        float bandScale = 1f;
+        float suck = 0.35f;
+        final float[] shardX = new float[SHARDS];
+        final float[] shardY = new float[SHARDS];
+        final float[] shardZ = new float[SHARDS];
+
+        private Vec3 towardCenter(Vec3 p, double speed) {
+            Vec3 d = center.subtract(p);
+            double len = d.length();
+            return len < 1e-4 ? Vec3.ZERO : d.scale(speed / len);
+        }
+
+        Streams(ClientLevel level, long seed, float radius) {
+            this.level = level;
+            int s = (int) seed;
+            float plasmaScale = Math.min(radius * 1.1f, 12f);
+            float darkScale = Math.min(radius * 1.8f, 16f);
+            float soulScale = Math.min(radius * 0.8f, 10f);
+            this.halo = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0x7305D9, Math.min(radius * 2.0f, 18f), s ^ 0x11, Vec3.ZERO, 0.01f),
+                random -> {
+                    double ang = random.nextDouble() * Math.PI * 2.0;
+                    double rr = radius * 1.55 * Math.sqrt(random.nextDouble());
+                    Vec3 p = center.add(right.scale(Math.cos(ang) * rr)).add(up.scale(Math.sin(ang) * rr))
+                        .add(view.scale((random.nextDouble() * 2.0 - 1.0) * depthBase * 1.4));
+                    return new MaterialEmitters.Sample(p, Vec3.ZERO);
+                }, 40f, 48);
+            this.inward = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0x800DE0, plasmaScale, s ^ 0x21, Vec3.ZERO, 0.008f),
+                random -> {
+                    double ang = random.nextDouble() * Math.PI * 2.0;
+                    double rr = 0.75 + 0.25 * random.nextDouble();
+                    Vec3 p = center.add(right.scale(Math.cos(ang) * bellyX * 2.2 * rr))
+                        .add(up.scale(Math.sin(ang) * halfH * 1.15 * rr))
+                        .add(view.scale((random.nextDouble() * 2.0 - 1.0) * depthBase * 0.5));
+                    return new MaterialEmitters.Sample(p, towardCenter(p, suck));
+                }, 160f, 190);
+            this.throat = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.darkness(0x05000A, darkScale, s ^ 0x31, Vec3.ZERO, 0.006f),
+                random -> {
+                    Vec3 p = center.add(right.scale((random.nextDouble() * 2.0 - 1.0) * bellyX * 0.94))
+                        .add(up.scale((random.nextDouble() * 2.0 - 1.0) * halfH * 0.97))
+                        .add(view.scale((random.nextDouble() * 2.0 - 1.0) * depthBase * 0.3));
+                    return new MaterialEmitters.Sample(p, towardCenter(p, 0.05));
+                }, 80f, 90);
+            this.rim = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.soul(0x9905F2, soulScale, s ^ 0x41, Vec3.ZERO, 0.008f),
+                random -> {
+                    double ang = random.nextDouble() * Math.PI * 2.0;
+                    Vec3 p = center.add(right.scale(Math.cos(ang) * bellyX * bandScale * 1.16))
+                        .add(up.scale(Math.sin(ang) * halfH * bandScale * 1.05))
+                        .add(view.scale((random.nextDouble() * 2.0 - 1.0) * depthBase * 0.4));
+                    Vec3 tangent = right.scale(-Math.sin(ang)).add(up.scale(Math.cos(ang))).scale(0.25);
+                    return new MaterialEmitters.Sample(p, tangent.add(towardCenter(p, 0.05)));
+                }, 120f, 140);
+            this.seam = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, Math.min(radius * 0.55f, 7f), s ^ 0x51, Vec3.ZERO, 0.005f),
+                random -> {
+                    double t = random.nextDouble() * 2.0 - 1.0;
+                    Vec3 p = center.add(up.scale(t * halfH * 0.94))
+                        .add(right.scale((random.nextDouble() * 2.0 - 1.0) * radius * 0.045));
+                    return new MaterialEmitters.Sample(p, Vec3.ZERO);
+                }, 100f, 120);
+            this.shards = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.soul(0x9405F0, Math.min(radius * 0.9f, 9f), s ^ 0x61, Vec3.ZERO, 0.01f),
+                random -> {
+                    int i = random.nextInt(SHARDS);
+                    Vec3 p = center.add(right.scale(shardX[i])).add(up.scale(shardY[i]))
+                        .add(view.scale(shardZ[i] + (random.nextDouble() * 2.0 - 1.0) * radius * 0.02));
+                    return new MaterialEmitters.Sample(p, towardCenter(p, suck * 0.6));
+                }, 70f, 84);
+        }
+    }
+
+    private final Map<Long, Streams> streams = new HashMap<>();
+
     @Override
     public void submit(RiftRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float radius = state.radius;
         if (radius <= 0.05f) {
+            streams.remove(state.seed);
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
+
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
             super.submit(state, poseStack, collector, cameraState);
             return;
         }
@@ -89,14 +194,14 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
                 (state.age - state.implodeStartTick) / (float) VoidRiftEntity.IMPLOSION_TICKS));
         }
         float eased = ease(implodeT);
-        float twistEnv = eased * eased;
         float fade = state.isImploding ? (1.0f - implodeT) : env;
-        // Distance scaling: layered alpha fades with the square root of the
-        // toolkit's distance factor, and the builders step their segment
-        // counts down on the same factor.
-        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
+        // Distance scaling: the envelope fades with the square root of the
+        // toolkit's distance factor, as the layered geometry version did.
+        Vec3 center = new Vec3(state.ex, state.ey, state.ez);
+        float ds = MaterialEmitters.distanceScale(center);
         fade *= (float) Math.sqrt(Math.max(0.05f, ds));
         if (fade <= 0.01f && !state.isImploding) {
+            streams.remove(state.seed);
             super.submit(state, poseStack, collector, cameraState);
             return;
         }
@@ -126,155 +231,75 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         float bellyX = belly * open;
         float depthBase = radius * 0.28f;
         float bandScale = state.isImploding ? (1.0f - 0.55f * eased) : (0.82f + 0.18f * eased);
-        float twistDeg = state.isImploding ? (float) (42.0 * twistEnv)
-            : (float) (5.0 * Math.sin(state.age * 0.13f));
-        long seed = state.seed;
         float age = state.age;
-        // Final snapshots for the geometry lambdas below; fade and the
-        // choreography alphas were reassigned above, so they are not
-        // effectively final in their own names.
-        final float fadeF = fade;
-        final float bodyAF = bodyA;
-        final float rimAF = rimA;
-        final float seamAF = seamA;
-        final float shardAF = shardA;
-        RenderType renderType = KiRenderHelper.kiRenderType();
 
-        poseStack.pushPose();
-        // Billboard: the tear faces the camera, standing upright in world
-        // space. The quaternion goes through a rotation matrix rather than
-        // mulPose(Quaternionf), which 26.3 removed; same rotation, both jars.
+        Streams found = streams.get(state.seed);
+        if (found == null || found.level != level) {
+            found = new Streams(level, state.seed, radius);
+            streams.put(state.seed, found);
+        }
+        final Streams s = found;
+        long now = System.nanoTime();
+        float delta = s.lastNanos == 0L ? 1f / 60f : Math.min(0.05f, (now - s.lastNanos) / 1_000_000_000f);
+        s.lastNanos = now;
+        s.lastSeenNanos = now;
+        streams.values().removeIf(other -> other != s && now - other.lastSeenNanos > 4_000_000_000L);
+
+        s.center = center;
+        // Billboard plane basis in world space, the same conjugate
+        // orientation pattern SkyCracksRenderer uses for its plane.
         if (cameraState.orientation != null) {
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(new org.joml.Quaternionf(cameraState.orientation)));
+            Quaternionf orientation = new Quaternionf(cameraState.orientation).conjugate();
+            Vector3f bx = orientation.transform(new Vector3f(1, 0, 0));
+            Vector3f by = orientation.transform(new Vector3f(0, 1, 0));
+            Vector3f bz = orientation.transform(new Vector3f(0, 0, 1));
+            s.right = new Vec3(bx.x, bx.y, bx.z);
+            s.up = new Vec3(by.x, by.y, by.z);
+            s.view = new Vec3(bz.x, bz.y, bz.z);
         }
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(twistDeg)));
+        s.radius = radius;
+        s.halfH = halfH;
+        s.bellyX = Math.max(0.02f, bellyX);
+        s.depthBase = depthBase;
+        s.bandScale = bandScale;
+        s.suck = 0.35f + eased * 0.95f;
 
-        // Back halo: a jittered glow fan in the tear plane, behind the
-        // throat, at the old halo's radius and alpha. The builder's fan
-        // lies in the XZ plane, so one X rotation stands it up; its y
-        // parameter becomes depth after the rotation.
+        // Lip crystal anchors: the old shard layout math, kept as emission
+        // placement data. The anchors hug the lips, breathe with the tear,
+        // and get sucked toward the throat as the collapse takes them.
+        float shrink = state.isImploding ? (1.0f - 0.9f * eased) : 1.0f;
+        for (int i = 0; i < SHARDS; i++) {
+            float t = 0.18f + 0.64f * (i / (float) (SHARDS - 1));
+            boolean left = (i & 1) == 0;
+            float side = left ? -1.0f : 1.0f;
+            float slim = 0.72f + 0.28f * (float) Math.sin(t * Math.PI);
+            float shaped = (float) Math.pow(Math.sin(t * Math.PI), 0.55 + 1.35 * (1.0 - open));
+            float y = (t - 0.5f) * 2.0f * halfH;
+            float hug = radius * 0.29f * slim * (state.isImploding ? (1.0f - eased) : 1.0f);
+            float x = side * (bellyX * shaped * 1.16f + hug);
+            if (state.isImploding) x *= (1.0f - 0.8f * eased);
+            float z = -depthBase * 0.3f * (state.isImploding ? (1.0f - eased) : 1.0f)
+                + (float) Math.sin(age * 0.7f + i * 2.3f) * radius * 0.02f;
+            s.shardX[i] = x * shrink;
+            s.shardY[i] = y * shrink;
+            s.shardZ[i] = z;
+        }
+
         if (fade > 0.02f) {
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.glowFan(pose, buffer, seed ^ 0x11L, radius * 1.55f, -depthBase * 1.4f,
-                    0.45f, 0.08f, 0.85f, 0.30f * fadeF, ds));
-            poseStack.popPose();
+            s.halo.tick(delta, fade * 0.30f);
+            s.rim.tick(delta, rimA);
         }
-
-        // Accretion bands: broken vortex bands in the tear plane (the same
-        // X rotation maps their local height onto depth), counter-rotating
-        // at the old radii, widths and layered alphas.
-        if (fade > 0.02f) {
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x21L, radius * 1.06f * bandScale,
-                    -depthBase * 0.5f - radius * 0.05f, -depthBase * 0.5f + radius * 0.05f,
-                    age * 0.055f, 0.80f, 0.45f, 1.0f, LayeredRender.ALPHA_MID * fadeF, ds);
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x22L, radius * 1.24f * bandScale,
-                    -depthBase * 0.7f - radius * 0.06f, -depthBase * 0.7f + radius * 0.06f,
-                    -age * 0.038f + 2.1f, 0.55f, 0.10f, 0.92f, LayeredRender.ALPHA_OUTER * 1.5f * fadeF, ds);
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x23L, radius * 0.90f * bandScale,
-                    -depthBase * 0.3f - radius * 0.04f, -depthBase * 0.3f + radius * 0.04f,
-                    age * 0.09f + 4.0f, 0.92f, 0.70f, 1.0f, LayeredRender.ALPHA_CORE * 0.45f * fadeF, ds);
-            });
-            poseStack.popPose();
-        }
-
-        // The tear body: two displaced domes. The violet shell dome is
-        // scaled into the mouth's tall ellipse; the near-black throat dome
-        // sits inside it and reaches deeper, so the mouth reads as a hole
-        // punched through the world rather than a bubble stuck on it. The
-        // dome builder faces +Y, so the X rotation aims it away from the
-        // camera and the scale is applied in the tear frame first.
         if (bodyA > 0.02f) {
-            poseStack.pushPose();
-            poseStack.mulPose(new Matrix4f().scale(bellyX * 1.10f / radius, halfH * 1.05f / radius, 0.24f));
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.displacedDome(pose, buffer, seed ^ 0x31L, radius,
-                    0.50f, 0.05f, 0.88f, 0.90f * bodyAF, 1.0f, ds));
-            poseStack.popPose();
-
-            poseStack.pushPose();
-            poseStack.mulPose(new Matrix4f().scale(bellyX * 0.94f / radius, halfH * 0.97f / radius, 0.34f));
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.displacedDome(pose, buffer, seed ^ 0x32L, radius,
-                    0.02f, 0.0f, 0.05f, 0.98f * bodyAF, 1.0f, ds));
-            poseStack.popPose();
+            s.inward.tick(delta, bodyA);
+            s.throat.tick(delta, bodyA);
         }
-
-        // The seam: the last light standing at peak collapse, a torn
-        // ribbon hung vertically through the mouth's center column.
         if (seamA > 0.03f) {
-            poseStack.pushPose();
-            poseStack.translate(0.0f, -halfH * 0.94f, depthBase * 0.10f);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x41L, halfH * 1.88f,
-                    Math.max(0.02f, radius * 0.045f), 0.0f,
-                    1.0f, 1.0f, 1.0f, seamAF, 1.0f, ds));
-            poseStack.popPose();
+            s.seam.tick(delta, seamA);
         }
-
-        // Lip flare: two torn ribbons trailing off the mouth's edges, the
-        // wake sheets the old flare triangles used to fake. The left one
-        // is mirrored so its length runs outward to -X.
-        if (rimA > 0.02f) {
-            poseStack.pushPose();
-            poseStack.translate(-bellyX, 0.0f, -depthBase * 0.15f);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            poseStack.mulPose(new Matrix4f().scale(-1.0f, 1.0f, 1.0f));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x51L, radius * 0.55f, halfH * 1.5f,
-                    radius * 0.10f, 0.60f, 0.08f, 0.96f, 0.22f * rimAF, 1.0f, ds));
-            poseStack.popPose();
-
-            poseStack.pushPose();
-            poseStack.translate(bellyX, 0.0f, -depthBase * 0.15f);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x52L, radius * 0.55f, halfH * 1.5f,
-                    radius * 0.10f, 0.60f, 0.08f, 0.96f, 0.22f * rimAF, 1.0f, ds));
-            poseStack.popPose();
-        }
-
-        // Crystal shards: shard fans planted along both lips, pointing
-        // away from the mouth's center, sucked toward the throat as the
-        // collapse takes them.
         if (shardA > 0.04f && open > 0.04f) {
-            float shrink = state.isImploding ? (1.0f - 0.9f * eased) : 1.0f;
-            for (int i = 0; i < SHARDS; i++) {
-                float t = 0.18f + 0.64f * (i / (float) (SHARDS - 1));
-                boolean left = (i & 1) == 0;
-                float side = left ? -1.0f : 1.0f;
-                float slim = 0.72f + 0.28f * (float) Math.sin(t * Math.PI);
-                float shaped = (float) Math.pow(Math.sin(t * Math.PI), 0.55 + 1.35 * (1.0 - open));
-                float y = (t - 0.5f) * 2.0f * halfH;
-                float hug = radius * 0.29f * slim * (state.isImploding ? (1.0f - eased) : 1.0f);
-                float x = side * (bellyX * shaped * 1.16f + hug);
-                if (state.isImploding) x *= (1.0f - 0.8f * eased);
-                float z = -depthBase * 0.3f * (state.isImploding ? (1.0f - eased) : 1.0f)
-                    + (float) Math.sin(age * 0.7f + i * 2.3f) * radius * 0.02f;
-                float shardR = radius * 0.34f * slim * shrink;
-                if (shardR < 0.05f) continue;
-                long shardSeed = seed ^ (0x60L + i);
-                float angDeg = (float) Math.toDegrees(Math.atan2(y, x));
-                poseStack.pushPose();
-                poseStack.translate(x, y, z);
-                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(angDeg)));
-                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-                collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                    BespokeGeometry.shardFan(pose, buffer, shardSeed, shardR,
-                        0.58f, 0.07f, 0.94f, shardAF, 1.0f, ds));
-                poseStack.popPose();
-            }
+            s.shards.tick(delta, shardA);
         }
 
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 

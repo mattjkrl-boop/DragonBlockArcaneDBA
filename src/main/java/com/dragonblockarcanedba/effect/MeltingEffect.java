@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -89,7 +89,7 @@ public class MeltingEffect extends MobEffect {
             float width = entity.getBbWidth();
             float height = entity.getBbHeight();
             level.sendParticles(
-                new DbaDustOptions(0x9900CC, 1.5F),
+                DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0x9900CC, 1.5F, entity.getId() * 31 + entity.tickCount),
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * width * 1.2,
                 entity.getY() + level.getRandom().nextFloat() * height,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width * 1.2,
@@ -99,7 +99,7 @@ public class MeltingEffect extends MobEffect {
             );
             // Secondary deeper purple particle for richness
             level.sendParticles(
-                new DbaDustOptions(0x660099, 1.0F),
+                DbaMaterialOptions.of(DbaMaterialOptions.SMOKE, 0x660099, 1.0F, entity.getId() * 31 + entity.tickCount + 1),
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * width,
                 entity.getY() + level.getRandom().nextFloat() * height * 0.6,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width,

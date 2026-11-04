@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -19,7 +20,7 @@ import net.minecraft.world.entity.player.Player;
  */
 public class HollowedEffect extends MobEffect {
     public HollowedEffect() {
-        super(MobEffectCategory.BENEFICIAL, 0x1A0033, com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE); // particles are spawned client side by vanilla effect particle sync
+        super(MobEffectCategory.BENEFICIAL, 0x1A0033, DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0x591A80, 2.0f, 0xD00D)); // particles are spawned client side by vanilla effect particle sync
 
         this.addAttributeModifier(
             Attributes.MOVEMENT_SPEED,

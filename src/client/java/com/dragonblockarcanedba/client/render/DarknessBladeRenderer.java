@@ -1,29 +1,26 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.DarknessBladeEntity;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Darkness Blade falling execution in MC 26.2.
  *
- * Bespoke pass: the hand-built greatsword (beveled blade boxes, horned
- * crossguard, hilt, smooth plunge cones) is gone. The falling sword is
- * now layered BespokeGeometry.bladeArc crescents standing vertical, the
- * wide base end of the arc reading as the guard mass, in obsidian,
- * fuller red, and a white hot core, with tornRibbon wake trails
- * streaming off the plunge. The seed comes from the entity UUID so the
- * torn silhouette is the same on every client. The spin (roll from yRot
- * plus age) and the 3 tick fade-in are unchanged from the spectacle pass.
+ * No-shapes pass: the falling blade geometry is gone. The plunge is now
+ * carried by plasma, darkness, vapor, and soul material shed along the
+ * falling path, with bright plasma sparks at the leading end. The entity
+ * still falls and rolls exactly as before, and the 3 tick fade-in is
+ * preserved as the emission envelope.
  */
 public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, DarknessBladeRenderer.DarknessBladeRenderState> {
 
@@ -36,6 +33,10 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
         public float age = 0;
         public double px = 0, py = 0, pz = 0;
         public long seed = 0;
+        public MaterialEmitters.Emitter[] emitters;
+        public long emitterSeed = Long.MIN_VALUE;
+        public ClientLevel emitterLevel;
+        public float lastEmissionAge = Float.NaN;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -66,60 +67,103 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
 
     @Override
     public void submit(DarknessBladeRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-        float ds = LayeredRender.distScale(cameraState, state.px, state.py, state.pz);
-        long seed = state.seed;
+        emitMaterials(state);
+        super.submit(state, poseStack, collector, cameraState);
+    }
 
-        poseStack.pushPose();
-        // Blades plunge point-first and roll as they fall (same spin math).
-        float roll = state.yRot + state.age * 18.0f;
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(roll)));
-
-        float fade = Math.min(1.0f, state.age / 3.0f);
-        float pulse = 0.82f + 0.18f * (float) Math.sin(state.age * 0.8f);
-
-        // The sword body: a wide-sweep bladeArc (236 degrees) tipped
-        // upright with XP -90 inside this rotated frame. Radius 1.9 gives
-        // a roughly 4.2 block silhouette, close to the old sword's 4.4
-        // block total length, and the arc's thick base end sits up top
-        // where the hilt and guard mass used to be.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-        poseStack.translate(1.35f, 0, 0);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed, 1.9f, 236f,
-                0.05f, 0.01f, 0.12f, 0.97f, fade, ds);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x5A11L, 1.55f, 226f,
-                0.06f, 0.0f, 0.14f, 0.99f, fade, ds);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xF011L, 0.95f, 205f,
-                0.72f, 0.03f, 0.22f, pulse, fade, ds);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xC0DEL, 0.45f, 180f,
-                1.0f, 0.90f, 1.0f, 0.95f, fade, ds);
-        });
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xAD01L, 2.1f, 240f,
-                0.40f, 0.04f, 0.75f, 0.16f, fade, ds);
-        });
-        poseStack.popPose();
-
-        // Plunge wake: torn ribbons streaming upward off the falling
-        // blade (the wake trails toward +Y in local space), replacing the
-        // two smooth plunge cones.
-        for (int i = 0; i < 2; i++) {
-            final float xOff = (i == 0 ? -0.45f : 0.45f);
-            final long wakeSeed = seed ^ (0x9AE1L + i * 97L);
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-            poseStack.translate(xOff, 0.6f, 0);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.tornRibbon(pose, buffer, wakeSeed, 2.4f, 0.55f, 0.3f,
-                    0.30f, 0.02f, 0.55f, 0.55f, fade, ds);
-            });
-            poseStack.popPose();
+    private static void emitMaterials(DarknessBladeRenderState state) {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            return;
+        }
+        float fade = Math.min(1.0f, Math.max(0.0f, state.age / 3.0f));
+        if (fade <= 0.01f) {
+            state.lastEmissionAge = state.age;
+            return;
         }
 
-        poseStack.popPose();
-        super.submit(state, poseStack, collector, cameraState);
+        float distance = MaterialEmitters.distanceScale(new Vec3(state.px, state.py, state.pz));
+        float envelope = fade * (0.35f + 0.65f * (float) Math.sqrt(Math.max(0.0f, distance)));
+        if (state.emitters == null || state.emitterSeed != state.seed || state.emitterLevel != level
+                || Float.isNaN(state.lastEmissionAge) || state.age < state.lastEmissionAge) {
+            state.emitters = createEmitters(state, level);
+            state.emitterSeed = state.seed;
+            state.emitterLevel = level;
+            for (MaterialEmitters.Emitter emitter : state.emitters) {
+                emitter.tick(0.05f, envelope);
+            }
+            state.lastEmissionAge = state.age;
+            return;
+        }
+
+        float delta = Math.min(0.05f, Math.max(0.0f, (state.age - state.lastEmissionAge) / 20.0f));
+        state.lastEmissionAge = state.age;
+        if (delta > 0.0f) {
+            for (MaterialEmitters.Emitter emitter : state.emitters) {
+                emitter.tick(delta, envelope);
+            }
+        }
+    }
+
+    private static MaterialEmitters.Emitter[] createEmitters(DarknessBladeRenderState state, ClientLevel level) {
+        int seed = (int) state.seed;
+        return new MaterialEmitters.Emitter[] {
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0x8C0DF2, 2.0f,
+                    seed ^ 0xB1A1, Vec3.ZERO, 0.010f),
+                bodySource(state, 0.28, -2.25, 2.25, 0.12), 120.0f, 135),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0xF21459, 1.25f,
+                    seed ^ 0xB1A2, Vec3.ZERO, 0.008f),
+                bodySource(state, 0.16, -2.05, 2.05, 0.09), 75.0f, 85),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0xFFFFFF, 0.85f,
+                    seed ^ 0xB1A3, Vec3.ZERO, 0.006f),
+                bodySource(state, 0.10, -1.65, 1.65, 0.07), 38.0f, 45),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.DARKNESS, 0x17002B, 2.85f,
+                    seed ^ 0xB1A4, Vec3.ZERO, 0.014f),
+                bodySource(state, 0.55, -2.30, 2.30, 0.16), 95.0f, 110),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.VAPOR, 0x5B21B6, 3.20f,
+                    seed ^ 0xB1A5, Vec3.ZERO, 0.020f),
+                bodySource(state, 0.85, -1.90, 3.10, 0.27), 70.0f, 80),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.SOUL, 0xC4B5FD, 1.50f,
+                    seed ^ 0xB1A6, Vec3.ZERO, 0.012f),
+                bodySource(state, 0.45, -2.10, 2.45, 0.18), 45.0f, 55),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0xFFE4E6, 0.95f,
+                    seed ^ 0xB1A7, Vec3.ZERO, 0.030f),
+                tipSparkSource(state), 42.0f, 50)
+        };
+    }
+
+    private static MaterialEmitters.Source bodySource(DarknessBladeRenderState state,
+                                                      double radius, double minAlong, double maxAlong,
+                                                      double upwardVelocity) {
+        return random -> {
+            double along = minAlong + random.nextDouble() * (maxAlong - minAlong);
+            double angle = Math.toRadians(state.yRot + state.age * 18.0f) + random.nextDouble() * Math.PI * 2.0;
+            double radial = Math.sqrt(random.nextDouble()) * radius;
+            double x = Math.cos(angle) * radial;
+            double z = Math.sin(angle) * radial;
+            Vec3 pos = new Vec3(state.px + x, state.py + along, state.pz + z);
+            Vec3 velocity = new Vec3(x * 0.020, upwardVelocity, z * 0.020);
+            return new MaterialEmitters.Sample(pos, velocity);
+        };
+    }
+
+    private static MaterialEmitters.Source tipSparkSource(DarknessBladeRenderState state) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double radial = Math.sqrt(random.nextDouble()) * 0.32;
+            double x = Math.cos(angle) * radial;
+            double z = Math.sin(angle) * radial;
+            Vec3 pos = new Vec3(state.px + x, state.py - 2.15 + random.nextDouble() * 0.35, state.pz + z);
+            Vec3 velocity = new Vec3(Math.cos(angle) * 0.16, -0.10 - random.nextDouble() * 0.12,
+                Math.sin(angle) * 0.16);
+            return new MaterialEmitters.Sample(pos, velocity);
+        };
     }
 }

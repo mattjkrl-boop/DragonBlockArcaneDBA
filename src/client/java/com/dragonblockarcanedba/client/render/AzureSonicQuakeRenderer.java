@@ -1,27 +1,36 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.AzureSonicQuakeEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Sonic Quake Impact Shockwave in Minecraft 26.2.
- * Renders physical 3D supersonic ground shatter, vertical aerodynamic pressure needles, and radiant sonic wave crests.
  *
- * Bespoke pass: the beveled crest and its additive echo are brokenVortexBand
- * slices (a torn band standing at crest height), the inner compression ring
- * is a flat broken band, the pressure needles are a seeded shardFan radiating
- * at the crest's radius, and the epicenter is a crackStar with a plume dust
- * crown. All shapes take the quake entity's synced render seed. The local
- * ring and triangle helpers are gone.
+ * No-shapes pass: this renderer draws no geometry. The expanding wave is
+ * carried by material emission at its crest: compressed ground dust and
+ * shock vapor rolling outward, physical debris chunks of the actual
+ * ground block, sparks, and tempest plasma licking along the crest line.
+ * The epicenter throws dust from a shrinking core area. Emission points
+ * are sampled on the crest as data; nothing is rendered from the crest
+ * itself. Wave timing, radius growth, and the fade envelope are unchanged
+ * from the bespoke build.
  */
 public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntity, AzureSonicQuakeRenderer.QuakeRenderState> {
 
@@ -62,6 +71,91 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
         state.wz = entity.getZ();
     }
 
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        float radius = 1.0f;
+        float coreRadius = 1.0f;
+        float crestHeight = 0.65f;
+    }
+
+    private static final class Emission {
+        final Frame frame = new Frame();
+        ClientLevel level;
+        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        float lastAge = -1f;
+    }
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
+
+    /** Points on the expanding crest, with an outward drift velocity. */
+    private static MaterialEmitters.Source crestRing(Frame frame, float yBase, float yFrac, float outward) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = frame.radius + (random.nextDouble() * 2.0 - 1.0) * 0.5;
+            Vec3 pos = new Vec3(
+                    frame.center.x + Math.cos(angle) * rr,
+                    frame.center.y + yBase + random.nextDouble() * frame.crestHeight * yFrac,
+                    frame.center.z + Math.sin(angle) * rr);
+            Vec3 vel = new Vec3(Math.cos(angle) * outward, 0.0, Math.sin(angle) * outward);
+            return new MaterialEmitters.Sample(pos, vel);
+        };
+    }
+
+    /** Points across the shrinking epicenter disc. */
+    private static MaterialEmitters.Source epicenter(Frame frame) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = frame.coreRadius * Math.sqrt(random.nextDouble());
+            Vec3 pos = new Vec3(
+                    frame.center.x + Math.cos(angle) * rr,
+                    frame.center.y + 0.05 + random.nextDouble() * 0.15,
+                    frame.center.z + Math.sin(angle) * rr);
+            return new MaterialEmitters.Sample(pos, Vec3.ZERO);
+        };
+    }
+
+    private static BlockState groundState(ClientLevel level, Vec3 center) {
+        BlockState state = level.getBlockState(BlockPos.containing(center.x, center.y - 0.5, center.z));
+        return state.isAir() ? Blocks.STONE.defaultBlockState() : state;
+    }
+
+    private Emission buildEmission(ClientLevel level, QuakeRenderState state) {
+        Emission emission = new Emission();
+        emission.level = level;
+        Frame frame = emission.frame;
+        frame.center = new Vec3(state.wx, state.wy, state.wz);
+        int seed = (int) state.seed;
+        BlockState ground = groundState(level, frame.center);
+        emission.emitters = new MaterialEmitters.Emitter[]{
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.dust(0x7E8A8F, 1.5f, seed ^ 0xD057,
+                                new Vec3(0.0, 0.05, 0.0), 0.03f),
+                        crestRing(frame, 0.04f, 0.55f, 0.14f), 250f, 340),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.vapor(0xCFE8F2, 2.0f, seed ^ 0x7E57,
+                                new Vec3(0.0, 0.04, 0.0), 0.03f),
+                        crestRing(frame, 0.04f, 0.40f, 0.10f), 100f, 140),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0x4DF2FF, 1.1f, seed ^ 0xBE10,
+                                new Vec3(0.0, 0.05, 0.0), 0.02f),
+                        crestRing(frame, 0.03f, 0.20f, 0.03f), 90f, 130),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, ground),
+                                new Vec3(0.0, 0.30, 0.0), 0.10f),
+                        crestRing(frame, 0.04f, 0.25f, 0.05f), 46f, 80),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.CRIT_SPARK,
+                                new Vec3(0.0, 0.12, 0.0), 0.08f),
+                        crestRing(frame, 0.04f, 0.30f, 0.06f), 40f, 70),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.dust(0xD8E2E6, 1.3f, seed ^ 0xC2AC,
+                                new Vec3(0.0, 0.10, 0.0), 0.04f),
+                        epicenter(frame), 70f, 100),
+        };
+        return emission;
+    }
+
     @Override
     public void submit(QuakeRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float maxLife = 18.0f;
@@ -71,51 +165,31 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
         float expansionEase = (float) Math.sin(progress * (Math.PI / 2.0));
         float currentRadius = Math.max(0.5f, expansionEase * state.maxRadius);
         float alpha = (1.0f - (progress * progress)) * 0.90f;
-        long seed = state.seed;
-        float ds = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
 
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        Vec3 center = new Vec3(state.wx, state.wy, state.wz);
+        float ds = MaterialEmitters.distanceScale(center);
+        float envelope = (alpha / 0.90f) * ds;
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-
-            // 1. High-Pressure Supersonic Shockwave Crest: a torn band
-            // standing at the old beveled crest's height and radius, in a
-            // blend of the old base and crest colors at the old alpha.
-            float crestHeight = 0.65f * (1.0f - progress * 0.8f);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xC2E57L,
-                currentRadius, 0.05f, 0.05f + crestHeight, 0.0f,
-                0.30f, 0.95f, 1.0f, alpha, ds);
-
-            // 2. Secondary Inner Sonic Compression Band, flat at the old
-            // inner ring's radius and alpha.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xC049L,
-                currentRadius * 0.55f, 0.08f, 0.14f, 0.0f,
-                0.0f, 1.0f, 0.8f, alpha * 0.65f, ds);
-
-            // 3. Pressure Shards: a seeded shard fan radiating at the old
-            // needle circle's radius, lengths and lift torn by the seed.
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x51A2DL,
-                currentRadius * 0.85f, 0.4f, 0.95f, 1.0f, alpha * 0.85f, 1.0f, ds);
-
-            // 4. Ground Burst Epicenter: a crack star at the old core's
-            // radius in white, plus the dust crown as a plume.
-            float coreRadius = Math.max(0.2f, (1.0f - progress) * 2.0f);
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0xC2AC1L,
-                coreRadius * 1.2f, 1.0f, 1.0f, 1.0f, alpha * 0.90f, 1.0f, ds);
-            BespokeGeometry.plume(pose, buffer, seed ^ 0xD0571L,
-                Math.max(0.6f, coreRadius), 0.2f + 1.4f * (1.0f - progress),
-                0.45f, 0.75f, 0.95f, alpha * 0.45f, 1.0f, ds);
-        });
-
-        // T1: additive echo of the crest band, slightly wider, so the shock
-        // crest glows instead of reading as a flat matte band.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            float haloRadius = currentRadius * 1.05f;
-            float haloCrest = 0.65f * (1.0f - progress * 0.8f);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xEC401L,
-                haloRadius, 0.05f, 0.05f + haloCrest, 0.0f,
-                0.45f, 0.55f, 0.55f, alpha * 0.28f, ds);
-        });
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level != null && envelope > 0.01f) {
+            Emission emission = emissions.get(state.seed);
+            if (emission == null || emission.level != level || state.age < emission.lastAge - 1.0f) {
+                emission = buildEmission(level, state);
+                emissions.put(state.seed, emission);
+                if (emissions.size() > 64) emissions.clear();
+            }
+            emission.frame.center = center;
+            emission.frame.radius = currentRadius;
+            emission.frame.coreRadius = Math.max(0.2f, (1.0f - progress) * 2.0f) * 1.2f;
+            emission.frame.crestHeight = 0.65f * (1.0f - progress * 0.8f);
+            float delta = emission.lastAge < 0f ? 0.05f
+                    : Math.min(0.05f, Math.max(0.0f, (state.age - emission.lastAge) / 20.0f));
+            emission.lastAge = state.age;
+            for (MaterialEmitters.Emitter emitter : emission.emitters) {
+                emitter.tick(delta, envelope);
+            }
+        }
 
         super.submit(state, poseStack, collector, cameraState);
     }

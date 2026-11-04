@@ -1,5 +1,6 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.DbaDamage;
@@ -69,6 +70,10 @@ public class SaibamanEntity extends DbaHostileEntity {
         }
         server.playSound(null, this.getX(), this.getY(), this.getZ(), DbaSounds.BOOM_BIG, SoundSource.HOSTILE, 1.0f, 1.2f);
         server.sendParticles(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, Blocks.SLIME_BLOCK.defaultBlockState()), this.getX(), this.getY() + 0.6, this.getZ(), 18, 0.4, 0.4, 0.4, 0.04);
+        server.sendParticles(DbaMaterialOptions.of(DbaMaterialOptions.VAPOR, 0x69B84A, 0.9f, this.getId() * 31 + 23),
+                this.getX(), this.getY() + 0.6, this.getZ(), 10, 0.4, 0.4, 0.4, 0.04);
+        server.sendParticles(DbaMaterialOptions.of(DbaMaterialOptions.DUST, 0x86A860, 0.85f, this.getId() * 31 + 29),
+                this.getX(), this.getY() + 0.6, this.getZ(), 8, 0.4, 0.4, 0.4, 0.04);
         this.discard();
     }
 

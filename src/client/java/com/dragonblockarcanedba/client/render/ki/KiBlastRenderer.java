@@ -1,26 +1,29 @@
 package com.dragonblockarcanedba.client.render.ki;
 
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KiBlastEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Entity Renderer for Ki Blast / Energy Laser Bolts in Minecraft 26.2.
- * Renders physical 3D aerodynamic energy laser geometry, all bespoke:
- * - Directionally aligned with entity flight pitch and yaw.
- * - Crossed torn ribbons for the plasma sheath and the white-hot core,
- *   seeded per shot, full width at the piercing nose and torn thin at the
- *   trailing tail.
- * - A shard fan flaring at the nose, a broken vortex band sheath winding
- *   down the wake, and a broken resonance ring around the body.
+ * No-shapes pass: this renderer draws no geometry. A ki blast is a dense
+ * cluster of technique-colored plasma around the bolt position, a smaller
+ * white-hot cluster at its heart, and a material trail of plasma and
+ * vapor streaming off the tail as it flies. The old pulse (1 + 0.12 sin
+ * of age) still drives the cluster radius. Impact remains the entity's
+ * own server burst, unchanged.
  */
 public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRenderer.BlastRenderState> {
 
@@ -35,6 +38,9 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
         public float xRot = 0;
         public float scale = 1.0f;
         public int seed = 0;
+        public double wx = 0;
+        public double wy = 0;
+        public double wz = 0;
     }
 
     @Override
@@ -51,89 +57,121 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
         state.xRot = entity.getXRot();
         state.scale = entity.getScale();
         state.seed = entity.getSeed();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
+    }
+
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        Vec3 dir = Vec3.ZERO;
+        float radius = 0.2f;
+        float tail = 1.6f;
+    }
+
+    private static final class Emission {
+        final Frame frame = new Frame();
+        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        float lastAge = -1f;
+    }
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
+
+    /** Points inside a small sphere around the bolt heart. */
+    private static MaterialEmitters.Source cluster(Frame frame, double radiusFactor) {
+        return random -> {
+            double u = random.nextDouble() * 2.0 - 1.0;
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = frame.radius * radiusFactor * Math.cbrt(random.nextDouble());
+            double flat = Math.sqrt(Math.max(0.0, 1.0 - u * u)) * rr;
+            Vec3 pos = new Vec3(frame.center.x + Math.cos(ang) * flat,
+                    frame.center.y + u * rr, frame.center.z + Math.sin(ang) * flat);
+            return new MaterialEmitters.Sample(pos, frame.dir.scale(0.03));
+        };
+    }
+
+    /** Points along the wake behind the bolt, widening toward the tail. */
+    private static MaterialEmitters.Source trail(Frame frame) {
+        return random -> {
+            double t = random.nextDouble();
+            Vec3 base = frame.center.add(frame.dir.scale(-(0.25 + t * frame.tail)));
+            double jitter = frame.radius * (0.35 + t * 0.85);
+            Vec3 pos = base.add(new Vec3(
+                    (random.nextDouble() * 2.0 - 1.0) * jitter,
+                    (random.nextDouble() * 2.0 - 1.0) * jitter,
+                    (random.nextDouble() * 2.0 - 1.0) * jitter));
+            return new MaterialEmitters.Sample(pos, frame.dir.scale(-0.03));
+        };
+    }
+
+    private static Vec3 lookDir(float yRot, float xRot) {
+        double yaw = Math.toRadians(yRot);
+        double pitch = Math.toRadians(xRot);
+        double cosP = Math.cos(pitch);
+        return new Vec3(-Math.sin(yaw) * cosP, -Math.sin(pitch), Math.cos(yaw) * cosP);
+    }
+
+    private static void updateFrame(Frame frame, BlastRenderState state) {
+        frame.center = new Vec3(state.wx, state.wy, state.wz);
+        frame.dir = lookDir(state.yRot, state.xRot);
+        float pulse = 1.0f + 0.12f * Mth.sin(state.ageInTicks * 0.9f);
+        float scale = Math.max(0.2f, state.scale);
+        frame.radius = 0.20f * pulse * scale;
+        frame.tail = 1.6f * scale;
+    }
+
+    private Emission buildEmission(ClientLevel level, BlastRenderState state) {
+        Emission emission = new Emission();
+        updateFrame(emission.frame, state);
+        Frame frame = emission.frame;
+        int seed = state.seed;
+        float scale = Math.max(0.2f, state.scale);
+        emission.emitters = new MaterialEmitters.Emitter[]{
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(state.color, 2.3f * scale, seed,
+                                Vec3.ZERO, 0.02f),
+                        cluster(frame, 1.15), 400f, 520),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0xFFFFFF, 1.25f * scale, seed ^ 0x0C0FE,
+                                Vec3.ZERO, 0.01f),
+                        cluster(frame, 0.55), 230f, 300),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(state.color, 1.7f * scale, seed ^ 0x07A11,
+                                Vec3.ZERO, 0.02f),
+                        trail(frame), 320f, 420),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.vapor(state.color, 2.4f * scale, seed ^ 0x0BEEF,
+                                Vec3.ZERO, 0.03f),
+                        trail(frame), 75f, 105),
+        };
+        return emission;
     }
 
     @Override
     public void submit(BlastRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float r = KiRenderHelper.red(state.color);
-        float g = KiRenderHelper.green(state.color);
-        float b = KiRenderHelper.blue(state.color);
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        float distScale = FxEnvelope.distScale(Math.sqrt(state.distanceToCameraSq));
+        float envelope = distScale;
 
-        float pulse = 1.0f + 0.12f * Mth.sin(state.ageInTicks * 0.9f);
-        float scale = state.scale;
-        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        long seed = state.seed;
-        float age = state.ageInTicks;
-
-        poseStack.pushPose();
-        // Align with projectile trajectory
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        // Spin along flight axis
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.ageInTicks * 12.0f)));
-
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            float radius = 0.20f * pulse * scale;
-            float headLen = 0.75f * scale;
-            float tailLen = 1.6f * scale;
-
-            // 1. Outer aerodynamic plasma sheath: crossed torn ribbons, nose first
-            boltRibbon(pose, buffer, seed, headLen, headLen + tailLen, radius * 2f, r, g, b, 0.85f, distScale, 0f);
-            boltRibbon(pose, buffer, seed ^ 0x9E3779B9L, headLen, headLen + tailLen, radius * 2f, r, g, b, 0.85f, distScale, 60f);
-            boltRibbon(pose, buffer, seed ^ 0x85EBCA6BL, headLen, headLen + tailLen, radius * 2f, r, g, b, 0.85f, distScale, 120f);
-
-            // 2. White-hot piercing energy core
-            float coreLen = headLen * 0.95f + tailLen * 0.65f;
-            boltRibbon(pose, buffer, seed ^ 0xC2B2AE35L, headLen * 0.95f, coreLen, radius * 0.9f, 1.0f, 1.0f, 0.95f, 1.0f, distScale, 30f);
-            boltRibbon(pose, buffer, seed ^ 0x27D4EB2FL, headLen * 0.95f, coreLen, radius * 0.9f, 1.0f, 1.0f, 0.95f, 1.0f, distScale, 90f);
-            boltRibbon(pose, buffer, seed ^ 0x165667B1L, headLen * 0.95f, coreLen, radius * 0.9f, 1.0f, 1.0f, 0.95f, 1.0f, distScale, 150f);
-
-            // 3. Nose flare: shards bursting sideways just behind the tip
-            PoseStack.Pose flare = pose.copy();
-            flare.translate(0f, 0f, headLen * 0.8f);
-            flare.rotate(Axis.XP.rotationDegrees(90f));
-            BespokeGeometry.shardFan(flare, buffer, seed ^ 0x51ED27L, radius * 1.6f, r, g, b, 0.9f, 1f, distScale);
-
-            // 4. Helical energy wake: two broken band segments winding down the tail
-            float wakeTotal = tailLen + 0.2f;
-            float segLen = wakeTotal / 2f;
-            for (int i = 0; i < 2; i++) {
-                float fracMid = (i + 0.5f) / 2f;
-                float rollDeg = (float) Math.toDegrees(age * 0.5 + fracMid * Math.PI * 3.0);
-                PoseStack.Pose p = pose.copy();
-                p.translate(0f, 0f, 0.2f - (i + 1) * segLen);
-                p.rotate(Axis.ZP.rotationDegrees(rollDeg));
-                p.rotate(Axis.XP.rotationDegrees(90f));
-                BespokeGeometry.brokenVortexBand(p, buffer, seed + i * 131L,
-                    radius * 1.35f * (1.0f - fracMid * 0.4f), 0f, segLen, 0f,
-                    r, g, b, (1.0f - fracMid) * 0.70f, distScale);
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level != null && envelope > 0.01f) {
+            long key = ((long) state.seed << 32) ^ (state.color & 0xFFFFFFFFL);
+            Emission emission = emissions.get(key);
+            if (emission == null || state.ageInTicks < emission.lastAge - 1.0f) {
+                emission = buildEmission(level, state);
+                emissions.put(key, emission);
+                if (emissions.size() > 64) emissions.clear();
             }
+            updateFrame(emission.frame, state);
+            float delta = emission.lastAge < 0f ? 0.05f
+                    : Math.min(0.05f, Math.max(0.0f, (state.ageInTicks - emission.lastAge) / 20.0f));
+            emission.lastAge = state.ageInTicks;
+            for (MaterialEmitters.Emitter emitter : emission.emitters) {
+                emitter.tick(delta, envelope);
+            }
+        }
 
-            // 5. Perpendicular energy resonance ring
-            PoseStack.Pose ringPose = pose.copy();
-            ringPose.rotate(Axis.XP.rotationDegrees(90f));
-            BespokeGeometry.brokenVortexBand(ringPose, buffer, seed ^ 0x99L, radius * 1.5f, -0.03f, 0.03f, 0f,
-                r, g, b, 0.75f, distScale);
-        });
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    /**
-     * One torn ribbon lying along the bolt axis with its full width at the
-     * nose: shift to the nose, roll around the axis, then turn the ribbon
-     * run onto -Z so it tapers toward the tail.
-     */
-    private static void boltRibbon(PoseStack.Pose pose, VertexConsumer buffer, long seed,
-                                   float noseZ, float length, float width,
-                                   float r, float g, float b, float alpha,
-                                   float distScale, float rollDeg) {
-        PoseStack.Pose p = pose.copy();
-        p.translate(0f, 0f, noseZ);
-        p.rotate(Axis.ZP.rotationDegrees(rollDeg));
-        p.rotate(Axis.YP.rotationDegrees(90f));
-        BespokeGeometry.tornRibbon(p, buffer, seed, length, width, 0f, r, g, b, alpha, 1f, distScale);
     }
 }

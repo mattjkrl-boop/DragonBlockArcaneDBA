@@ -1,33 +1,36 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.DimensionalWarpRiftEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Dimensional Warp Rift in Minecraft 26.2.
- * Renders a physical 3D spacetime tear and void portal, built entirely from
- * the bespoke toolkit (BESPOKE-STANDARD rule 1), all seeded from the entity's
- * synced seed so every client draws the same torn shape:
- * - Ground anchor glow and the shared layered vortex column
- * - A wandering crack star of fissures and a dark shard fan levered up at the rim
- * - A broken ground band where the old astrolabe ring turned, and a tall
- *   broken orbit band where the crystalline shards circled
- * - The towering vertical tear itself: four torn ribbons deep (violet corona,
- *   magenta slit, black event horizon, white-hot seam), drawn on two crossed
- *   planes, with a torn wake streaming behind it
- * - A displaced-dome singularity pearl at the tear's heart, ringed by two
- *   tilted broken gyroscopic bands
+ * No-shapes conversion: this renderer draws no geometry at all. The rift
+ * follows the standard's rift method, carried entirely by material
+ * particles emitted through the shared MaterialEmitters toolkit:
+ * - Void plasma and darkness streaming inward from the rim toward the
+ *   tear, matching the pull the entity's VortexPhysics applies
+ * - A dense white and magenta plasma cluster at the tear's heart where
+ *   the singularity pearl used to sit
+ * - Spatial glass dust and plasma flecks across the ground the entity
+ *   scars, over the real crying obsidian GroundScar disk
+ * - Darkness vapor drifting at the boundary, suggesting the torn volume
+ * Screen-space distortion stays where it already honestly lives: the
+ * entity's own DbaImpactFx burst call at the destination. The renderer
+ * adds no fake local refraction and no shard, fan, band, or ribbon
+ * geometry. Lifecycle shaping (entrance ease, expansion, pulse, tear open
+ * and shut) is the same math the geometry version used; only the
+ * presentation material changed.
  */
 public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpRiftEntity, DimensionalWarpRiftRenderer.WarpRiftRenderState> {
 
@@ -68,164 +71,113 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
         state.seed = entity.getSeed();
     }
 
+    /**
+     * Emission points on a cylinder around the tear, each carrying a
+     * velocity toward the tear's heart, so the material visibly streams
+     * inward and feeds the rift instead of orbiting it as a band.
+     */
+    private static MaterialEmitters.Source inwardStream(Vec3 center, double radius, double height, double speed) {
+        return random -> {
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = radius * (0.45 + 0.55 * random.nextDouble());
+            Vec3 pos = new Vec3(center.x + Math.cos(ang) * rr,
+                center.y + random.nextDouble() * height,
+                center.z + Math.sin(ang) * rr);
+            Vec3 target = new Vec3(center.x, center.y + height * 0.45, center.z);
+            Vec3 toHeart = target.subtract(pos);
+            double len = Math.max(1.0e-4, toHeart.length());
+            return new MaterialEmitters.Sample(pos, toHeart.scale(speed / len));
+        };
+    }
+
     @Override
     public void submit(WarpRiftRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float life = (float) state.maxLifetime;
         float progress = Math.min(1.0f, state.age / life);
         if (progress >= 1.0f) return;
 
-        // Shared lifecycle envelope (point 5): build over the first 20 percent,
-        // full presence through the burst, dissipate over the last 35 percent.
-        // Replaces the old sine hump, which spent half the rift's short life
-        // half faded. The tear's own open and shut shaping below still applies.
+        // Shared lifecycle envelope: build over the first 20 percent, full
+        // presence through the burst, dissipate over the last 35 percent.
+        // Same envelope and tear shaping as the geometry version.
         float env = FxEnvelope.envelope(state.age, life, 0.20f, 0.35f);
         if (env <= 0.001f) return;
-        float fade = env;
         float distScale = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
         float entrance = ease(Math.min(1.0f, state.age / 6.0f));
         float expansion = state.isDestination ? (0.6f + progress * 0.7f) : (1.0f - progress * 0.4f);
         float radius = state.radius * entrance * expansion;
         float pulse = 0.88f + 0.12f * (float) Math.sin(state.age * 0.5f);
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
-        final float fRadius = radius;
-        final float fAge = state.age;
-        final float fFade = fade;
-        final float fDist = distScale;
-        final float fProgress = progress;
-        final boolean fDest = state.isDestination;
-        final long fSeed = state.seed;
-
-        float shut = ease(Math.max(0.0f, (fProgress - 0.55f) / 0.45f));
+        float shut = ease(Math.max(0.0f, (progress - 0.55f) / 0.45f));
         float openTear = 1.0f - 0.88f * shut;
-        float tearH = (2.8f + pulse * 0.35f) * entrance * openTear * (fDest ? (0.55f + 0.55f * ease(fProgress)) : (1.0f - 0.45f * ease(fProgress)));
-        float tearW = 0.42f * entrance * openTear * (fDest ? (0.35f + 0.75f * ease(fProgress)) : (1.0f - 0.7f * ease(fProgress)));
-        float tearY = 1.4f;
-        final float fShut = shut;
-        final float fOpen = openTear;
-        final float fTearH = tearH;
-        final float fTearW = tearW;
+        float tearH = (2.8f + pulse * 0.35f) * entrance * openTear * (state.isDestination ? (0.55f + 0.55f * ease(progress)) : (1.0f - 0.45f * ease(progress)));
+        float tearW = 0.42f * entrance * openTear * (state.isDestination ? (0.35f + 0.75f * ease(progress)) : (1.0f - 0.7f * ease(progress)));
 
-        poseStack.pushPose();
+        Vec3 base = new Vec3(state.x, state.y, state.z);
+        Vec3 heart = base.add(0.0, 1.4, 0.0);
+        int seed = (int) state.seed;
+        float envelope = env * distScale;
+        float tearEnv = envelope * openTear;
+        float radiusFactor = Math.max(0.35f, radius / 3.5f);
+        float delta = 1.0f / 60.0f;
 
-        // Ground work in the base pose: anchor glow, the layered vortex
-        // column, the fissure crack star, the rim shard fan, the broken
-        // ground band, and the tall broken orbit band.
-        float orbitFrac = fDest
-            ? 0.30f + 0.65f * ease(fProgress)
-            : 0.85f - 0.50f * ease(fProgress);
-        final float fOrbitR = fRadius * orbitFrac;
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            LayeredRender.drawAnchorGlow(pose, buffer, fRadius * 1.2f, 0.05f,
-                0.62f, 0.10f, 0.92f, 0.55f * fFade, fDist);
-            LayeredRender.drawVortexBands(pose, buffer, fRadius * 0.55f, 3.4f, fAge,
-                0.62f, 0.10f, 0.92f, fFade, fDist);
+        // The inward stream: void plasma and darkness pulled from the rim
+        // toward the heart, the visual half of the entity's vortex pull.
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0x990DE6, 1.45f, seed, Vec3.ZERO, 0.03f),
+            inwardStream(base, radius, 3.2, 0.55),
+            280f * radiusFactor, 420).tick(delta, envelope);
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.darkness(0x05000D, 1.60f, seed ^ 0x51AB, Vec3.ZERO, 0.03f),
+            inwardStream(base, radius * 0.95, 3.0, 0.38),
+            190f * radiusFactor, 300).tick(delta, envelope);
 
-            // The fissure trenches, as one wandering crack star.
-            BespokeGeometry.crackStar(pose, buffer, fSeed,
-                fRadius * 1.02f, 0.55f, 0.05f, 0.90f, 0.50f, fFade, fDist);
-            // Shattered void shards levered up around the rim.
-            BespokeGeometry.shardFan(pose, buffer, fSeed ^ 0x51ABL,
-                fRadius * 0.95f, 0.10f, 0.02f, 0.18f, 0.90f, fFade, fDist);
-            // The ground band, turning slowly where the astrolabe ring was.
-            BespokeGeometry.brokenVortexBand(pose, buffer, fSeed ^ 0x81A6L,
-                fRadius * 0.66f, 0.03f, 0.20f, (float) Math.toRadians(fAge * 10.0f),
-                0.55f, 0.02f, 0.90f, 0.75f * fFade, fDist);
-            // The orbiting shards, as one tall broken band whose radius
-            // spirals in at the origin and erupts out at the destination,
-            // exactly the motion the pyramids traced.
-            BespokeGeometry.brokenVortexBand(pose, buffer, fSeed ^ 0x08B1L,
-                fOrbitR, 0.5f, 2.3f, fAge * 0.12f,
-                1.0f, 0.15f, 0.85f, 0.55f * fFade, fDist);
-        });
+        // The tear seam itself: white plasma sampled inside the torn
+        // volume, narrowing and dimming as the tear shuts.
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFFFFF, 0.85f, seed ^ 0x7EA1, Vec3.ZERO, 0.02f),
+            MaterialEmitters.volume(heart, new Vec3(Math.max(0.06, tearW * 2.2), Math.max(0.10, tearH * 0.85), Math.max(0.06, tearW * 2.2))),
+            120f, 150).tick(delta, tearEnv);
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFF26D9, 1.20f, seed ^ 0x7EA2, Vec3.ZERO, 0.03f),
+            MaterialEmitters.volume(heart, new Vec3(Math.max(0.10, tearW * 3.2), Math.max(0.12, tearH), Math.max(0.10, tearW * 3.2))),
+            150f, 180).tick(delta, tearEnv);
 
-        // The tear itself: four torn ribbons deep, on two crossed planes so
-        // the slit reads from every side. Ribbons run upward from the corona
-        // base; the shorter layers sit inside the corona's span.
-        float tearBase = tearY - fTearH * 1.3f;
-        for (int plane = 0; plane < 2; plane++) {
-            final long planeSeed = fSeed ^ (plane == 0 ? 0x7EA1L : 0x7EA2L);
-            poseStack.pushPose();
-            poseStack.translate(0, tearBase, 0);
-            if (plane == 1) {
-                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-            }
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                float envTear = fFade * fOpen;
-                BespokeGeometry.tornRibbon(pose, buffer, planeSeed,
-                    fTearH * 2.6f, fTearW * 3.2f, 0.12f, 0.60f, 0.05f, 0.90f, 0.70f, envTear, fDist);
-                BespokeGeometry.tornRibbon(pose, buffer, planeSeed ^ 0x11L,
-                    fTearH * 2.0f, fTearW * 2.0f, 0.12f, 1.0f, 0.15f, 0.85f, 0.90f, envTear, fDist);
-                BespokeGeometry.tornRibbon(pose, buffer, planeSeed ^ 0x22L,
-                    fTearH * 1.4f, fTearW * 1.0f, 0.12f, 0.02f, 0.0f, 0.05f, 0.98f, envTear, fDist);
-                BespokeGeometry.tornRibbon(pose, buffer, planeSeed ^ 0x33L,
-                    fTearH * 1.8f, fTearW * 0.3f, 0.12f, 1.0f, 1.0f, 1.0f, 1.0f, envTear, fDist);
-            });
-            poseStack.popPose();
-        }
+        // The singularity heart: a dense plasma cluster, pulsing on the
+        // same 0.88 plus 0.12 sin(age x 0.5) curve the pearl used.
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFFFFF, 0.75f, seed ^ 0xC08E, Vec3.ZERO, 0.02f),
+            MaterialEmitters.sphereVolume(heart, 0.30f * pulse),
+            140f, 160).tick(delta, envelope);
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFF26D9, 1.00f, seed ^ 0x5166, Vec3.ZERO, 0.02f),
+            MaterialEmitters.sphereVolume(heart, 0.46f * pulse),
+            120f, 140).tick(delta, envelope);
 
-        // The tear wake: one torn ribbon streaming backward, pinching away
-        // as the rift shuts.
-        float trail = 1.15f * (1.0f - shut);
-        if (trail >= 0.04f && fade >= 0.02f) {
-            final float fTrail = trail;
-            poseStack.pushPose();
-            poseStack.translate(0, tearY, 0);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.tornRibbon(pose, buffer, fSeed ^ 0xA9EL,
-                    fTrail, fTearW * 1.7f, 0.18f, 0.75f, 0.08f, 0.95f, 0.75f,
-                    fFade * (1.0f - fShut), fDist));
-            poseStack.popPose();
-        }
+        // Boundary vapor: sparse large darkness vapor drifting through the
+        // torn volume, suggesting the film without drawing a shell.
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.vapor(0x3D0A66, 2.40f, seed ^ 0x81A6, new Vec3(0.0, 0.02, 0.0), 0.02f),
+            MaterialEmitters.sphereVolume(base.add(0.0, 1.5, 0.0), radius * 0.95),
+            90f * radiusFactor, 140).tick(delta, envelope);
 
-        // The singularity pearl at the tear's heart: displaced domes front
-        // (magenta shell, white core) and back (void black).
-        poseStack.pushPose();
-        poseStack.translate(0, tearY, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, fSeed ^ 0x5166L,
-                0.34f * pulse, 1.0f, 0.15f, 0.85f, 0.95f, fFade, fDist));
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, tearY, 0.20f * pulse);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, fSeed ^ 0xC08EL,
-                0.17f * pulse, 1.0f, 1.0f, 1.0f, 1.0f, fFade, fDist));
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, tearY, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, fSeed ^ 0xB01DL,
-                0.34f * pulse, 0.02f, 0.0f, 0.05f, 0.99f, fFade, fDist));
-        poseStack.popPose();
+        // Ground cracks: spatial glass dust and violet plasma flecks across
+        // the scarred disk, at the same radius the fissure work covered.
+        // The crack mark itself stays the entity's real GroundScar disk.
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.glassDust(0xD9B3FF, 1.05f, seed ^ 0x08B1, new Vec3(0.0, 0.03, 0.0), 0.02f),
+            MaterialEmitters.groundArea(base, radius * 1.02, state.y + 0.05),
+            130f * radiusFactor, 200).tick(delta, envelope);
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0x8C1AFF, 0.90f, seed ^ 0x6910, new Vec3(0.0, 0.02, 0.0), 0.02f),
+            MaterialEmitters.groundArea(base, radius * 0.80, state.y + 0.05),
+            90f * radiusFactor, 140).tick(delta, envelope);
 
-        // Dual gyroscopic bands around the tear, tilted against each other
-        // and turning at the old rings' speeds.
-        float[] gyroTilt = {38.0f, -38.0f};
-        float[] gyroSpeed = {24.0f, -19.0f};
-        float[][] gyroColor = {{1.0f, 0.15f, 0.85f}, {0.60f, 0.05f, 0.95f}};
-        float[] gyroAlpha = {0.65f, 0.55f};
-        for (int gi = 0; gi < 2; gi++) {
-            final long gyroSeed = fSeed ^ (gi == 0 ? 0x6910L : 0x6911L);
-            final float gyroTwist = (float) Math.toRadians(fAge * gyroSpeed[gi]);
-            final float gr = gyroColor[gi][0], gg = gyroColor[gi][1], gb = gyroColor[gi][2];
-            final float ga = gyroAlpha[gi] * fFade;
-            poseStack.pushPose();
-            poseStack.translate(0, tearY, 0);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(gyroTilt[gi])));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.brokenVortexBand(pose, buffer, gyroSeed,
-                    fRadius * 0.62f, -0.07f, 0.07f, gyroTwist, gr, gg, gb, ga, fDist));
-            poseStack.popPose();
-        }
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 

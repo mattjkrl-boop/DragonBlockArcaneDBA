@@ -43,7 +43,8 @@ import java.util.List;
  *   - 400 + (Spirit × 1.5) temporal damage to all entities in range, split in two
  *     halves: the first at cast, the second at the rift's envelope peak (tick 15)
  *   - Self-Buff: Celestial Grace for 10 seconds
- *   - Physical 3D Translucent Celestial Dome & 3D Rotating Clock Astrolabe Entity
+ *   - Material based Temporal Rift Entity (inward streaming temporal
+ *     plasma, soul material, glass dust, mist, and a dark core)
  *     that lives 5 seconds (100 ticks)
  *   - 7-second cooldown (140 ticks), longer than the rift's own life
  *
@@ -312,7 +313,7 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             // --- Self-Buff: Celestial Grace (Speed + Jump Boost + Resistance + Safe Fall) for 10 seconds (200 ticks) ---
             player.addEffect(new MobEffectInstance(DbaEffects.CELESTIAL_GRACE_HOLDER, 200, 0, false, true));
 
-            // Physical 3D Geometric Temporal Rift Entity (Volumetric Celestial Dome + 3D Rotating Clock Astrolabe)
+            // Temporal Rift Entity: the material based time suspension field
             TemporalRiftEntity rift = new TemporalRiftEntity(
                 serverLevel,
                 player,
@@ -346,7 +347,7 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
         }
 
         // 7-second cooldown (140 ticks): longer than the rift's 100 tick
-        // life, so two suspension domes can never stack.
+        // life, so two suspension fields can never stack.
         player.getCooldowns().addCooldown(stack, RIFT_COOLDOWN_TICKS);
         return InteractionResult.SUCCESS;
     }

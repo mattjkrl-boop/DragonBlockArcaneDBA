@@ -1,32 +1,36 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.SpiritCannonBeamEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 /**
- * Entity Renderer for Spirit Cannon Beam in Minecraft 26.2.
- * Bespoke pass: every shape comes from BespokeGeometry seeded by the
- * entity's synced seed. The beam body is crossed torn ribbons (white core,
- * cyan flow pair, wide sheath pair), the orbital nodes are glow fan
- * apertures with counter spun shard star reticles, the muzzle is a glow
- * aperture with a shard seal, and the terminus is a displaced dome with a
- * gold splash star and a white flash fan. Layer radii, colors, envelope,
- * first person anchoring, and the fade retract are unchanged from the
- * spectacle pass.
+ * Entity renderer for the Spirit Cannon beam.
+ *
+ * No-shapes pass: the renderer draws no geometry. The synced beam path is
+ * emission data only. Soul material carries the white core and cyan sheath,
+ * vapor softens the outside, gold souls gather toward the terminus, and the
+ * contact point sheds plasma, vapor, and sparks. The lifecycle envelope,
+ * first person anchor, fade retract, pulse, colors, and synced seed are the
+ * bespoke pass values; only the presentation material changed.
  */
 public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEntity, SpiritCannonBeamRenderer.SpiritCannonRenderState> {
+
+    private static final int WHITE = 0xFFFFFF;
+    private static final int CYAN = 0x00E5FF;
+    private static final int GOLD = 0xFFC83C;
 
     public SpiritCannonBeamRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -70,7 +74,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         state.casterId = entity.getCasterId();
         state.seed = entity.getSeed();
 
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null &&
             (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) &&
             mc.options.getCameraType().isFirstPerson());
@@ -86,153 +90,109 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
     public void submit(SpiritCannonRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
-        float beamLength = state.length;
-        if (beamLength < 0.2f || state.fade <= 0.01f) return;
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc.level;
+        if (level == null || state.length < 0.2f || state.fade <= 0.01f) return;
 
         float age = state.age;
         float pulse = 1.0f + 0.06f * (float) Math.sin(age * 1.5f);
-        float fadeRaw = Math.min(1.0f, age / 5.0f);
-        float fadeIn = fadeRaw * fadeRaw * (3.0f - 2.0f * fadeRaw);
-        // Fade out (standard point 5): the entity counts a synced FADE down
-        // over its last 6 ticks; alpha and drawn length both ride it, so the
-        // beam retracts and thins instead of vanishing in one tick.
-        final float env = fadeIn * state.fade;
-        final float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        final long seed = state.seed;
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        float fadeIn = FxEnvelope.smoothstep(Math.min(1.0f, age / 5.0f));
+        float env = fadeIn * state.fade;
+        if (env <= 0.01f) return;
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
+        Vec3 origin = new Vec3(state.x, state.y, state.z);
+        float distScale = MaterialEmitters.distanceScale(origin);
+        float emission = env * distScale;
+        float delta = frameDelta();
 
-        if (state.isFirstPersonOwner) {
-            // Anchor beam origin to the Spirit Sword blade tip: way lower and on weapon hand side
-            float sideSign = state.onRight ? -1.0f : 1.0f;
-            poseStack.translate(sideSign * 0.40f, -0.46f, 0.35f);
-        }
+        Matrix4f rotation = new Matrix4f()
+            .rotateY((float) Math.toRadians(-state.yRot))
+            .rotateX((float) Math.toRadians(state.xRot));
+        Vec3 direction = transformDirection(rotation, new Vec3(0.0, 0.0, 1.0));
 
+        float sideSign = state.onRight ? -1.0f : 1.0f;
+        Vec3 localOffset = state.isFirstPersonOwner
+            ? new Vec3(sideSign * 0.40f, -0.46f, 0.35f)
+            : Vec3.ZERO;
         float zStart = state.isFirstPersonOwner ? 0.25f : 0.0f;
         float fpScale = state.isFirstPersonOwner ? 0.50f : 1.0f;
-        final float drawLength = zStart + (beamLength - zStart) * (0.15f + 0.85f * state.fade);
-        final float fZStart = zStart;
-        final float fFpScale = fpScale;
+        float drawLength = zStart + (state.length - zStart) * (0.15f + 0.85f * state.fade);
+        if (drawLength <= zStart + 0.05f) return;
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // 1. Beam body as crossed torn ribbons. Widths are the old
-            // prism diameters (core 0.26, mid 0.52, sheath 0.84 across),
-            // rolls advance at the old prism rotation speeds, and the
-            // bends give the flow layers a slow irregular wander the
-            // prisms never had.
-            float runLen = drawLength - fZStart;
-            beamRibbon(pose, buffer, seed + 1L, age * 5.0f, fZStart, runLen,
-                0.26f * pulse * fFpScale, 0.02f, 1.0f, 1.0f, 1.0f, 0.95f, env, distScale);
-            beamRibbon(pose, buffer, seed + 2L, age * 5.0f + 90.0f, fZStart, runLen,
-                0.26f * pulse * fFpScale, -0.02f, 1.0f, 1.0f, 1.0f, 0.95f, env, distScale);
-            beamRibbon(pose, buffer, seed + 3L, -age * 8.0f, fZStart, runLen,
-                0.52f * pulse * fFpScale, 0.35f, 0.0f, 0.92f, 1.0f, 0.65f, env, distScale);
-            beamRibbon(pose, buffer, seed + 4L, -age * 8.0f + 90.0f, fZStart, runLen,
-                0.52f * pulse * fFpScale, -0.35f, 0.0f, 0.92f, 1.0f, 0.65f, env, distScale);
-            beamRibbon(pose, buffer, seed + 5L, age * 3.0f, fZStart, runLen,
-                0.84f * pulse * fFpScale, 0.55f, 0.05f, 0.70f, 1.0f, 0.30f, env, distScale);
-            beamRibbon(pose, buffer, seed + 6L, age * 3.0f + 90.0f, fZStart, runLen,
-                0.84f * pulse * fFpScale, -0.55f, 0.05f, 0.70f, 1.0f, 0.30f, env, distScale);
+        Vec3 start = origin.add(transformPosition(rotation, localOffset.add(new Vec3(0.0, 0.0, zStart))));
+        Vec3 end = origin.add(transformPosition(rotation, localOffset.add(new Vec3(0.0, 0.0, drawLength))));
+        Vec3 goldStart = start.add(end.subtract(start).scale(0.60));
+        float runLength = (float) start.distanceTo(end);
+        float lengthScale = Math.max(0.35f, Math.min(1.6f, runLength / 16.0f));
+        int seed = seedInt(state.seed, 1);
 
-            // 2. Orbital nodes: glow fan apertures riding the beam with a
-            // counter spun shard star reticle inside each. Placement,
-            // alternating cyan and gold, pulse phasing, and radii are the
-            // spectacle numbers; only the shapes went bespoke.
-            float usable = drawLength - fZStart;
-            if (usable >= 3.0f && env > 0.01f) {
-                int nodes = FxEnvelope.segments(Math.min(8, Math.max(2, (int) (usable / 4.0f))), distScale, 2);
-                for (int n = 0; n < nodes; n++) {
-                    float frac = (n + 1) / (float) (nodes + 1);
-                    float z = fZStart + usable * frac;
-                    boolean gold = (n % 2 == 1);
-                    float r = gold ? 1.0f : 0.0f;
-                    float g = gold ? 0.82f : 0.92f;
-                    float b = gold ? 0.25f : 1.0f;
-                    float nodePulse = 0.72f + 0.28f * (float) Math.sin(age * 3.0f + n * 1.7f);
-                    float ringR = (0.64f + 0.08f * (float) Math.sin(age * 2.0f + n * 2.3f)) * pulse * fFpScale;
-                    float spin = age * (gold ? -38.0f : 38.0f) + n * 30.0f;
-                    PoseStack.Pose aperture = pose.copy();
-                    aperture.translate(0.0f, 0.0f, z);
-                    aperture.rotate(Axis.ZP.rotationDegrees(spin));
-                    aperture.rotate(Axis.XP.rotationDegrees(90.0f));
-                    BespokeGeometry.glowFan(aperture, buffer, seed + 100L + n * 17L, ringR, 0.0f,
-                        r, g, b, 0.50f * nodePulse * env, distScale);
-                    PoseStack.Pose reticle = pose.copy();
-                    reticle.translate(0.0f, 0.0f, z);
-                    reticle.rotate(Axis.ZP.rotationDegrees(-spin * 1.4f));
-                    reticle.rotate(Axis.XP.rotationDegrees(90.0f));
-                    BespokeGeometry.shardFan(reticle, buffer, seed + 200L + n * 29L, ringR * 0.62f,
-                        Math.min(1f, r + 0.4f), Math.min(1f, g + 0.4f), Math.min(1f, b + 0.4f),
-                        0.55f, nodePulse * env, distScale);
-                }
-            }
+        MaterialEmitters.Source beamPath = MaterialEmitters.path(start, end, 0.025);
+        emit(level,
+            MaterialEmitters.Preset.soul(WHITE, 2.65f * pulse * fpScale, seed,
+                direction.scale(0.030), 0.035f),
+            beamPath, 185.0f * lengthScale, 230, delta, emission);
+        emit(level,
+            MaterialEmitters.Preset.soul(CYAN, 3.55f * pulse * fpScale, seedInt(state.seed, 2),
+                direction.scale(0.022), 0.055f),
+            beamPath, 115.0f * lengthScale, 150, delta, emission);
+        emit(level,
+            MaterialEmitters.Preset.vapor(CYAN, 5.10f * pulse * fpScale, seedInt(state.seed, 3),
+                direction.scale(0.012), 0.085f),
+            beamPath, 42.0f * lengthScale, 60, delta, emission);
+        emit(level,
+            MaterialEmitters.Preset.soul(GOLD, 3.30f * pulse * fpScale, seedInt(state.seed, 4),
+                direction.scale(0.018), 0.060f),
+            MaterialEmitters.path(goldStart, end, 0.012),
+            38.0f * lengthScale, 55, delta, emission);
 
-            // 3. Muzzle aperture at the blade tip: a cyan glow fan with a
-            // counter spun white-cyan shard seal inside it.
-            PoseStack.Pose muzzle = pose.copy();
-            muzzle.translate(0.0f, 0.0f, 0.15f);
-            muzzle.rotate(Axis.ZP.rotationDegrees(age * 30.0f));
-            muzzle.rotate(Axis.XP.rotationDegrees(90.0f));
-            BespokeGeometry.glowFan(muzzle, buffer, seed + 300L, 0.70f * pulse, 0.0f,
-                0.0f, 0.90f, 1.0f, 0.85f * env, distScale);
-            PoseStack.Pose seal = pose.copy();
-            seal.translate(0.0f, 0.0f, 0.20f);
-            seal.rotate(Axis.ZP.rotationDegrees(-age * 45.0f));
-            seal.rotate(Axis.XP.rotationDegrees(90.0f));
-            BespokeGeometry.shardFan(seal, buffer, seed + 301L, 0.48f * pulse,
-                0.0f, 0.95f, 1.0f, 0.90f, env, distScale);
-
-            // 4. Terminus at the hit point: a displaced dome bellied back
-            // toward the caster, a gold splash star on the contact plane,
-            // and a white flash fan at its heart.
-            PoseStack.Pose dome = pose.copy();
-            dome.translate(0.0f, 0.0f, drawLength - 0.05f);
-            dome.rotate(Axis.XP.rotationDegrees(90.0f));
-            BespokeGeometry.displacedDome(dome, buffer, seed + 400L, 0.85f * pulse,
-                0.0f, 0.95f, 1.0f, 0.75f, env, distScale);
-            PoseStack.Pose splash = pose.copy();
-            splash.translate(0.0f, 0.0f, drawLength);
-            splash.rotate(Axis.ZP.rotationDegrees(age * 25.0f));
-            splash.rotate(Axis.XP.rotationDegrees(90.0f));
-            BespokeGeometry.shardFan(splash, buffer, seed + 401L, 1.1f * pulse,
-                1.0f, 0.90f, 0.30f, 0.85f, env, distScale);
-            PoseStack.Pose flash = pose.copy();
-            flash.translate(0.0f, 0.0f, drawLength);
-            flash.rotate(Axis.XP.rotationDegrees(90.0f));
-            BespokeGeometry.glowFan(flash, buffer, seed + 402L, 0.50f * pulse, 0.0f,
-                1.0f, 1.0f, 1.0f, 0.90f * env, distScale);
-        });
-
-        // Glow pass: a low alpha copy of the core and sheath so the beam
-        // blooms as light instead of reading as matte ribbons.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            float runLen = drawLength - fZStart;
-            beamRibbon(pose, buffer, seed + 7L, age * 5.0f + 45.0f, fZStart, runLen,
-                0.30f * pulse * fFpScale, 0.02f, 1.0f, 1.0f, 1.0f, 0.22f, env, distScale);
-            beamRibbon(pose, buffer, seed + 8L, age * 3.0f + 45.0f, fZStart, runLen,
-                0.88f * pulse * fFpScale, 0.55f, 0.05f, 0.70f, 1.0f, 0.10f, env, distScale);
-        });
-
-        poseStack.popPose();
+        emit(level,
+            MaterialEmitters.Preset.soul(CYAN, 3.15f * pulse * fpScale, seedInt(state.seed, 5),
+                direction.scale(0.045), 0.045f),
+            MaterialEmitters.sphereVolume(start, 0.26 * pulse * fpScale),
+            58.0f, 75, delta, emission);
+        emit(level,
+            MaterialEmitters.Preset.plasma(WHITE, 3.25f * pulse * fpScale, seedInt(state.seed, 6),
+                direction.scale(0.20), 0.30f),
+            MaterialEmitters.sphereVolume(end, 0.48 * pulse * fpScale),
+            95.0f, 120, delta, emission);
+        emit(level,
+            MaterialEmitters.Preset.vapor(CYAN, 4.65f * pulse * fpScale, seedInt(state.seed, 7),
+                direction.scale(0.05), 0.16f),
+            MaterialEmitters.sphereVolume(end, 0.72 * pulse * fpScale),
+            34.0f, 50, delta, emission);
+        emit(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.SPARK, direction.scale(0.10), 0.30f),
+            MaterialEmitters.point(end),
+            42.0f, 60, delta, emission);
     }
 
-    /**
-     * One beam layer: a torn ribbon started at zStart and run down the beam
-     * axis. tornRibbon runs along its local +X in the XZ plane, so the pose
-     * is rolled around the beam axis first, then turned so +X points down
-     * +Z. Pose operations post-multiply, so the calls below compose as
-     * translate, roll, turn when read against a vertex.
-     */
-    private static void beamRibbon(PoseStack.Pose base, VertexConsumer buffer, long seed,
-                                   float rollDeg, float zStart, float length, float width, float bend,
-                                   float r, float g, float b, float alpha, float env, float distScale) {
-        PoseStack.Pose p = base.copy();
-        p.translate(0.0f, 0.0f, zStart);
-        p.rotate(Axis.ZP.rotationDegrees(rollDeg));
-        p.rotate(Axis.YP.rotationDegrees(-90.0f));
-        BespokeGeometry.tornRibbon(p, buffer, seed, length, width, bend, r, g, b, alpha, env, distScale);
+    private static void emit(ClientLevel level, MaterialEmitters.Preset preset, MaterialEmitters.Source source,
+                             float ratePerSecond, int budgetPerSecond, float deltaSeconds, float envelope) {
+        if (envelope <= 0.01f) return;
+        new MaterialEmitters.Emitter(level, preset, source, ratePerSecond, budgetPerSecond)
+            .tick(deltaSeconds, envelope);
+    }
+
+    private static Vec3 transformPosition(Matrix4f rotation, Vec3 local) {
+        Vector3f transformed = rotation.transformPosition(new Vector3f(
+            (float) local.x, (float) local.y, (float) local.z));
+        return new Vec3(transformed.x(), transformed.y(), transformed.z());
+    }
+
+    private static Vec3 transformDirection(Matrix4f rotation, Vec3 local) {
+        Vector3f transformed = rotation.transformDirection(new Vector3f(
+            (float) local.x, (float) local.y, (float) local.z));
+        return new Vec3(transformed.x(), transformed.y(), transformed.z());
+    }
+
+    private static int seedInt(long seed, int stream) {
+        long mixed = seed ^ stream * 0x9E3779B97F4A7C15L;
+        return (int) (mixed ^ (mixed >>> 32));
+    }
+
+    private static float frameDelta() {
+        long frameTimeNs = Minecraft.getInstance().getFrameTimeNs();
+        if (frameTimeNs <= 0L) return 1.0f / 60.0f;
+        return Math.max(0.002f, Math.min(0.05f, frameTimeNs / 1_000_000_000.0f));
     }
 }

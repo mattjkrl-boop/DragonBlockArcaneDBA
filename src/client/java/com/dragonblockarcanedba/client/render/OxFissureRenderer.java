@@ -1,28 +1,33 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.OxFissureEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Random;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Ox King's Ground Fissure in Minecraft 26.2.
- * Bespoke pass: every shape comes from BespokeGeometry. The trench is a
- * layered crack star squashed on X (0.55) inside the yaw aligned pose, so
- * the star's arms fill the same rotated rectangle the entity damages
- * (about 4.2 long, 2.0 wide) instead of the old hand drawn straight decal.
- * The stone teeth are branch spikes along the crack's long axis, and the
- * additive pass redraws the hot core layer so the crack blooms.
+ * No-shapes pass: this renderer draws no geometry. The trench is carried by
+ * material sampled along the crack line as data: hot plasma glowing in the
+ * crack, a white-hot core stream, ground dust, embers, and occasional
+ * physical debris chunks of the actual ground block. The crack follows the
+ * same yaw and the same 4.2 by 2.0 footprint the entity damages, and the
+ * fade in, pulse, and fade out are unchanged from the bespoke build.
  */
 public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissureRenderer.OxFissureRenderState> {
     public OxFissureRenderer(EntityRendererProvider.Context context) {
@@ -33,6 +38,9 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
         public float ageInTicks = 0;
         public long seed = 0;
         public float yRot = 0;
+        public double wx = 0;
+        public double wy = 0;
+        public double wz = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -56,91 +64,112 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
         state.ageInTicks = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
         state.yRot = entity.getYRot();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
+    }
+
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        double dirX = 0.0;
+        double dirZ = 1.0;
+    }
+
+    private static final class Emission {
+        final Frame frame = new Frame();
+        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        float lastAge = -1f;
+    }
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
+
+    /**
+     * Points along the crack line: length 3.9 along the fissure axis with a
+     * lateral jitter inside the 2.0 wide damage footprint. Data only.
+     */
+    private static MaterialEmitters.Source crackLine(Frame frame, float lateral) {
+        return random -> {
+            double along = (random.nextDouble() * 2.0 - 1.0) * 1.95;
+            double side = (random.nextDouble() * 2.0 - 1.0) * lateral;
+            double px = -frame.dirZ;
+            double pz = frame.dirX;
+            return new MaterialEmitters.Sample(new Vec3(
+                    frame.center.x + frame.dirX * along + px * side,
+                    frame.center.y + 0.05 + random.nextDouble() * 0.05,
+                    frame.center.z + frame.dirZ * along + pz * side), Vec3.ZERO);
+        };
+    }
+
+    private static BlockState groundState(ClientLevel level, Vec3 center) {
+        BlockState state = level.getBlockState(BlockPos.containing(center.x, center.y - 0.5, center.z));
+        return state.isAir() ? Blocks.STONE.defaultBlockState() : state;
+    }
+
+    private Emission buildEmission(ClientLevel level, OxFissureRenderState state) {
+        Emission emission = new Emission();
+        Frame frame = emission.frame;
+        frame.center = new Vec3(state.wx, state.wy, state.wz);
+        int seed = (int) state.seed;
+        BlockState ground = groundState(level, frame.center);
+        emission.emitters = new MaterialEmitters.Emitter[]{
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0xFF6A12, 1.20f, seed ^ 0x7007,
+                                Vec3.ZERO, 0.008f),
+                        crackLine(frame, 0.50f), 130f, 180),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0xFFD98A, 0.70f, seed ^ 0x7008,
+                                Vec3.ZERO, 0.005f),
+                        crackLine(frame, 0.22f), 42f, 70),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.dust(0xA0825F, 1.4f, seed ^ 0xD057,
+                                new Vec3(0.0, 0.03, 0.0), 0.02f),
+                        crackLine(frame, 0.85f), 70f, 110),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.ember(new Vec3(0.0, 0.10, 0.0), 0.04f),
+                        crackLine(frame, 0.45f), 26f, 45),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, ground),
+                                new Vec3(0.0, 0.20, 0.0), 0.06f),
+                        crackLine(frame, 0.60f), 12f, 25),
+        };
+        return emission;
     }
 
     @Override
     public void submit(OxFissureRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
         float pulse = 0.75f + 0.25f * (float) Math.sin(state.ageInTicks * 0.25f);
         float life = state.ageInTicks / (float) OxFissureEntity.MAX_LIFETIME;
         float inT = Math.min(1.0f, state.ageInTicks / 4.0f);
         float inEase = 1.0f - (1.0f - inT) * (1.0f - inT) * (1.0f - inT);
         float outT = life <= 0.70f ? 0.0f : Math.min(1.0f, (life - 0.70f) / 0.30f);
         float fade = inEase * (1.0f - outT * outT * (3.0f - 2.0f * outT));
-        long seed = state.seed;
+        float envelope = fade * pulse;
 
-        // Stone teeth along the crack's long axis (local Z), alternating
-        // sides like the spectacle build; heights from the seeded stream.
-        Random rng = new Random(seed);
-        int toothCount = 4;
-        float[] toothFrom = new float[toothCount * 3];
-        float[] toothTo = new float[toothCount * 3];
-        float toothGrow = Math.min(1.0f, state.ageInTicks * 0.2f);
-        for (int i = 0; i < toothCount; i++) {
-            float side = (i % 2 == 0) ? 1.0f : -1.0f;
-            float toothH = (0.3f + rng.nextFloat() * 0.35f) * toothGrow;
-            float tx = side * 0.3f;
-            float tz = -1.35f + i * 0.9f;
-            toothFrom[i * 3] = tx;
-            toothFrom[i * 3 + 1] = 0.05f;
-            toothFrom[i * 3 + 2] = tz;
-            toothTo[i * 3] = tx + side * 0.15f;
-            toothTo[i * 3 + 1] = Math.max(0.08f, toothH);
-            toothTo[i * 3 + 2] = tz + side * 0.15f;
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level != null && envelope > 0.01f) {
+            Emission emission = emissions.get(state.seed);
+            if (emission == null || state.ageInTicks < emission.lastAge - 1.0f) {
+                emission = buildEmission(level, state);
+                emissions.put(state.seed, emission);
+                if (emissions.size() > 64) emissions.clear();
+            }
+            Frame frame = emission.frame;
+            frame.center = new Vec3(state.wx, state.wy, state.wz);
+            // The bespoke build rotated its pose by -yRot around Y; the same
+            // rotation applied to the local +Z axis gives the crack direction.
+            double a = Math.toRadians(-state.yRot);
+            frame.dirX = Math.sin(a);
+            frame.dirZ = Math.cos(a);
+            float delta = emission.lastAge < 0f ? 0.05f
+                    : Math.min(0.05f, Math.max(0.0f, (state.ageInTicks - emission.lastAge) / 20.0f));
+            emission.lastAge = state.ageInTicks;
+            for (MaterialEmitters.Emitter emitter : emission.emitters) {
+                emitter.tick(delta, envelope);
+            }
         }
 
-        float fadeF = fade;
-        float pulseF = pulse;
-        float coreFade = fade * (1.0f - outT);
-
-        // Align the trench with the yaw the spawner set (radially outward
-        // from the slam). Every fissure used to render pointing the same way.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.YP.rotationDegrees(-state.yRot)));
-
-        // Anchor glow and teeth in the unscaled yaw pose.
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            LayeredRender.drawAnchorGlow(pose, buffer, 2.0f, 0.05f,
-                1.0f, 0.50f, 0.08f, LayeredRender.ALPHA_MID * fadeF, 1.0f);
-            for (int i = 0; i < toothCount; i++) {
-                Vec3 from = new Vec3(toothFrom[i * 3], toothFrom[i * 3 + 1], toothFrom[i * 3 + 2]);
-                Vec3 to = new Vec3(toothTo[i * 3], toothTo[i * 3 + 1], toothTo[i * 3 + 2]);
-                BespokeGeometry.branch(pose, buffer, seed ^ (0x7007L + i * 131L),
-                    from, to, 0.16f,
-                    0.25f, 0.20f, 0.16f, fadeF, 1.0f, 1.0f);
-                BespokeGeometry.branch(pose, buffer, seed ^ (0x7008L + i * 131L),
-                    from, new Vec3(to.x, Math.max(0.06f, to.y * 0.65f), to.z), 0.07f,
-                    1.0f, 0.35f, 0.05f, fadeF * 0.95f, 1.0f, 1.0f);
-            }
-        });
-
-        // The crack star itself, squashed on X so its arms span the damage
-        // rectangle: radius 1.9 along Z, about 1.05 across X after the squash.
-        // Four layers share one seed, so the paths coincide: dark underlay,
-        // magma base, heat core, white hot center.
-        poseStack.pushPose();
-        poseStack.scale(0.55f, 1.0f, 1.0f);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.crackStar(pose, buffer, seed, 1.95f,
-                0.45f, 0.08f, 0.0f, fadeF * 0.95f, 1.0f, 1.0f);
-            BespokeGeometry.crackStar(pose, buffer, seed, 1.90f,
-                1.0f, 0.25f * pulseF, 0.0f, fadeF * 0.95f, 1.0f, 1.0f);
-            BespokeGeometry.crackStar(pose, buffer, seed, 1.82f,
-                1.0f, 0.90f * pulseF, 0.20f, fadeF, 1.0f, 1.0f);
-            BespokeGeometry.crackStar(pose, buffer, seed, 1.74f,
-                1.0f, 0.98f, 0.72f, coreFade, 1.0f, 1.0f);
-        });
-
-        // Additive glow halo: the heat core layer blooms so the crack reads
-        // as molten light in the ground.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.crackStar(pose, buffer, seed, 1.82f,
-                1.0f, 0.90f * pulseF, 0.20f, fadeF * 0.35f, 1.0f, 1.0f);
-        });
-        poseStack.popPose();
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 }

@@ -1,31 +1,35 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KingsSlamEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 /**
  * Entity Renderer for Ox King's Slam (Normal and Flawless) in Minecraft 26.2.
- * Bespoke pass: every shape comes from BespokeGeometry. The radiating canyon
- * trenches are layered crack stars, the dome walls are Y-squashed displaced
- * domes, the crest ring is a low broken vortex band over a glow fan caldera,
- * the monoliths are elongated displaced domes with branch veins, and the
- * flawless geysers are plumes. All spectacle numbers (growth curve, fade,
- * radii, heights, counts) are unchanged.
+ * No-shapes pass: this renderer draws no geometry. The slam reads as
+ * compressed ground dust and shock vapor rolling across the impact disc,
+ * physical debris chunks of the actual ground block, embers, and hot plasma
+ * running through the radiating cracks. The flawless variant adds plasma
+ * and vapor geyser emission at seeded anchor points inside the disc. Growth
+ * curve, fade, radii, and lifetime are unchanged from the bespoke build.
  */
 public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlamRenderer.KingsSlamRenderState> {
 
@@ -39,6 +43,9 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
         public float age = 0;
         public int lifetime = 40;
         public long seed = 0;
+        public double wx = 0;
+        public double wy = 0;
+        public double wz = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -64,6 +71,105 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
         state.age = entity.tickCount + partialTicks;
         state.lifetime = entity.getLifetime();
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
+    }
+
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        float radius = 1.0f;
+    }
+
+    private static final class Emission {
+        final Frame frame = new Frame();
+        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        Vec3[] geyserOffsets = new Vec3[0];
+        boolean flawless = false;
+        float lastAge = -1f;
+    }
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
+
+    /** Points across the impact disc at a fixed height band. */
+    private static MaterialEmitters.Source disc(Frame frame, float yBase, float yRange) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double rr = frame.radius * Math.sqrt(random.nextDouble());
+            return new MaterialEmitters.Sample(new Vec3(
+                    frame.center.x + Math.cos(angle) * rr,
+                    frame.center.y + yBase + random.nextDouble() * yRange,
+                    frame.center.z + Math.sin(angle) * rr), Vec3.ZERO);
+        };
+    }
+
+    /** Points at one of the seeded geyser anchors, chosen per sample. */
+    private static MaterialEmitters.Source geyserAnchors(Frame frame, Emission emission) {
+        return random -> {
+            Vec3[] offsets = emission.geyserOffsets;
+            if (offsets.length == 0) return new MaterialEmitters.Sample(frame.center, Vec3.ZERO);
+            return new MaterialEmitters.Sample(frame.center.add(offsets[random.nextInt(offsets.length)]), Vec3.ZERO);
+        };
+    }
+
+    private static BlockState groundState(ClientLevel level, Vec3 center) {
+        BlockState state = level.getBlockState(BlockPos.containing(center.x, center.y - 0.5, center.z));
+        return state.isAir() ? Blocks.STONE.defaultBlockState() : state;
+    }
+
+    private Emission buildEmission(ClientLevel level, KingsSlamRenderState state) {
+        Emission emission = new Emission();
+        emission.flawless = state.isFlawless;
+        Frame frame = emission.frame;
+        frame.center = new Vec3(state.wx, state.wy, state.wz);
+        int seed = (int) state.seed;
+        int hotColor = state.isFlawless ? 0xFFD24A : 0xFF8C1F;
+
+        // Flawless geyser anchors: 8 seeded points in the same distance band
+        // the bespoke geysers used (0.45 to 0.85 of the radius).
+        if (state.isFlawless) {
+            Random rng = new Random(state.seed ^ 0x6E15L);
+            emission.geyserOffsets = new Vec3[8];
+            for (int g = 0; g < emission.geyserOffsets.length; g++) {
+                double ang = (g / (double) emission.geyserOffsets.length) * Math.PI * 2.0 + rng.nextDouble() * 0.2;
+                float dist = state.radius * (0.45f + rng.nextFloat() * 0.40f);
+                emission.geyserOffsets[g] = new Vec3(
+                        Math.cos(ang) * dist, 0.05, Math.sin(ang) * dist);
+            }
+        }
+
+        BlockState ground = groundState(level, frame.center);
+        emission.emitters = new MaterialEmitters.Emitter[]{
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.dust(0xA0825F, 1.8f, seed ^ 0xD057,
+                                new Vec3(0.0, 0.04, 0.0), 0.04f),
+                        disc(frame, 0.05f, 0.30f), 260f, 340),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.vapor(0xD8C6A8, 2.2f, seed ^ 0x7E57,
+                                new Vec3(0.0, 0.06, 0.0), 0.03f),
+                        disc(frame, 0.10f, 0.60f), 70f, 110),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(hotColor, 1.15f, seed ^ 0xCA1D,
+                                new Vec3(0.0, 0.01, 0.0), 0.01f),
+                        disc(frame, 0.04f, 0.06f), 110f, 160),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.ember(new Vec3(0.0, 0.14, 0.0), 0.06f),
+                        disc(frame, 0.05f, 0.20f), 44f, 70),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, ground),
+                                new Vec3(0.0, 0.32, 0.0), 0.12f),
+                        disc(frame, 0.05f, 0.10f), 54f, 90),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(hotColor, 1.5f, seed ^ 0x6E15,
+                                new Vec3(0.0, 0.62, 0.0), 0.06f),
+                        geyserAnchors(frame, emission), state.isFlawless ? 170f : 0f, 220),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.vapor(0xE8D9BE, 2.4f, seed ^ 0x6E16,
+                                new Vec3(0.0, 0.40, 0.0), 0.08f),
+                        geyserAnchors(frame, emission), state.isFlawless ? 60f : 0f, 90),
+        };
+        return emission;
     }
 
     @Override
@@ -71,166 +177,35 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
         super.submit(state, poseStack, collector, cameraState);
 
         float radius = state.radius;
-        boolean isFlawless = state.isFlawless;
         float age = state.age;
         float life = Math.min(1.0f, age / (float) Math.max(1, state.lifetime));
         float growT = Math.min(1.0f, life / 0.55f);
         float grow = 1.0f - (1.0f - growT) * (1.0f - growT) * (1.0f - growT);
         float exitT = life <= 0.62f ? 0.0f : Math.min(1.0f, (life - 0.62f) / 0.38f);
         float fade = 1.0f - exitT * exitT * (3.0f - 2.0f * exitT);
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
-        float rCol = isFlawless ? 1.0f : 1.0f;
-        float gCol = isFlawless ? 0.85f : 0.35f;
-        float bCol = isFlawless ? 0.20f : 0.02f;
 
         float distScale = FxEnvelope.distScale(Math.sqrt(state.distanceToCameraSq));
-        long seed = state.seed;
-        float shockR = radius * grow;
-        float domeH = (2.5f + (isFlawless ? 3.0f : 1.5f)) * grow * (1.0f - exitT * 0.55f);
+        float shockR = Math.max(0.2f, radius * grow);
+        float envelope = fade * distScale;
 
-        Random rng = new Random(seed);
-
-        // Monolith placement (positions were random in the spectacle build
-        // too; the counts, distance band, heights, and leans are unchanged).
-        int rockCount = FxEnvelope.segments(isFlawless ? 28 : 16, distScale, 8);
-        float[] rockX = new float[rockCount];
-        float[] rockZ = new float[rockCount];
-        float[] rockH = new float[rockCount];
-        float[] rockW = new float[rockCount];
-        float[] rockRot = new float[rockCount];
-        float[] rockLean = new float[rockCount];
-        float[] rockTipX = new float[rockCount];
-        float[] rockTipZ = new float[rockCount];
-        for (int r = 0; r < rockCount; r++) {
-            double rockAngle = (r / (double) rockCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.35);
-            float rockDist = radius * (0.25f + rng.nextFloat() * 0.65f);
-
-            float rx = (float) Math.cos(rockAngle) * rockDist;
-            float rz = (float) Math.sin(rockAngle) * rockDist;
-
-            float maxH = (isFlawless ? 2.5f : 1.5f) + rng.nextFloat() * (isFlawless ? 3.0f : 1.8f);
-            float slabHeight = maxH * grow * (1.0f - exitT * 0.35f);
-            float slabWidth = 0.45f + rng.nextFloat() * 0.40f;
-
-            float tiltFactor = 0.35f + rng.nextFloat() * 0.25f;
-
-            rockX[r] = rx;
-            rockZ[r] = rz;
-            rockH[r] = slabHeight;
-            rockW[r] = slabWidth;
-            rockRot[r] = (float) -Math.toDegrees(rockAngle);
-            rockLean[r] = (float) Math.toDegrees(Math.atan(tiltFactor));
-            rockTipX[r] = rx + (float) Math.cos(rockAngle) * (slabHeight * tiltFactor);
-            rockTipZ[r] = rz + (float) Math.sin(rockAngle) * (slabHeight * tiltFactor);
-        }
-
-        // Flawless geyser placement, with the same per-geyser height flicker.
-        int geyserCount = isFlawless ? 8 : 0;
-        float[] geyserX = new float[geyserCount];
-        float[] geyserZ = new float[geyserCount];
-        float[] geyserH = new float[geyserCount];
-        if (isFlawless) {
-            for (int g = 0; g < geyserCount; g++) {
-                double gAng = (g / (double) geyserCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.2);
-                float gDist = radius * (0.45f + rng.nextFloat() * 0.40f);
-                geyserX[g] = (float) Math.cos(gAng) * gDist;
-                geyserZ[g] = (float) Math.sin(gAng) * gDist;
-                float gHeight = 6.0f + rng.nextFloat() * 2.5f;
-                gHeight *= grow * (1.0f - exitT) * (0.90f + 0.10f * (float) Math.sin(age * 0.9f + g * 1.7f));
-                geyserH[g] = gHeight;
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level != null && envelope > 0.01f) {
+            Emission emission = emissions.get(state.seed);
+            if (emission == null || emission.flawless != state.isFlawless || age < emission.lastAge - 1.0f) {
+                emission = buildEmission(level, state);
+                emissions.put(state.seed, emission);
+                if (emissions.size() > 64) emissions.clear();
             }
-        }
-
-        float fadeF = fade;
-        float distScaleF = distScale;
-        boolean showDome = fade > 0.05f;
-        // Cracks spread outward as the dome grows (the spectacle trenches
-        // had full length from tick one but zero width; the star splits the
-        // difference so tick one is not a full size decal).
-        float crackSpread = 0.35f + 0.65f * grow;
-
-        // Ground layer: anchor glow, crest band, caldera glow fan, layered
-        // crack stars for the trenches, and the monolith veins.
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            if (showDome) {
-                LayeredRender.drawAnchorGlow(pose, buffer, Math.max(1.0f, shockR), 0.07f,
-                    rCol, gCol, bCol, LayeredRender.ALPHA_MID * fadeF, distScaleF);
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xC9E57L,
-                    Math.max(0.2f, shockR * 0.92f), 0.04f, 0.16f, 0.0f,
-                    rCol, gCol, bCol, fadeF * 0.85f, distScaleF);
-                BespokeGeometry.glowFan(pose, buffer, seed ^ 0xCA1DL,
-                    Math.max(0.2f, shockR * 0.65f), 0.05f,
-                    1.0f, isFlawless ? 0.95f : 0.60f, 0.10f, fadeF * 0.70f, distScaleF);
+            Frame frame = emission.frame;
+            frame.center = new Vec3(state.wx, state.wy, state.wz);
+            frame.radius = shockR;
+            float delta = emission.lastAge < 0f ? 0.05f
+                    : Math.min(0.05f, Math.max(0.0f, (age - emission.lastAge) / 20.0f));
+            emission.lastAge = age;
+            for (MaterialEmitters.Emitter emitter : emission.emitters) {
+                emitter.tick(delta, envelope);
             }
-
-            float crackR = radius * 0.95f * crackSpread;
-            BespokeGeometry.crackStar(pose, buffer, seed, crackR,
-                rCol, gCol * 0.7f, bCol * 0.5f, fadeF * 0.95f, 1.0f, distScaleF);
-            BespokeGeometry.crackStar(pose, buffer, seed, crackR * 0.97f,
-                1.0f, isFlawless ? 1.0f : 0.85f, 0.40f, fadeF, 1.0f, distScaleF);
-            BespokeGeometry.crackStar(pose, buffer, seed, crackR * 0.93f,
-                1.0f, 0.98f, 0.72f, fadeF * 0.80f, 1.0f, distScaleF);
-
-            for (int r = 0; r < rockCount; r++) {
-                BespokeGeometry.branch(pose, buffer, seed ^ (0xBE10L + r * 131L),
-                    new Vec3(rockX[r], 0.08f, rockZ[r]),
-                    new Vec3(rockTipX[r], Math.max(0.10f, rockH[r] * 0.9f), rockTipZ[r]),
-                    Math.max(0.03f, rockW[r] * 0.20f),
-                    1.0f, isFlawless ? 0.70f : 0.30f, 0.05f, fadeF * 0.95f, 1.0f, distScaleF);
-            }
-        });
-
-        // Dome walls: displaced domes squashed on Y to the spectacle dome
-        // height (the builder's own height is its radius, so the pose scale
-        // carries the difference). Outer wall, then the hotter inner wall.
-        if (showDome && shockR > 0.2f) {
-            poseStack.pushPose();
-            poseStack.scale(1.0f, domeH / shockR, 1.0f);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD04E1L, shockR,
-                    rCol, gCol, bCol, fadeF * 0.65f, 1.0f, distScaleF);
-            });
-            poseStack.popPose();
-
-            poseStack.pushPose();
-            poseStack.scale(1.0f, (domeH * 0.70f) / (shockR * 0.52f), 1.0f);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD04E2L, shockR * 0.52f,
-                    1.0f, isFlawless ? 1.0f : 0.82f, isFlawless ? 0.45f : 0.22f, fadeF * 0.55f, 1.0f, distScaleF);
-            });
-            poseStack.popPose();
-        }
-
-        // Monolith bodies: elongated displaced domes leaned outward.
-        for (int r = 0; r < rockCount; r++) {
-            float domeRadius = Math.max(0.10f, rockW[r] * 0.55f);
-            float heightScale = rockH[r] / domeRadius;
-            long rockSeed = seed ^ (0x9A40L + r * 0x9E37L);
-            poseStack.pushPose();
-            poseStack.translate(rockX[r], 0.05f, rockZ[r]);
-            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(rockRot[r])));
-            poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(-rockLean[r])));
-            poseStack.scale(1.0f, heightScale, 1.0f);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.displacedDome(pose, buffer, rockSeed, domeRadius,
-                    0.25f, 0.20f, 0.16f, fadeF, 1.0f, distScaleF);
-            });
-            poseStack.popPose();
-        }
-
-        // Flawless geysers: eruption plumes at the seeded positions.
-        for (int g = 0; g < geyserCount; g++) {
-            if (geyserH[g] <= 0.1f) continue;
-            long geyserSeed = seed ^ (0x6E15L + g * 0x9E37L);
-            float gHeight = geyserH[g];
-            poseStack.pushPose();
-            poseStack.translate(geyserX[g], 0.0f, geyserZ[g]);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.plume(pose, buffer, geyserSeed, 0.70f, gHeight,
-                    1.0f, 0.52f, 0.07f, fadeF * 0.85f, 1.0f, distScaleF);
-            });
-            poseStack.popPose();
         }
     }
 }

@@ -1,6 +1,6 @@
 package com.dragonblockarcanedba.client.particle;
 
-import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
@@ -39,14 +39,16 @@ public class OtherworldCloudParticleManager {
      */
     private static class CloudFormation {
         final int tier;
+        final int seed;
         double relX;
         double relZ;
         double y;
         double radius;
         double speed;
 
-        CloudFormation(int tier, double relX, double relZ, double y, double radius, double speed) {
+        CloudFormation(int tier, int seed, double relX, double relZ, double y, double radius, double speed) {
             this.tier = tier;
+            this.seed = seed;
             this.relX = relX;
             this.relZ = relZ;
             this.y = y;
@@ -101,7 +103,7 @@ public class OtherworldCloudParticleManager {
                 double y = calculateTierCloudY(tier);
                 double radius = 14.0 + RNG.nextDouble() * 10.0; // 14 to 24 block cloud radius
 
-                CLOUD_FORMATIONS.add(new CloudFormation(tier, relX, relZ, y, radius, speed));
+                CLOUD_FORMATIONS.add(new CloudFormation(tier, tier * 101 + i * 1009, relX, relZ, y, radius, speed));
             }
         }
         initialized = true;
@@ -130,6 +132,18 @@ public class OtherworldCloudParticleManager {
             // 2. Ambient view drift: occasional gentle wisps near the Check-In Station or Snake Way
             spawnAmbientLowWisps(level, px, py, pz);
         }
+    }
+
+    /**
+     * Cloud material at cloud scale: broad mist carries the body of a
+     * formation, and every third puff is vapor so the bank keeps a lighter,
+     * faster-dissolving component inside the slower mist.
+     */
+    private static DbaMaterialOptions cloudMaterial(int variant, int seed) {
+        if (variant == 1) {
+            return DbaMaterialOptions.of(DbaMaterialOptions.VAPOR, 0xFFFFFF, 6.0f, seed);
+        }
+        return DbaMaterialOptions.of(DbaMaterialOptions.MIST, 0xFFF3D6, 2.4f, seed);
     }
 
     private static void tickVolumetricClouds(ClientLevel level, double px, double py, double pz) {
@@ -165,7 +179,7 @@ public class OtherworldCloudParticleManager {
                 double vz = (RNG.nextDouble() - 0.5) * 0.02;
 
                 level.addParticle(
-                    DbaParticles.CLOUD_PUFF,
+                    cloudMaterial(p == 1 ? 1 : 0, cloud.seed + p * 131),
                     spawnX, spawnY, spawnZ,
                     vx, vy, vz
                 );
@@ -186,7 +200,7 @@ public class OtherworldCloudParticleManager {
             double vz = (RNG.nextDouble() - 0.5) * 0.015;
 
             level.addParticle(
-                DbaParticles.CLOUD_PUFF,
+                cloudMaterial(i == 1 ? 1 : 0, 0x4F21 + i * 1009),
                 px + offsetX, spawnY, pz + offsetZ,
                 vx, vy, vz
             );

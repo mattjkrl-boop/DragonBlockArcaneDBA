@@ -1,30 +1,34 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.SwiftCrescentEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Entity Renderer for Swift Crescent in Minecraft 26.2.
- * Renders the Katana Flashdraw crescent in layers: a silver blade arc body,
- * a bright white core arc nested inside it, a colored cutting lip arc on the
- * outer edge, a torn ribbon wake behind the belly, an outer wispy halo copy,
- * and a shard fan spark at the belly that peaks at the strike tick. All
- * geometry comes from the shared BespokeGeometry builders seeded from the
- * entity UUID, so the same crescent draws the same torn silhouette on every
- * client (BESPOKE-STANDARD rule 1). Variant 0 cuts with a cyan lip; variant 1
- * mirrors the arc and cuts with a pale silver-blue lip. Alpha runs on the
- * shared FxEnvelope so the cut builds, peaks, and dissipates.
+ * The Flashdraw cut is no longer drawn as a crescent mesh. This renderer
+ * only supplies the cut position, orientation, scale, and lifecycle as
+ * data to the shared material emitters. Silver and white ki plasma fills
+ * the moving cut volume, the variant lip color tints a second plasma
+ * stream, air vapor trails behind the cut, and steel sparks gather at the
+ * belly. At the strike tick the same materials leave as a one-shot burst.
+ * Variant 0 cuts with a cyan lip; variant 1 reverses the wake direction
+ * and cuts with a pale silver-blue lip.
  */
 public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, SwiftCrescentRenderer.SwiftCrescentRenderState> {
 
@@ -42,6 +46,7 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
         public int maxLifetime = 10;
         public int strikeTick = -1;
         public long seed = 0;
+        public UUID uuid = new UUID(0L, 0L);
         public double wx = 0, wy = 0, wz = 0;
     }
 
@@ -72,6 +77,7 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
         state.maxLifetime = entity.getMaxLifetime();
         state.strikeTick = entity.getStrikeDamage() > 0f ? entity.getStrikeTick() : -1;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.uuid = entity.getUUID();
         state.wx = entity.getX();
         state.wy = entity.getY();
         state.wz = entity.getZ();
@@ -79,90 +85,61 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
 
     @Override
     public void submit(SwiftCrescentRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        // Shared lifecycle: build over the first 25 percent, dissipate over
-        // the last 35. Nothing renders outside the envelope.
         float fade = FxEnvelope.envelope(state.age, state.maxLifetime, 0.25f, 0.35f);
         if (fade <= 0.0f) return;
-        float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.level == null) return;
 
+        float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.25f));
         float baseScale = state.scale * (0.76f + 0.30f * open);
         float trail = 0.10f + 0.58f * FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.65f));
-        // The belly spark peaks exactly when the carried strike lands.
         float strikeFrac = state.strikeTick >= 0
             ? state.strikeTick / (float) state.maxLifetime
             : 0.20f;
         float impact = strike(progress, strikeFrac);
-        float dist = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        Vec3 center = new Vec3(state.wx, state.wy, state.wz);
+        float dist = MaterialEmitters.distanceScale(center);
+        if (dist <= 0.01f) return;
 
-        // Variant 1 mirrors the arc and swaps the cyan lip for silver-blue.
-        float mirror = state.variant == 1 ? -1.0f : 1.0f;
-        float lipR = state.variant == 1 ? 0.55f : 0.0f;
-        float lipG = state.variant == 1 ? 0.80f : 0.86f;
-        float lipB = 1.0f;
-        long seed = state.seed;
+        Anchor anchor = anchorFor(state, mc.level);
+        anchor.center = center;
+        Vec3[] basis = basis(state);
+        anchor.right = basis[0];
+        anchor.up = basis[1];
+        anchor.forward = basis[2].scale(state.variant == 1 ? -1.0 : 1.0);
+        anchor.scale = baseScale;
+        anchor.trail = trail;
+        anchor.variant = state.variant;
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.tiltAngle)));
-        poseStack.scale(baseScale, baseScale, baseScale);
-
-        // The crescent body: three nested blade arcs (silver body, white
-        // core, colored lip) sharing one pose. The builder arc bulges along
-        // its local +X; a -90 degree yaw turns the bulge to face +Z, the way
-        // the old hand drawn strip bowed. Mirroring flips local Z.
-        poseStack.pushPose();
-        poseStack.scale(1.0f, 1.0f, mirror);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed, 2.3f, 100.0f,
-                0.86f, 0.95f, 1.0f, 0.92f, fade, dist);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x1111L, 1.93f, 100.0f,
-                1.0f, 1.0f, 1.0f, 0.55f, fade, dist);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x2222L, 2.42f, 100.0f,
-                lipR, lipG, lipB, 0.45f, fade, dist);
-        });
-        poseStack.popPose();
-
-        // The follow-through wake: a torn ribbon trailing behind the belly,
-        // always toward local -Z like the old strip wake.
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, 0.30f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x3333L, trail, 2.0f, 0.0f,
-                0.86f, 0.95f, 1.0f, 0.45f, fade, dist);
-        });
-        poseStack.popPose();
-
-        // The belly spark: a shard fan in the crescent plane at the point of
-        // the cut, peaking at the strike tick. Its alpha ignores the fade,
-        // matching the old spark: the strike window itself gates it.
-        if (impact > 0.02f) {
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.02f, 0.38f * mirror);
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x4444L, 0.45f * impact,
-                    1.0f, 1.0f, 1.0f, impact, 1.0f, dist);
-            });
-            poseStack.popPose();
+        float delta = anchor.deltaSeconds(mc.isPaused());
+        if (delta > 0f) {
+            float envelope = fade * dist;
+            anchor.plasma.tick(delta, envelope);
+            anchor.core.tick(delta, envelope);
+            anchor.lip.tick(delta, envelope);
+            anchor.vapor.tick(delta, envelope * 0.8f);
+            if (impact > 0.02f) anchor.sparks.tick(delta, impact * dist);
         }
 
-        // Outer layer: a larger, faint copy of the same arc so the cut has a
-        // wispy edge that dissolves into the air (standard point 1).
-        poseStack.pushPose();
-        poseStack.scale(1.3f, 1.3f, 1.3f);
-        poseStack.scale(1.0f, 1.0f, mirror);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed, 2.3f, 100.0f,
-                0.86f, 0.95f, 1.0f, 0.92f, fade * 0.18f, dist);
-        });
-        poseStack.popPose();
-
-        poseStack.popPose();
+        float strikeAge = strikeFrac * state.maxLifetime;
+        if (!anchor.strikeBurstDone && anchor.lastAge >= 0f
+                && anchor.lastAge < strikeAge && state.age >= strikeAge && state.strikeTick >= 0) {
+            anchor.strikeBurstDone = true;
+            int lipColor = state.variant == 1 ? 0x8CCCFF : 0x00DBFF;
+            MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, 2.0f, anchor.seed ^ 0x51A7, Vec3.ZERO, 0.16f)
+                    .withLifetimeFactor(0.6f),
+                MaterialEmitters.sphereVolume(center, 0.55 * baseScale), 22);
+            MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.plasma(lipColor, 2.4f, anchor.seed ^ 0x51A8, Vec3.ZERO, 0.20f)
+                    .withLifetimeFactor(0.6f),
+                MaterialEmitters.sphereVolume(center, 0.70 * baseScale), 14);
+            MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.24f),
+                MaterialEmitters.point(center), 16);
+        }
+        anchor.lastAge = state.age;
         super.submit(state, poseStack, collector, cameraState);
     }
 
@@ -171,5 +148,128 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
         float window = Math.min(1.0f, strikeFrac * 2.0f);
         if (progress >= window) return 0.0f;
         return (float) Math.sin((progress / window) * Math.PI);
+    }
+
+    private static Vec3[] basis(SwiftCrescentRenderState state) {
+        double yaw = Math.toRadians(state.yRot);
+        double pitch = Math.toRadians(state.xRot);
+        double tilt = Math.toRadians(state.tiltAngle);
+        double cosYaw = Math.cos(yaw), sinYaw = Math.sin(yaw);
+        double cosPitch = Math.cos(pitch), sinPitch = Math.sin(pitch);
+        double cosTilt = Math.cos(tilt), sinTilt = Math.sin(tilt);
+        Vec3 right = new Vec3(
+            cosYaw * cosTilt - sinYaw * sinPitch * sinTilt,
+            cosPitch * sinTilt,
+            sinYaw * cosTilt + cosYaw * sinPitch * sinTilt);
+        Vec3 up = new Vec3(
+            -cosYaw * sinTilt - sinYaw * sinPitch * cosTilt,
+            cosPitch * cosTilt,
+            -sinYaw * sinTilt + cosYaw * sinPitch * cosTilt);
+        Vec3 forward = new Vec3(-sinYaw * cosPitch, -sinPitch, cosYaw * cosPitch);
+        return new Vec3[]{right, up, forward};
+    }
+
+    private static Anchor anchorFor(SwiftCrescentRenderState state, ClientLevel level) {
+        long now = System.nanoTime();
+        Anchor anchor = ANCHORS.get(state.uuid);
+        if (anchor == null || anchor.level != level) {
+            anchor = new Anchor(level, (int) state.seed, state.variant);
+            ANCHORS.put(state.uuid, anchor);
+        }
+        anchor.lastSeenNanos = now;
+        Iterator<Map.Entry<UUID, Anchor>> it = ANCHORS.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<UUID, Anchor> entry = it.next();
+            if (!entry.getKey().equals(state.uuid) && now - entry.getValue().lastSeenNanos > 4_000_000_000L) {
+                it.remove();
+            }
+        }
+        return anchor;
+    }
+
+    private static final Map<UUID, Anchor> ANCHORS = new HashMap<>();
+
+    private static final class Anchor {
+        private final ClientLevel level;
+        private final int seed;
+        private long lastSeenNanos;
+        private long lastTickNanos;
+        private float lastAge = -1f;
+        private boolean strikeBurstDone;
+        private Vec3 center = Vec3.ZERO;
+        private Vec3 right = new Vec3(1, 0, 0);
+        private Vec3 up = new Vec3(0, 1, 0);
+        private Vec3 forward = new Vec3(0, 0, 1);
+        private float scale = 1f;
+        private float trail = 0f;
+        private int variant = 0;
+        private final MaterialEmitters.Emitter plasma;
+        private final MaterialEmitters.Emitter core;
+        private final MaterialEmitters.Emitter lip;
+        private final MaterialEmitters.Emitter vapor;
+        private final MaterialEmitters.Emitter sparks;
+
+        private Anchor(ClientLevel level, int seed, int variant) {
+            this.level = level;
+            this.seed = seed;
+            this.variant = variant;
+            MaterialEmitters.Source cutVolume = random -> {
+                double z = random.nextDouble() * 2.0 - 1.0;
+                double ang = random.nextDouble() * Math.PI * 2.0;
+                double rr = Math.cbrt(random.nextDouble());
+                double flat = Math.sqrt(Math.max(0.0, 1.0 - z * z)) * rr;
+                double lx = Math.cos(ang) * flat * 2.15 * scale;
+                double ly = Math.sin(ang) * flat * 1.05 * scale;
+                double lz = z * 0.28 * scale;
+                Vec3 pos = center.add(right.scale(lx)).add(up.scale(ly)).add(forward.scale(lz));
+                Vec3 vel = forward.scale(-0.06)
+                    .add(right.scale(lx * 0.018))
+                    .add(up.scale(ly * 0.018));
+                return new MaterialEmitters.Sample(pos, vel);
+            };
+            MaterialEmitters.Source wake = random -> {
+                double t = random.nextDouble();
+                Vec3 pos = center
+                    .add(forward.scale((0.30 - t * (0.60 + trail * 2.0)) * scale))
+                    .add(right.scale((random.nextDouble() * 2.0 - 1.0) * 1.55 * scale))
+                    .add(up.scale((random.nextDouble() * 2.0 - 1.0) * 0.72 * scale));
+                return new MaterialEmitters.Sample(pos, forward.scale(-0.16));
+            };
+            int lipColor = variant == 1 ? 0x8CCCFF : 0x00DBFF;
+            // Merge wiring: the host lives 10 ticks, so the material
+            // lifetimes are factored down toward the host window (plasma
+            // 0.6, wake vapor 0.45) instead of trailing up to 54 ticks of
+            // afterglow after the crescent is gone.
+            this.plasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xDBF2FF, 2.6f, seed, Vec3.ZERO, 0.025f)
+                    .withLifetimeFactor(0.6f),
+                cutVolume, 175f, 200);
+            this.core = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, 1.8f, seed ^ 0x1111, Vec3.ZERO, 0.018f)
+                    .withLifetimeFactor(0.6f),
+                cutVolume, 95f, 115);
+            this.lip = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(lipColor, 2.9f, seed ^ 0x2222, Vec3.ZERO, 0.025f)
+                    .withLifetimeFactor(0.6f),
+                cutVolume, 70f, 90);
+            this.vapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0xDBF2FF, 3.4f, seed ^ 0x3333, Vec3.ZERO, 0.020f)
+                    .withLifetimeFactor(0.45f),
+                wake, 48f, 64);
+            this.sparks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.16f),
+                random -> new MaterialEmitters.Sample(center, Vec3.ZERO), 24f, 32);
+        }
+
+        private float deltaSeconds(boolean paused) {
+            long now = System.nanoTime();
+            if (lastTickNanos == 0L) {
+                lastTickNanos = now;
+                return paused ? 0f : 0.016f;
+            }
+            float delta = Math.min(0.05f, (now - lastTickNanos) / 1_000_000_000.0f);
+            lastTickNanos = now;
+            return paused ? 0f : delta;
+        }
     }
 }

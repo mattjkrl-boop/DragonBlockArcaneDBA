@@ -1,30 +1,27 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.BraveShockwaveEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Brave Sword Heroic Impact Shockwave in Minecraft 26.2.
- * Bespoke pass: the beveled crest ring, flat rings, valor spike triangles,
- * and starburst core are rebuilt on BespokeGeometry. Broken vortex bands
- * carry the raised crest (gold) and its cyan harmonic, a wider faint band
- * runs ahead of the front as the old wisp ring did, crack stars tear the
- * ground under the front, shard fans ride the ring as the valor spikes,
- * and a spinning two tone shard fan is the epicenter burst. The seed
- * comes from the entity UUID, which is synced state, so every client
- * draws the same shockwave.
+ * No-shapes pass: the renderer draws no geometry at all. The shockwave
+ * reads as compressed ground dust, valor plasma, and soul light carried
+ * on the expanding front, emitted through MaterialEmitters in the Brave
+ * gold theme, with a plasma and dust burst at the epicenter. Emission
+ * follows the same sine expansion ease, envelope, and 44 tick life the
+ * entity resolves its damage with.
  */
 public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity, BraveShockwaveRenderer.ShockwaveRenderState> {
 
@@ -37,6 +34,14 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
         public float age = 0;
         public int maxLifetime = 44;
         public long seed = 0;
+        public MaterialEmitters.Emitter dustEmitter;
+        public MaterialEmitters.Emitter plasmaEmitter;
+        public MaterialEmitters.Emitter soulEmitter;
+        public MaterialEmitters.Emitter coreEmitter;
+        public long emitterSeed = Long.MIN_VALUE;
+        public ClientLevel emitterLevel;
+        public float lastAge = -1f;
+        public boolean burstFired = false;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -65,101 +70,96 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
 
     @Override
     public void submit(ShockwaveRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        // The lifetime comes from the entity (44 ticks), not a hardcoded copy:
-        // the ring now has time to cross its full radius and dissipate.
         float maxLife = (float) state.maxLifetime;
         float progress = Math.min(1.0f, state.age / maxLife);
         if (progress >= 1.0f) return;
 
-        float expansionEase = (float) Math.sin(progress * (Math.PI / 2.0));
-        float currentRadius = Math.max(0.05f, expansionEase * state.maxRadius);
-        float env = FxEnvelope.envelope(state.age, maxLife, 0.15f, 0.35f);
-        float alpha = env * 0.92f;
-        float crest = 0.85f * env;
-        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        float age = state.age;
-        long seed = state.seed;
-
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // Ground anchor glow under the whole effect (standard point 1).
-            LayeredRender.drawAnchorGlow(pose, buffer, currentRadius * 0.95f, 0.03f,
-                1.0f, 0.84f, 0.0f, alpha * 0.45f, distScale);
-
-            // Outer layer: a wide, faint gold wisp band ahead of the front,
-            // where the old flat wisp ring ran.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x3C6EF362L, currentRadius * 1.10f,
-                0.02f, 0.10f, age * 0.045f, 1.0f, 0.84f, 0.0f, alpha * LayeredRender.ALPHA_OUTER, distScale);
-
-            // Mid layer: the crest front as a broken vortex band, gold at
-            // full crest height with a lower cyan harmonic just inside it,
-            // replacing the beveled ring's gold base and cyan top.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed, currentRadius,
-                0.05f, 0.05f + crest, age * 0.045f, 1.0f, 0.84f, 0.0f, alpha, distScale);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x2B992DDFL, currentRadius * 0.96f,
-                0.05f, 0.05f + crest * 0.55f, -age * 0.03f, 0.0f, 0.95f, 1.0f, alpha * 0.8f, distScale);
-
-            // Ground work: crack stars tearing outward under the front,
-            // gold at the front radius and a cyan set behind it.
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0x51ED2701L, currentRadius,
-                1.0f, 0.84f, 0.0f, 0.80f, env, distScale);
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0x85EBCA6BL, currentRadius * 0.7f,
-                0.0f, 0.95f, 1.0f, 0.45f, env, distScale);
-
-            // Core layer: the bright white epicenter as a low torn band
-            // where the old white flat ring sat.
-            float ringWidth = Math.min(0.85f, currentRadius * 0.16f);
-            float rInner = Math.max(0.1f, currentRadius - ringWidth);
-            float coreOuter = Math.max(0.12f, rInner * 0.72f);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x27D4EB2FL, coreOuter,
-                0.09f, 0.30f, age * 0.06f, 1.0f, 1.0f, 1.0f, alpha * 0.9f, distScale);
-        });
-
-        // Epicenter burst: a two tone shard fan spinning at the old
-        // starburst rate, gold over cyan.
-        float burstRadius = state.maxRadius * 0.20f * (0.75f + 0.25f * (float) Math.sin(age * 0.35f));
-        if (burstRadius >= 0.05f && alpha > 0.01f) {
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.08f, 0.0f);
-            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(age * 14.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x165667B1L, burstRadius,
-                    1.0f, 0.88f, 0.20f, 0.85f, env, distScale);
-                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x1B56C4E9L, burstRadius * 0.62f,
-                    0.0f, 0.95f, 1.0f, 0.85f, env, distScale);
-            });
-            poseStack.popPose();
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
         }
 
-        // Valor spikes riding the ring front: the old twelve crystalline
-        // blades at the same rotation rate, height formula, and color,
-        // each now a shard fan stood upright in the radial plane with its
-        // center lifted so the fan crests where the old tips did.
-        if (currentRadius >= 0.4f && alpha > 0.01f) {
-            int spikeCount = FxEnvelope.segments(12, distScale, 6);
-            float rot = age * 0.045f;
-            for (int k = 0; k < spikeCount; k++) {
-                double a = rot + (k / (double) spikeCount) * Math.PI * 2.0;
-                float vary = 0.75f + 0.45f * (float) Math.sin(k * 2.7f + age * 0.22f);
-                float height = (0.7f + crest * 1.15f) * vary;
-                double ax = Math.cos(a), az = Math.sin(a);
-                float bx = (float) (ax * currentRadius), bz = (float) (az * currentRadius);
-                float yawDeg = (float) Math.toDegrees(Math.atan2(-az, ax));
-                long spikeSeed = seed ^ (0x9E3779B9L + k * 131L);
+        // Opening burst at the epicenter, where the old starburst core sat.
+        if (state.age <= 2.0f && !state.burstFired) {
+            state.burstFired = true;
+            int seed = (int) (state.seed ^ (state.seed >>> 32));
+            Vec3 center = new Vec3(state.x, state.y + 0.25, state.z);
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.plasma(0xFFD700, 2.6f, seed ^ 0x165667B1, Vec3.ZERO, 0.30f),
+                MaterialEmitters.point(center), 20);
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.dust(0xFFD700, 2.2f, seed ^ 0x1B56C4E9, new Vec3(0, 0.03, 0), 0.22f),
+                MaterialEmitters.groundArea(new Vec3(state.x, state.y, state.z), state.maxRadius * 0.25, state.y + 0.06), 14);
+        }
 
-                poseStack.pushPose();
-                poseStack.translate(bx, 0.05f + height * 0.45f, bz);
-                poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(yawDeg)));
-                poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-                collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                    BespokeGeometry.shardFan(pose, buffer, spikeSeed, height * 0.62f,
-                        1.0f, 0.95f, 0.72f, 0.80f, env, distScale);
-                });
-                poseStack.popPose();
-            }
+        float env = FxEnvelope.envelope(state.age, maxLife, 0.15f, 0.35f);
+        if (env > 0.01f) {
+            float dist = MaterialEmitters.distanceScale(new Vec3(state.x, state.y, state.z));
+            ensureEmitters(state, level);
+            float delta = frameDelta(state);
+            float e = env * dist;
+            state.dustEmitter.tick(delta, e);
+            state.plasmaEmitter.tick(delta, e);
+            state.soulEmitter.tick(delta, e * 0.80f);
+            state.coreEmitter.tick(delta, e * 0.85f);
         }
 
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void ensureEmitters(ShockwaveRenderState state, ClientLevel level) {
+        if (state.dustEmitter != null && state.emitterSeed == state.seed && state.emitterLevel == level) {
+            return;
+        }
+        int seed = (int) (state.seed ^ (state.seed >>> 32));
+
+        // Material carried on the expanding front itself: dust low and
+        // wide, plasma at crest height, soul light just behind the front.
+        MaterialEmitters.Source dustFront = random -> frontSample(state, random, 1.0, 0.38, 0.035);
+        MaterialEmitters.Source plasmaFront = random -> frontSample(state, random, 1.0, 0.55, 0.020);
+        MaterialEmitters.Source soulBack = random -> frontSample(state, random, 0.88, 0.30, 0.015);
+        MaterialEmitters.Source core = random -> {
+            Vec3 center = new Vec3(state.x, state.y + 0.3, state.z);
+            return MaterialEmitters.sphereVolume(center, Math.max(0.2, state.maxRadius * 0.18)).sample(random);
+        };
+
+        state.dustEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.dust(0xFFD700, 2.2f, seed, Vec3.ZERO, 0.02f),
+            dustFront, 155f, 300);
+        state.plasmaEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFD700, 2.4f, seed ^ 0x2B992DDF, Vec3.ZERO, 0.02f),
+            plasmaFront, 95f, 180);
+        state.soulEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.soul(0x00F2FF, 2.2f, seed ^ 0x51ED2701, Vec3.ZERO, 0.018f),
+            soulBack, 52f, 110);
+        state.coreEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFFFFF, 2.0f, seed ^ 0x27D4EB2F, new Vec3(0, 0.01, 0), 0.03f),
+            core, 60f, 120);
+        state.emitterSeed = state.seed;
+        state.emitterLevel = level;
+    }
+
+    /** One sample on the expanding front, at the entity's own sine ease radius. */
+    private static MaterialEmitters.Sample frontSample(ShockwaveRenderState state, RandomSource random,
+                                                       double radiusMul, double height, double outwardSpeed) {
+        float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
+        double radius = Math.max(0.05f, (float) Math.sin(progress * (Math.PI / 2.0)) * state.maxRadius) * radiusMul;
+        double a = random.nextDouble() * Math.PI * 2.0;
+        Vec3 outward = new Vec3(Math.cos(a), 0, Math.sin(a));
+        Vec3 pos = new Vec3(state.x + outward.x * radius,
+            state.y + 0.06 + random.nextDouble() * height,
+            state.z + outward.z * radius);
+        Vec3 vel = outward.scale(outwardSpeed).add(0, 0.008, 0);
+        return new MaterialEmitters.Sample(pos, vel);
+    }
+
+    private static float frameDelta(ShockwaveRenderState state) {
+        float prev = state.lastAge;
+        state.lastAge = state.age;
+        if (prev < 0f) return 1f / 20f;
+        float d = state.age - prev;
+        if (d <= 0f || d > 3f) return 1f / 20f;
+        return d / 20f;
     }
 }

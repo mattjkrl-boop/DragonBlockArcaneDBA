@@ -1,33 +1,39 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.PowerPoleExtensionEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Power Pole Extension in Minecraft 26.2.
- * Renders a physical 3D stretching Power Pole model:
- * - Crimson shaft stretching dynamically across the reach distance, built
- *   from crossed torn ribbons inside a torn gold sheath
- * - Gold end caps and collar fittings at base and tip, a faceted dome tip
- * - Golden dragon bands coiled along the shaft as stepped torn bands
- * - Supersonic Mach compression plumes sliding the shaft and a torn wake
- * - Leading-edge golden shard fan glint at the striking tip
  *
- * Bespoke pass: every shape comes from BespokeGeometry (BESPOKE-STANDARD
- * rule 1). The old equal-sided shaft, bevel ring, dome, cone, and
- * starburst loops and their local draw helpers are gone. Seeds hash from
- * the entity's synced state, so the torn silhouettes agree on every
- * client and hold still frame to frame.
+ * No-shapes conversion: this renderer draws no geometry. The extending
+ * strike is carried by material particles sampled along the pole path:
+ * pale vapor displaced by the rush, crimson plasma in three heat bands
+ * along the stream, a brighter core stream, and dust plus steel sparks at
+ * the leading tip. The pole item model itself remains a physical object
+ * in the hand; this entity is the extension effect, so its path, length,
+ * and timing are data for the emitters and nothing here renders a shaft,
+ * sheath, collar, dome, plume, wake, or glint shape.
+ *
+ * Lifecycle math is unchanged from the bespoke renderer: ease out over
+ * 3 ticks, hold, retract over the last 3 ticks, gone at tick 12.
  */
 public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensionEntity, PowerPoleExtensionRenderer.ExtensionRenderState> {
+
+    private static final Map<Integer, EmissionRig> RIGS = new HashMap<>();
 
     public PowerPoleExtensionRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -39,6 +45,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         public float maxLength = 30.0f;
         public float age = 0.0f;
         public int casterId = -1;
+        public int entityId = -1;
         public long seed = 0;
         public boolean isFirstPersonOwner = false;
         public boolean onRight = true;
@@ -67,12 +74,13 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         state.maxLength = entity.getMaxLength();
         state.age = entity.tickCount + partialTicks;
         state.casterId = entity.getCasterId();
-        // Bespoke geometry seed: hashed from the entity's SYNCED state only
+        state.entityId = entity.getId();
+        // Material seed: hashed from the entity's synced state only
         // (caster id, max length), never from client random or wall clock.
         state.seed = (entity.getCasterId() * 0x9E3779B97F4A7C15L)
             ^ Float.floatToIntBits(entity.getMaxLength());
 
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null &&
             (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) &&
             mc.options.getCameraType().isFirstPerson());
@@ -92,11 +100,6 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         if (maxLength < 0.5f) return;
 
         float age = state.age;
-
-        // The staff eases out to the poke, holds, then eases back in, fading
-        // fully to zero across the retract so the pole is gone exactly when
-        // the entity discards at tick 12. The alpha used to bottom out at
-        // 0.65, so the pole vanished at 65 percent opacity: a visible cut.
         float extendProgress;
         float alphaMult = 1.0f;
         if (age < 3.0f) {
@@ -110,210 +113,166 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         } else {
             extendProgress = 1.0f;
         }
+        if (alphaMult <= 0.01f) {
+            RIGS.remove(state.entityId);
+            return;
+        }
 
-        final float currentLength = Math.max(0.8f, maxLength * extendProgress);
-        final float finalAlpha = alphaMult;
-        final float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
-            cameraState, state.x, state.y, state.z);
-        final long seed = state.seed;
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-
+        Vec3 forward = direction(state.yRot, state.xRot);
+        Vec3 origin = new Vec3(state.x, state.y, state.z);
+        float fpScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
         if (state.isFirstPersonOwner) {
-            // Anchor extending pole to the hand: way lower and on the weapon hand side (screen right)
-            float sideSign = state.onRight ? -1.0f : 1.0f;
-            poseStack.translate(sideSign * 0.38f, -0.48f, 0.20f);
+            Vec3 right = rightVector(state.yRot);
+            Vec3 up = right.cross(forward).normalize();
+            double side = state.onRight ? 0.38 : -0.38;
+            origin = origin.add(right.scale(side)).add(up.scale(-0.48)).add(forward.scale(0.20));
         }
 
-        final float baseZStart = state.isFirstPersonOwner ? 0.20f : 0.0f;
-        final float fpScale = state.isFirstPersonOwner ? 0.55f : 1.0f;
-        final float shaftRadius = 0.13f * fpScale;
-        final float capRadius = 0.165f * fpScale;
-        final float shaftZ1 = Math.max(baseZStart, 0.4f);
-        final float shaftZ2 = currentLength - 0.4f;
+        float currentLength = Math.max(0.8f, maxLength * extendProgress);
+        float distScale = MaterialEmitters.distanceScale(origin);
+        if (distScale <= 0.01f) return;
 
-        // Axial frame (builder +Y down the pole axis): the torn sheath, the
-        // gold cap collars, and the stepped coil bands all position by
-        // height, so they share one submit.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            if (shaftZ2 > shaftZ1) {
-                // Outer layer of the strike trail (standard point 1): a wide,
-                // faint pale gold torn sheath around the shaft, the displaced
-                // air and energy the extension drags with it.
-                com.dragonblockarcanedba.client.render.ki.BespokeGeometry.brokenVortexBand(
-                    pose, buffer, seed ^ 0x5EA7L, shaftRadius * 2.1f, shaftZ1, shaftZ2, 0.0f,
-                    1.0f, 0.88f, 0.66f, finalAlpha * 0.14f, distScale);
-            }
-            // Base gold fitting collar.
-            com.dragonblockarcanedba.client.render.ki.BespokeGeometry.brokenVortexBand(
-                pose, buffer, seed ^ 0xCA9L, capRadius, baseZStart, 0.6f, 0.0f,
-                1.0f, 0.82f, 0.12f, finalAlpha, distScale);
-            if (currentLength > 1.2f) {
-                // Tip gold fitting collar.
-                com.dragonblockarcanedba.client.render.ki.BespokeGeometry.brokenVortexBand(
-                    pose, buffer, seed ^ 0xCA7L, capRadius, currentLength - 0.9f, currentLength, 0.0f,
-                    1.0f, 0.82f, 0.12f, finalAlpha, distScale);
-                // Golden dragon bands: stepped torn gold slices whose twist
-                // advances slice by slice, the coil read of the old helix.
-                int slices = 4;
-                float coilFrom = 0.6f;
-                float coilSpan = currentLength - 1.2f;
-                for (int k = 0; k < slices; k++) {
-                    float y0 = coilFrom + coilSpan * (k / (float) slices);
-                    float y1 = coilFrom + coilSpan * ((k + 1) / (float) slices);
-                    com.dragonblockarcanedba.client.render.ki.BespokeGeometry.brokenVortexBand(
-                        pose, buffer, seed ^ 0xC011L ^ (k * 41L), shaftRadius + 0.02f * fpScale, y0, y1,
-                        age * 0.2f + k * 1.1f, 1.0f, 0.85f, 0.15f, 0.90f * finalAlpha, distScale);
-                }
-            }
-        });
-        poseStack.popPose();
+        EmissionRig rig = rigFor(level, state);
+        if (rig == null) return;
+        float delta = rig.deltaFor(age);
+        rig.frame.update(origin, forward, currentLength, fpScale);
+        float envelope = alphaMult * distScale * Math.min(1.0f, 0.35f + currentLength / 18.0f);
+        rig.tick(delta, envelope);
 
-        // Crimson shaft: crossed torn ribbons in the 3-stop gradient the old
-        // sided shaft used (hot bright at the hand, full crimson mid, deep
-        // crimson at the tip), plus a thinner bright power core pair.
-        if (shaftZ2 > shaftZ1) {
-            float band1 = shaftZ1 + (shaftZ2 - shaftZ1) / 3.0f;
-            float band2 = shaftZ1 + (shaftZ2 - shaftZ1) * 2.0f / 3.0f;
-            drawShaftRibbons(poseStack, collector, renderType, seed ^ 0xA1L,
-                shaftZ1, band1, shaftRadius * 2.0f * 1.15f, 1.0f, 0.22f, 0.16f, 1.0f, finalAlpha, distScale);
-            drawShaftRibbons(poseStack, collector, renderType, seed ^ 0xA2L,
-                band1, band2, shaftRadius * 2.0f * 1.15f, 0.85f, 0.08f, 0.08f, 1.0f, finalAlpha, distScale);
-            drawShaftRibbons(poseStack, collector, renderType, seed ^ 0xA3L,
-                band2, shaftZ2, shaftRadius * 2.0f * 1.15f, 0.58f, 0.03f, 0.05f, 1.0f, finalAlpha, distScale);
-        }
-        float coreZ1 = Math.max(baseZStart, 0.2f);
-        float coreZ2 = currentLength - 0.2f;
-        if (coreZ2 > coreZ1) {
-            drawShaftRibbons(poseStack, collector, renderType, seed ^ 0xA4L,
-                coreZ1, coreZ2, shaftRadius * 1.3f, 1.0f, 0.35f, 0.25f, 0.85f, finalAlpha, distScale);
-        }
-
-        // Faceted dome tip with its bright lip ring, seated at the leading edge.
-        if (currentLength > 1.2f) {
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, currentLength);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                com.dragonblockarcanedba.client.render.ki.BespokeGeometry.brokenVortexBand(
-                    pose, buffer, seed ^ 0x117L, capRadius * 1.45f, -0.05f, 0.05f, 0.0f,
-                    1.0f, 0.98f, 0.62f, finalAlpha * 0.8f, distScale);
-                com.dragonblockarcanedba.client.render.ki.BespokeGeometry.displacedDome(
-                    pose, buffer, seed ^ 0xD04EL, capRadius,
-                    1.0f, 0.90f, 0.20f, finalAlpha, 1.0f, distScale);
-            });
-            poseStack.popPose();
-        }
-
-        // Mach compression plumes slide the length of the poke and thin out
-        // as they go: stacked torn puff discs where the cones used to be.
-        if (currentLength > 1.6f) {
-            int shockCount = 3;
-            for (int s = 0; s < shockCount; s++) {
-                float shockProgress = ((age * 0.45f) + (s / (float) shockCount)) % 1.0f;
-                float shockEase = shockProgress * shockProgress * (3.0f - 2.0f * shockProgress);
-                float shockZ = 0.7f + shockEase * (currentLength - 1.4f);
-                if (shockZ > 0.8f && shockZ < currentLength - 0.35f) {
-                    final float plumeR = 0.52f * (1.0f - shockEase * 0.4f) * fpScale;
-                    final float plumeH = 0.68f * fpScale;
-                    final float plumeA = (float) Math.sin(shockProgress * (float) Math.PI) * 0.7f * finalAlpha;
-                    final long plumeSeed = seed ^ (0x91E5L + s * 67L);
-                    poseStack.pushPose();
-                    poseStack.translate(0.0f, 0.0f, shockZ - plumeH);
-                    poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-                    collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                        com.dragonblockarcanedba.client.render.ki.BespokeGeometry.plume(
-                            pose, buffer, plumeSeed, plumeR, plumeH,
-                            1.0f, 0.92f, 0.50f, plumeA, 1.0f, distScale);
-                    });
-                    poseStack.popPose();
-                }
-            }
-
-            // Tip wake: crossed torn ribbons trailing off the striking tip,
-            // widening backward, so the extension's speed has a shape.
-            drawWakeRibbons(poseStack, collector, renderType, seed ^ 0x9A7EL,
-                currentLength, 1.0f * fpScale, finalAlpha, distScale);
-        }
-
-        // Gold strike glint on the tip: two seeded shard fans, a wide gold
-        // burst and a tight bright core. The impact entity is the hit itself.
-        if (currentLength > 1.0f) {
-            final float starR = 0.55f * (1.0f + 0.15f * (float) Math.sin(age * 3.0f)) * fpScale;
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, currentLength);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                com.dragonblockarcanedba.client.render.ki.BespokeGeometry.shardFan(
-                    pose, buffer, seed ^ 0x57A1L, starR,
-                    1.0f, 0.95f, 0.40f, 0.90f * finalAlpha, 1.0f, distScale);
-                com.dragonblockarcanedba.client.render.ki.BespokeGeometry.shardFan(
-                    pose, buffer, seed ^ 0x57A2L, starR * 0.55f,
-                    1.0f, 0.98f, 0.85f, 0.90f * finalAlpha, 1.0f, distScale);
-            });
-            poseStack.popPose();
-        }
-
-        poseStack.popPose();
-    }
-
-    /**
-     * One shaft stretch as two crossed torn ribbons: the builder runs along
-     * +X, so the pose turns +X onto the pole axis (+Z) and one ribbon's
-     * width spans local X, the other's local Y. Orchestration only; all
-     * geometry comes from BespokeGeometry.tornRibbon.
-     */
-    private static void drawShaftRibbons(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                                         long seed, float zFrom, float zTo, float width,
-                                         float r, float g, float b, float alpha,
-                                         float envelope, float distScale) {
-        final float len = zTo - zFrom;
-        if (len <= 0.01f) return;
-        for (int cross = 0; cross < 2; cross++) {
-            final boolean crossed = cross == 1;
-            final long ribbonSeed = seed ^ (crossed ? 0xC2055L : 0L);
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, zFrom);
-            if (crossed) {
-                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-            }
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                com.dragonblockarcanedba.client.render.ki.BespokeGeometry.tornRibbon(
-                    pose, buffer, ribbonSeed, len, width, 0.0f,
-                    r, g, b, alpha, envelope, distScale);
-            });
-            poseStack.popPose();
+        if (age >= 12.0f) {
+            RIGS.remove(state.entityId);
         }
     }
 
-    /**
-     * The tip wake: two crossed torn ribbons starting at the tip and
-     * running back toward the hand (builder +X turned onto local -Z).
-     */
-    private static void drawWakeRibbons(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                                        long seed, float tipZ, float width,
-                                        float envelope, float distScale) {
-        for (int cross = 0; cross < 2; cross++) {
-            final boolean crossed = cross == 1;
-            final long ribbonSeed = seed ^ (crossed ? 0xC2055L : 0L);
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, tipZ);
-            if (crossed) {
-                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
+    private static EmissionRig rigFor(ClientLevel level, ExtensionRenderState state) {
+        long now = level.getGameTime();
+        RIGS.values().removeIf(rig -> now - rig.lastSeenGameTime > 60L);
+        EmissionRig rig = RIGS.get(state.entityId);
+        if (rig != null && (rig.level != level || rig.seed != state.seed || state.age < rig.lastAge - 1.0f)) {
+            RIGS.remove(state.entityId);
+            rig = null;
+        }
+        if (rig == null) {
+            rig = new EmissionRig(level, state.seed);
+            rig.lastAge = state.age;
+            RIGS.put(state.entityId, rig);
+        }
+        rig.lastSeenGameTime = now;
+        return rig;
+    }
+
+    private static Vec3 direction(float yawDegrees, float pitchDegrees) {
+        double yaw = Math.toRadians(yawDegrees);
+        double pitch = Math.toRadians(pitchDegrees);
+        double cp = Math.cos(pitch);
+        Vec3 dir = new Vec3(-Math.sin(yaw) * cp, -Math.sin(pitch), Math.cos(yaw) * cp);
+        return dir.lengthSqr() < 1.0e-8 ? new Vec3(0, 0, 1) : dir.normalize();
+    }
+
+    private static Vec3 rightVector(float yawDegrees) {
+        double yaw = Math.toRadians(yawDegrees);
+        return new Vec3(-Math.cos(yaw), 0, -Math.sin(yaw));
+    }
+
+    /** Mutable path frame read by the emitter sources at sample time. */
+    private static final class Frame {
+        Vec3 origin = Vec3.ZERO;
+        Vec3 forward = new Vec3(0, 0, 1);
+        float length = 1.0f;
+        float fpScale = 1.0f;
+
+        void update(Vec3 origin, Vec3 forward, float length, float fpScale) {
+            this.origin = origin;
+            this.forward = forward;
+            this.length = length;
+            this.fpScale = fpScale;
+        }
+
+        Vec3 pointAt(double t) {
+            return origin.add(forward.scale(length * t));
+        }
+
+        Vec3 tip() {
+            return origin.add(forward.scale(length));
+        }
+    }
+
+    private static MaterialEmitters.Source segmentSource(Frame frame, double from, double to, double pathSpeed) {
+        return random -> {
+            double t = from + (to - from) * random.nextDouble();
+            return new MaterialEmitters.Sample(frame.pointAt(t), frame.forward.scale(pathSpeed));
+        };
+    }
+
+    private static MaterialEmitters.Source tipSource(Frame frame) {
+        return random -> new MaterialEmitters.Sample(frame.tip(), frame.forward.scale(0.22));
+    }
+
+    private static final class EmissionRig {
+        final ClientLevel level;
+        final long seed;
+        final Frame frame = new Frame();
+        final MaterialEmitters.Emitter vapor;
+        final MaterialEmitters.Emitter plasmaHot;
+        final MaterialEmitters.Emitter plasmaMid;
+        final MaterialEmitters.Emitter plasmaTip;
+        final MaterialEmitters.Emitter plasmaCore;
+        final MaterialEmitters.Emitter tipDust;
+        final MaterialEmitters.Emitter tipSparks;
+        float lastAge = 0.0f;
+        long lastSeenGameTime = 0L;
+        boolean started = false;
+
+        EmissionRig(ClientLevel level, long seed) {
+            this.level = level;
+            this.seed = seed;
+            int s = (int) seed;
+            this.vapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0xF7D774, 1.45f, s ^ 0x9A9, Vec3.ZERO, 0.035f),
+                segmentSource(frame, 0.0, 1.0, 0.30), 250.0f, 330);
+            this.plasmaHot = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFF3829, 0.72f, s ^ 0xA11, Vec3.ZERO, 0.020f),
+                segmentSource(frame, 0.0, 0.36, 0.55), 105.0f, 150);
+            this.plasmaMid = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xD91414, 0.78f, s ^ 0xA22, Vec3.ZERO, 0.020f),
+                segmentSource(frame, 0.33, 0.68, 0.55), 105.0f, 150);
+            this.plasmaTip = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0x94141C, 0.72f, s ^ 0xA33, Vec3.ZERO, 0.020f),
+                segmentSource(frame, 0.65, 1.0, 0.55), 95.0f, 140);
+            this.plasmaCore = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFF5940, 0.45f, s ^ 0xA44, Vec3.ZERO, 0.012f),
+                segmentSource(frame, 0.0, 1.0, 0.65), 85.0f, 120);
+            this.tipDust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(0xB09A72, 0.90f, s ^ 0xD57, Vec3.ZERO, 0.16f),
+                tipSource(frame), 70.0f, 100);
+            this.tipSparks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.30f),
+                tipSource(frame), 55.0f, 90);
+        }
+
+        float deltaFor(float age) {
+            if (!started) {
+                started = true;
+                lastAge = age;
+                return 1.0f / 60.0f;
             }
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                com.dragonblockarcanedba.client.render.ki.BespokeGeometry.tornRibbon(
-                    pose, buffer, ribbonSeed, 1.3f, width, 0.12f,
-                    1.0f, 0.95f, 0.75f, 0.16f, envelope, distScale);
-            });
-            poseStack.popPose();
+            float delta = (age - lastAge) / 20.0f;
+            lastAge = age;
+            return Math.max(0.0f, Math.min(0.05f, delta));
+        }
+
+        void tick(float delta, float envelope) {
+            if (delta <= 0.0f || envelope <= 0.01f) return;
+            vapor.tick(delta, envelope);
+            plasmaHot.tick(delta, envelope);
+            plasmaMid.tick(delta, envelope);
+            plasmaTip.tick(delta, envelope);
+            plasmaCore.tick(delta, envelope);
+            tipDust.tick(delta, envelope * frame.fpScale);
+            tipSparks.tick(delta, envelope);
         }
     }
 }

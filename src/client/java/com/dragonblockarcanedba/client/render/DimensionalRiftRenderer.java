@@ -1,27 +1,35 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.DimensionalRiftEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Entity Renderer for Dimensional Rift in Minecraft 26.2.
- * All geometry is bespoke (BESPOKE-STANDARD rule 1): broken vortex bands for
- * the accretion rings, torn ribbons for the vertical fissures, shard fans for
- * the orbital soul shards, and displaced domes for the singularity core. Every
- * builder seed derives from the entity's synced state, so the silhouette is
- * the same on every client. The three counter rotating accretion rings, the
- * towering tears, the 18 spike character (now two irregular shard fans), and
- * the black hole core are the spectacle pass layout, kept.
+ * No-shapes conversion: this renderer draws no geometry at all. The rift is
+ * carried entirely by the shared material system: darkness smoke filling the
+ * volume, soul wisps streaming inward with the pull, void plasma in the tall
+ * fissure column and the singularity core, and orbiting soul and darkness
+ * particle clusters where the bespoke pass placed shard fans. The clusters
+ * are emission points only; nothing solid is rendered. Lifecycle envelope,
+ * radius, pulse, and collapse timing are the spectacle pass values, kept.
+ * The ground scar, debris field, and server vortex particles stay in the
+ * entity, untouched.
  */
 public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntity, DimensionalRiftRenderer.DimensionalRiftRenderState> {
 
@@ -62,152 +70,177 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
         state.wy = entity.getY();
         state.wz = entity.getZ();
         // Seed from synced state only (entity id and position arrive in the
-        // spawn packet), so every client draws the same bespoke silhouette.
+        // spawn packet), so every client seeds the same material variation.
         state.seed = (long) entity.getId() * 2654435761L
             ^ (long) (entity.getX() * 64.0) * 40503L
             ^ (long) (entity.getZ() * 64.0) * 0x9E3779B9L;
     }
 
+    /**
+     * One live rift's emitter set. The sources read the rig's current center,
+     * radius, height, pull, and orbit phase, which submit refreshes every
+     * frame, so the shared Emitter accumulators keep their frame-rate
+     * independence and budgets while the sampled volume follows the entity.
+     */
+    private static final class RiftRig {
+        final ClientLevel level;
+        final List<MaterialEmitters.Emitter> emitters = new ArrayList<>();
+        Vec3 center = Vec3.ZERO;
+        float radius = 3.0f;
+        float height = 2.5f;
+        float pull = 0.0f;
+        float coreRadius = 1.6f;
+        float orbitAngle = 0.0f;
+        float lastAge = 0.0f;
+        long lastSeenNanos = 0L;
+        long lastTickNanos = 0L;
+
+        RiftRig(ClientLevel level, long seed) {
+            this.level = level;
+            emitters.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.darkness(0x0A0012, 2.6f, (int) (seed ^ 0xD44F1L), Vec3.ZERO, 0.015f),
+                random -> volumeSample(random, false), 55.0f, 75));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.soul(0x9900E6, 2.0f, (int) (seed ^ 0x50171L), Vec3.ZERO, 0.020f),
+                random -> volumeSample(random, true), 85.0f, 115));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xCC0DF2, 3.0f, (int) (seed ^ 0xF155EL), Vec3.ZERO, 0.020f),
+                this::fissureSample, 65.0f, 90));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xF5EEFF, 2.6f, (int) (seed ^ 0xC09EL), Vec3.ZERO, 0.010f),
+                this::coreSample, 45.0f, 60));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.soul(0xE633FF, 2.2f, (int) (seed ^ 0x0BB17L), Vec3.ZERO, 0.012f),
+                random -> orbitSample(random, false), 40.0f, 55));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.darkness(0x0D001A, 2.2f, (int) (seed ^ 0x0BB18L), Vec3.ZERO, 0.012f),
+                random -> orbitSample(random, true), 25.0f, 35));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.glassDust(0xCCF2FF, 1.4f, (int) (seed ^ 0x61A55L), Vec3.ZERO, 0.030f),
+                this::coreSample, 20.0f, 30));
+        }
+
+        /** Points inside the rift volume, drifting with swirl and, for the soul stream, the pull itself. */
+        private MaterialEmitters.Sample volumeSample(RandomSource random, boolean stream) {
+            Vec3 volumeCenter = center.add(0.0, height * 0.5, 0.0);
+            Vec3 half = new Vec3(Math.max(0.5, radius * 0.92), Math.max(0.4, height * 0.5), Math.max(0.5, radius * 0.92));
+            MaterialEmitters.Sample base = MaterialEmitters.volume(volumeCenter, half).sample(random);
+            Vec3 radial = new Vec3(base.pos().x - center.x, 0.0, base.pos().z - center.z);
+            double len = radial.length();
+            Vec3 radialDir = len < 1.0e-4 ? Vec3.ZERO : radial.scale(1.0 / len);
+            Vec3 tangent = new Vec3(-radialDir.z, 0.0, radialDir.x);
+            double inward = stream ? 0.22 + pull * 0.30 : 0.05;
+            double swirl = stream ? 0.10 : 0.035;
+            Vec3 velocity = radialDir.scale(-inward)
+                .add(tangent.scale(swirl))
+                .add(new Vec3(0.0, stream ? 0.0 : 0.012, 0.0));
+            return new MaterialEmitters.Sample(base.pos(), velocity);
+        }
+
+        /** Points in the tall central fissure column, easing toward the axis. */
+        private MaterialEmitters.Sample fissureSample(RandomSource random) {
+            Vec3 volumeCenter = center.add(0.0, height * 0.5, 0.0);
+            Vec3 half = new Vec3(Math.max(0.3, radius * 0.16), Math.max(0.4, height * 0.5), Math.max(0.3, radius * 0.16));
+            MaterialEmitters.Sample base = MaterialEmitters.volume(volumeCenter, half).sample(random);
+            Vec3 velocity = new Vec3((center.x - base.pos().x) * 0.02, 0.015, (center.z - base.pos().z) * 0.02);
+            return new MaterialEmitters.Sample(base.pos(), velocity);
+        }
+
+        /** Points inside the singularity core volume, drifting inward. */
+        private MaterialEmitters.Sample coreSample(RandomSource random) {
+            Vec3 coreCenter = center.add(0.0, 0.5, 0.0);
+            MaterialEmitters.Sample base = MaterialEmitters.sphereVolume(coreCenter, Math.max(0.35, coreRadius)).sample(random);
+            Vec3 inward = coreCenter.subtract(base.pos());
+            Vec3 velocity = inward.lengthSqr() < 1.0e-6 ? Vec3.ZERO : inward.normalize().scale(0.045);
+            return new MaterialEmitters.Sample(base.pos(), velocity);
+        }
+
+        /**
+         * Orbiting cluster points: nine seeded cluster centers carried around
+         * the old shard orbit bands, each sampled with jitter so a cluster is
+         * a loose knot of soul or darkness material, never a solid.
+         */
+        private MaterialEmitters.Sample orbitSample(RandomSource random, boolean dark) {
+            int clusters = 9;
+            int cluster = random.nextInt(clusters);
+            double baseOrbit = radius * (0.90 - 0.58 * pull);
+            double orbitRadius = Math.max(0.35, baseOrbit * ((cluster & 1) == 0 ? 0.90 : 0.68));
+            double angle = orbitAngle + cluster * 2.399963229728653;
+            double x = center.x + Math.cos(angle) * orbitRadius + (random.nextDouble() - 0.5) * 0.55;
+            double z = center.z + Math.sin(angle) * orbitRadius + (random.nextDouble() - 0.5) * 0.55;
+            double y = center.y + 0.55 + Math.sin(orbitAngle * 1.7 + cluster * 1.93) * 0.30
+                + (random.nextDouble() - 0.5) * 0.45;
+            Vec3 radialDir = new Vec3(Math.cos(angle), 0.0, Math.sin(angle));
+            Vec3 tangent = new Vec3(-Math.sin(angle), 0.0, Math.cos(angle));
+            Vec3 velocity = tangent.scale(dark ? 0.035 : 0.055)
+                .add(radialDir.scale(-0.075))
+                .add(new Vec3(0.0, 0.008, 0.0));
+            return new MaterialEmitters.Sample(new Vec3(x, y, z), velocity);
+        }
+    }
+
+    private final Map<Long, RiftRig> rigs = new HashMap<>();
+
+    private RiftRig rigFor(ClientLevel level, long seed, float age) {
+        RiftRig rig = rigs.get(seed);
+        if (rig == null || rig.level != level || age < rig.lastAge - 0.001f) {
+            rig = new RiftRig(level, seed);
+            rigs.put(seed, rig);
+        }
+        return rig;
+    }
+
+    private void pruneRigs(long now) {
+        Iterator<Map.Entry<Long, RiftRig>> it = rigs.entrySet().iterator();
+        while (it.hasNext()) {
+            if (now - it.next().getValue().lastSeenNanos > 5_000_000_000L) {
+                it.remove();
+            }
+        }
+    }
+
     @Override
     public void submit(DimensionalRiftRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level != null) {
+            float maxLife = (float) DimensionalRiftEntity.MAX_LIFETIME;
+            float lifeT = Math.min(1.0f, state.age / maxLife);
+            float pull = lifeT * lifeT * (3.0f - 2.0f * lifeT);
+            if (state.isCollapsing) {
+                pull = Math.min(1.0f, pull + 0.40f);
+            }
+            // The same envelope the entity uses for its pull and particles, so
+            // the material builds across the expansion and dies across the
+            // collapse instead of popping at either end.
+            float fade = com.dragonblockarcanedba.util.FxEnvelope.envelope(
+                state.age, maxLife,
+                DimensionalRiftEntity.ENVELOPE_BUILD_FRAC, DimensionalRiftEntity.ENVELOPE_DECAY_FRAC);
+            float pulse = 0.85f + 0.15f * (float) Math.sin(state.age * 0.25f);
+            float rot = state.age * (state.isCollapsing ? 25.0f : 8.0f);
+            float coreSize = Math.max(0.55f, 1.15f * pulse) * (1.0f - pull * 0.22f);
 
-        float maxLife = (float) DimensionalRiftEntity.MAX_LIFETIME;
-        float lifeT = Math.min(1.0f, state.age / maxLife);
-        float pull = lifeT * lifeT * (3.0f - 2.0f * lifeT);
-        if (state.isCollapsing) {
-            pull = Math.min(1.0f, pull + 0.40f);
+            RiftRig rig = rigFor(level, state.seed, state.age);
+            long now = System.nanoTime();
+            rig.center = new Vec3(state.wx, state.wy, state.wz);
+            rig.radius = state.radius;
+            rig.height = Math.min(8.0f, 2.5f + (state.radius * 0.4f)) * pulse;
+            rig.pull = pull;
+            rig.coreRadius = coreSize * 1.45f;
+            rig.orbitAngle = (float) Math.toRadians(rot * 0.8f);
+            rig.lastAge = state.age;
+            rig.lastSeenNanos = now;
+
+            float delta = rig.lastTickNanos == 0L ? 0.0f
+                : Math.min(0.05f, (now - rig.lastTickNanos) / 1_000_000_000.0f);
+            rig.lastTickNanos = now;
+            float envelope = fade * MaterialEmitters.distanceScale(rig.center);
+            if (delta > 0.0f && envelope > 0.01f) {
+                for (MaterialEmitters.Emitter emitter : rig.emitters) {
+                    emitter.tick(delta, envelope);
+                }
+            }
+            pruneRigs(now);
         }
-        final float pullIn = pull;
-        // One shared envelope for alpha, the same fractions the entity uses for
-        // its pull and particles, so the visual builds across the expansion and
-        // dies across the collapse instead of popping at either end.
-        final float fade = com.dragonblockarcanedba.util.FxEnvelope.envelope(
-            state.age, maxLife,
-            DimensionalRiftEntity.ENVELOPE_BUILD_FRAC, DimensionalRiftEntity.ENVELOPE_DECAY_FRAC);
-        // Distance scaling (standard point 1): distant rifts step their segment
-        // counts down, near rifts stay rich.
-        final float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
-            cameraState, state.wx, state.wy, state.wz);
-        final float radius = state.radius;
-        final long seed = state.seed;
-
-        float rot = state.age * (state.isCollapsing ? 25.0f : 8.0f);
-        float pulse = 0.85f + 0.15f * (float) Math.sin(state.age * 0.25f);
-
-        poseStack.pushPose();
-
-        // Ground work in the base pose: anchor glow, the three accretion rings
-        // as broken vortex bands, and the shared layered vortex bands.
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // Ground anchor glow (shared LayeredRender): a soft violet splash
-            // that grounds the rift to the world under everything else.
-            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawAnchorGlow(
-                pose, buffer, radius * 1.05f, 0.04f, 0.75f, 0.20f, 1.0f, 0.50f * fade, distScale);
-
-            // Outer accretion shockwave: a rising broken band wall at the
-            // current radius, with a thin bright lip band riding its top edge.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xA11CEL,
-                radius, 0.0f, 0.55f * pulse, 0.0f,
-                0.60f, 0.0f, 0.90f, 0.90f * fade, distScale);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB22DL,
-                radius * 1.03f, 0.02f, 0.16f, (float) Math.toRadians(rot * 0.55f),
-                1.0f, 0.72f, 0.95f, 0.50f * fade, distScale);
-
-            // Middle accretion ring, counter rotating at 65 percent radius.
-            float midRadius = radius * 0.65f;
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xC33EL,
-                midRadius, 0.02f, 0.12f, (float) Math.toRadians(-rot * 1.4f),
-                0.85f, 0.05f, 0.95f, 0.80f * fade, distScale);
-
-            // Inner compression ring, high speed at 35 percent radius.
-            float innerRadius = radius * 0.35f;
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xD44FL,
-                innerRadius, 0.02f, 0.10f, (float) Math.toRadians(rot * 2.2f),
-                0.20f, 0.90f, 1.0f, 0.85f * fade, distScale);
-
-            // Layered vortex bands (shared LayeredRender): three counter
-            // rotating layers around the tears, bright core, violet mid, wispy
-            // outer, so the rift body has the standard's depth.
-            float vHeight = Math.min(8.0f, 2.5f + (radius * 0.4f)) * pulse;
-            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawVortexBands(
-                pose, buffer, radius * 0.62f, vHeight, state.age,
-                0.62f, 0.05f, 0.95f, fade, distScale);
-        });
-
-        // Vertical spatial fissures: three crossed torn ribbons, each a wide
-        // radiant sheet with a dark void strip down its middle. The ribbon
-        // runs along +X lying flat; rotate it upright (Z +90) and then around
-        // Y to the plane's angle.
-        float vHeight = Math.min(8.0f, 2.5f + (radius * 0.4f)) * pulse;
-        float vWidth = Math.min(1.8f, 0.4f + (radius * 0.1f));
-        float[][] tearColors = {
-            {0.80f, 0.05f, 0.95f, 1.00f},
-            {0.20f, 0.90f, 1.0f, 0.90f},
-            {1.00f, 0.10f, 0.70f, 0.90f},
-        };
-        for (int plane = 0; plane < 3; plane++) {
-            final float[] col = tearColors[plane];
-            final long planeSeed = seed ^ (0x7E57L + plane * 0x1F123L);
-            poseStack.pushPose();
-            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(plane * 60.0f)));
-            poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.tornRibbon(pose, buffer, planeSeed,
-                    vHeight, vWidth * 2.0f, 0.5f,
-                    col[0], col[1], col[2], col[3], fade, distScale);
-                BespokeGeometry.tornRibbon(pose, buffer, planeSeed ^ 0xC0DEL,
-                    vHeight, vWidth * 1.05f, 0.5f,
-                    0.05f, 0.0f, 0.10f, 0.95f, fade, distScale);
-            });
-            poseStack.popPose();
-        }
-
-        // Orbital soul shards: two shard fans at the old orbit bands, their
-        // irregular spacing keeping the spikes' varied golden angle character
-        // instead of 18 identical pyramids on one ring. The fans orbit at the
-        // old spikes' angular speed.
-        float shardOrbitRadius = radius * (0.90f - 0.58f * pullIn);
-        poseStack.pushPose();
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(rot * 0.8f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x5A9DL,
-                shardOrbitRadius * 0.90f, 0.50f, 0.0f, 0.85f, 0.85f, fade, distScale);
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x6A9DL,
-                shardOrbitRadius * 0.68f, 0.95f, 0.2f, 1.0f, 0.95f, fade, distScale);
-        });
-        poseStack.popPose();
-
-        // Black hole core: a displaced dome pair (dark body), a broken band
-        // horizon, and a small white heart dome pair, centered at y 0.5 where
-        // the old octahedron sat.
-        float coreSize = Math.max(0.55f, 1.15f * pulse) * (1.0f - pullIn * 0.22f);
-        poseStack.pushPose();
-        poseStack.translate(0, 0.5, 0);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xC09EL,
-                coreSize, 0.02f, 0.0f, 0.05f, 0.98f, fade, distScale);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB091L,
-                coreSize * 1.3f, -0.05f, 0.10f, (float) Math.toRadians(rot * 2.2f),
-                0.85f, 0.90f, 1.0f, 0.75f * fade, distScale);
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xBEA7L,
-                coreSize * 0.30f, 0.95f, 0.90f, 1.0f, 1.0f, fade, distScale);
-        });
-        poseStack.popPose();
-
-        // Bottom halves of the core domes, mirrored through the center plane.
-        poseStack.pushPose();
-        poseStack.translate(0, 0.5, 0);
-        poseStack.mulPose(new Matrix4f().scale(1f, -1f, 1f));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xC09EL,
-                coreSize, 0.02f, 0.0f, 0.05f, 0.98f, fade, distScale);
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xBEA7L,
-                coreSize * 0.30f, 0.95f, 0.90f, 1.0f, 1.0f, fade, distScale);
-        });
-        poseStack.popPose();
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 }

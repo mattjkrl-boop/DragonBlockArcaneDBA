@@ -67,8 +67,9 @@ public class DbaMaterialParticle extends SingleQuadParticle {
         this.yd = dy;
         this.zd = dz;
         int span = Math.max(1, profile.maxLife() - profile.minLife() + 1);
-        this.lifetime = profile.minLife() + this.random.nextInt(span);
-        this.gravity = profile.gravity();
+        int rolledLife = profile.minLife() + this.random.nextInt(span);
+        this.lifetime = Math.max(1, Math.round(rolledLife * options.lifetimeFactor()));
+        this.gravity = profile.gravity() * options.gravityScale();
         this.friction = profile.drag();
         this.hasPhysics = profile.groundMode() != GroundMode.NONE;
         this.baseSize = profile.size() * options.scale() * (0.82f + this.random.nextFloat() * 0.36f);

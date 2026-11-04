@@ -1,31 +1,39 @@
 package com.dragonblockarcanedba.client.fx;
 
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Draws only the trails listed in WeaponTrailProfiles. That table is the katana's
- * white slash. The old generic swing (one arc on every weapon, on top of the
- * weapon's own effect) is not drawn. Purely client side.
+ * Emits material along the swing paths listed in WeaponTrailProfiles.
+ *
+ * The samples are emission data only. Nothing in this class draws a ribbon
+ * or any other geometry: the old trail surface is now plasma and vapor
+ * particles spawned along the recorded hilt and tip path by the shared
+ * MaterialEmitters accumulator, in the profile color, with a near-white
+ * plasma core along the leading half of the blade. The profile table has
+ * not changed, and neither have its colors, reach, sweep, fade ticks, or
+ * tip behavior. Purely client side.
  */
 public final class SwingTrailRenderer {
     private SwingTrailRenderer() {}
 
     private static final int SUBSTEPS = 4;
+    private static final float TICK_SECONDS = 1.0f / 20.0f;
 
     private record Sample(Vec3 hilt, Vec3 tip, int born) {}
 
@@ -33,6 +41,12 @@ public final class SwingTrailRenderer {
         final ArrayDeque<Sample> samples = new ArrayDeque<>();
         WeaponTrailProfiles.Profile profile;
         int lastFlashClock = -100;
+        int seedBase;
+        WeaponTrailProfiles.Profile emitterProfile;
+        ClientLevel emitterLevel;
+        MaterialEmitters.Emitter plasma;
+        MaterialEmitters.Emitter core;
+        MaterialEmitters.Emitter vapor;
     }
 
     private static final Map<UUID, Trail> TRAILS = new HashMap<>();
@@ -40,30 +54,6 @@ public final class SwingTrailRenderer {
 
     public static void register() {
         ClientTickEvents.END_CLIENT_TICK.register(SwingTrailRenderer::tick);
-        LevelRenderEvents.AFTER_TRANSLUCENT_FEATURES.register(context -> {
-            if (TRAILS.isEmpty()) return;
-            Vec3 cam = context.levelState().cameraRenderState.pos;
-            context.submitNodeCollector().submitCustomGeometry(context.poseStack(), KiRenderHelper.kiRenderType(), (pose, buffer) -> {
-                Matrix4f mat = pose.pose();
-                for (Trail trail : TRAILS.values()) {
-                    WeaponTrailProfiles.Profile p = trail.profile;
-                    if (p == null) continue;
-                    float r = KiRenderHelper.red(p.color()), g = KiRenderHelper.green(p.color()), b = KiRenderHelper.blue(p.color());
-                    float cr = r + (1f - r) * 0.7f, cg = g + (1f - g) * 0.7f, cb = b + (1f - b) * 0.7f;
-                    Sample prev = null;
-                    for (Sample s : trail.samples) {
-                        if (prev != null) {
-                            float a0 = alpha(p, prev) * 0.55f, a1 = alpha(p, s) * 0.55f;
-                            ribbon(buffer, mat, pose, prev.hilt, prev.tip, s.hilt, s.tip, cam, r, g, b, a0, a1);
-                            // hot core along the leading half of the blade
-                            Vec3 c0 = prev.hilt.lerp(prev.tip, 0.5), c1 = s.hilt.lerp(s.tip, 0.5);
-                            ribbon(buffer, mat, pose, c0, prev.tip, c1, s.tip, cam, cr, cg, cb, a0 * 1.5f, a1 * 1.5f);
-                        }
-                        prev = s;
-                    }
-                }
-            });
-        });
     }
 
     private static float alpha(WeaponTrailProfiles.Profile p, Sample s) {
@@ -71,24 +61,6 @@ public final class SwingTrailRenderer {
         t = Math.max(0f, Math.min(1f, t));
         float eased = t * t * (3f - 2f * t);
         return eased * p.alpha();
-    }
-
-    private static void ribbon(com.mojang.blaze3d.vertex.VertexConsumer buffer, Matrix4f mat, com.mojang.blaze3d.vertex.PoseStack.Pose pose,
-                               Vec3 h0v, Vec3 t0v, Vec3 h1v, Vec3 t1v, Vec3 cam, float r, float g, float b, float a0, float a1) {
-        float[] h0 = rel(h0v, cam), t0 = rel(t0v, cam), h1 = rel(h1v, cam), t1 = rel(t1v, cam);
-        KiRenderHelper.vertex(buffer, mat, pose, h0[0], h0[1], h0[2], r, g, b, 0f, 0, 0, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, mat, pose, t0[0], t0[1], t0[2], r, g, b, a0, 1, 0, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, mat, pose, t1[0], t1[1], t1[2], r, g, b, a1, 1, 1, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, mat, pose, h1[0], h1[1], h1[2], r, g, b, 0f, 0, 1, 0, 1, 0);
-        // back face so the ribbon is visible from both sides
-        KiRenderHelper.vertex(buffer, mat, pose, h1[0], h1[1], h1[2], r, g, b, 0f, 0, 1, 0, -1, 0);
-        KiRenderHelper.vertex(buffer, mat, pose, t1[0], t1[1], t1[2], r, g, b, a1, 1, 1, 0, -1, 0);
-        KiRenderHelper.vertex(buffer, mat, pose, t0[0], t0[1], t0[2], r, g, b, a0, 1, 0, 0, -1, 0);
-        KiRenderHelper.vertex(buffer, mat, pose, h0[0], h0[1], h0[2], r, g, b, 0f, 0, 0, 0, -1, 0);
-    }
-
-    private static float[] rel(Vec3 v, Vec3 cam) {
-        return new float[] {(float) (v.x - cam.x), (float) (v.y - cam.y), (float) (v.z - cam.z)};
     }
 
     private static void tick(Minecraft mc) {
@@ -104,7 +76,11 @@ public final class SwingTrailRenderer {
             float anim = com.dragonblockarcanedba.util.DbaCompat.attackAnim(player, 1.0f);
             float prevAnim = com.dragonblockarcanedba.util.DbaCompat.attackAnim(player, 0.0f);
             if (anim <= 0f && prevAnim <= 0f) continue;
-            Trail trail = TRAILS.computeIfAbsent(player.getUUID(), id -> new Trail());
+            Trail trail = TRAILS.computeIfAbsent(player.getUUID(), id -> {
+                Trail created = new Trail();
+                created.seedBase = id.hashCode();
+                return created;
+            });
             trail.profile = profile;
             if (profile.kind() == WeaponTrailProfiles.Kind.FLASH) {
                 if (clock - trail.lastFlashClock > 5) {
@@ -126,8 +102,99 @@ public final class SwingTrailRenderer {
             Trail trail = it.next().getValue();
             int maxAge = trail.profile == null ? 6 : trail.profile.fadeTicks();
             while (!trail.samples.isEmpty() && clock - trail.samples.peekFirst().born > maxAge) trail.samples.pollFirst();
-            if (trail.samples.isEmpty() && clock - trail.lastFlashClock > 20) it.remove();
+            if (trail.samples.isEmpty() && clock - trail.lastFlashClock > 20) {
+                it.remove();
+            } else if (!trail.samples.isEmpty() && trail.profile != null) {
+                emitTrail(mc.level, trail);
+            }
         }
+    }
+
+    /**
+     * Feeds the trail emitters for one client tick. The emission envelope
+     * is the old ribbon alpha: the strongest surviving sample alpha, taken
+     * over the profile fade window and distance-scaled like every other
+     * converted effect.
+     */
+    private static void emitTrail(ClientLevel level, Trail trail) {
+        WeaponTrailProfiles.Profile p = trail.profile;
+        if (p == null) return;
+        if (trail.samples.size() < 2 && p.kind() != WeaponTrailProfiles.Kind.FLASH) return;
+        ensureEmitters(level, trail);
+        float envelope = 0f;
+        for (Sample s : trail.samples) envelope = Math.max(envelope, alpha(p, s));
+        Sample newest = trail.samples.peekLast();
+        if (newest != null) envelope *= MaterialEmitters.distanceScale(newest.tip());
+        if (envelope <= 0.01f) return;
+        trail.plasma.tick(TICK_SECONDS, envelope);
+        trail.core.tick(TICK_SECONDS, envelope);
+        trail.vapor.tick(TICK_SECONDS, envelope * 0.7f);
+    }
+
+    private static void ensureEmitters(ClientLevel level, Trail trail) {
+        WeaponTrailProfiles.Profile p = trail.profile;
+        if (trail.plasma != null && trail.emitterProfile == p && trail.emitterLevel == level) return;
+        float profileScale = (float) Math.max(0.75, Math.min(1.5, p.reach() / 2.0));
+        MaterialEmitters.Source blade = trailPathSource(trail, 0.0, 1.0, 0.22);
+        MaterialEmitters.Source leading = trailPathSource(trail, 0.5, 1.0, 0.22);
+        trail.plasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, p.color(),
+                        profileScale * 0.95f, trail.seedBase ^ 0x51A5, Vec3.ZERO, 0.018f),
+                blade, 280f, 340);
+        trail.core = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, coreColor(p),
+                        profileScale * 0.62f, trail.seedBase ^ 0xC02E, Vec3.ZERO, 0.012f),
+                leading, 150f, 220);
+        trail.vapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.VAPOR, p.color(),
+                        profileScale * 1.3f, trail.seedBase ^ 0x9A70, Vec3.ZERO, 0.03f),
+                blade, 85f, 130);
+        trail.emitterProfile = p;
+        trail.emitterLevel = level;
+    }
+
+    /** The old hot core color: the profile color pushed 70 percent toward white. */
+    private static int coreColor(WeaponTrailProfiles.Profile p) {
+        int color = p.color();
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+        r += Math.round((255 - r) * 0.7f);
+        g += Math.round((255 - g) * 0.7f);
+        b += Math.round((255 - b) * 0.7f);
+        return (r << 16) | (g << 8) | b;
+    }
+
+    /**
+     * A source over the recorded swing path. Each sample picks a segment
+     * between two recorded swing samples and a point across the blade
+     * between hilt and tip, and reports the segment motion as a small
+     * source velocity so the material keeps moving the way the swing did.
+     * A lone sample, which is how a FLASH profile records its shot, is a
+     * single hilt to tip line.
+     */
+    private static MaterialEmitters.Source trailPathSource(Trail trail, double minBlade, double maxBlade,
+                                                           double velocityScale) {
+        return random -> samplePath(trail, random, minBlade, maxBlade, velocityScale);
+    }
+
+    private static MaterialEmitters.Sample samplePath(Trail trail, RandomSource random,
+                                                      double minBlade, double maxBlade, double velocityScale) {
+        List<Sample> samples = new ArrayList<>(trail.samples);
+        if (samples.isEmpty()) return new MaterialEmitters.Sample(Vec3.ZERO, Vec3.ZERO);
+        double blade = minBlade + random.nextDouble() * (maxBlade - minBlade);
+        if (samples.size() == 1) {
+            Sample only = samples.get(0);
+            return new MaterialEmitters.Sample(only.hilt().lerp(only.tip(), blade), Vec3.ZERO);
+        }
+        int segment = random.nextInt(samples.size() - 1);
+        Sample a = samples.get(segment);
+        Sample b = samples.get(segment + 1);
+        double time = random.nextDouble();
+        Vec3 aPoint = a.hilt().lerp(a.tip(), blade);
+        Vec3 bPoint = b.hilt().lerp(b.tip(), blade);
+        return new MaterialEmitters.Sample(aPoint.lerp(bPoint, time),
+                bPoint.subtract(aPoint).scale(velocityScale));
     }
 
     private static Vec3[] basis(Player player) {
@@ -159,35 +226,30 @@ public final class SwingTrailRenderer {
         if (trail.samples.size() > 64) trail.samples.pollFirst();
     }
 
-    /** Blaster: a spark burst at the muzzle plus a short tracer streak, no ribbon sweep. */
+    /** Blaster: a spark burst at the muzzle, with the shot line recorded as emission data for the trail emitters. */
     private static void flash(Minecraft mc, Player player, WeaponTrailProfiles.Profile p, Trail trail) {
         Vec3[] b = basis(player);
         Vec3 muzzle = b[3].add(b[0].scale(1.15)).add(b[1].scale(0.22)).add(0, -0.08, 0);
         Vec3 end = b[3].add(b[0].scale(p.reach()));
         trail.samples.addLast(new Sample(muzzle, end, clock));
         if (trail.samples.size() > 8) trail.samples.pollFirst();
-        if (DbaEffectsConfig.effectDensity() > 0f) {
-            for (int i = 0; i < 5; i++) {
-                mc.level.addParticle(DbaParticles.SPARK, muzzle.x, muzzle.y, muzzle.z,
-                    b[0].x * 0.25 + (player.getRandom().nextDouble() - 0.5) * 0.12,
-                    b[0].y * 0.25 + (player.getRandom().nextDouble() - 0.5) * 0.12,
-                    b[0].z * 0.25 + (player.getRandom().nextDouble() - 0.5) * 0.12);
-            }
-        }
+        MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK, b[0].scale(0.25), 0.06f),
+                MaterialEmitters.point(muzzle), 5);
     }
 
     private static void tipParticles(Minecraft mc, Player player, WeaponTrailProfiles.Profile p) {
         Vec3[] b = basis(player);
         Vec3 tipPos = b[3].add(b[0].scale(p.reach() * 0.8));
-        ParticleOptions type = switch (p.tip()) {
-            case SPARK -> DbaParticles.SPARK;
-            case EMBER -> DbaParticles.EMBER;
-            case VOID_SMOKE -> DbaParticles.VOID_SMOKE;
-            case WIND -> DbaParticles.WIND;
+        Vec3 drift = new Vec3(0, 0.03, 0);
+        MaterialEmitters.Preset preset = switch (p.tip()) {
+            case SPARK -> MaterialEmitters.Preset.fixed(DbaParticles.SPARK, drift, 0.025f);
+            case EMBER -> MaterialEmitters.Preset.ember(drift, 0.025f);
+            case VOID_SMOKE -> MaterialEmitters.Preset.fixed(DbaParticles.VOID_SMOKE, drift, 0.025f);
+            case WIND -> MaterialEmitters.Preset.fixed(DbaParticles.WIND, drift, 0.025f);
             case NONE -> null;
         };
-        if (type == null) return;
-        mc.level.addParticle(type, tipPos.x, tipPos.y, tipPos.z,
-            (player.getRandom().nextDouble() - 0.5) * 0.05, 0.03, (player.getRandom().nextDouble() - 0.5) * 0.05);
+        if (preset == null) return;
+        MaterialEmitters.burst(mc.level, preset, MaterialEmitters.point(tipPos), 1);
     }
 }

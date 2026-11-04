@@ -1,33 +1,41 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.SpikeFlailSwingEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Chain and spiked ball at the end of the swing. The entity sits on the ball.
- * All geometry comes from BespokeGeometry (BESPOKE-STANDARD rule 1): the chain
- * is torn ribbon spans with alternating link roll, the ball is two displaced
- * domes with shard fans for spikes, and the swing leaves a torn ribbon trail
- * along the ball's arc. Seeds derive from the entity id, so every client
- * draws the same shapes.
+ * No-shapes pass: this renderer submits no effect geometry. The swing reads
+ * as air vapor and steel sparks shed along the real arc, hot plasma glints at
+ * the moving head, sparse vapor along the chain path, and warm dust kicked
+ * up under the low points of the arc. The physical Spike Flail item model in
+ * the holder's hand is untouched. Seeds derive from the entity id, so every
+ * client emits the same material variation.
  */
 public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntity, SpikeFlailSwingRenderer.SwingState> {
     /** Trail samples behind the ball along its arc, oldest first; the last is the ball itself. */
     private static final int TRAIL_POINTS = 5;
+    /** Warm steel dust, the flail's particle theme color. */
+    private static final int THEME_DUST = 0xD8C9A3;
+
+    private final Map<Integer, Emission> emissions = new HashMap<>();
 
     public SpikeFlailSwingRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -35,15 +43,13 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
 
     public static class SwingState extends EntityRenderState {
         public float age;
-        public float handX;
-        public float handY;
-        public float handZ;
-        public boolean hasHand;
+        public int entityId;
         public long seed;
-        public final float[] trailX = new float[TRAIL_POINTS];
-        public final float[] trailY = new float[TRAIL_POINTS];
-        public final float[] trailZ = new float[TRAIL_POINTS];
         public boolean hasTrail;
+        public Vec3 center = Vec3.ZERO;
+        public Vec3 hand = Vec3.ZERO;
+        public double groundY;
+        public final List<Vec3> trail = new ArrayList<>(TRAIL_POINTS);
     }
 
     public boolean shouldRender(SpikeFlailSwingEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -63,57 +69,71 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
     public void extractRenderState(SpikeFlailSwingEntity entity, SwingState state, float partialTick) {
         super.extractRenderState(entity, state, partialTick);
         state.age = entity.tickCount + partialTick;
+        state.entityId = entity.getId();
         state.seed = entity.getId() * 2654435761L ^ 0x5F1A11L;
-        Entity owner = entity.getOwner();
-        state.hasHand = owner != null;
+        state.center = new Vec3(state.x, state.y, state.z);
         state.hasTrail = false;
+        state.trail.clear();
+        Entity owner = entity.getOwner();
         if (owner != null) {
-            Vec3 ball = entity.getPosition(partialTick);
             float yaw = entity.swingYaw();
             double yawRad = Math.toRadians(yaw);
-            Vec3 hand = owner.getPosition(partialTick).add(-Math.sin(yawRad) * 0.35, 1.05, Math.cos(yawRad) * 0.35);
-            Vec3 rel = hand.subtract(ball);
-            state.handX = (float) rel.x;
-            state.handY = (float) rel.y;
-            state.handZ = (float) rel.z;
-            // Arc samples behind the ball, relative to the ball's current arc point,
-            // so the trail ends exactly where the ball is drawn.
+            Vec3 ball = entity.getPosition(partialTick);
+            state.center = ball;
+            state.hand = owner.getPosition(partialTick).add(-Math.sin(yawRad) * 0.35, 1.05, Math.cos(yawRad) * 0.35);
+            state.groundY = owner.getY();
             float cur = Mth.clamp((entity.tickCount + partialTick) / (float) SpikeFlailSwingEntity.SWING_TICKS, 0.0f, 1.0f);
-            Vec3 now = SpikeFlailSwingEntity.ballPos(owner, yaw, cur);
             for (int i = 0; i < TRAIL_POINTS; i++) {
                 float p = Math.max(0.0f, cur - (TRAIL_POINTS - 1 - i) * 0.09f);
-                Vec3 s = SpikeFlailSwingEntity.ballPos(owner, yaw, p);
-                state.trailX[i] = (float) (s.x - now.x);
-                state.trailY[i] = (float) (s.y - now.y);
-                state.trailZ[i] = (float) (s.z - now.z);
+                state.trail.add(SpikeFlailSwingEntity.ballPos(owner, yaw, p));
             }
-            state.hasTrail = true;
+            state.hasTrail = state.trail.size() >= 2;
         }
     }
 
     @Override
     public void submit(SwingState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        super.submit(state, poseStack, collector, cameraState);
+        if (!state.hasTrail) {
+            return;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc == null ? null : mc.level;
+        if (level == null) {
+            return;
+        }
         float fade = ease(Math.max(0.0f, 1.0f - Math.max(0.0f, state.age - 8.0f) / 3.0f));
         float open = ease(Math.min(1.0f, state.age / 2.0f));
-        RenderType type = KiRenderHelper.kiRenderType();
-        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        if (state.hasTrail && fade > 0.01f) {
-            float[] widths = {0.20f, 0.28f, 0.36f, 0.44f};
-            for (int i = 0; i < TRAIL_POINTS - 1; i++) {
-                submitSpan(poseStack, collector, type,
-                    state.trailX[i], state.trailY[i], state.trailZ[i],
-                    state.trailX[i + 1], state.trailY[i + 1], state.trailZ[i + 1],
-                    widths[i], 0.0f, 0.92f, 0.90f, 0.82f, fade * (0.10f + 0.07f * i),
-                    state.seed ^ (0x7EA1L + i), distScale);
-            }
+        if (fade <= 0.01f) {
+            return;
         }
-        if (state.hasHand) {
-            submitChain(poseStack, collector, type, state.handX, state.handY, state.handZ,
-                0.0f, 0.0f, 0.0f, fade, state.seed ^ 0xC4A1L, distScale);
+        float distScale = MaterialEmitters.distanceScale(state.center);
+        float envelope = fade * (0.35f + 0.65f * open) * distScale;
+        if (envelope <= 0.01f) {
+            return;
         }
-        submitBall(poseStack, collector, type, 0.42f * (0.75f + 0.25f * open), fade,
-            state.seed ^ 0xBA11L, distScale);
-        super.submit(state, poseStack, collector, cameraState);
+        Emission emission = emissions.get(state.entityId);
+        if (emission == null || emission.level != level || emission.seed != state.seed) {
+            emission = new Emission(level, (int) state.seed);
+            emissions.put(state.entityId, emission);
+            pruneEmissions();
+        }
+        emission.frame.trail.clear();
+        emission.frame.trail.addAll(state.trail);
+        emission.frame.hand = state.hand;
+        emission.frame.center = state.center;
+        emission.frame.groundY = state.groundY;
+        float delta = emission.delta(state.age);
+        float dustEnvelope = envelope * (state.center.y - state.groundY <= 1.25 ? 1.0f : 0.30f);
+        emission.tick(delta, envelope, dustEnvelope);
+    }
+
+    private void pruneEmissions() {
+        if (emissions.size() < 48) {
+            return;
+        }
+        long cutoff = System.nanoTime() - 30_000_000_000L;
+        emissions.values().removeIf(e -> e.lastSeenNanos < cutoff);
     }
 
     private static float ease(float t) {
@@ -121,98 +141,74 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
         return c * c * (3.0f - 2.0f * c);
     }
 
-    /**
-     * One torn ribbon span from one point to another: the pose is translated to
-     * the start and yawed, pitched, and rolled so the ribbon's length axis lies
-     * along the span. The shared strand for chain links and trail segments.
-     */
-    static void submitSpan(PoseStack poseStack, SubmitNodeCollector collector, RenderType type,
-                           float x0, float y0, float z0, float x1, float y1, float z1,
-                           float width, float rollDeg,
-                           float r, float g, float b, float alpha, long seed, float distScale) {
-        float dx = x1 - x0;
-        float dy = y1 - y0;
-        float dz = z1 - z0;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.001f || alpha <= 0.01f) {
-            return;
-        }
-        float horiz = (float) Math.sqrt(dx * dx + dz * dz);
-        float yawDeg = (float) Math.toDegrees(Math.atan2(-dz, dx));
-        float pitchDeg = (float) Math.toDegrees(Math.atan2(dy, horiz));
-        poseStack.pushPose();
-        poseStack.translate(x0, y0, z0);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(yawDeg)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(pitchDeg)));
-        if (rollDeg != 0.0f) {
-            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(rollDeg)));
-        }
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed, len, width, 0.0f, r, g, b, alpha, 1.0f, distScale));
-        poseStack.popPose();
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        final List<Vec3> trail = new ArrayList<>(TRAIL_POINTS);
+        Vec3 hand = Vec3.ZERO;
+        Vec3 center = Vec3.ZERO;
+        double groundY;
     }
 
-    /**
-     * The chain between two points: eight ribbon spans along the same sag curve
-     * the old prism links followed, with alternating width and roll so the
-     * links read as alternating chain links instead of a smooth tube.
-     */
-    static void submitChain(PoseStack poseStack, SubmitNodeCollector collector, RenderType type,
-                            float hx, float hy, float hz, float bx, float by, float bz,
-                            float fade, long seed, float distScale) {
-        int links = 8;
-        float px = hx;
-        float py = hy;
-        float pz = hz;
-        for (int i = 1; i <= links; i++) {
-            float t = i / (float) links;
-            float sag = (float) Math.sin(t * Math.PI) * 0.45f;
-            float x = Mth.lerp(t, hx, bx);
-            float y = Mth.lerp(t, hy, by) - sag;
-            float z = Mth.lerp(t, hz, bz);
-            float width = i % 2 == 0 ? 0.20f : 0.13f;
-            float roll = i % 2 == 0 ? 75.0f : 0.0f;
-            submitSpan(poseStack, collector, type, px, py, pz, x, y, z, width, roll,
-                0.72f, 0.74f, 0.78f, fade, seed + i * 131L, distScale);
-            px = x;
-            py = y;
-            pz = z;
-        }
-    }
+    private static final class Emission {
+        final ClientLevel level;
+        final long seed;
+        final Frame frame = new Frame();
+        final MaterialEmitters.Emitter trailVapor;
+        final MaterialEmitters.Emitter trailSparks;
+        final MaterialEmitters.Emitter corePlasma;
+        final MaterialEmitters.Emitter chainVapor;
+        final MaterialEmitters.Emitter groundDust;
+        float lastAge = Float.NaN;
+        long lastSeenNanos = System.nanoTime();
 
-    /**
-     * The spiked ball: two noise-displaced domes make the lumpy iron body and
-     * shard fans in three planes make the spikes, all seeded. No spheres, no
-     * cones, no lat-long grids.
-     */
-    static void submitBall(PoseStack poseStack, SubmitNodeCollector collector, RenderType type,
-                           float radius, float fade, long seed, float distScale) {
-        if (fade <= 0.01f) {
-            return;
+        Emission(ClientLevel level, int seed) {
+            this.level = level;
+            this.seed = seed;
+            MaterialEmitters.Source trailPath = random -> frame.trail.size() < 2
+                ? new MaterialEmitters.Sample(frame.center, Vec3.ZERO)
+                : MaterialEmitters.path(frame.trail, 0.0).sample(random);
+            MaterialEmitters.Source chainPath = random ->
+                MaterialEmitters.path(frame.hand, frame.center, 0.0).sample(random);
+            MaterialEmitters.Source ballPoint = random -> new MaterialEmitters.Sample(frame.center, Vec3.ZERO);
+            MaterialEmitters.Source ground = random ->
+                MaterialEmitters.groundArea(new Vec3(frame.center.x, 0.0, frame.center.z), 0.55, frame.groundY + 0.10).sample(random);
+            this.trailVapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0xEDE8DA, 1.50f, seed ^ 0xA17, Vec3.ZERO, 0.035f),
+                trailPath, 150f, 220);
+            this.trailSparks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.14f),
+                trailPath, 65f, 100);
+            this.corePlasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFFF6D8, 0.65f, seed ^ 0xC09E, Vec3.ZERO, 0.050f),
+                ballPoint, 70f, 110);
+            this.chainVapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0xDAD4C6, 1.05f, seed ^ 0xC4A1, Vec3.ZERO, 0.025f),
+                chainPath, 55f, 90);
+            this.groundDust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(THEME_DUST, 1.10f, seed ^ 0xD057, new Vec3(0.0, 0.015, 0.0), 0.050f),
+                ground, 30f, 55);
         }
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, seed, radius,
-                0.78f, 0.80f, 0.84f, fade * 0.95f, 1.0f, distScale));
-        poseStack.pushPose();
-        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(180.0f)));
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD0EL, radius,
-                0.78f, 0.80f, 0.84f, fade * 0.95f, 1.0f, distScale));
-        poseStack.popPose();
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x11L, radius * 1.5f,
-                0.85f, 0.87f, 0.91f, fade * 0.9f, 1.0f, distScale));
-        poseStack.pushPose();
-        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x22L, radius * 1.5f,
-                0.85f, 0.87f, 0.91f, fade * 0.9f, 1.0f, distScale));
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) ->
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x33L, radius * 1.5f,
-                0.85f, 0.87f, 0.91f, fade * 0.9f, 1.0f, distScale));
-        poseStack.popPose();
+
+        float delta(float age) {
+            lastSeenNanos = System.nanoTime();
+            if (Float.isNaN(lastAge) || age < lastAge) {
+                lastAge = age;
+                return 1.0f / 20.0f;
+            }
+            float delta = Math.min(0.10f, Math.max(0.0f, (age - lastAge) / 20.0f));
+            lastAge = age;
+            return delta;
+        }
+
+        void tick(float delta, float envelope, float dustEnvelope) {
+            if (delta <= 0.0f || envelope <= 0.01f) {
+                return;
+            }
+            trailVapor.tick(delta, envelope);
+            trailSparks.tick(delta, envelope);
+            corePlasma.tick(delta, envelope);
+            chainVapor.tick(delta, envelope * 0.80f);
+            groundDust.tick(delta, dustEnvelope);
+        }
     }
 }

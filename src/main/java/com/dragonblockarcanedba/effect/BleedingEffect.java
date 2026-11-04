@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -51,7 +51,7 @@ public class BleedingEffect extends MobEffect {
         // Visual dripping effect (every 4 ticks to avoid particle spam)
         if (entity.tickCount % 4 == 0) {
             level.sendParticles(
-                new DbaDustOptions(0x8B0000, 1.2F),
+                DbaMaterialOptions.of(DbaMaterialOptions.MIST, 0x8B0000, 1.2F, entity.getId() * 31 + entity.tickCount),
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * entity.getBbWidth(), 
                 entity.getY() + level.getRandom().nextFloat() * entity.getBbHeight(), 
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * entity.getBbWidth(),
@@ -61,7 +61,7 @@ public class BleedingEffect extends MobEffect {
             );
             // Secondary splatter particles
             level.sendParticles(
-                new DbaDustOptions(0xCC0000, 0.8F),
+                DbaMaterialOptions.of(DbaMaterialOptions.MIST, 0xCC0000, 0.8F, entity.getId() * 31 + entity.tickCount + 1),
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * entity.getBbWidth() * 0.8,
                 entity.getY() + 0.1,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * entity.getBbWidth() * 0.8,

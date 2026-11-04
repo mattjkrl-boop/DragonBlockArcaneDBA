@@ -1,38 +1,63 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.WarMaceRiseEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 /**
- * An upward crescent with a trail, rebuilt on the bespoke toolkit
- * (BESPOKE-STANDARD rule 1). Each layer is the toolkit's blade arc: a
- * tapered, nicked irregular arc, stood upright into the facing plane. The
- * main crescent climbs as before; two lagging ghost arcs below it and one
- * wider, fainter wisp arc around it give the swing layered depth, and an
- * expanding glow fan at the base marks the launch for the first few ticks.
- * All layers are seeded from the entity's synced seed and run the shared
- * FxEnvelope, so the swing builds in and settles instead of popping.
+ * The rising crescent, converted for the no-shapes realism pass. This
+ * renderer draws no geometry at all. The crescent is a path, and a path is
+ * data: bronze plasma is emitted along the same 250 degree arc, in the
+ * same facing plane, climbing at the same 0.22 blocks per tick the hit
+ * volume climbs, so what the target sees is still what hits it. The main
+ * arc, the wider wisp, and the two lagging ghost arcs below are separate
+ * emission layers at their old radii, heights, colors, and relative
+ * strengths. The expanding launch ring at the base is ground dust and
+ * vapor rolling outward for the first ticks.
+ *
+ * Identity is preserved: the bronze palette, the open ease over the first
+ * 3 ticks, the synced seed, and the shared FxEnvelope lifecycle (build 12
+ * percent, dissipate 30 percent) all carry over from the bespoke build.
+ * Only what the effect is made of changed.
  */
 public class WarMaceRiseRenderer extends EntityRenderer<WarMaceRiseEntity, WarMaceRiseRenderer.RiseState> {
-    /** Arc sweep in degrees, centered on the facing direction. */
+    /** Arc sweep in degrees, centered on the facing direction. Data for the emission path. */
     private static final float SWEEP = 250.0f;
+
+    /** Bright bronze of the main crescent. */
+    private static final int MAIN = 0xF7D180;
+    /** Pale bronze of the wide wisp layer. */
+    private static final int WISP = 0xFFEBB3;
+    /** Theme bronze of the lower ghost layer. */
+    private static final int GHOST_LOW = 0xD99E47;
+    /** Theme bronze of the upper ghost layer. */
+    private static final int GHOST_MID = 0xE0A852;
+    /** Pale vapor bronze. */
+    private static final int PALE = 0xEBC280;
+
+    /** Live material emitters, one bundle per rendered rise entity id. */
+    private final Map<Integer, RiseEmission> emissions = new HashMap<>();
 
     public WarMaceRiseRenderer(EntityRendererProvider.Context context) {
         super(context);
     }
 
     public static class RiseState extends EntityRenderState {
+        public int entityId;
         public float age;
         public float yRot;
         public int seed;
@@ -57,6 +82,7 @@ public class WarMaceRiseRenderer extends EntityRenderer<WarMaceRiseEntity, WarMa
     @Override
     public void extractRenderState(WarMaceRiseEntity entity, RiseState state, float partialTick) {
         super.extractRenderState(entity, state, partialTick);
+        state.entityId = entity.getId();
         state.age = entity.tickCount + partialTick;
         state.yRot = entity.getYRot();
         state.seed = entity.getSeed();
@@ -67,58 +93,178 @@ public class WarMaceRiseRenderer extends EntityRenderer<WarMaceRiseEntity, WarMa
 
     @Override
     public void submit(RiseState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float open = ease(Math.min(1.0f, state.age / 3.0f));
         float env = FxEnvelope.envelope(state.age, 8.0f, 0.12f, 0.30f);
-        float lift = state.age * 0.22f;
-        float radius = 1.15f * (0.45f + 0.55f * open);
-        float distScale = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-        long seed = state.seed;
-        RenderType type = KiRenderHelper.kiRenderType();
-
-        // Impact feedback at the base: an expanding glow fan for the first
-        // ticks, drawn without the climb so it stays on the launch point.
-        if (state.age < 3.5f) {
-            float ringAlpha = (1.0f - state.age / 3.5f) * 0.6f;
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-            collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-                BespokeGeometry.glowFan(pose, buffer, seed ^ 0xBA5E,
-                    0.8f + state.age * 0.55f, 0.05f,
-                    1.0f, 0.8f, 0.45f, ringAlpha, distScale);
-            });
-            poseStack.popPose();
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null || env <= 0.001f) {
+            emissions.remove(state.entityId);
+            super.submit(state, poseStack, collector, cameraState);
+            return;
         }
 
-        // Trail ghosts first, then the wide wisp, then the main crescent.
-        drawArcLayer(state, poseStack, collector, type, seed ^ 0xA003,
-            radius * 0.92f, lift - 0.56f, 0.85f, 0.62f, 0.28f, 0.55f, env * 0.20f, distScale);
-        drawArcLayer(state, poseStack, collector, type, seed ^ 0xA002,
-            radius * 0.96f, lift - 0.28f, 0.88f, 0.66f, 0.32f, 0.60f, env * 0.40f, distScale);
-        drawArcLayer(state, poseStack, collector, type, seed ^ 0xA001,
-            radius * 1.3f, lift + 0.06f, 1.0f, 0.92f, 0.70f, 0.50f, env * 0.30f, distScale);
-        drawArcLayer(state, poseStack, collector, type, seed,
-            radius, lift, 0.97f, 0.82f, 0.50f, 0.95f, env, distScale);
+        float open = ease(Math.min(1.0f, state.age / 3.0f));
+        float lift = state.age * 0.22f;
+        float radius = 1.15f * (0.45f + 0.55f * open);
+        Vec3 center = new Vec3(state.ex, state.ey, state.ez);
+
+        RiseEmission emission = emissions.get(state.entityId);
+        if (emission != null && state.age < emission.lastAge - 0.01f) {
+            // Age ran backwards: a new rise took this id or the level reset.
+            emissions.remove(state.entityId);
+            emission = null;
+        }
+        boolean fresh = emission == null
+            || emission.level != level
+            || emission.seed != state.seed;
+        if (fresh) {
+            emission = new RiseEmission(level, center, state.seed);
+            emissions.put(state.entityId, emission);
+        }
+
+        // The frame follows the climb every submit: the arc path is
+        // sampled at the live lift and radius, in the facing plane of the
+        // live yRot, matching the renderer's old pose math point for point.
+        Frame frame = emission.frame;
+        frame.center = center;
+        frame.radius = radius;
+        frame.lift = lift;
+        frame.baseRadius = 0.8f + state.age * 0.55f;
+        double yawRad = Math.toRadians(state.yRot);
+        frame.forward = new Vec3(-Math.sin(yawRad), 0.0, Math.cos(yawRad));
+        frame.right = new Vec3(Math.cos(yawRad), 0.0, Math.sin(yawRad));
+
+        float delta = fresh ? (1.0f / 60.0f)
+            : Math.min(0.05f, Math.max(0.0f, (state.age - emission.lastAge) / 20.0f));
+        emission.lastAge = state.age;
+
+        float dist = MaterialEmitters.distanceScale(center);
+        float ringEnv = state.age < 3.5f ? (1.0f - state.age / 3.5f) * 0.6f : 0.0f;
+        emission.tick(delta, env * dist, ringEnv * dist);
+        pruneEmissions(state.entityId);
+
         super.submit(state, poseStack, collector, cameraState);
     }
 
+    /** Drops bundles for rises that stopped rendering several seconds ago. */
+    private void pruneEmissions(int keepId) {
+        long now = System.nanoTime();
+        Iterator<Map.Entry<Integer, RiseEmission>> it = emissions.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Integer, RiseEmission> entry = it.next();
+            if (entry.getKey() != keepId && now - entry.getValue().lastSeenNanos > 5_000_000_000L) {
+                it.remove();
+            }
+        }
+    }
+
+    /** Mutable per-frame sampling data read by the sources. Data only. */
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        Vec3 forward = new Vec3(0.0, 0.0, 1.0);
+        Vec3 right = new Vec3(1.0, 0.0, 0.0);
+        float radius = 1.0f;
+        float lift = 0.0f;
+        float baseRadius = 0.8f;
+    }
+
     /**
-     * One blade arc layer: the pose faces the entity's way, sits at the
-     * layer's height on the climb, and tips the toolkit's ground plane arc
-     * upright so it sweeps in the facing plane like the old crescent.
+     * Points along the crescent arc: the facing plane, centered on the
+     * facing direction, at the layer's radius and height on the climb. The
+     * same point set the blade arc used to draw through; here it only
+     * decides where plasma spawns. Each point drifts outward along the
+     * arc's radial direction as it dies.
      */
-    private static void drawArcLayer(RiseState state, PoseStack poseStack, SubmitNodeCollector collector,
-                                     RenderType type, long seed, float radius, float y,
-                                     float r, float g, float b, float alpha, float envelope,
-                                     float distScale) {
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.translate(0.0f, y, 0.35f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed, radius, SWEEP,
-                r, g, b, alpha, envelope, distScale);
-        });
-        poseStack.popPose();
+    private static MaterialEmitters.Source arc(Frame frame, float radiusMul, float yOffset) {
+        return random -> {
+            double phi = Math.toRadians(-SWEEP / 2.0 + random.nextDouble() * SWEEP);
+            double sin = Math.sin(phi);
+            double cos = Math.cos(phi);
+            double r = frame.radius * radiusMul;
+            Vec3 pos = new Vec3(
+                frame.center.x + frame.right.x * sin * r + frame.forward.x * 0.35,
+                frame.center.y + frame.lift + yOffset + cos * r,
+                frame.center.z + frame.right.z * sin * r + frame.forward.z * 0.35);
+            Vec3 vel = new Vec3(frame.right.x * sin * 0.03, cos * 0.03 + 0.015, frame.right.z * sin * 0.03);
+            return new MaterialEmitters.Sample(pos, vel);
+        };
+    }
+
+    /** Points on the expanding launch ring at the base, rolling outward. */
+    private static MaterialEmitters.Source baseRing(Frame frame) {
+        return random -> {
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double cos = Math.cos(ang);
+            double sin = Math.sin(ang);
+            Vec3 pos = new Vec3(frame.center.x + cos * frame.baseRadius,
+                frame.center.y + 0.06, frame.center.z + sin * frame.baseRadius);
+            Vec3 vel = new Vec3(cos * 0.14, 0.02, sin * 0.14);
+            return new MaterialEmitters.Sample(pos, vel);
+        };
+    }
+
+    /**
+     * The material emitter bundle for one rise: the main plasma arc, the
+     * wide wisp arc, two ghost arcs below, a vapor wash along the main
+     * arc, sparse steel sparks shed off the arc, and the ground dust and
+     * vapor of the launch ring.
+     */
+    private static final class RiseEmission {
+        private final ClientLevel level;
+        private final int seed;
+        private final Frame frame = new Frame();
+        private final MaterialEmitters.Emitter mainArc;
+        private final MaterialEmitters.Emitter wispArc;
+        private final MaterialEmitters.Emitter ghostArcLow;
+        private final MaterialEmitters.Emitter ghostArcMid;
+        private final MaterialEmitters.Emitter arcVapor;
+        private final MaterialEmitters.Emitter arcSparks;
+        private final MaterialEmitters.Emitter baseDust;
+        private final MaterialEmitters.Emitter baseVapor;
+        private float lastAge = -1.0f;
+        private long lastSeenNanos = System.nanoTime();
+
+        private RiseEmission(ClientLevel level, Vec3 center, int seed) {
+            this.level = level;
+            this.seed = seed;
+            this.frame.center = center;
+            this.mainArc = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(MAIN, 1.15f, seed, Vec3.ZERO, 0.012f),
+                arc(frame, 1.0f, 0.0f), 300f, 380);
+            this.wispArc = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(WISP, 1.5f, seed ^ 0xA001, Vec3.ZERO, 0.015f),
+                arc(frame, 1.3f, 0.06f), 95f, 140);
+            this.ghostArcMid = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(GHOST_MID, 1.2f, seed ^ 0xA002, Vec3.ZERO, 0.012f),
+                arc(frame, 0.96f, -0.28f), 110f, 150);
+            this.ghostArcLow = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(GHOST_LOW, 1.2f, seed ^ 0xA003, Vec3.ZERO, 0.012f),
+                arc(frame, 0.92f, -0.56f), 85f, 120);
+            this.arcVapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(PALE, 1.9f, seed ^ 0xA004, Vec3.ZERO, 0.02f),
+                arc(frame, 1.0f, 0.0f), 50f, 80);
+            this.arcSparks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK, new Vec3(0.0, 0.05, 0.0), 0.05f),
+                arc(frame, 1.0f, 0.0f), 36f, 60);
+            this.baseDust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(GHOST_LOW, 1.6f, seed ^ 0xBA5E, Vec3.ZERO, 0.03f),
+                baseRing(frame), 170f, 220);
+            this.baseVapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(PALE, 2.1f, seed ^ 0xBA5F, Vec3.ZERO, 0.02f),
+                baseRing(frame), 60f, 90);
+        }
+
+        private void tick(float deltaSeconds, float envelope, float ringEnvelope) {
+            lastSeenNanos = System.nanoTime();
+            mainArc.tick(deltaSeconds, envelope);
+            wispArc.tick(deltaSeconds, envelope * 0.45f);
+            ghostArcMid.tick(deltaSeconds, envelope * 0.55f);
+            ghostArcLow.tick(deltaSeconds, envelope * 0.35f);
+            arcVapor.tick(deltaSeconds, envelope * 0.5f);
+            arcSparks.tick(deltaSeconds, envelope * 0.7f);
+            if (ringEnvelope > 0.01f) {
+                baseDust.tick(deltaSeconds, ringEnvelope);
+                baseVapor.tick(deltaSeconds, ringEnvelope);
+            }
+        }
     }
 
     private static float ease(float t) {

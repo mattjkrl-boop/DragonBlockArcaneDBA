@@ -3,6 +3,8 @@ package com.dragonblockarcanedba.client.fx;
 import com.dragonblockarcanedba.network.BossStaggerPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -32,7 +34,26 @@ public final class StaggerFx {
                 e.duration = Math.max(1, payload.durationTicks());
                 e.ticksLeft = e.duration;
                 BY_ID.put(payload.entityId(), e);
+                emitImpact(context.client(), payload);
             }));
+    }
+
+    private static void emitImpact(Minecraft client, BossStaggerPayload payload) {
+        if (client.level == null) return;
+        Entity entity = client.level.getEntity(payload.entityId());
+        if (entity == null) return;
+        float strength = Math.max(0f, payload.strength());
+        Vec3 center = entity.position().add(0, entity.getBbHeight() * 0.55, 0);
+        double radius = Math.max(0.35, entity.getBbWidth() * 0.55);
+        int seed = payload.entityId() * 31 + 41;
+        MaterialEmitters.burst(client.level,
+                MaterialEmitters.Preset.dust(0xC2B49A, 0.9f, seed, new Vec3(0, 0.04, 0), 0.16f),
+                MaterialEmitters.sphereVolume(center, radius),
+                10 + Math.round(8f * strength));
+        MaterialEmitters.burst(client.level,
+                MaterialEmitters.Preset.plasma(0xFFCA6A, 0.9f, seed + 1, Vec3.ZERO, 0.22f),
+                MaterialEmitters.sphereVolume(center, radius),
+                6 + Math.round(6f * strength));
     }
 
     public static void tick(Minecraft mc) {

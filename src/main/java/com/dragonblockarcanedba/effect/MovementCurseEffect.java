@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -66,7 +66,7 @@ public class MovementCurseEffect extends MobEffect {
                 double pz = entity.getZ() + (level.getRandom().nextFloat() - 0.5) * (width + 0.4);
 
                 level.sendParticles(
-                    new DbaDustOptions(0x4B0082, 1.4F), // Indigo purple
+                    DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0x4B0082, 1.4F, entity.getId() * 31 + entity.tickCount + i), // Indigo purple
                     px, py, pz,
                     1, 0.0, 0.02, 0.0, 0.01
                 );
@@ -75,7 +75,7 @@ public class MovementCurseEffect extends MobEffect {
             // Dark smoke if heavily cursed
             if (stacks >= 7) {
                 level.sendParticles(
-                    com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                    DbaMaterialOptions.of(DbaMaterialOptions.DARKNESS, 0x591A80, 1.0f, entity.getId() * 31 + entity.tickCount + 100),
                     entity.getX(), entity.getY() + height * 0.5, entity.getZ(),
                     2, width * 0.3, height * 0.2, width * 0.3, 0.02
                 );

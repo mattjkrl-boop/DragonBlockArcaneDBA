@@ -34,6 +34,8 @@ public final class MaterialEmitters {
         private final ParticleOptions fixedOptions;
         private final Vec3 velocity;
         private final float spread;
+        private float lifetimeFactor = 1.0f;
+        private float gravityScale = 1.0f;
 
         private Preset(int material, int color, float scale, int seedBase,
                        ParticleOptions fixedOptions, Vec3 velocity, float spread) {
@@ -98,9 +100,35 @@ public final class MaterialEmitters {
             return fixed(DbaParticles.ASH, velocity, spread);
         }
 
+        /**
+         * Opt-in lifetime factor for material presets: below 1.0 shortens
+         * the rolled particle lifetime, so a short-lived host effect does
+         * not leave an afterglow tail. No effect on fixed presets, whose
+         * options are not DbaMaterialOptions. Default 1.0 is Phase 1
+         * behavior exactly.
+         */
+        public Preset withLifetimeFactor(float factor) {
+            this.lifetimeFactor = factor;
+            return this;
+        }
+
+        /**
+         * Opt-in gravity scale for material presets: multiplies the
+         * profile gravity, so 0.1 asks for near-suspended material.
+         * No effect on fixed presets. Default 1.0 is Phase 1 behavior
+         * exactly.
+         */
+        public Preset withGravityScale(float factor) {
+            this.gravityScale = factor;
+            return this;
+        }
+
         private ParticleOptions optionsFor(int cursor) {
             if (material < 0) return fixedOptions;
-            return DbaMaterialOptions.of(material, color, scale, seedBase + cursor * 1013);
+            DbaMaterialOptions options = DbaMaterialOptions.of(material, color, scale, seedBase + cursor * 1013);
+            if (lifetimeFactor != 1.0f) options = options.withLifetimeFactor(lifetimeFactor);
+            if (gravityScale != 1.0f) options = options.withGravityScale(gravityScale);
+            return options;
         }
     }
 

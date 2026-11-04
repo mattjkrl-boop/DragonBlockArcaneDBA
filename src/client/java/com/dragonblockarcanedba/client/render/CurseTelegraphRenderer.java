@@ -1,27 +1,27 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.CurseTelegraphEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
 
 /**
- * Entity Renderer for Curse Telegraph in Minecraft 26.2.
- * The bespoke pass rebuilds the warning marker entirely on
- * BespokeGeometry: a crackStar ground star (crimson over violet) in place
- * of the equal-segment pentagram rings, a brokenVortexBand as the
- * contracting implosion indicator, tornRibbon tendrils rising around the
- * rim, and a displacedDome hex eye at the heart that flashes as the
- * countdown completes. Seeds come from the entity id, identical on every
- * client.
+ * Curse Telegraph as gathering cursed material, not a drawn marker. The
+ * no-shapes conversion removes the crack stars, contracting band, tendril
+ * ribbons, and hex eye dome entirely. The warning now reads through
+ * material behavior: curse plasma and darkness gather across the ground
+ * area, the shrinking implosion radius is carried by a tightening ground
+ * source of hot plasma, rising rim emission replaces the tendrils, and the
+ * center gathers soul and plasma that thickens as the countdown completes.
+ * The accelerating pulse, the radius, the progress curve, and the entity id
+ * seed are unchanged.
  */
 public class CurseTelegraphRenderer extends EntityRenderer<CurseTelegraphEntity, CurseTelegraphRenderer.TelegraphRenderState> {
 
@@ -34,6 +34,7 @@ public class CurseTelegraphRenderer extends EntityRenderer<CurseTelegraphEntity,
         public float progress = 0.0f;
         public float age = 0;
         public long seed = 0;
+        public float lastEmitAge = -1f;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -64,75 +65,91 @@ public class CurseTelegraphRenderer extends EntityRenderer<CurseTelegraphEntity,
     public void submit(TelegraphRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
+
         float radius = state.radius;
         float progress = state.progress;
         float age = state.age;
-        long seed = state.seed;
-        float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        int seed = (int) (state.seed ^ (state.seed >>> 32));
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float ds = MaterialEmitters.distanceScale(center);
+        float delta = emissionDelta(state, age);
 
-        // Pulse rate accelerates as countdown reaches completion
+        // Pulse rate accelerates as countdown reaches completion, exactly as
+        // the drawn marker pulsed.
         float pulseSpeed = 0.3f + (progress * 0.7f);
         float pulse = 0.8f + 0.2f * (float) Math.sin(age * pulseSpeed * 20.0f);
+        float env = ds * pulse;
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // 1. Corrupted ground star: two crackStars, crimson over violet.
-            BespokeGeometry.crackStar(pose, buffer, seed, radius,
-                0.95f, 0.02f, 0.15f, 0.85f, pulse, ds);
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0x57A2L, radius * 0.75f,
-                0.65f, 0.01f, 0.85f, 0.75f, pulse, ds);
+        // The corrupted ground: plasma and darkness gathering across the
+        // full marker area, with a little ground dust in the drift.
+        MaterialEmitters.Source ground = MaterialEmitters.groundArea(center, radius, center.y + 0.05);
+        emit(level, MaterialEmitters.Preset.plasma(0xF20D33, 0.95f, seed, Vec3.ZERO, 0.020f),
+            ground, 150f, delta, env);
+        emit(level, MaterialEmitters.Preset.plasma(0xA60DD9, 0.85f, seed + 0x57A2, Vec3.ZERO, 0.020f),
+            ground, 110f, delta, env);
+        emit(level, MaterialEmitters.Preset.darkness(0x14030A, 1.45f, seed + 0xD415, new Vec3(0, 0.010, 0), 0.015f),
+            ground, 120f, delta, env);
+        emit(level, MaterialEmitters.Preset.dust(0x6E625E, 0.95f, seed + 0xD057, Vec3.ZERO, 0.025f),
+            ground, 60f, delta, env * 0.7f);
 
-            // 2. Contracting implosion indicator: a broken band shrinking
-            // from the full radius to nothing as progress reaches 1.
-            float shrinkR = radius * (1.0f - progress);
-            if (shrinkR > 0.05f) {
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB4D1L, shrinkR, 0.02f, 0.12f,
-                    age * 0.7f, 1.0f, 0.9f, 0.95f, 0.95f, ds);
-            }
+        // The implosion indicator: hot plasma gathering inside a ground
+        // source that shrinks from the full radius to nothing as progress
+        // reaches one, the same contraction the band used to draw.
+        float shrinkR = radius * (1.0f - progress);
+        if (shrinkR > 0.05f) {
+            MaterialEmitters.Source shrinking = MaterialEmitters.groundArea(center, shrinkR, center.y + 0.07);
+            emit(level, MaterialEmitters.Preset.plasma(0xFFF2F7, 0.90f, seed + 0xB4D1, Vec3.ZERO, 0.020f),
+                shrinking, 170f, delta, env);
+            emit(level, MaterialEmitters.Preset.plasma(0x8C1AF2, 1.00f, seed + 0xB4D2, Vec3.ZERO, 0.020f),
+                shrinking, 90f, delta, env);
+        }
 
-            // 3. Rising cursed tendrils: torn ribbons stood on end around
-            // the rim, crimson sheath with a white core on the same seed.
-            int pillarCount = 6;
-            float pillarH = 1.2f + (progress * 2.5f);
-            float pillarW = 0.16f * (1.0f - progress * 0.3f);
-            for (int p = 0; p < pillarCount; p++) {
-                double pAngle = (p / (double) pillarCount) * Math.PI * 2.0 + Math.toRadians(age * 15.0f);
-                float px = (float) Math.cos(pAngle) * radius;
-                float pz = (float) Math.sin(pAngle) * radius;
-                PoseStack.Pose tendril = pose.copy();
-                tendril.translate(px, 0.05f, pz);
-                tendril.rotate(Axis.ZP.rotation((float) (Math.PI / 2.0)));
-                long tSeed = seed + p * 131L;
-                BespokeGeometry.tornRibbon(tendril, buffer, tSeed, pillarH, pillarW, 0.35f,
-                    0.95f, 0.02f, 0.20f, 0.80f, pulse, ds);
-                BespokeGeometry.tornRibbon(tendril, buffer, tSeed, pillarH, pillarW * 0.38f, 0.35f,
-                    1.0f, 0.95f, 0.95f, 0.95f, pulse, ds);
-            }
+        // Rising cursed drift at the rim: emission sampled around the rim
+        // circle and up to the old tendril height, which grows with progress.
+        float pillarH = 1.2f + (progress * 2.5f);
+        MaterialEmitters.Source rim = rimSource(center, radius, pillarH);
+        emit(level, MaterialEmitters.Preset.plasma(0xF20D33, 0.90f, seed + 131, Vec3.ZERO, 0.020f),
+            rim, 220f, delta, env);
+        emit(level, MaterialEmitters.Preset.plasma(0xFFF2F7, 0.70f, seed + 263, Vec3.ZERO, 0.020f),
+            rim, 100f, delta, env);
+        emit(level, MaterialEmitters.Preset.darkness(0x1F0510, 1.30f, seed + 397, new Vec3(0, 0.014, 0), 0.015f),
+            rim, 90f, delta, env);
 
-            // 4. Central hex eye: a lumpy displaced dome flashing at the
-            // heart of the marker.
-            PoseStack.Pose eye = pose.copy();
-            eye.translate(0, 0.08f, 0);
-            float coreSize = (0.25f + (progress * 0.25f)) * pulse;
-            BespokeGeometry.displacedDome(eye, buffer, seed ^ 0xE7E1L, coreSize * 1.6f,
-                1.0f, 0.05f, 0.15f, 0.95f, pulse, ds);
-        });
+        // The heart of the marker: soul and plasma gathering at the center,
+        // thickening and brightening as the countdown completes.
+        Vec3 heart = center.add(0, 0.10, 0);
+        float coreRate = 120f * (0.5f + progress);
+        emit(level, MaterialEmitters.Preset.plasma(0xF20D26, 1.00f + progress * 0.8f, seed + 0xE7E1, Vec3.ZERO, 0.030f),
+            MaterialEmitters.point(heart), coreRate, delta, env);
+        emit(level, MaterialEmitters.Preset.soul(0xD9B3FF, 0.85f, seed + 0xE7E2, Vec3.ZERO, 0.025f),
+            MaterialEmitters.point(heart), 80f, delta, env);
+    }
 
-        // T1: additive warning glow tracing the contracting band and the
-        // hex eye, so the strike marker burns brighter as the countdown
-        // completes.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            float shrinkR = radius * (1.0f - progress);
-            if (shrinkR > 0.05f) {
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB4D1L, shrinkR * 1.08f, 0.02f, 0.12f,
-                    age * 0.7f, 0.55f, 0.50f, 0.52f, 0.25f, ds);
-            }
+    /** Points sampled around the rim and up to the given height. Data only. */
+    private static MaterialEmitters.Source rimSource(Vec3 center, double radius, double height) {
+        return random -> {
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = radius * (0.90 + random.nextDouble() * 0.20);
+            return new MaterialEmitters.Sample(new Vec3(
+                center.x + Math.cos(ang) * rr,
+                center.y + 0.05 + random.nextDouble() * height,
+                center.z + Math.sin(ang) * rr), Vec3.ZERO);
+        };
+    }
 
-            PoseStack.Pose eye = pose.copy();
-            eye.translate(0, 0.08f, 0);
-            float coreSize = (0.25f + (progress * 0.25f)) * pulse * 1.5f;
-            BespokeGeometry.displacedDome(eye, buffer, seed ^ 0xE7E1L, coreSize * 1.6f,
-                0.55f, 0.03f, 0.08f, 0.30f, pulse, ds);
-        });
+    private static void emit(ClientLevel level, MaterialEmitters.Preset preset, MaterialEmitters.Source source,
+                             float ratePerSecond, float delta, float envelope) {
+        if (level == null || envelope <= 0.01f || ratePerSecond <= 0f) return;
+        int budget = Math.max(1, Math.round(ratePerSecond));
+        new MaterialEmitters.Emitter(level, preset, source, ratePerSecond, budget).tick(delta, envelope);
+    }
+
+    private static float emissionDelta(TelegraphRenderState state, float age) {
+        float prev = state.lastEmitAge;
+        state.lastEmitAge = age;
+        if (prev < 0f || age < prev) return 1.0f / 60.0f;
+        return Math.max(0.001f, Math.min(0.05f, (age - prev) / 20.0f));
     }
 }

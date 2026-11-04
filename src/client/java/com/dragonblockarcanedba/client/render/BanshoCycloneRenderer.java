@@ -1,30 +1,26 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.BanshoCycloneEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Entity Renderer for Bansho Fan Cyclone in Minecraft 26.2.
- * The funnel wall is the shared layered vortex (LayeredRender.drawVortexBands):
- * a bright core band, an emerald mid band, and a wispy outer band whose edge
- * sits exactly on the cyclone's 4 block effect radius, so what you see is
- * what hurts you. Everything else is bespoke toolkit geometry seeded from the
- * entity's synced id, so every client draws the same torn silhouette: a broken
- * suction band and glow fan eye at the foot, triple helical jade branch
- * ribbons climbing the wall, 8 orbiting blade arc scythes, and a broken crown
- * outflow band, all breathing on the same FxEnvelope as the entity.
+ * Material presentation for the Bansho Fan cyclone. The renderer draws no
+ * geometry. It feeds emerald vapor, pale mist, a bright vapor core, and
+ * ground dust into sources shaped by the cyclone's current radius and
+ * height, so the storm is carried by moving material rather than bands,
+ * fans, arcs, or branch meshes. The lifecycle envelope remains the entity's
+ * own build and decay envelope.
  */
 public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, BanshoCycloneRenderer.CycloneRenderState> {
 
@@ -38,6 +34,69 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         public int lifetime = BanshoCycloneEntity.LIFE_TICKS;
         public double ex, ey, ez;
         public long seed;
+        public Emission emission;
+    }
+
+    static final class Emission {
+        private final CycloneRenderState state;
+        private ClientLevel level;
+        private long seed;
+        private float scale = Float.NaN;
+        private float lastAge = Float.NaN;
+        private MaterialEmitters.Emitter vapor;
+        private MaterialEmitters.Emitter mist;
+        private MaterialEmitters.Emitter dust;
+        private MaterialEmitters.Emitter core;
+
+        Emission(CycloneRenderState state) {
+            this.state = state;
+        }
+
+        void tick(ClientLevel level, float envelope) {
+            if (this.level != level || this.seed != state.seed || this.scale != state.scale) {
+                create(level);
+            }
+            float delta;
+            if (Float.isNaN(lastAge) || state.age < lastAge) {
+                delta = 1.0f / 60.0f;
+            } else {
+                delta = Math.min(0.05f, (state.age - lastAge) / 20.0f);
+            }
+            lastAge = state.age;
+            vapor.tick(delta, envelope);
+            mist.tick(delta, envelope);
+            dust.tick(delta, envelope);
+            core.tick(delta, envelope);
+        }
+
+        private void create(ClientLevel level) {
+            this.level = level;
+            this.seed = state.seed;
+            this.scale = state.scale;
+            this.lastAge = Float.NaN;
+            int seed = (int) state.seed;
+            float rateScale = 0.75f + state.scale * 0.25f;
+            vapor = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.vapor(0x26FFA6, 1.30f + state.scale * 0.25f,
+                            seed ^ 11, Vec3.ZERO, 0.012f),
+                    random -> cycloneSample(state, random, 1.0f, 0.15f, 1.0f, 0.11f, 0.040f),
+                    120.0f * rateScale, Math.max(1, Math.round(170.0f * rateScale)));
+            mist = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.mist(0x8FFFD8, 2.0f,
+                            seed ^ 23, Vec3.ZERO, 0.006f),
+                    random -> cycloneSample(state, random, 1.0f, 0.78f, 1.08f, 0.07f, 0.018f),
+                    45.0f * rateScale, Math.max(1, Math.round(70.0f * rateScale)));
+            dust = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.dust(0x86C9A6, 0.95f,
+                            seed ^ 37, Vec3.ZERO, 0.018f),
+                    random -> groundSample(state, random),
+                    55.0f * rateScale, Math.max(1, Math.round(85.0f * rateScale)));
+            core = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.vapor(0xCFFFEF, 1.0f,
+                            seed ^ 53, Vec3.ZERO, 0.008f),
+                    random -> cycloneSample(state, random, 0.45f, 0.0f, 0.38f, 0.08f, 0.060f),
+                    35.0f * rateScale, Math.max(1, Math.round(55.0f * rateScale)));
+        }
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -65,122 +124,71 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         state.ey = entity.getY();
         state.ez = entity.getZ();
         // The entity id arrives in the spawn packet, so it is synced state:
-        // every client seeds the same torn shapes for the same storm.
+        // every client seeds the same material variation for the same storm.
         state.seed = entity.getId() * 0x9E3779B97F4A7C15L ^ 0xBA550FADL;
     }
 
     @Override
     public void submit(CycloneRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
-        float scale = state.scale;
-        float effectRadius = scale * 4.0f;
-        float fullHeight = scale * 6.5f;
-        float age = state.age;
         float life = Math.max(1, state.lifetime);
-
-        // One envelope for everything, the same fractions the entity uses for
-        // its damage window and forces, so visual and numbers agree.
-        float envelope = FxEnvelope.envelope(age, life, BanshoCycloneEntity.BUILD_FRAC, BanshoCycloneEntity.DECAY_FRAC);
-        if (envelope <= 0.01f) {
-            super.submit(state, poseStack, collector, cameraState);
-            return;
-        }
-        float growth = FxEnvelope.smoothstep(age / (life * BanshoCycloneEntity.BUILD_FRAC));
-        float radiusNow = effectRadius * (0.45f + 0.55f * growth);
-        float heightNow = fullHeight * (0.35f + 0.65f * growth);
-        float distScale = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-
-        final float finalAlphaMult = envelope;
-        final long seed = state.seed;
-        final float gRadius = radiusNow * 0.95f;
-        final float crownY = heightNow;
-        final float crownR = radiusNow * 1.12f;
-
-        poseStack.pushPose();
-
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // Ground anchor glow: the storm is planted on the world, not pasted on it.
-            LayeredRender.drawAnchorGlow(pose, buffer, radiusNow * 1.05f, 0.06f,
-                0.15f, 1.0f, 0.65f, 0.30f * finalAlphaMult, distScale);
-
-            // The funnel itself: three counter-rotating layered bands. The mid
-            // band radius is chosen so the wispy outer band (1.45x) lands
-            // exactly on the effect radius: the visible wall IS the hit wall.
-            LayeredRender.drawVortexBands(pose, buffer, radiusNow / 1.45f, heightNow, age,
-                0.15f, 1.0f, 0.65f, finalAlphaMult, distScale);
-
-            // Suction skirt at the foot: a low broken vortex band grinding the
-            // ground line, its twist carrying the old ring's rotation.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 11L,
-                gRadius * 0.86f, 0.02f, 0.17f, (float) Math.toRadians(age * 28.0),
-                0.0f, 0.72f, 0.38f, 0.70f * finalAlphaMult, distScale);
-
-            // The pale eye at the core of the foot: a splash of light, not a disc.
-            BespokeGeometry.glowFan(pose, buffer, seed ^ 23L,
-                gRadius * 0.24f, 0.09f,
-                0.85f, 1.0f, 0.92f, 0.80f * finalAlphaMult, distScale);
-
-            // Ascending triple-helical jade ribbons, riding the funnel wall.
-            // Each strand is a chain of bespoke branch segments through the
-            // same helix points the old ruled quads used; the branch jitter
-            // tears the ribbon instead of ruling it. Gradient along the climb:
-            // deep jade at the base brightening to pale jade at the top.
-            int strands = 3;
-            int ribbonSteps = 8;
-            for (int s = 0; s < strands; s++) {
-                float strandOffset = (s / (float) strands) * (float) (Math.PI * 2.0);
-                for (int step = 0; step < ribbonSteps; step++) {
-                    float t1 = step / (float) ribbonSteps;
-                    float t2 = (step + 1) / (float) ribbonSteps;
-                    float tm = (t1 + t2) * 0.5f;
-
-                    double ang1 = strandOffset + (age * 22.0 * (Math.PI / 180.0)) + (t1 * Math.PI * 3.8);
-                    double ang2 = strandOffset + (age * 22.0 * (Math.PI / 180.0)) + (t2 * Math.PI * 3.8);
-                    float r1 = radiusNow * (0.35f + 0.65f * t1 * t1);
-                    float r2 = radiusNow * (0.35f + 0.65f * t2 * t2);
-                    Vec3 from = new Vec3(Math.cos(ang1) * r1, t1 * heightNow, Math.sin(ang1) * r1);
-                    Vec3 to = new Vec3(Math.cos(ang2) * r2, t2 * heightNow, Math.sin(ang2) * r2);
-                    BespokeGeometry.branch(pose, buffer, seed ^ (s * 131L + step * 17L + 5L),
-                        from, to, 0.55f * scale * (0.6f + tm * 0.7f),
-                        0.45f * tm, 1.0f, 0.48f + 0.34f * tm, 0.60f, finalAlphaMult, distScale);
-                }
+        float envelope = FxEnvelope.envelope(state.age, life,
+                BanshoCycloneEntity.BUILD_FRAC, BanshoCycloneEntity.DECAY_FRAC);
+        if (envelope > 0.01f) {
+            ClientLevel level = Minecraft.getInstance().level;
+            if (level != null) {
+                if (state.emission == null) state.emission = new Emission(state);
+                float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
+                state.emission.tick(level, envelope * distanceScale);
             }
-
-            // Upper crown outflow: a broken band flaring at the top rim,
-            // counter-rotating against the foot band.
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 37L,
-                crownR * 0.9f, crownY - 0.20f, crownY + 0.04f, (float) Math.toRadians(-age * 26.0),
-                0.05f, 0.95f, 0.65f, 0.50f * finalAlphaMult, distScale);
-        });
-
-        // Orbiting razor blades (8): bespoke blade arcs standing vertical in
-        // the tangent plane, each in its own posed submit so the arc center
-        // rides the tangent at its orbit point. Two nested arcs per blade:
-        // a deep jade outer crescent and a pale core crescent.
-        int bladeCount = 8;
-        for (int i = 0; i < bladeCount; i++) {
-            float bladeProgress = (i / (float) bladeCount);
-            float bladeY = bladeProgress * heightNow * 0.85f + 0.4f;
-            float bladeRadius = radiusNow * (0.45f + 0.55f * (bladeY / Math.max(0.001f, heightNow)));
-            double bladeAngle = (bladeProgress * Math.PI * 2.0) + (age * (32.0f + i * 3.0f) * (Math.PI / 180.0));
-            float sx = (float) Math.cos(bladeAngle) * bladeRadius;
-            float sz = (float) Math.sin(bladeAngle) * bladeRadius;
-            final long bladeSeed = seed ^ (0xB1ADEL + i);
-            poseStack.pushPose();
-            poseStack.translate(sx, bladeY, sz);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees((float) -(Math.toDegrees(bladeAngle) + 90.0))));
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.bladeArc(pose, buffer, bladeSeed,
-                    0.55f * scale, 130f, 0.15f, 0.78f, 0.48f, 0.90f, finalAlphaMult, distScale);
-                BespokeGeometry.bladeArc(pose, buffer, bladeSeed ^ 3L,
-                    0.36f * scale, 130f, 0.88f, 1.0f, 0.95f, 0.90f, finalAlphaMult, distScale);
-            });
-            poseStack.popPose();
         }
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static float growth(CycloneRenderState state) {
+        float life = Math.max(1, state.lifetime);
+        return FxEnvelope.smoothstep(state.age / (life * BanshoCycloneEntity.BUILD_FRAC));
+    }
+
+    private static float radiusNow(CycloneRenderState state) {
+        return state.scale * 4.0f * (0.45f + 0.55f * growth(state));
+    }
+
+    private static float heightNow(CycloneRenderState state) {
+        return state.scale * 6.5f * (0.35f + 0.65f * growth(state));
+    }
+
+    private static MaterialEmitters.Sample cycloneSample(CycloneRenderState state, RandomSource random,
+                                                         float yMax, float inner, float outer,
+                                                         float tangentSpeed, float upSpeed) {
+        float t = random.nextFloat() * yMax;
+        float profile = 0.35f + 0.65f * t * t;
+        double angle = random.nextDouble() * Math.PI * 2.0 + state.age * 0.38;
+        float fraction = inner + (outer - inner) * (float) Math.sqrt(random.nextDouble());
+        float radius = radiusNow(state) * profile * fraction;
+        Vec3 pos = new Vec3(
+                state.ex + Math.cos(angle) * radius,
+                state.ey + t * heightNow(state),
+                state.ez + Math.sin(angle) * radius);
+        Vec3 tangent = new Vec3(-Math.sin(angle), 0.0, Math.cos(angle));
+        Vec3 radial = new Vec3(Math.cos(angle), 0.0, Math.sin(angle));
+        Vec3 velocity = tangent.scale(tangentSpeed * (0.75 + random.nextDouble() * 0.5))
+                .add(radial.scale((random.nextDouble() - 0.5) * 0.03))
+                .add(0.0, upSpeed * (0.6 + random.nextDouble() * 0.8), 0.0);
+        return new MaterialEmitters.Sample(pos, velocity);
+    }
+
+    private static MaterialEmitters.Sample groundSample(CycloneRenderState state, RandomSource random) {
+        double angle = random.nextDouble() * Math.PI * 2.0;
+        float radius = radiusNow(state) * 0.95f * (float) Math.sqrt(random.nextDouble());
+        Vec3 pos = new Vec3(
+                state.ex + Math.cos(angle) * radius,
+                state.ey + 0.12,
+                state.ez + Math.sin(angle) * radius);
+        Vec3 tangent = new Vec3(-Math.sin(angle), 0.0, Math.cos(angle));
+        Vec3 radial = new Vec3(Math.cos(angle), 0.0, Math.sin(angle));
+        Vec3 velocity = tangent.scale(0.15)
+                .add(radial.scale(0.05))
+                .add(0.0, 0.015 + random.nextDouble() * 0.035, 0.0);
+        return new MaterialEmitters.Sample(pos, velocity);
     }
 }

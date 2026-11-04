@@ -1,37 +1,33 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.AzureLightningEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Telegraph renderer for AzureLightningEntity.
  *
- * Spectacle pass: the bolt itself is drawn by the shared BoltEntity now, so
- * this renderer draws the warning and the aftermath. During the telegraph
- * window it draws an anchor glow and a hard ring at exactly the strike
- * radius (the warning's size equals the hit's size), a converging inner
- * ring that closes as the strike nears, and a thin charge column. After the
- * strike tick it draws an 8 tick afterglow ring that fades out. The old
- * textured 44 block bolt mesh is retired; the BoltEntity's branched seeded
- * bolt replaces it.
- *
- * Bespoke pass: the warning ring and afterglow ring are brokenVortexBand
- * slices whose columns straddle the strike radius, over the anchor glow
- * that fills the warned circle at exactly that radius; the converging ring
- * is a shrinking glowFan splash, and the charge column is a seeded branch
- * ribbon. All shapes take the lightning entity's synced render seed.
- * The local ring, beam, and quad helpers are gone.
+ * No-shapes pass: this renderer draws no geometry. The warning and the
+ * aftermath are material emission. During the telegraph window, lightning
+ * plasma motes gather across the warned disc at exactly the strike radius
+ * (the warning's size still equals the hit's size), a brighter stream
+ * converges toward the center as the strike nears, vapor hangs low over
+ * the disc, and a thin stream of plasma rises along the charge path.
+ * After the strike tick, the disc cools as fading plasma and vapor over
+ * the afterglow window. The bolt itself stays the shared BoltEntity's job.
+ * All emission takes the lightning entity's synced render seed.
  */
 public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity, AzureLightningRenderer.AzureLightningRenderState> {
 
@@ -76,6 +72,70 @@ public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity,
         state.wz = entity.getZ();
     }
 
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        float radius = 3.5f;
+        float convRadius = 3.5f;
+    }
+
+    private static final class Emission {
+        final Frame frame = new Frame();
+        ClientLevel level;
+        MaterialEmitters.Emitter warning;
+        MaterialEmitters.Emitter converge;
+        MaterialEmitters.Emitter column;
+        MaterialEmitters.Emitter vapor;
+        float lastAge = -1f;
+    }
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
+
+    /** Points across a disc at the frame's warning or converging radius. */
+    private static MaterialEmitters.Source disc(Frame frame, boolean converging) {
+        return random -> {
+            double radius = converging ? frame.convRadius : frame.radius;
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = radius * Math.sqrt(random.nextDouble());
+            Vec3 pos = new Vec3(
+                    frame.center.x + Math.cos(ang) * rr,
+                    frame.center.y + 0.06 + random.nextDouble() * 0.08,
+                    frame.center.z + Math.sin(ang) * rr);
+            return new MaterialEmitters.Sample(pos, Vec3.ZERO);
+        };
+    }
+
+    private Emission buildEmission(ClientLevel level, AzureLightningRenderState state) {
+        Emission emission = new Emission();
+        emission.level = level;
+        Frame frame = emission.frame;
+        frame.center = new Vec3(state.wx, state.wy, state.wz);
+        frame.radius = state.radius;
+        frame.convRadius = state.radius;
+        int seed = (int) state.seed;
+        // Theme colors: azure for a normal strike, pale gold for a rare one.
+        int main = state.isRare ? 0xFFD973 : 0x26D9FF;
+        int vaporColor = state.isRare ? 0xF2E3C2 : 0x9FD8E8;
+        Vec3 top = new Vec3(state.wx, state.wy + 30.0, state.wz);
+        emission.warning = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(main, 1.25f, seed ^ 0x12A0,
+                        Vec3.ZERO, 0.01f),
+                disc(frame, false), 170f, 240);
+        emission.converge = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, 0.95f, seed ^ 0xC011,
+                        Vec3.ZERO, 0.01f),
+                disc(frame, true), 110f, 160);
+        emission.column = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(main, 1.05f, seed ^ 0xBEAA,
+                        Vec3.ZERO, 0.02f),
+                MaterialEmitters.path(frame.center, top, 0.30), 130f, 200);
+        emission.vapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(vaporColor, 2.2f, seed ^ 0x9A90,
+                        new Vec3(0.0, 0.02, 0.0), 0.02f),
+                disc(frame, false), 42f, 70);
+        return emission;
+    }
+
     @Override
     public void submit(AzureLightningRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
@@ -83,62 +143,43 @@ public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity,
         float age = state.age;
         float strikeAt = Math.max(1.0f, state.telegraphTicks);
         float radius = state.radius;
-        long seed = state.seed;
         if (age >= strikeAt + AzureLightningEntity.AFTERGLOW_TICKS) return;
 
-        float ds = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
+        Vec3 center = new Vec3(state.wx, state.wy, state.wz);
+        float ds = MaterialEmitters.distanceScale(center);
 
-        // Theme colors: azure for a normal strike, pale gold for a rare one.
-        float cr = state.isRare ? 1.0f : 0.15f;
-        float cg = state.isRare ? 0.85f : 0.85f;
-        float cb = state.isRare ? 0.45f : 1.0f;
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level == null || ds <= 0.01f) return;
 
-        RenderType glowType = KiRenderHelper.kiRenderType();
+        Emission emission = emissions.get(state.seed);
+        if (emission == null || emission.level != level || age < emission.lastAge - 1.0f) {
+            emission = buildEmission(level, state);
+            emissions.put(state.seed, emission);
+            if (emissions.size() > 64) emissions.clear();
+        }
+        emission.frame.center = center;
+        emission.frame.radius = radius;
+        float delta = emission.lastAge < 0f ? 0.05f
+                : Math.min(0.05f, Math.max(0.0f, (age - emission.lastAge) / 20.0f));
+        emission.lastAge = age;
 
         if (age < strikeAt) {
             // Telegraph phase: t runs 0 to 1 across the warning window.
             float t = FxEnvelope.smoothstep(age / strikeAt);
             // The warning pulses faster as the strike closes in.
             float blink = (Math.sin(age * (0.6 + t * 1.6)) > 0.0) ? 1.0f : 0.72f;
-            float warnAlpha = (0.35f + 0.55f * t) * blink;
-
-            collector.submitCustomGeometry(poseStack, glowType, (pose, buffer) -> {
-
-                // Anchor glow filling the warned circle at exactly the radius.
-                LayeredRender.drawAnchorGlow(pose, buffer, radius, 0.06f,
-                    cr, cg, cb, (0.16f + 0.30f * t) * blink, ds);
-
-                // Warning band at the damage radius: a thin broken band whose
-                // jittered columns straddle the exact strike circle.
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x12A0L,
-                    radius, 0.07f, 0.13f, 0.0f,
-                    cr, cg, cb, warnAlpha, ds);
-
-                // Converging splash: a glow fan that closes to the center
-                // as t reaches 1, at the old converging ring's alpha.
-                float convR = radius * (1.0f - t) + 0.35f;
-                BespokeGeometry.glowFan(pose, buffer, seed ^ 0xC011L,
-                    convR, 0.08f, 0.95f, 1.0f, 1.0f, 0.55f * t * blink, ds);
-
-                // Thin charge column rising from the strike point: a seeded
-                // branch ribbon the old crossed quads' width and height.
-                float beamAlpha = (0.10f + 0.28f * t) * blink;
-                BespokeGeometry.branch(pose, buffer, seed ^ 0xBEAAL,
-                    new Vec3(0, 0, 0), new Vec3(0, 30.0f, 0), 0.44f,
-                    cr, cg, cb, beamAlpha, 1.0f, ds);
-            });
+            emission.frame.convRadius = radius * (1.0f - t) + 0.35f;
+            emission.warning.tick(delta, (0.35f + 0.55f * t) * blink * ds);
+            emission.converge.tick(delta, 0.55f * t * blink * ds);
+            emission.column.tick(delta, (0.10f + 0.28f * t) * blink * ds);
+            emission.vapor.tick(delta, 0.25f * blink * ds);
         } else {
             // Afterglow phase: the struck circle cools and fades over 8 ticks.
             float k = (age - strikeAt) / (float) AzureLightningEntity.AFTERGLOW_TICKS;
             float fade = 1.0f - FxEnvelope.smoothstep(k);
-
-            collector.submitCustomGeometry(poseStack, glowType, (pose, buffer) -> {
-                LayeredRender.drawAnchorGlow(pose, buffer, radius, 0.06f,
-                    cr, cg, cb, 0.30f * fade, ds);
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xAF7EL,
-                    radius, 0.07f, 0.13f, 0.0f,
-                    cr, cg, cb, 0.55f * fade, ds);
-            });
+            emission.warning.tick(delta, 0.55f * fade * ds);
+            emission.vapor.tick(delta, 0.20f * fade * ds);
         }
     }
 }

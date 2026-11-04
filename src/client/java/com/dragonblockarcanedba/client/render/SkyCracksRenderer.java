@@ -1,35 +1,36 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.SkyCracksEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 /**
- * The torn sky above the Cursed Tempest. This used to draw nothing at all;
- * the spectacle pass gave it a hand-rolled crack network, and the bespoke
- * pass rebuilds that network entirely on BespokeGeometry: seven main
- * fractures drawn with the branch builder (midpoint-displaced jagged
- * ribbons, a crimson sheath with a white hot core on the identical seeded
- * path), a crackStar web of wandering violet and crimson fractures woven
- * between them, and a glowFan shadow pool behind it all. Everything is
- * seeded from the entity's synced seed, so the tear is the same tear on
- * every client. The network is billboarded to the camera; the flat
- * builders (glowFan, crackStar) are drawn through a pose rotated so their
- * ground plane becomes the billboard plane. Alpha runs the shared
- * lifecycle envelope over the entity's 100 tick life times a slow
- * electrical flicker, so the tear opens, burns, and seals shut instead of
- * popping in and vanishing.
+ * The torn sky above the Cursed Tempest, carried by material instead of a
+ * drawn crack network. The no-shapes conversion removes the branch bolts,
+ * crack stars, and glow fan entirely. The fractures survive as emission
+ * data: seven main jagged paths and a web of shorter ones, regenerated from
+ * the entity's synced seed in the camera billboard plane on every frame, so
+ * the tear is the same tear on every client. Glowing curse plasma and a
+ * white hot core bleed along those paths, violet plasma fills the web, soul
+ * wisps drift off the fractures, and a broad darkness emission behind the
+ * paths reads as the shadow of the tear. No crack mesh, ribbon, or decal
+ * quad is drawn. Alpha still runs the shared lifecycle envelope over the
+ * entity's 100 tick life times the slow electrical flicker.
  */
 public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracksRenderer.SkyCracksRenderState> {
 
@@ -40,6 +41,7 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
     public static class SkyCracksRenderState extends EntityRenderState {
         public float age = 0;
         public int seed = 0;
+        public float lastEmitAge = -1f;
     }
 
     @Override
@@ -70,51 +72,125 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
 
         float env = FxEnvelope.envelope(state.age, SkyCracksEntity.LIFE_TICKS, 0.15f, 0.35f);
         if (env <= 0.01f) return;
-        float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
+
+        float ds = MaterialEmitters.distanceScale(new Vec3(state.x, state.y, state.z));
         float flicker = 0.78f + 0.22f * (float) Math.sin(state.age * 2.1f + state.seed * 0.37f);
         float alpha = env * flicker;
-        long seed = state.seed;
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        float emitEnv = alpha * ds;
+        float delta = emissionDelta(state, state.age);
+        int seed = state.seed;
+        Vec3 center = new Vec3(state.x, state.y, state.z);
 
-        poseStack.pushPose();
-        if (cameraState.orientation != null) {
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(new org.joml.Quaternionf(cameraState.orientation).conjugate()));
+        // The billboard plane basis, from the same camera orientation the
+        // drawn version used. The plane now only positions emission points.
+        Quaternionf orientation = cameraState.orientation != null
+            ? new Quaternionf(cameraState.orientation).conjugate() : new Quaternionf();
+        Vector3f basisX = orientation.transform(new Vector3f(1, 0, 0));
+        Vector3f basisY = orientation.transform(new Vector3f(0, 1, 0));
+
+        List<List<Vec3>> paths = crackPaths(center, basisX, basisY, seed);
+        MaterialEmitters.Source pathSource = pathsSource(paths);
+
+        // The fractures themselves: crimson plasma bleeding along the paths,
+        // a white hot core on the same paths, violet plasma through the web,
+        // and soul wisps drifting off the tear.
+        emit(level, MaterialEmitters.Preset.plasma(0xF20D33, 1.55f, seed ^ 0xC4ACC, Vec3.ZERO, 0.030f),
+            pathSource, 520f, delta, emitEnv);
+        emit(level, MaterialEmitters.Preset.plasma(0xFFF7F7, 1.00f, seed ^ 0xB17E, Vec3.ZERO, 0.025f),
+            pathSource, 220f, delta, emitEnv);
+        emit(level, MaterialEmitters.Preset.plasma(0x8C1AF2, 1.30f, seed ^ 0xF04C, Vec3.ZERO, 0.030f),
+            pathSource, 260f, delta, emitEnv);
+        emit(level, MaterialEmitters.Preset.soul(0xC9A6FF, 1.10f, seed ^ 0x5017, Vec3.ZERO, 0.025f),
+            pathSource, 90f, delta, emitEnv);
+
+        // The shadow of the tear: broad darkness sampled across the billboard
+        // disc behind the fractures, strongest near the heart.
+        emit(level, MaterialEmitters.Preset.darkness(0x1A0312, 4.20f, seed ^ 0x5EED, Vec3.ZERO, 0.010f),
+            discSource(center, basisX, basisY, 22.0), 110f, delta, emitEnv * 0.8f);
+    }
+
+    /** A point in the billboard plane from plane-local coordinates. */
+    private static Vec3 planePoint(Vec3 center, Vector3f basisX, Vector3f basisY, double x, double y) {
+        return new Vec3(
+            center.x + basisX.x * x + basisY.x * y,
+            center.y + basisX.y * x + basisY.y * y,
+            center.z + basisX.z * x + basisY.z * y);
+    }
+
+    /**
+     * The fracture set as jagged polylines in the billboard plane: seven
+     * mains radiating from the heart plus a shorter web, all regenerated
+     * from the synced seed. Data only; nothing here draws.
+     */
+    private static List<List<Vec3>> crackPaths(Vec3 center, Vector3f basisX, Vector3f basisY, int seed) {
+        Random rng = new Random(seed);
+        List<List<Vec3>> paths = new ArrayList<>(15);
+        int mains = 7;
+        for (int m = 0; m < mains; m++) {
+            double ang = (m / (double) mains) * Math.PI * 2.0 + (rng.nextDouble() * 0.5 - 0.25);
+            float len = 15.0f + rng.nextFloat() * 10.0f;
+            paths.add(jaggedPath(center, basisX, basisY, ang, len, rng));
         }
+        for (int w = 0; w < 8; w++) {
+            double ang = rng.nextDouble() * Math.PI * 2.0;
+            float len = 6.0f + rng.nextFloat() * 8.0f;
+            paths.add(jaggedPath(center, basisX, basisY, ang, len, rng));
+        }
+        return paths;
+    }
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // Flat builders draw in the XZ ground plane; rotate a copy of
-            // the pose so that plane becomes the billboard XY plane.
-            PoseStack.Pose flat = pose.copy();
-            flat.rotate(Axis.XP.rotation((float) (-Math.PI / 2.0)));
+    private static List<Vec3> jaggedPath(Vec3 center, Vector3f basisX, Vector3f basisY, double ang, float len, Random rng) {
+        int segments = 6;
+        List<Vec3> path = new ArrayList<>(segments + 1);
+        double dirX = Math.cos(ang);
+        double dirY = Math.sin(ang);
+        for (int s = 0; s <= segments; s++) {
+            double frac = s / (double) segments;
+            double along = len * frac;
+            double side = (rng.nextDouble() * 2.0 - 1.0) * 1.15 * Math.sin(frac * Math.PI);
+            path.add(planePoint(center, basisX, basisY,
+                dirX * along - dirY * side, dirY * along + dirX * side));
+        }
+        return path;
+    }
 
-            // Shadow of the tear: a dark pool the cracks burn through.
-            BespokeGeometry.glowFan(flat, buffer, seed ^ 0x5EEDL, 24.0f, 0.0f,
-                0.10f, 0.01f, 0.16f, 0.30f * alpha, ds);
+    /** Samples points across a disc in the billboard plane. Data only. */
+    private static MaterialEmitters.Source discSource(Vec3 center, Vector3f basisX, Vector3f basisY, double radius) {
+        return random -> {
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = radius * Math.sqrt(random.nextDouble());
+            return new MaterialEmitters.Sample(planePoint(center, basisX, basisY, Math.cos(ang) * rr, Math.sin(ang) * rr), Vec3.ZERO);
+        };
+    }
 
-            // The fracture web between the mains: two crackStars, crimson
-            // wide and violet tighter, wandering and tapering.
-            BespokeGeometry.crackStar(flat, buffer, seed ^ 0xC4ACCL, 20.0f,
-                0.95f, 0.05f, 0.20f, 0.50f, alpha, ds);
-            BespokeGeometry.crackStar(flat, buffer, seed ^ 0xF04CL, 14.0f,
-                0.55f, 0.10f, 0.95f, 0.60f, alpha, ds);
+    /** Samples a random point along a random path in the set. */
+    private static MaterialEmitters.Source pathsSource(List<List<Vec3>> paths) {
+        List<List<Vec3>> copy = List.copyOf(paths);
+        return random -> {
+            if (copy.isEmpty()) return new MaterialEmitters.Sample(Vec3.ZERO, Vec3.ZERO);
+            List<Vec3> path = copy.get(random.nextInt(copy.size()));
+            if (path.size() < 2) return new MaterialEmitters.Sample(path.isEmpty() ? Vec3.ZERO : path.get(0), Vec3.ZERO);
+            int i = random.nextInt(path.size() - 1);
+            Vec3 a = path.get(i);
+            Vec3 b = path.get(i + 1);
+            return new MaterialEmitters.Sample(a.add(b.subtract(a).scale(random.nextDouble())), Vec3.ZERO);
+        };
+    }
 
-            // Seven main fractures: branch bolts radiating from the heart.
-            // Sheath and core share a seed, so the white core runs exactly
-            // down the crimson sheath's jagged path.
-            BespokeGeometry.Rng rng = new BespokeGeometry.Rng(seed);
-            int mains = 7;
-            for (int m = 0; m < mains; m++) {
-                double ang = (m / (double) mains) * Math.PI * 2.0 + rng.range(-0.25f, 0.25f);
-                float len = rng.range(15.0f, 25.0f);
-                Vec3 to = new Vec3(Math.cos(ang) * len, Math.sin(ang) * len, 0);
-                long crackSeed = seed * 31L + m * 101L;
-                BespokeGeometry.branch(pose, buffer, crackSeed, Vec3.ZERO, to, 0.34f,
-                    0.95f, 0.05f, 0.20f, 0.95f, alpha, ds);
-                BespokeGeometry.branch(pose, buffer, crackSeed, Vec3.ZERO, to, 0.13f,
-                    1.0f, 0.95f, 0.97f, 0.95f, alpha, ds);
-            }
-        });
+    private static void emit(ClientLevel level, MaterialEmitters.Preset preset, MaterialEmitters.Source source,
+                             float ratePerSecond, float delta, float envelope) {
+        if (level == null || envelope <= 0.01f || ratePerSecond <= 0f) return;
+        int budget = Math.max(1, Math.round(ratePerSecond));
+        new MaterialEmitters.Emitter(level, preset, source, ratePerSecond, budget).tick(delta, envelope);
+    }
 
-        poseStack.popPose();
+    private static float emissionDelta(SkyCracksRenderState state, float age) {
+        float prev = state.lastEmitAge;
+        state.lastEmitAge = age;
+        if (prev < 0f || age < prev) return 1.0f / 60.0f;
+        return Math.max(0.001f, Math.min(0.05f, (age - prev) / 20.0f));
     }
 }

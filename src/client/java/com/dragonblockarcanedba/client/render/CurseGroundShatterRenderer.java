@@ -1,25 +1,32 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.CurseGroundShatterEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 /**
- * Entity Renderer for Curse Ground Shatter in Minecraft 26.2.
- * The bespoke pass rebuilds the shatter entirely on BespokeGeometry: the
- * fissure trenches are two crackStars (crimson sheath, pale core), the
- * shockwave is a brokenVortexBand over a glowFan pool, and the erupting
- * slabs are tornRibbons stood on end and leaning outward, all seeded from
- * the entity UUID so every client sees the same shatter.
+ * Curse Ground Shatter as broken ground and venting curse, not drawn
+ * geometry. The no-shapes conversion removes the crack stars, shock band,
+ * glow pool, and slab ribbons entirely. The fissures survive as seeded
+ * jagged paths across the ground, carried by crimson and pale curse plasma
+ * emitted along them, with darkness smoke venting from the same paths and
+ * ground dust rolling across the area and the expanding shock front. The
+ * twelve slab positions survive as dust and darkness emission points where
+ * the debris used to rise. The corrected fade over the fixed 35 tick life
+ * is unchanged, and every path derives from the entity UUID seed so every
+ * client sees the same shatter.
  */
 public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatterEntity, CurseGroundShatterRenderer.ShatterRenderState> {
 
@@ -32,6 +39,7 @@ public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatte
         public float age = 0;
         public int lifetime = 35;
         public long seed = 0;
+        public float lastEmitAge = -1f;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -62,70 +70,125 @@ public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatte
     public void submit(ShatterRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
+
         float radius = state.radius;
         float age = state.age;
         // state.lifetime is the fixed 35 tick total (it only decrements server
         // side), so the old age / (lifetime + age) formula stranded the fade at
         // about 0.5 when the entity vanished. Progress over the total reaches 0.
         float fade = Math.max(0.0f, 1.0f - age / (float) state.lifetime);
-        long seed = state.seed;
-        float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        if (fade <= 0.02f) return;
+        int seed = (int) (state.seed ^ (state.seed >>> 32));
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float ds = MaterialEmitters.distanceScale(center);
+        float env = fade * ds;
+        float delta = emissionDelta(state, age);
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            // 1. Expanding shockwave: a broken band over a violet glow pool.
-            float shockR = Math.min(radius * 1.3f, age * 0.45f);
-            if (fade > 0.05f && shockR > 0.1f) {
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x51A1L, shockR, 0.02f, 0.10f,
-                    0.0f, 0.95f, 0.05f, 0.25f, fade * 0.85f, ds);
-                BespokeGeometry.glowFan(pose, buffer, seed ^ 0x51A2L, shockR * 0.65f, 0.04f,
-                    0.70f, 0.02f, 0.95f, fade * 0.75f, ds);
-            }
+        // The fissures: seeded jagged ground paths carrying curse plasma,
+        // with darkness venting along them.
+        List<List<Vec3>> cracks = crackPaths(center, radius, state.seed);
+        MaterialEmitters.Source crackSource = pathsSource(cracks);
+        emit(level, MaterialEmitters.Preset.plasma(0xF20D33, 1.05f, seed + 0xF155, Vec3.ZERO, 0.020f),
+            crackSource, 300f, delta, env);
+        emit(level, MaterialEmitters.Preset.plasma(0xFFF2F7, 0.80f, seed + 0xF156, Vec3.ZERO, 0.020f),
+            crackSource, 150f, delta, env);
+        emit(level, MaterialEmitters.Preset.darkness(0x14030A, 1.60f, seed + 0xF157, new Vec3(0, 0.012, 0), 0.015f),
+            crackSource, 150f, delta, env);
 
-            // 2. Radiating fissure trenches: crackStar sheath and core.
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0xF155L, radius,
-                0.95f, 0.05f, 0.20f, 0.95f, fade, ds);
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0xF156L, radius * 0.85f,
-                1.0f, 0.85f, 0.95f, 1.0f, fade, ds);
-
-            // 3. Erupting slabs: torn ribbons stood on end, leaning outward
-            // from the center, dark sheath with a crimson core.
-            BespokeGeometry.Rng rng = new BespokeGeometry.Rng(seed);
-            float growth = Math.min(1.0f, age * 0.4f);
-            int rockCount = 12;
-            for (int r = 0; r < rockCount; r++) {
-                double rockAngle = (r / (double) rockCount) * Math.PI * 2.0 + rng.range(0.0f, 0.4f);
-                float rockDist = radius * rng.range(0.35f, 0.90f);
-                float rx = (float) Math.cos(rockAngle) * rockDist;
-                float rz = (float) Math.sin(rockAngle) * rockDist;
-                float slabHeight = rng.range(0.5f, 1.3f) * growth;
-                float slabWidth = rng.range(0.35f, 0.65f);
-                if (slabHeight <= 0.02f) continue;
-
-                PoseStack.Pose slab = pose.copy();
-                slab.translate(rx, 0.05f, rz);
-                slab.rotate(Axis.YP.rotation((float) -rockAngle));
-                slab.rotate(Axis.ZP.rotation((float) (Math.PI / 2.0 - 0.30)));
-                long slabSeed = seed + r * 269L;
-                BespokeGeometry.tornRibbon(slab, buffer, slabSeed, slabHeight, slabWidth, 0.15f,
-                    0.15f, 0.05f, 0.22f, 0.95f, fade, ds);
-                BespokeGeometry.tornRibbon(slab, buffer, slabSeed, slabHeight, slabWidth * 0.5f, 0.15f,
-                    0.95f, 0.05f, 0.35f, 1.0f, fade, ds);
-            }
-        });
-
-        // T1: additive glow echo of the expanding shock band, slightly wider
-        // than the main pass, sharing the same corrected fade.
-        if (fade > 0.05f) {
-            float haloShockR = Math.min(radius * 1.3f, age * 0.45f) * 1.07f;
-            if (haloShockR > 0.1f) {
-                collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-                    BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x51A1L, haloShockR, 0.02f, 0.10f,
-                        0.0f, 0.55f, 0.03f, 0.15f, fade * 0.30f, ds);
-                    BespokeGeometry.glowFan(pose, buffer, seed ^ 0x51A2L, haloShockR * 0.60f, 0.04f,
-                        0.42f, 0.01f, 0.57f, fade * 0.20f, ds);
-                });
-            }
+        // Ground dust across the whole shatter, thickening on the expanding
+        // shock front the old band used to mark.
+        emit(level, MaterialEmitters.Preset.dust(0x6E625E, 1.20f, seed + 0x51A1, Vec3.ZERO, 0.030f),
+            MaterialEmitters.groundArea(center, radius, center.y + 0.05), 180f, delta, env);
+        float shockR = Math.min(radius * 1.3f, age * 0.45f);
+        if (shockR > 0.1f) {
+            emit(level, MaterialEmitters.Preset.dust(0x8A7A72, 1.05f, seed + 0x51A2, Vec3.ZERO, 0.035f),
+                MaterialEmitters.groundArea(center, shockR, center.y + 0.05), 220f, delta, env);
+            emit(level, MaterialEmitters.Preset.plasma(0x8C1AF2, 0.90f, seed + 0x51A3, Vec3.ZERO, 0.025f),
+                MaterialEmitters.groundArea(center, shockR, center.y + 0.07), 90f, delta, env);
         }
+
+        // The twelve slab positions: dust and darkness rising where the
+        // erupting slabs used to stand, growing in over the first frames.
+        float growth = Math.min(1.0f, age * 0.4f);
+        if (growth > 0.02f) {
+            List<Vec3> slabs = slabPoints(center, radius, state.seed);
+            MaterialEmitters.Source slabSource = pointsSource(slabs);
+            emit(level, MaterialEmitters.Preset.dust(0x574A45, 1.35f, seed + 269, new Vec3(0, 0.030, 0), 0.020f),
+                slabSource, 120f, delta, env * growth);
+            emit(level, MaterialEmitters.Preset.darkness(0x26050F, 1.30f, seed + 271, new Vec3(0, 0.020, 0), 0.015f),
+                slabSource, 60f, delta, env * growth);
+        }
+    }
+
+    /** Seeded jagged radial fissure paths across the ground. Data only. */
+    private static List<List<Vec3>> crackPaths(Vec3 center, float radius, long seed) {
+        Random rng = new Random(seed ^ 0xF155L);
+        int cracks = 7 + rng.nextInt(3);
+        List<List<Vec3>> paths = new ArrayList<>(cracks);
+        for (int k = 0; k < cracks; k++) {
+            double ang = (k / (double) cracks) * Math.PI * 2.0 + (rng.nextDouble() * 2.0 - 1.0) * 0.30;
+            double len = radius * (0.55 + rng.nextDouble() * 0.45);
+            int segments = 5;
+            List<Vec3> path = new ArrayList<>(segments + 1);
+            for (int s = 0; s <= segments; s++) {
+                double frac = s / (double) segments;
+                double radial = len * frac;
+                double side = (rng.nextDouble() * 2.0 - 1.0) * 0.16 * frac;
+                path.add(new Vec3(
+                    center.x + Math.cos(ang) * radial - Math.sin(ang) * side,
+                    center.y + 0.04,
+                    center.z + Math.sin(ang) * radial + Math.cos(ang) * side));
+            }
+            paths.add(path);
+        }
+        return paths;
+    }
+
+    /** The twelve old slab base positions, from the same seeded stream shape. */
+    private static List<Vec3> slabPoints(Vec3 center, float radius, long seed) {
+        Random rng = new Random(seed);
+        List<Vec3> points = new ArrayList<>(12);
+        for (int r = 0; r < 12; r++) {
+            double ang = (r / 12.0) * Math.PI * 2.0 + rng.nextDouble() * 0.4;
+            float dist = radius * (0.35f + rng.nextFloat() * 0.55f);
+            points.add(new Vec3(center.x + Math.cos(ang) * dist, center.y + 0.08, center.z + Math.sin(ang) * dist));
+        }
+        return points;
+    }
+
+    /** Samples a random point along a random path in the set. */
+    private static MaterialEmitters.Source pathsSource(List<List<Vec3>> paths) {
+        List<List<Vec3>> copy = List.copyOf(paths);
+        return random -> {
+            if (copy.isEmpty()) return new MaterialEmitters.Sample(Vec3.ZERO, Vec3.ZERO);
+            List<Vec3> path = copy.get(random.nextInt(copy.size()));
+            if (path.size() < 2) return new MaterialEmitters.Sample(path.isEmpty() ? Vec3.ZERO : path.get(0), Vec3.ZERO);
+            int i = random.nextInt(path.size() - 1);
+            Vec3 a = path.get(i);
+            Vec3 b = path.get(i + 1);
+            return new MaterialEmitters.Sample(a.add(b.subtract(a).scale(random.nextDouble())), Vec3.ZERO);
+        };
+    }
+
+    /** Samples one of the given points at random. */
+    private static MaterialEmitters.Source pointsSource(List<Vec3> points) {
+        List<Vec3> copy = List.copyOf(points);
+        return random -> new MaterialEmitters.Sample(copy.isEmpty() ? Vec3.ZERO : copy.get(random.nextInt(copy.size())), Vec3.ZERO);
+    }
+
+    private static void emit(ClientLevel level, MaterialEmitters.Preset preset, MaterialEmitters.Source source,
+                             float ratePerSecond, float delta, float envelope) {
+        if (level == null || envelope <= 0.01f || ratePerSecond <= 0f) return;
+        int budget = Math.max(1, Math.round(ratePerSecond));
+        new MaterialEmitters.Emitter(level, preset, source, ratePerSecond, budget).tick(delta, envelope);
+    }
+
+    private static float emissionDelta(ShatterRenderState state, float age) {
+        float prev = state.lastEmitAge;
+        state.lastEmitAge = age;
+        if (prev < 0f || age < prev) return 1.0f / 60.0f;
+        return Math.max(0.001f, Math.min(0.05f, (age - prev) / 20.0f));
     }
 }

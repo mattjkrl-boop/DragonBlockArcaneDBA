@@ -1,8 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.particle.DbaDustOptions;
-import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -61,12 +60,12 @@ public class SorrowRiftEffect extends MobEffect {
             double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
 
             level.sendParticles(
-                new DbaDustOptions(0x8A2BE2, 1.2f),
+                DbaMaterialOptions.of(DbaMaterialOptions.SOUL, 0x8A2BE2, 1.2f, entity.getId() * 31 + entity.tickCount),
                 px, py, pz,
                 1, 0.0, -0.02, 0.0, 0.01
             );
             level.sendParticles(
-                DbaParticles.VOID_SMOKE,
+                DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0x591A80, 2.0f, entity.getId() * 31 + entity.tickCount + 1),
                 px, py, pz,
                 1, 0.0, 0.0, 0.0, 0.05
             );

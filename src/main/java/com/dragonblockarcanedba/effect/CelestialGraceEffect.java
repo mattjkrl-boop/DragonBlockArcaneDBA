@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -73,12 +73,12 @@ public class CelestialGraceEffect extends MobEffect {
             double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
 
             level.sendParticles(
-                new DbaDustOptions(0x00FFFF, 1.3f), // Cyan
+                DbaMaterialOptions.of(DbaMaterialOptions.SOUL, 0x00FFFF, 1.3f, entity.getId() * 31 + entity.tickCount), // Cyan
                 px, py, pz,
                 1, 0.0, 0.04, 0.0, 0.01
             );
             level.sendParticles(
-                new DbaDustOptions(0xFFFFFF, 1.0f), // White shimmer
+                DbaMaterialOptions.of(DbaMaterialOptions.VAPOR, 0xFFFFFF, 1.0f, entity.getId() * 31 + entity.tickCount + 1), // White shimmer
                 px, py, pz,
                 1, 0.0, 0.02, 0.0, 0.01
             );

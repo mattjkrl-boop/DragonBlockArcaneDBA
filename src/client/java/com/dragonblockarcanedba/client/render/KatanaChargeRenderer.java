@@ -1,30 +1,34 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KatanaChargeEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.UUID;
 
 /**
- * Entity Renderer for Katana Flashdraw Charge-up in Minecraft 26.2.
- * Renders physical 3D iaido drawing stance ground focus rings (broken
- * vortex bands hugging the ground, from the shared BespokeGeometry
- * toolkit), three counter rotating layered vortex bands around the stance
- * (LayeredRender), a sheathed hilt spark fan, and converging crystalline
- * silver motes as small shard fans spiraling into the hilt. Alpha follows
- * the shared lifecycle shape: a smoothstep fade in, and a fade out over the
- * entity's FADE_TICKS once the charge ends or is cancelled. All geometry is
- * seeded from the entity UUID (BESPOKE-STANDARD rule 1); no local draw
- * helpers remain.
+ * Entity Renderer for Katana Flashdraw Charge in Minecraft 26.2.
+ * The stance rings, ground accent, hilt fans, and vortex bands are gone.
+ * This renderer supplies the caster position, facing, charge ratio, and
+ * lifecycle to the shared material emitters. Ki plasma and air vapor are
+ * sampled through the stance volume and pulled toward the sheathed hilt,
+ * vapor moves around the rim and over the ground, and a small steel spark
+ * stream lives at the hilt itself. Alpha from the old lifecycle becomes
+ * emission density here: a smooth build over the first four ticks and a
+ * fade across FADE_TICKS once the charge ends or is cancelled.
  */
 public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, KatanaChargeRenderer.KatanaChargeRenderState> {
 
@@ -38,6 +42,7 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
         public float xRot = 0;
         public float age = 0;
         public long seed = 0;
+        public UUID uuid = new UUID(0L, 0L);
         public int fadeStart = -1;
         public double wx = 0, wy = 0, wz = 0;
     }
@@ -65,6 +70,7 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.uuid = entity.getUUID();
         state.fadeStart = entity.getFadeStart();
         state.wx = entity.getX();
         state.wy = entity.getY();
@@ -73,138 +79,151 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
 
     @Override
     public void submit(KatanaChargeRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
         float charge = state.chargeRatio;
         float age = state.age;
         float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.4f);
-        // Lifecycle: smoothstep fade in over the first 4 ticks, and a fade out
-        // over FADE_TICKS once the charge ends, so the stance never pops.
         float alpha = (0.65f + (charge * 0.35f)) * FxEnvelope.smoothstep(Math.min(1.0f, age / 4.0f));
         if (state.fadeStart >= 0) {
             float fadeT = (age - state.fadeStart) / (float) KatanaChargeEntity.FADE_TICKS;
             if (fadeT >= 1.0f) return;
             alpha *= 1.0f - FxEnvelope.smoothstep(fadeT);
         }
-        final float alphaF = alpha;
-        float dist = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
-        long seed = state.seed;
+        if (alpha <= 0.01f) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.level == null) return;
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        Vec3 center = new Vec3(state.wx, state.wy, state.wz);
+        float dist = MaterialEmitters.distanceScale(center);
+        if (dist <= 0.01f) return;
 
-        // 1. Planar ground iaido focus rings: three broken vortex bands lying
-        // almost flat at ground level, counter rotating through the builder's
-        // twist parameter (outer electric cyan, inner silver-white, white
-        // core), replacing the old equal-segment ring loops.
-        float rOuter = 1.3f + (charge * 0.4f);
-        float coreR = rOuter * (0.22f + charge * 0.08f);
-        float twistOuter = (float) Math.toRadians(age * 25.0f);
-        float twistInner = (float) Math.toRadians(-age * 35.0f);
-        float twistCore = (float) Math.toRadians(age * 48.0f);
-        float ringAlphaOuter = alphaF * 0.75f * pulse;
-        float ringAlphaInner = alphaF * 0.90f * pulse;
-        float ringAlphaCore = alphaF * pulse;
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed, rOuter, 0.02f, 0.10f, twistOuter,
-                0.15f, 0.85f, 1.0f, ringAlphaOuter, dist);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x1111L, rOuter * 0.65f, 0.04f, 0.12f, twistInner,
-                0.90f, 0.95f, 1.0f, ringAlphaInner, dist);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x2222L, coreR, 0.06f, 0.16f, twistCore,
-                1.0f, 1.0f, 1.0f, ringAlphaCore, dist);
-        });
+        double yaw = Math.toRadians(state.yRot);
+        Vec3 right = new Vec3(Math.cos(yaw), 0, Math.sin(yaw));
+        Vec3 forward = new Vec3(-Math.sin(yaw), 0, Math.cos(yaw));
 
-        // The ground arc accent in front of the stance: two nested blade
-        // arcs (silver over white) bowed toward +Z, the builder bulge turned
-        // forward by a -90 degree yaw, offset so the band sits where the old
-        // parabola strip lay.
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.06f, -0.55f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x3333L, 1.3f, 80.0f,
-                0.86f, 0.95f, 1.0f, 0.8f * pulse, alphaF, dist);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x4444L, 1.12f, 80.0f,
-                1.0f, 1.0f, 1.0f, 1.0f * pulse, alphaF * 0.9f, dist);
-        });
-        poseStack.popPose();
+        Anchor anchor = anchorFor(state, mc.level);
+        anchor.center = center;
+        anchor.right = right;
+        anchor.forward = forward;
+        anchor.charge = charge;
 
-        // 2. Sheathed hilt spark matrix (left hip drawing position): two
-        // shard fans stood into the XY plane, white over cyan.
-        float hiltX = -0.28f;
-        float hiltY = 0.75f;
-        float hiltZ = -0.05f;
-        float sparkSize = (0.12f + charge * 0.10f) * pulse;
-        poseStack.pushPose();
-        poseStack.translate(hiltX, hiltY, hiltZ);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x5555L, sparkSize * 1.8f,
-                1.0f, 1.0f, 1.0f, 1.0f, alphaF, dist);
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x6666L, sparkSize * 1.1f,
-                0.2f, 0.9f, 1.0f, 0.8f, alphaF, dist);
-        });
-        poseStack.popPose();
-
-        // 3. Converging inward crystalline silver motes: small shard fans on
-        // a golden angle spiral, drifting into the hilt. Positions and the
-        // height jitter come from the seeded toolkit stream, so every client
-        // sees the same spiral.
-        int moteCount = Math.max(4, Math.round((10 + (int) (charge * 8)) * dist));
-        BespokeGeometry.Rng rng = new BespokeGeometry.Rng(seed);
-        float[][] motes = new float[moteCount][4];
-        for (int m = 0; m < moteCount; m++) {
-            float moteProg = (age * 0.06f + (m / (float) moteCount)) % 1.0f;
-            float inwardProg = 1.0f - moteProg; // Moves from outside in towards hilt
-            double ang = (m * 2.39996) + (age * 0.08f); // Golden ratio angle spread
-            float moteDist = 0.2f + inwardProg * (1.2f + charge * 0.5f);
-            motes[m][0] = hiltX + (float) Math.cos(ang) * moteDist;
-            motes[m][1] = hiltY + ((rng.nextFloat() - 0.5f) * 0.6f * inwardProg);
-            motes[m][2] = hiltZ + (float) Math.sin(ang) * moteDist;
-            motes[m][3] = moteProg;
+        float delta = anchor.deltaSeconds(mc.isPaused());
+        if (delta > 0f) {
+            float envelope = alpha * pulse * dist;
+            anchor.gatherPlasma.tick(delta, envelope);
+            anchor.gatherVapor.tick(delta, envelope * 0.8f);
+            anchor.hiltPlasma.tick(delta, envelope);
+            anchor.hiltSparks.tick(delta, envelope);
+            anchor.groundVapor.tick(delta, envelope * 0.55f);
         }
-        for (int m = 0; m < moteCount; m++) {
-            float moteProg = motes[m][3];
-            float mSize = 0.04f * (0.4f + moteProg * 0.6f);
-            float mAlpha = alphaF * moteProg;
-            long moteSeed = seed ^ (0x7700L + m);
-            poseStack.pushPose();
-            poseStack.translate(motes[m][0], motes[m][1], motes[m][2]);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.shardFan(pose, buffer, moteSeed, mSize * 2.2f,
-                    0.8f, 0.95f, 1.0f, 0.9f, mAlpha, dist);
-            });
-            poseStack.popPose();
-        }
-
-        // Layered vortex bands around the stance (standard point 1): a tight
-        // bright core, a cyan mid band, and a wispy outer band, counter
-        // rotating at different speeds, giving the charge real vertical depth.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            LayeredRender.drawVortexBands(pose, buffer, 0.85f + charge * 0.3f, 1.2f + charge * 0.5f, age,
-                0.15f, 0.85f, 1.0f, alphaF * 0.85f, dist);
-        });
-
-        // Additive halo pass: a wider, faint copy of the outer cyan ring and
-        // the hilt spark so the charge blooms and anchors to the ground
-        // instead of reading matte.
-        float haloRadius = (1.3f + (charge * 0.4f)) * 1.15f;
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed, haloRadius, 0.02f, 0.10f, twistOuter,
-                0.15f, 0.85f, 1.0f, 0.16f * alphaF, dist);
-        });
-        poseStack.pushPose();
-        poseStack.translate(hiltX, hiltY, hiltZ);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        float haloSparkRadius = (0.12f + charge * 0.10f) * 1.7f * 1.8f;
-        float haloSparkAlpha = 0.20f * alphaF;
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x5555L, haloSparkRadius,
-                1.0f, 1.0f, 1.0f, 1.0f, haloSparkAlpha, dist);
-        });
-        poseStack.popPose();
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static Anchor anchorFor(KatanaChargeRenderState state, ClientLevel level) {
+        long now = System.nanoTime();
+        Anchor anchor = ANCHORS.get(state.uuid);
+        if (anchor == null || anchor.level != level) {
+            anchor = new Anchor(level, (int) state.seed);
+            ANCHORS.put(state.uuid, anchor);
+        }
+        anchor.lastSeenNanos = now;
+        Iterator<Map.Entry<UUID, Anchor>> it = ANCHORS.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<UUID, Anchor> entry = it.next();
+            if (!entry.getKey().equals(state.uuid) && now - entry.getValue().lastSeenNanos > 4_000_000_000L) {
+                it.remove();
+            }
+        }
+        return anchor;
+    }
+
+    private static final Map<UUID, Anchor> ANCHORS = new HashMap<>();
+
+    private static final class Anchor {
+        private final ClientLevel level;
+        private final int seed;
+        private long lastSeenNanos;
+        private long lastTickNanos;
+        private Vec3 center = Vec3.ZERO;
+        private Vec3 right = new Vec3(1, 0, 0);
+        private Vec3 forward = new Vec3(0, 0, 1);
+        private float charge = 0f;
+        private final MaterialEmitters.Emitter gatherPlasma;
+        private final MaterialEmitters.Emitter gatherVapor;
+        private final MaterialEmitters.Emitter hiltPlasma;
+        private final MaterialEmitters.Emitter hiltSparks;
+        private final MaterialEmitters.Emitter groundVapor;
+
+        private Anchor(ClientLevel level, int seed) {
+            this.level = level;
+            this.seed = seed;
+            MaterialEmitters.Source gather = random -> {
+                Vec3 mid = center.add(0, 0.75, 0);
+                double z = random.nextDouble() * 2.0 - 1.0;
+                double ang = random.nextDouble() * Math.PI * 2.0;
+                double rr = Math.cbrt(random.nextDouble());
+                double flat = Math.sqrt(Math.max(0.0, 1.0 - z * z)) * rr;
+                double radius = 1.30 + charge * 0.45;
+                Vec3 pos = mid
+                    .add(right.scale(Math.cos(ang) * flat * radius))
+                    .add(forward.scale(Math.sin(ang) * flat * radius))
+                    .add(0, z * 0.78, 0);
+                Vec3 vel = hilt().subtract(pos).scale(0.20).add(0, 0.010, 0);
+                return new MaterialEmitters.Sample(pos, vel);
+            };
+            MaterialEmitters.Source rim = random -> {
+                double ang = random.nextDouble() * Math.PI * 2.0;
+                double radius = 0.90 + charge * 0.40 + (random.nextDouble() * 2.0 - 1.0) * 0.16;
+                Vec3 pos = center
+                    .add(right.scale(Math.cos(ang) * radius))
+                    .add(forward.scale(Math.sin(ang) * radius))
+                    .add(0, 0.12 + random.nextDouble() * 0.80, 0);
+                Vec3 tangent = right.scale(-Math.sin(ang)).add(forward.scale(Math.cos(ang))).scale(0.11);
+                Vec3 vel = tangent.add(center.add(0, 0.75, 0).subtract(pos).scale(0.018));
+                return new MaterialEmitters.Sample(pos, vel);
+            };
+            MaterialEmitters.Source hiltSource = random -> {
+                Vec3 pos = hilt().add(
+                    (random.nextDouble() * 2.0 - 1.0) * 0.07,
+                    (random.nextDouble() * 2.0 - 1.0) * 0.07,
+                    (random.nextDouble() * 2.0 - 1.0) * 0.07);
+                return new MaterialEmitters.Sample(pos, new Vec3(0, 0.018, 0));
+            };
+            MaterialEmitters.Source ground = random -> {
+                double ang = random.nextDouble() * Math.PI * 2.0;
+                double rr = Math.sqrt(random.nextDouble()) * (1.30 + charge * 0.40);
+                Vec3 pos = new Vec3(center.x + Math.cos(ang) * rr, center.y + 0.04, center.z + Math.sin(ang) * rr);
+                return new MaterialEmitters.Sample(pos, new Vec3(0, 0.010, 0));
+            };
+            this.gatherPlasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0x9FE8FF, 2.1f, seed, Vec3.ZERO, 0.016f),
+                gather, 108f, 128);
+            this.gatherVapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0xDBF2FF, 3.1f, seed ^ 0x1111, Vec3.ZERO, 0.018f),
+                rim, 56f, 72);
+            this.hiltPlasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, 1.35f, seed ^ 0x2222, Vec3.ZERO, 0.012f),
+                hiltSource, 38f, 48);
+            this.hiltSparks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.11f),
+                hiltSource, 15f, 22);
+            this.groundVapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0x7FD8FF, 3.6f, seed ^ 0x3333, Vec3.ZERO, 0.016f),
+                ground, 21f, 28);
+        }
+
+        private Vec3 hilt() {
+            return center.add(right.scale(-0.28)).add(forward.scale(-0.05)).add(0, 0.75, 0);
+        }
+
+        private float deltaSeconds(boolean paused) {
+            long now = System.nanoTime();
+            if (lastTickNanos == 0L) {
+                lastTickNanos = now;
+                return paused ? 0f : 0.016f;
+            }
+            float delta = Math.min(0.05f, (now - lastTickNanos) / 1_000_000_000.0f);
+            lastTickNanos = now;
+            return paused ? 0f : delta;
+        }
     }
 }

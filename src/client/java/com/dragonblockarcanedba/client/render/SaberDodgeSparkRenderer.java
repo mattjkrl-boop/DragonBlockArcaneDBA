@@ -1,33 +1,34 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.SaberDodgeSparkEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Saber Dodge Spark in Minecraft 26.2.
  *
- * <p>Bespoke pass: the hand-rolled clash rings, bowed spike quads and
- * diamond sparks are deleted. The rings are {@link BespokeGeometry}
- * broken vortex bands with the same opposed spin rates, the 8 clash
- * spikes and 12 flying shards are jagged branch streaks, and the core
- * flash is a plume, per the bespoke standard's dodge spark mapping. The
- * seeded shard scatter now runs on the toolkit's own Rng fed by the same
- * synced UUID seed. Build-in, growth, quadratic fade and the additive
- * halo are unchanged from the spectacle pass.</p>
+ * <p>No-shapes pass: the clash rings, spike quads, flying diamond
+ * shards, and core plume are no longer drawn as geometry. The burst is
+ * emitted as gold void plasma, white plasma, spatial glass dust, and a
+ * thin darkness vapor rim inside the burst volume, using the shared
+ * material emitters. Build-in, growth, quadratic fade, colors, and the
+ * bloom moment are carried by emission density and one opening burst.</p>
  */
 public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntity, SaberDodgeSparkRenderer.DodgeSparkRenderState> {
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
 
     public SaberDodgeSparkRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -73,115 +74,111 @@ public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntit
     @Override
     public void submit(DodgeSparkRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
-        if (progress >= 1.0f) return;
+        long key = state.seed;
+        if (progress >= 1.0f) {
+            emissions.remove(key);
+            return;
+        }
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
 
-        // Build in over the first fifth of life: alpha rides the shared
-        // envelope's opening while the old quadratic fade keeps the
-        // dissipation shape, and the burst grows from a small core.
+        pruneEmissions();
         float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.20f));
         float fade = (1.0f - progress * progress) * open;
         float grow = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.25f));
-        float scale = state.scale * (0.55f + 0.85f * grow + progress * 0.35f);
-        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-        long seed = state.seed;
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        float ds = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
 
-        poseStack.pushPose();
-
-        // Spikes, flying shards and the core plume. The rings live in their
-        // own submits below because the bands need a rotated frame.
-        SubmitNodeCollector.CustomGeometryRenderer geometry = (pose, buffer) -> {
-            // 1. 8-Point Diamond Energy Clash Spikes, as branch streaks:
-            // gold body with the thin white core the old quads carried.
-            int spikeCount = 8;
-            for (int i = 0; i < spikeCount; i++) {
-                double angle = (i / (double) spikeCount) * Math.PI * 2.0 + (state.age * 0.15);
-                float spikeLen = (1.5f + (i % 2 == 0 ? 0.9f : 0.4f)) * scale;
-                float spikeWidth = 0.24f * (1.0f - progress * 0.7f) * scale;
-                Vec3 tip = new Vec3(Math.cos(angle) * spikeLen, Math.sin(angle) * spikeLen, 0);
-                BespokeGeometry.branch(pose, buffer, seed + i * 131L, Vec3.ZERO, tip,
-                    spikeWidth, 1.0f, 0.95f, 0.40f, fade * 0.85f, 1.0f, ds);
-                BespokeGeometry.branch(pose, buffer, seed + i * 131L + 3L, Vec3.ZERO, tip,
-                    spikeWidth * 0.28f, 1.0f, 1.0f, 1.0f, fade, 1.0f, ds);
+        Emission emission = emissions.get(key);
+        if (emission == null || emission.level != level || state.age < emission.lastAge - 0.01f) {
+            emission = new Emission(level, state);
+            emissions.put(key, emission);
+        }
+        emission.update(state, grow, progress);
+        float delta = emission.delta(state.age);
+        float strength = fade * ds;
+        if (!emission.burstDone) {
+            emission.burstDone = true;
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.plasma(0xFFD75E, 1.05f, (int) (state.seed ^ 0xC03EL), Vec3.ZERO, 0.42f),
+                MaterialEmitters.point(emission.origin), Math.max(5, Math.round(22 * ds)));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.glassDust(0xFFF3B0, 0.95f, (int) (state.seed ^ 0x54A2DL), Vec3.ZERO, 0.55f),
+                MaterialEmitters.point(emission.origin), Math.max(4, Math.round(14 * ds)));
+        }
+        if (strength > 0.01f) {
+            for (MaterialEmitters.Emitter emitter : emission.emitters) {
+                emitter.tick(delta, strength);
             }
+        }
 
-            // 2. 12 High-Velocity Flying Spark Shards, as short outward
-            // branch streaks. Positions come from the toolkit Rng on the
-            // same synced seed, consumed in the same order as before.
-            BespokeGeometry.Rng rng = new BespokeGeometry.Rng(seed ^ 0x54A2DL);
-            int sparkCount = 12;
-            for (int s = 0; s < sparkCount; s++) {
-                double sparkAngle = (s / (double) sparkCount) * Math.PI * 2.0 + (rng.nextFloat() * 0.4);
-                float speed = 1.3f + rng.nextFloat() * 1.6f;
-                float sparkDist = progress * speed * 3.0f * scale;
-                float sx = (float) Math.cos(sparkAngle) * sparkDist;
-                float sy = (float) Math.sin(sparkAngle) * sparkDist + (rng.nextFloat() - 0.5f) * 0.6f;
-                float sz = (rng.nextFloat() - 0.5f) * sparkDist * 0.7f;
-                float sparkSize = 0.15f * (1.0f - progress * 0.8f);
-                Vec3 from = new Vec3(sx, sy, sz);
-                Vec3 to = new Vec3(
-                    sx + Math.cos(sparkAngle) * sparkSize * 2.4,
-                    sy + Math.sin(sparkAngle) * sparkSize * 2.4, sz);
-                BespokeGeometry.branch(pose, buffer, seed + 1000L + s * 17L, from, to,
-                    sparkSize * 0.8f, 1.0f, 0.92f, 0.35f, fade, 1.0f, ds);
-            }
-
-            // 3. Radiant White-Gold Core Flash, as a plume puff.
-            float coreSize = (0.8f * (1.0f - progress * 0.6f)) * scale;
-            BespokeGeometry.plume(pose, buffer, seed ^ 0xC03EL, coreSize, coreSize * 0.9f,
-                1.0f, 1.0f, 0.95f, fade, 1.0f, ds);
-        };
-
-        // The burst is built in one plane and nearly vanishes edge-on, so the
-        // same geometry is submitted a second time rotated 90 degrees, giving
-        // the clash volume from any viewing angle.
-        collector.submitCustomGeometry(poseStack, renderType, geometry);
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotationY((float) Math.PI / 2.0f));
-        collector.submitCustomGeometry(poseStack, renderType, geometry);
-        poseStack.popPose();
-
-        // Clash rings as broken vortex bands. The bands circle the Y axis
-        // in their own frame; the X rotation lays them into the burst's XY
-        // plane, and the twist arguments carry the old spin rates (age * 35
-        // and age * 22 one way, age * -50 against). Radii are the means of
-        // the old rings' inner and outer radii.
-        SubmitNodeCollector.CustomGeometryRenderer rings = (pose, buffer) -> {
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBADD1L,
-                1.55f * scale, 0.0f, 0.12f * scale, (float) Math.toRadians(state.age * 35.0),
-                1.0f, 0.85f, 0.15f, fade * 0.90f, ds);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBADD2L,
-                1.10f * scale, 0.0f, 0.12f * scale, (float) Math.toRadians(-state.age * 50.0),
-                1.0f, 0.98f, 0.70f, fade * 0.98f, ds);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBADD3L,
-                0.34f * scale, 0.0f, 0.08f * scale, (float) Math.toRadians(state.age * 22.0),
-                1.0f, 1.0f, 1.0f, fade, ds);
-        };
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, rings);
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, rings);
-        poseStack.popPose();
-
-        // Additive halo pass: an oversized faint copy of the core plume and
-        // one clash band, so the impact blooms.
-        float haloCore = (0.8f * (1.0f - progress * 0.6f)) * scale * 1.6f;
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) ->
-            BespokeGeometry.plume(pose, buffer, seed ^ 0x4A10L, haloCore, haloCore * 0.9f,
-                1.0f, 1.0f, 0.95f, fade * 0.22f, 1.0f, ds));
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) ->
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBEEFL,
-                1.76f * scale, 0.0f, 0.12f * scale, (float) Math.toRadians(state.age * 35.0),
-                1.0f, 0.85f, 0.15f, fade * 0.14f, ds));
-        poseStack.popPose();
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private void pruneEmissions() {
+        long now = System.nanoTime();
+        emissions.values().removeIf(e -> now - e.lastSeenNanos > 5_000_000_000L);
+    }
+
+    /**
+     * Per-effect emitter set, keyed by the synced UUID seed on the
+     * renderer instance because render states are recreated on every
+     * extraction. The source samples the burst volume as data only.
+     */
+    private static final class Emission {
+        final ClientLevel level;
+        final MaterialEmitters.Emitter[] emitters;
+        float lastAge = -1.0f;
+        long lastSeenNanos = System.nanoTime();
+        boolean burstDone = false;
+        Vec3 origin = Vec3.ZERO;
+        float radius = 1.0f;
+
+        Emission(ClientLevel level, DodgeSparkRenderState state) {
+            this.level = level;
+            update(state, 0.0f, 0.0f);
+            int seed = (int) state.seed;
+            float baseScale = state.scale;
+
+            MaterialEmitters.Source volume = random -> {
+                double u = random.nextDouble() * 2.0 - 1.0;
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double rr = radius * Math.cbrt(random.nextDouble());
+                double flat = Math.sqrt(Math.max(0.0, 1.0 - u * u)) * rr;
+                Vec3 pos = origin.add(Math.cos(angle) * flat, u * rr, Math.sin(angle) * flat);
+                return new MaterialEmitters.Sample(pos, Vec3.ZERO);
+            };
+
+            this.emitters = new MaterialEmitters.Emitter[] {
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(0xFFD75E, 1.05f * baseScale, seed, Vec3.ZERO, 0.30f),
+                    volume, 430.0f, 520),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(0xFFFFFF, 0.72f * baseScale, seed ^ 0x4A10, Vec3.ZERO, 0.24f),
+                    volume, 150.0f, 200),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.glassDust(0xFFF3B0, 0.95f * baseScale, seed ^ 0x54A2, Vec3.ZERO, 0.16f),
+                    volume, 190.0f, 250),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.darkness(0x3D1A78, 1.30f * baseScale, seed ^ 0xBADD, Vec3.ZERO, 0.10f),
+                    volume, 80.0f, 120)
+            };
+        }
+
+        void update(DodgeSparkRenderState state, float grow, float progress) {
+            this.origin = new Vec3(state.ex, state.ey, state.ez);
+            float animatedScale = state.scale * (0.55f + 0.85f * grow + progress * 0.35f);
+            this.radius = Math.max(0.10f, animatedScale * 0.85f);
+        }
+
+        float delta(float age) {
+            this.lastSeenNanos = System.nanoTime();
+            if (this.lastAge < 0.0f) {
+                this.lastAge = age;
+                return 1.0f / 60.0f;
+            }
+            float d = Math.min(0.05f, Math.max(0.0f, (age - this.lastAge) / 20.0f));
+            this.lastAge = age;
+            return d;
+        }
     }
 }

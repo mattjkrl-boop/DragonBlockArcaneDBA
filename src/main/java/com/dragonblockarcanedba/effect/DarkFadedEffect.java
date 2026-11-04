@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -18,7 +19,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
  */
 public class DarkFadedEffect extends MobEffect {
     public DarkFadedEffect() {
-        super(MobEffectCategory.HARMFUL, 0x0A0014, com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE); // particles are spawned client side by vanilla effect particle sync
+        super(MobEffectCategory.HARMFUL, 0x0A0014, DbaMaterialOptions.of(DbaMaterialOptions.DARKNESS, 0x591A80, 1.0f, 0xDADE)); // particles are spawned client side by vanilla effect particle sync
 
         this.addAttributeModifier(
             Attributes.MOVEMENT_SPEED,

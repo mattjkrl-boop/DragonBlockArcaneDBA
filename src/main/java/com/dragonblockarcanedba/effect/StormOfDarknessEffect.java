@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -52,23 +52,23 @@ public class StormOfDarknessEffect extends MobEffect {
         // Visual storm particles
         if (entity.tickCount % 3 == 0) {
             level.sendParticles(
-                com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                DbaMaterialOptions.of(DbaMaterialOptions.DARKNESS, 0x591A80, 1.0f, entity.getId() * 31 + entity.tickCount),
                 entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
                 3, entity.getBbWidth() * 0.4, entity.getBbHeight() * 0.3, entity.getBbWidth() * 0.4, 0.05
             );
             level.sendParticles(
-                new DbaDustOptions(0x8B0000, 1.2F), // Dark crimson
+                DbaMaterialOptions.of(DbaMaterialOptions.SMOKE, 0x8B0000, 1.2F, entity.getId() * 31 + entity.tickCount + 1), // Dark crimson
                 entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
                 2, 0.3, 0.3, 0.3, 0.02
             );
             level.sendParticles(
-                new DbaDustOptions(0x0A0A0A, 1.5F), // Black ash
+                DbaMaterialOptions.of(DbaMaterialOptions.SMOKE, 0x0A0A0A, 1.5F, entity.getId() * 31 + entity.tickCount + 2), // Black ash
                 entity.getX(), entity.getY() + entity.getBbHeight(), entity.getZ(),
                 1, 0.4, 0.4, 0.4, 0.01
             );
             if (level.getRandom().nextFloat() < 0.2f) {
                 level.sendParticles(
-                    new DbaDustOptions(0xFFFF00, 1.0F), // Yellow static
+                    DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0xFFFF00, 1.0F, entity.getId() * 31 + entity.tickCount + 3), // Yellow static
                     entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
                     1, 0.5, 0.5, 0.5, 0.01
                 );

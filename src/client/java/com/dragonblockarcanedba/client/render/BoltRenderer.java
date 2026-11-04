@@ -1,28 +1,38 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.BoltEntity;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 /**
- * Branched lightning for BoltEntity. The whole bolt, trunk plus forks, is a
- * pure function of the synced seed, so every client draws the same strike.
- * Two passes per segment: a wide theme colored sheath and a thin near white
- * core, each drawn as crossed ribbons, alpha driven by the shared envelope
- * times a per tick flicker that never repeats the same frame twice.
+ * Branched lightning for BoltEntity.
+ *
+ * The seeded branch path is emission data only. Nothing here draws a
+ * ribbon, a polyline strip, or a ground disc: the strike is layered
+ * plasma material emitted along the trunk and fork segments by the
+ * shared MaterialEmitters toolkit, in a theme colored sheath and a near
+ * white core, with spark particles and a ground glow of plasma sprites
+ * at the strike point. The path itself is still a pure function of the
+ * synced seed, built with the exact random walk the old geometry used,
+ * so every client emits along the same trunk and forks. Alpha timing is
+ * the shared envelope times the same per tick flicker as before.
  */
 public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltState> {
 
@@ -31,8 +41,9 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
     }
 
     public static class BoltState extends EntityRenderState {
+        public int entityId;
         public int seed;
-        public float r, g, b;
+        public int color;
         public float length;
         public float age;
         public int life;
@@ -56,17 +67,193 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
     @Override
     public void extractRenderState(BoltEntity entity, BoltState state, float partialTick) {
         super.extractRenderState(entity, state, partialTick);
+        state.entityId = entity.getId();
         state.seed = entity.getSeed();
-        int color = entity.getColor();
-        state.r = KiRenderHelper.red(color);
-        state.g = KiRenderHelper.green(color);
-        state.b = KiRenderHelper.blue(color);
+        state.color = entity.getColor();
         state.length = entity.getLength();
         state.age = entity.tickCount + partialTick;
         state.life = entity.getLife();
     }
 
-    private record Seg(float x0, float y0, float z0, float x1, float y1, float z1, float taper) {}
+    /** One branch segment in world coordinates, with the old geometry taper kept as data. */
+    private record Seg(Vec3 from, Vec3 to, float taper) {
+        double length() {
+            return from.distanceTo(to);
+        }
+    }
+
+    /** A taper group of segments, sampled by length. */
+    private static final class SegmentSet {
+        final List<Seg> segments;
+        final Vec3 fallback;
+        final double totalLength;
+
+        private SegmentSet(List<Seg> segments, Vec3 fallback) {
+            this.segments = List.copyOf(segments);
+            this.fallback = fallback;
+            double total = 0.0;
+            for (Seg s : segments) total += s.length();
+            this.totalLength = total;
+        }
+
+        static SegmentSet group(List<Seg> all, Vec3 fallback, boolean strong) {
+            List<Seg> picked = new ArrayList<>();
+            for (Seg s : all) {
+                if ((s.taper() >= 0.72f) == strong) picked.add(s);
+            }
+            return new SegmentSet(picked, fallback);
+        }
+
+        float share(double total) {
+            return total <= 0.0 ? 0f : (float) (totalLength / total);
+        }
+    }
+
+    private static MaterialEmitters.Source segmentSource(SegmentSet set) {
+        return random -> {
+            if (set.segments.isEmpty() || set.totalLength <= 0.0) {
+                return new MaterialEmitters.Sample(set.fallback, Vec3.ZERO);
+            }
+            double pick = random.nextDouble() * set.totalLength;
+            Seg chosen = set.segments.get(set.segments.size() - 1);
+            for (Seg s : set.segments) {
+                pick -= s.length();
+                if (pick <= 0.0) {
+                    chosen = s;
+                    break;
+                }
+            }
+            double t = random.nextDouble();
+            return new MaterialEmitters.Sample(chosen.from().lerp(chosen.to(), t), Vec3.ZERO);
+        };
+    }
+
+    /**
+     * Per strike emission state. Render states are rebuilt every frame,
+     * so the toolkit emitters live here, keyed by entity id and validated
+     * against the synced seed, color, length, life, and strike point. An
+     * entry that stops being submitted is dropped after two seconds.
+     */
+    private static final class Emission {
+        final int seed;
+        final int color;
+        final float length;
+        final int life;
+        final Vec3 base;
+        float lastAge;
+        long lastSeenNanos;
+
+        final MaterialEmitters.Source strongSource;
+        final MaterialEmitters.Source weakSource;
+        final MaterialEmitters.Source groundSource;
+        final MaterialEmitters.Source groundCoreSource;
+        final MaterialEmitters.Preset strongSheathPreset;
+        final MaterialEmitters.Preset strongCorePreset;
+        final MaterialEmitters.Preset weakSheathPreset;
+        final MaterialEmitters.Preset weakCorePreset;
+        final MaterialEmitters.Preset groundPreset;
+        final MaterialEmitters.Preset groundCorePreset;
+        final MaterialEmitters.Preset sparkPreset;
+        final MaterialEmitters.Emitter strongSheath;
+        final MaterialEmitters.Emitter strongCore;
+        final MaterialEmitters.Emitter weakSheath;
+        final MaterialEmitters.Emitter weakCore;
+        final MaterialEmitters.Emitter ground;
+        final MaterialEmitters.Emitter groundCore;
+        final MaterialEmitters.Emitter sparks;
+        final float strongShare;
+        final float weakShare;
+        final float lengthFactor;
+
+        Emission(ClientLevel level, BoltState state, List<Seg> segments) {
+            this.seed = state.seed;
+            this.color = state.color;
+            this.length = state.length;
+            this.life = state.life;
+            this.base = new Vec3(state.x, state.y, state.z);
+            this.lastAge = state.age;
+
+            SegmentSet strong = SegmentSet.group(segments, base, true);
+            SegmentSet weak = SegmentSet.group(segments, base, false);
+            double total = strong.totalLength + weak.totalLength;
+            this.strongShare = strong.share(total);
+            this.weakShare = weak.share(total);
+            this.lengthFactor = (float) Math.max(0.5, Math.min(1.75, state.length / 16.0));
+            float pathScale = (float) Math.max(0.35, total / Math.max(1.0, state.length));
+
+            this.strongSource = segmentSource(strong);
+            this.weakSource = segmentSource(weak);
+            this.groundSource = MaterialEmitters.groundArea(base, 1.6, base.y + 0.05);
+            this.groundCoreSource = MaterialEmitters.groundArea(base, 0.7, base.y + 0.05);
+
+            int core = coreColor(state.color);
+            this.strongSheathPreset = MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA,
+                    state.color, 1.55f, state.seed ^ 0x5EA7, Vec3.ZERO, 0.025f);
+            this.strongCorePreset = MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA,
+                    core, 0.85f, state.seed ^ 0xC02E, Vec3.ZERO, 0.015f);
+            this.weakSheathPreset = MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA,
+                    state.color, 1.12f, state.seed ^ 0x9EA7, Vec3.ZERO, 0.025f);
+            this.weakCorePreset = MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA,
+                    core, 0.58f, state.seed ^ 0xF117, Vec3.ZERO, 0.015f);
+            this.groundPreset = MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA,
+                    state.color, 2.1f, state.seed ^ 0x6A11, Vec3.ZERO, 0.01f);
+            this.groundCorePreset = MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA,
+                    0xFFFFFF, 1.25f, state.seed ^ 0x6A22, Vec3.ZERO, 0.01f);
+            this.sparkPreset = MaterialEmitters.Preset.fixed(DbaParticles.SPARK,
+                    new Vec3(0, 0.10, 0), 0.30f);
+
+            float sheathRate = 170f * pathScale;
+            float coreRate = 300f * pathScale;
+            this.strongSheath = new MaterialEmitters.Emitter(level, strongSheathPreset, strongSource,
+                    sheathRate * strongShare, budget(sheathRate * strongShare));
+            this.strongCore = new MaterialEmitters.Emitter(level, strongCorePreset, strongSource,
+                    coreRate * strongShare, budget(coreRate * strongShare));
+            this.weakSheath = new MaterialEmitters.Emitter(level, weakSheathPreset, weakSource,
+                    sheathRate * weakShare, budget(sheathRate * weakShare));
+            this.weakCore = new MaterialEmitters.Emitter(level, weakCorePreset, weakSource,
+                    coreRate * weakShare, budget(coreRate * weakShare));
+            this.ground = new MaterialEmitters.Emitter(level, groundPreset, groundSource,
+                    62f, budget(62f));
+            this.groundCore = new MaterialEmitters.Emitter(level, groundCorePreset, groundCoreSource,
+                    42f, budget(42f));
+            this.sparks = new MaterialEmitters.Emitter(level, sparkPreset,
+                    MaterialEmitters.point(base), 90f, budget(90f));
+        }
+
+        private static int budget(float rate) {
+            return Math.max(1, Math.round(rate * 1.8f) + 16);
+        }
+
+        /** The first frame of a strike: one burst along the whole path so the bolt is present at once. */
+        void burstInitial(ClientLevel level, float strength) {
+            MaterialEmitters.burst(level, strongSheathPreset, strongSource,
+                    Math.round(9f * lengthFactor * strength * strongShare));
+            MaterialEmitters.burst(level, strongCorePreset, strongSource,
+                    Math.round(15f * lengthFactor * strength * strongShare));
+            MaterialEmitters.burst(level, weakSheathPreset, weakSource,
+                    Math.round(7f * lengthFactor * strength * weakShare));
+            MaterialEmitters.burst(level, weakCorePreset, weakSource,
+                    Math.round(11f * lengthFactor * strength * weakShare));
+            MaterialEmitters.burst(level, groundPreset, groundSource,
+                    Math.round(5f * strength));
+            MaterialEmitters.burst(level, groundCorePreset, groundCoreSource,
+                    Math.round(4f * strength));
+            MaterialEmitters.burst(level, sparkPreset, MaterialEmitters.point(base),
+                    Math.round(8f * strength));
+        }
+
+        void tick(float deltaSeconds, float strength) {
+            strongSheath.tick(deltaSeconds, strength);
+            strongCore.tick(deltaSeconds, strength);
+            weakSheath.tick(deltaSeconds, strength);
+            weakCore.tick(deltaSeconds, strength);
+            ground.tick(deltaSeconds, strength * 0.8f);
+            groundCore.tick(deltaSeconds, strength * 0.8f);
+            sparks.tick(deltaSeconds, strength);
+        }
+    }
+
+    private final Map<Integer, Emission> emissions = new HashMap<>();
 
     @Override
     public void submit(BoltState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
@@ -75,10 +262,59 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
         // Flicker: reseeded per whole tick from the bolt seed.
         Random flicker = new Random(state.seed * 31L + (int) state.age);
         float fl = 0.65f + flicker.nextFloat() * 0.35f;
-        float alpha = env * fl;
+        float dist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+        float strength = env * fl * dist;
 
-        // Build the bolt geometry from the seed: trunk points walk upward with
-        // a jittered random walk; forks leave the trunk and dive outward.
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level != null && strength > 0.01f) {
+            long now = System.nanoTime();
+            emissions.values().removeIf(e -> now - e.lastSeenNanos > 2_000_000_000L);
+            Vec3 base = new Vec3(state.x, state.y, state.z);
+            Emission emission = emissions.get(state.entityId);
+            boolean fresh = emission == null
+                    || emission.seed != state.seed
+                    || emission.color != state.color
+                    || emission.length != state.length
+                    || emission.life != state.life
+                    || !emission.base.equals(base)
+                    || emission.lastAge > state.age + 0.001f;
+            if (fresh) {
+                emission = new Emission(level, state, buildSegments(state));
+                emissions.put(state.entityId, emission);
+                emission.burstInitial(level, strength);
+                emission.lastAge = state.age;
+            } else {
+                float deltaTicks = Math.max(0f, state.age - emission.lastAge);
+                if (deltaTicks > 0f) {
+                    emission.tick(deltaTicks / 20.0f, strength);
+                    emission.lastAge = state.age;
+                }
+            }
+            emission.lastSeenNanos = now;
+            if (state.age >= state.life) emissions.remove(state.entityId);
+        }
+        super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /** The old near white core color: the theme color pushed 75 percent toward white. */
+    private static int coreColor(int color) {
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+        r += Math.round((255 - r) * 0.75f);
+        g += Math.round((255 - g) * 0.75f);
+        b += Math.round((255 - b) * 0.75f);
+        return (r << 16) | (g << 8) | b;
+    }
+
+    /**
+     * Builds the branch path from the synced seed. This is the exact
+     * random walk the old ribbon geometry used, kept unchanged as data:
+     * the trunk points climb with a jittered walk and the forks leave the
+     * trunk and dive outward, consuming the seed in the same order.
+     */
+    private static List<Seg> buildSegments(BoltState state) {
+        Vec3 base = new Vec3(state.x, state.y, state.z);
         Random rand = new Random(state.seed);
         int steps = 12;
         float[] tx = new float[steps + 1];
@@ -93,7 +329,8 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
         tx[steps] = px; tz[steps] = pz;
         List<Seg> segs = new ArrayList<>();
         for (int i = 0; i < steps; i++) {
-            segs.add(new Seg(tx[i], ty[i], tz[i], tx[i + 1], ty[i + 1], tz[i + 1], 1f - i / (float) steps * 0.4f));
+            segs.add(new Seg(base.add(tx[i], ty[i], tz[i]), base.add(tx[i + 1], ty[i + 1], tz[i + 1]),
+                    1f - i / (float) steps * 0.4f));
         }
         int forks = 2 + rand.nextInt(3);
         for (int f = 0; f < forks; f++) {
@@ -108,73 +345,11 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
                 float nz = bz + dirZ * (0.5f + rand.nextFloat() * 0.5f);
                 float ny = by - drop * (0.7f + rand.nextFloat() * 0.5f);
                 if (ny < 0.2f) break;
-                segs.add(new Seg(bx, by, bz, nx, ny, nz, 0.55f * (1f - i / (float) blen)));
+                segs.add(new Seg(base.add(bx, by, bz), base.add(nx, ny, nz),
+                        0.55f * (1f - i / (float) blen)));
                 bx = nx; by = ny; bz = nz;
             }
         }
-
-        RenderType type = KiRenderHelper.kiRenderType();
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            // Sheath pass, theme color.
-            for (Seg s : segs) {
-                ribbon(matrix, buffer, pose, s, 0.30f * s.taper(), state.r, state.g, state.b, alpha * 0.32f);
-            }
-            // Core pass, near white.
-            for (Seg s : segs) {
-                float cr = state.r + (1f - state.r) * 0.75f;
-                float cg = state.g + (1f - state.g) * 0.75f;
-                float cb = state.b + (1f - state.b) * 0.75f;
-                ribbon(matrix, buffer, pose, s, 0.12f * s.taper(), cr, cg, cb, alpha * 0.9f);
-            }
-            // Ground glow at the strike point.
-            disc(matrix, buffer, pose, 1.6f, state.r, state.g, state.b, alpha * 0.4f);
-            disc(matrix, buffer, pose, 0.7f, 1f, 1f, 1f, alpha * 0.5f);
-        });
-        super.submit(state, poseStack, collector, cameraState);
-    }
-
-    /** One segment as two crossed ribbons so the bolt reads from every angle. */
-    private static void ribbon(Matrix4f matrix, VertexConsumer buffer, PoseStack.Pose pose,
-                               Seg s, float halfWidth, float r, float g, float b, float a) {
-        // Ribbon facing Z (width along X) and ribbon facing X (width along Z).
-        quad(matrix, buffer, pose,
-            s.x0() - halfWidth, s.y0(), s.z0(), s.x0() + halfWidth, s.y0(), s.z0(),
-            s.x1() + halfWidth, s.y1(), s.z1(), s.x1() - halfWidth, s.y1(), s.z1(), r, g, b, a);
-        quad(matrix, buffer, pose,
-            s.x0(), s.y0(), s.z0() - halfWidth, s.x0(), s.y0(), s.z0() + halfWidth,
-            s.x1(), s.y1(), s.z1() + halfWidth, s.x1(), s.y1(), s.z1() - halfWidth, r, g, b, a);
-    }
-
-    private static void quad(Matrix4f matrix, VertexConsumer buffer, PoseStack.Pose pose,
-                             float x0, float y0, float z0, float x1, float y1, float z1,
-                             float x2, float y2, float z2, float x3, float y3, float z3,
-                             float r, float g, float b, float a) {
-        KiRenderHelper.vertex(buffer, matrix, pose, x0, y0, z0, r, g, b, a, 0, 0, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x1, y1, z1, r, g, b, a, 1, 0, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x2, y2, z2, r, g, b, a, 1, 1, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x3, y3, z3, r, g, b, a, 0, 1, 0, 1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x3, y3, z3, r, g, b, a, 0, 1, 0, -1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x2, y2, z2, r, g, b, a, 1, 1, 0, -1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x1, y1, z1, r, g, b, a, 1, 0, 0, -1, 0);
-        KiRenderHelper.vertex(buffer, matrix, pose, x0, y0, z0, r, g, b, a, 0, 0, 0, -1, 0);
-    }
-
-    /** Flat glowing disc in the XZ plane at local y = 0.05. */
-    private static void disc(Matrix4f matrix, VertexConsumer buffer, PoseStack.Pose pose,
-                             float radius, float r, float g, float b, float a) {
-        int segments = 20;
-        for (int i = 0; i < segments; i++) {
-            double a0 = (i / (double) segments) * Math.PI * 2.0;
-            double a1 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-            float x0 = (float) Math.cos(a0) * radius, z0 = (float) Math.sin(a0) * radius;
-            float x1 = (float) Math.cos(a1) * radius, z1 = (float) Math.sin(a1) * radius;
-            KiRenderHelper.vertex(buffer, matrix, pose, 0, 0.05f, 0, r, g, b, a, 0.5f, 0.5f, 0, 1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, x0, 0.05f, z0, r, g, b, a * 0.15f, 0, 0, 0, 1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, x1, 0.05f, z1, r, g, b, a * 0.15f, 1, 0, 0, 1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, x1, 0.05f, z1, r, g, b, a * 0.15f, 1, 0, 0, -1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, x0, 0.05f, z0, r, g, b, a * 0.15f, 0, 0, 0, -1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, 0, 0.05f, 0, r, g, b, a, 0.5f, 0.5f, 0, -1, 0);
-        }
+        return segs;
     }
 }

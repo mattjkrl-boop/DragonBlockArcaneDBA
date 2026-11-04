@@ -1,33 +1,38 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.EvilSpearProjectileEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Entity Renderer for Evil Spear Projectile in MC 26.2.
- * Renders a high-fidelity 3D demonic spectral spear with faceted shaft, multi-beveled diamond spearhead,
- * barbed vortex fins, supersonic Mach shock cone, layered torn trail ribbons, and expanding wake vortex rings.
+ * Entity renderer for the Evil Spear projectile in Minecraft 26.2.
  *
- * Bespoke pass (standard rule 1): the spear is rebuilt entirely from
- * BespokeGeometry, seeded from the entity UUID. Crossed torn ribbons form
- * the shaft and the diamond blade (a flat ribbon reads as a rod; two
- * crossed ribbons read as a faceted solid), angled torn ribbons form the
- * barbs, a plume forms the Mach sheath, and broken vortex bands form the
- * cone rim and the wake. The old per-renderer regular helpers (equal-sided
- * taper tube, diamond head, cone fan, rings, quads) are deleted.
+ * No-shapes pass: the thrown spear is spectral energy, so this renderer no
+ * longer draws a spear body, head, barbs, sheath, trail ribbons, or wake
+ * bands. It emits a dense material cluster at the projectile position and a
+ * material trail along the actual movement segment: crimson plasma at the
+ * core, darkness smoke in the wake, hellfire embers shed along the path,
+ * flame at the leading cluster, and pale soul vapor through the cluster.
+ * The projectile entity still owns its flight, pierce, vortex, impact
+ * entities, sounds, and server side trail particles.
  */
 public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProjectileEntity, EvilSpearProjectileRenderer.EvilSpearRenderState> {
+
+    private final Map<Long, EmissionRig> rigs = new HashMap<>();
+
     public EvilSpearProjectileRenderer(EntityRendererProvider.Context context) {
         super(context);
     }
@@ -38,6 +43,7 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         public float age = 0;
         public boolean isFirstPersonOwner = false;
         public long seed = 0;
+        public Vec3 velocity = Vec3.ZERO;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -62,8 +68,9 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.velocity = entity.getDeltaMovement();
 
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null &&
             (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) &&
             mc.options.getCameraType().isFirstPerson());
@@ -71,185 +78,141 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
 
     @Override
     public void submit(EvilSpearRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-        final float age = state.age;
-        final long seed = state.seed;
-        // Distance scaling (standard point 1): distant throws step their
-        // segment counts down instead of costing full geometry.
-        final float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null && mc.level != null) {
+            ClientLevel level = mc.level;
+            Vec3 center = new Vec3(state.x, state.y, state.z);
+            float age = state.age;
 
-        poseStack.pushPose();
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(age * 30.0f))); // Continuous high-speed spiral spin
+            float spawnT = Math.min(1.0f, age / 3.0f);
+            float spawnFade = FxEnvelope.smoothstep(spawnT);
+            float endT = age > 32.0f ? Math.min(1.0f, (age - 32.0f) / 8.0f) : 0.0f;
+            float bodyFade = spawnFade * (1.0f - FxEnvelope.smoothstep(endT));
+            float firstPersonFactor = state.isFirstPersonOwner && age < 5.0f
+                    ? 0.55f + 0.45f * spawnFade
+                    : 1.0f;
+            float envelope = bodyFade * firstPersonFactor * MaterialEmitters.distanceScale(center);
 
-        float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
-        poseStack.scale(fpScale, fpScale, fpScale);
-
-        // The throw builds in over its first 3 ticks, holds, then eases out
-        // over the last part of the flight. Nothing pops in at full alpha.
-        float spawnT = Math.min(1.0f, age / 3.0f);
-        float spawnFade = spawnT * spawnT * (3.0f - 2.0f * spawnT);
-        float endT = age > 32.0f ? Math.min(1.0f, (age - 32.0f) / 8.0f) : 0.0f;
-        final float bodyFade = spawnFade * (1.0f - endT * endT * (3.0f - 2.0f * endT));
-
-        // Spear local space: butt at z = -2.0, head tip at z = 2.85.
-        // tornRibbon runs along its local +X; the rotations below lay it
-        // along the spear axis with the wide end where each part needs it.
-
-        // Shaft: crossed torn ribbons, wide at the neck under the head,
-        // narrowing to the butt. Dark sheath pair, then the bright core pair.
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 1.35f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5A01L, 3.35f, 0.24f, 0.0f,
-            0.22f, 0.02f, 0.08f, 0.95f * bodyFade, ds);
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 1.35f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(-90.0f)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5A02L, 3.35f, 0.24f, 0.0f,
-            0.22f, 0.02f, 0.08f, 0.95f * bodyFade, ds);
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 1.22f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5A03L, 3.07f, 0.10f, 0.0f,
-            1.0f, 0.55f, 0.68f, bodyFade, ds);
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 1.22f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(-90.0f)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5A04L, 3.07f, 0.10f, 0.0f,
-            1.0f, 0.55f, 0.68f, bodyFade, ds);
-        poseStack.popPose();
-
-        // Diamond head: crossed wide ribbons, crimson edge pair outside,
-        // pale core pair inside, both tapering to the tip at z = 2.85.
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 1.2f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5B01L, 1.65f, 0.84f, 0.0f,
-            0.95f, 0.05f, 0.20f, 0.95f * bodyFade, ds);
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 1.2f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5B02L, 1.65f, 0.84f, 0.0f,
-            0.95f, 0.05f, 0.20f, 0.95f * bodyFade, ds);
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 1.55f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5B03L, 1.13f, 0.32f, 0.0f,
-            1.0f, 0.85f, 0.90f, bodyFade, ds);
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 1.55f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5B04L, 1.13f, 0.32f, 0.0f,
-            1.0f, 0.85f, 0.90f, bodyFade, ds);
-        poseStack.popPose();
-
-        // Barbed crossguard fins at the butt: four angled ribbons reaching
-        // out and forward from z = -2.0, plus two rear flukes at the head.
-        barb(poseStack, collector, renderType, seed ^ 0x5C01L, -2.0f, -63.4f, 0.0f, 1.23f, bodyFade, ds);
-        barb(poseStack, collector, renderType, seed ^ 0x5C02L, -2.0f, -116.6f, 0.0f, 1.23f, bodyFade, ds);
-        poseStack.pushPose();
-        poseStack.translate(0, 0, -2.0f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(63.4f)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5C03L, 1.23f, 0.12f, 0.12f,
-            0.85f, 0.0f, 0.15f, 0.90f * bodyFade, ds);
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, 0, -2.0f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-63.4f)));
-        poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(-90.0f)));
-        ribbon(poseStack, collector, renderType, seed ^ 0x5C04L, 1.23f, 0.12f, 0.12f,
-            0.85f, 0.0f, 0.15f, 0.90f * bodyFade, ds);
-        poseStack.popPose();
-        barb(poseStack, collector, renderType, seed ^ 0x5C05L, 1.2f, 55.0f, 1.0f, 0.61f, bodyFade, ds);
-        barb(poseStack, collector, renderType, seed ^ 0x5C06L, 1.2f, 125.0f, 1.0f, 0.61f, bodyFade, ds);
-
-        // Mach sheath around the head: an irregular plume leaning to the
-        // tip where the equal-segment cone fan used to be, rimmed by a
-        // broken band at its mouth (z = 0.3).
-        poseStack.pushPose();
-        poseStack.translate(0, 0, 0.3f);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.plume(pose, buffer, seed ^ 0x5D01L, 0.70f, 2.55f,
-                1.0f, 0.12f, 0.24f, 0.42f, bodyFade, ds));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x5D02L, 0.92f, 0.0f, 0.15f,
-                age * 0.3f, 1.0f, 0.72f, 0.78f, 0.55f * bodyFade, ds));
-        poseStack.popPose();
-
-        // Blood ribbons trailing the throw: two dense torn strands plus a
-        // third wide, faint wisp so the trail has layered depth (core,
-        // mid, outer). Each strand is clocked around the spear axis.
-        for (int strand = 0; strand < 3; strand++) {
-            float clockDeg = strand == 1 ? 180.0f : (strand == 2 ? 90.0f : 0.0f);
-            boolean wispy = strand == 2;
-            poseStack.pushPose();
-            poseStack.translate(0, 0, -2.0f);
-            poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(clockDeg)));
-            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-            ribbon(poseStack, collector, renderType, seed ^ (0x5E00L + strand),
-                4.2f, wispy ? 0.49f : 0.36f, 0.45f,
-                1.0f, 0.18f, 0.22f, 0.85f * bodyFade * (wispy ? 0.32f : 1.0f), ds);
-            poseStack.popPose();
+            if (envelope > 0.01f) {
+                EmissionRig rig = rigFor(level, state.seed, center, age);
+                rig.tick(center, state.velocity, envelope, age);
+            }
+            pruneRigs();
         }
 
-        // One wake band eases back off the spear and dies.
-        float wake = (age * 0.12f) % 1.0f;
-        float wakeEase = wake * wake * (3.0f - 2.0f * wake);
-        float ringZ = -2.0f - wakeEase * 4.2f;
-        float ringRadius = 0.28f + wakeEase * 0.7f;
-        float ringAlpha = (float) Math.sin(wake * Math.PI) * 0.5f * bodyFade;
-        poseStack.pushPose();
-        poseStack.translate(0, 0, ringZ);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x5F01L, ringRadius, 0.0f, 0.18f,
-                0.6f, 0.95f, 0.05f, 0.20f, ringAlpha, ds));
-        poseStack.popPose();
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    /** Submit one torn ribbon in the current pose. Orchestration only. */
-    private static void ribbon(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                               long seed, float length, float width, float bend,
-                               float r, float g, float b, float alpha, float ds) {
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed, length, width, bend, r, g, b, alpha, 1.0f, ds));
+    private EmissionRig rigFor(ClientLevel level, long seed, Vec3 center, float age) {
+        EmissionRig rig = rigs.get(seed);
+        if (rig != null && (rig.level != level || age + 0.01f < rig.lastAge
+                || rig.current.distanceToSqr(center) > 64.0 * 64.0)) {
+            rigs.remove(seed);
+            rig = null;
+        }
+        if (rig == null) {
+            rig = new EmissionRig(level, seed, center);
+            rigs.put(seed, rig);
+        }
+        return rig;
+    }
+
+    private void pruneRigs() {
+        long now = System.nanoTime();
+        rigs.entrySet().removeIf(entry -> now - entry.getValue().lastSeenNanos > 5_000_000_000L);
     }
 
     /**
-     * One horizontal barb: a torn ribbon rooted at zRoot and angled by
-     * yawDeg so its length reaches out sideways and along the spear.
-     * shade picks the crossguard (0) or the brighter head fluke (1) colors.
+     * Accumulator storage for one projectile. The shared emitters sample a
+     * cluster around the current position and a trail along the segment from
+     * the previous rendered position to the current one.
      */
-    private static void barb(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                             long seed, float zRoot, float yawDeg, float shade,
-                             float length, float bodyFade, float ds) {
-        poseStack.pushPose();
-        poseStack.translate(0, 0, zRoot);
-        poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(yawDeg)));
-        if (shade > 0.5f) {
-            ribbon(poseStack, collector, renderType, seed, length, 0.10f, 0.06f,
-                1.0f, 0.10f, 0.25f, 0.95f * bodyFade, ds);
-        } else {
-            ribbon(poseStack, collector, renderType, seed, length, 0.12f, 0.12f,
-                0.85f, 0.0f, 0.15f, 0.90f * bodyFade, ds);
+    private static final class EmissionRig {
+        private final ClientLevel level;
+        private Vec3 previous;
+        private Vec3 current;
+        private Vec3 velocity = Vec3.ZERO;
+        private float lastAge = 0f;
+        private long lastSeenNanos = System.nanoTime();
+
+        private final MaterialEmitters.Emitter plasma;
+        private final MaterialEmitters.Emitter darkness;
+        private final MaterialEmitters.Emitter embers;
+        private final MaterialEmitters.Emitter flame;
+        private final MaterialEmitters.Emitter soul;
+
+        private EmissionRig(ClientLevel level, long seed, Vec3 center) {
+            this.level = level;
+            this.previous = center;
+            this.current = center;
+            int seedBase = (int) seed;
+
+            MaterialEmitters.Source cluster = this::sampleCluster;
+            MaterialEmitters.Source trail = this::sampleTrail;
+            MaterialEmitters.Source wake = this::sampleWake;
+
+            this.plasma = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(0xF20D33, 1.35f, seedBase ^ 0x5A31,
+                            Vec3.ZERO, 0.015f),
+                    cluster, 86f, 112);
+            this.darkness = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.darkness(0x26030B, 2.05f, seedBase ^ 0x5A47,
+                            Vec3.ZERO, 0.020f),
+                    wake, 48f, 68);
+            this.embers = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.ember(Vec3.ZERO, 0.050f),
+                    trail, 44f, 64);
+            this.flame = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.flame(Vec3.ZERO, 0.020f),
+                    cluster, 28f, 44);
+            this.soul = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.soul(0xFFD9E6, 1.05f, seedBase ^ 0x5A61,
+                            Vec3.ZERO, 0.020f),
+                    cluster, 26f, 42);
         }
-        poseStack.popPose();
+
+        private void tick(Vec3 center, Vec3 velocity, float envelope, float age) {
+            float delta = Math.min(0.05f, Math.max(0.0f, (age - lastAge) / 20.0f));
+            this.previous = this.current;
+            this.current = center;
+            this.velocity = velocity == null ? Vec3.ZERO : velocity;
+            this.lastAge = age;
+            this.lastSeenNanos = System.nanoTime();
+
+            plasma.tick(delta, envelope);
+            darkness.tick(delta, envelope * 0.85f);
+            embers.tick(delta, envelope);
+            flame.tick(delta, envelope * 0.80f);
+            soul.tick(delta, envelope * 0.70f);
+        }
+
+        private MaterialEmitters.Sample sampleCluster(RandomSource random) {
+            Vec3 back = velocity.lengthSqr() > 1.0e-6
+                    ? velocity.normalize().scale(-0.55 + random.nextDouble() * 0.80)
+                    : Vec3.ZERO;
+            Vec3 pos = current.add(back).add(jitter(random, 0.17));
+            return new MaterialEmitters.Sample(pos, velocity.scale(0.04));
+        }
+
+        private MaterialEmitters.Sample sampleTrail(RandomSource random) {
+            Vec3 pos = previous.add(current.subtract(previous).scale(random.nextDouble()))
+                    .add(jitter(random, 0.23));
+            return new MaterialEmitters.Sample(pos, velocity.scale(-0.015));
+        }
+
+        private MaterialEmitters.Sample sampleWake(RandomSource random) {
+            Vec3 back = velocity.lengthSqr() > 1.0e-6
+                    ? velocity.normalize().scale(-0.65 - random.nextDouble() * 0.85)
+                    : Vec3.ZERO;
+            Vec3 pos = current.add(back).add(jitter(random, 0.42));
+            return new MaterialEmitters.Sample(pos, velocity.scale(-0.03));
+        }
+
+        private static Vec3 jitter(RandomSource random, double extent) {
+            return new Vec3(
+                    (random.nextDouble() * 2.0 - 1.0) * extent,
+                    (random.nextDouble() * 2.0 - 1.0) * extent,
+                    (random.nextDouble() * 2.0 - 1.0) * extent);
+        }
     }
 }

@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -64,7 +64,7 @@ public class HeroicFocusEffect extends MobEffect {
             double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
 
             level.sendParticles(
-                new DbaDustOptions(0xFFD700, 1.3f), // Gold
+                DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0xFFD700, 1.3f, entity.getId() * 31 + entity.tickCount), // Gold
                 px, py, pz,
                 1, 0.0, 0.04, 0.0, 0.01
             );

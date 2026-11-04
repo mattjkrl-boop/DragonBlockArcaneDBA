@@ -1,29 +1,26 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.BraveCrossSlashEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Brave Finisher Cross Slash in Minecraft 26.2.
- * Bespoke pass: the two rolled parabola crescents are rebuilt as
- * BespokeGeometry blade arcs stood upright and rolled to plus and minus
- * 45 degrees, layered gold, cyan, and white per blade, with shard fans
- * sparking at the four arm ends and a two tone shard fan starburst in the
- * strike window where the old geometric starburst sat. The seed comes
- * from the entity UUID, which is synced state, so every client draws the
- * same cross.
+ * No-shapes pass: the renderer draws no geometry at all. The finisher
+ * reads as valor plasma and soul light shed along the two diagonal swing
+ * paths and through the effect volume, emitted through MaterialEmitters
+ * in the Brave gold theme, with a plasma burst in the strike window.
+ * Emission follows the same draw-out, envelope, and strike timing the
+ * old cross used over its real 40 tick life.
  */
 public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntity, BraveCrossSlashRenderer.CrossSlashRenderState> {
 
@@ -38,7 +35,17 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         public float age = 0;
         public int maxLifetime = 40;
         public long seed = 0;
+        public MaterialEmitters.Emitter plasmaEmitter;
+        public MaterialEmitters.Emitter coreEmitter;
+        public MaterialEmitters.Emitter soulEmitter;
+        public MaterialEmitters.Emitter vaporEmitter;
+        public long emitterSeed = Long.MIN_VALUE;
+        public ClientLevel emitterLevel;
+        public float lastAge = -1f;
+        public boolean burstFired = false;
     }
+
+    private record Basis(Vec3 forward, Vec3 right, Vec3 up) {}
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
     public boolean shouldRender(BraveCrossSlashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -72,102 +79,122 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         float progress = Math.min(1.0f, state.age / life);
         if (progress >= 1.0f) return;
 
-        // Shared lifecycle over the entity's real 40 tick life: blades draw
-        // out across the build fifth, hold through the damage pulses, then
-        // dissipate across the last 30 percent.
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
+
         float drawOut = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.2f));
         float fade = FxEnvelope.envelope(state.age, life, 0.2f, 0.3f);
+        if (fade > 0.01f) {
+            float dist = MaterialEmitters.distanceScale(new Vec3(state.x, state.y, state.z));
+            ensureEmitters(state, level);
+            float delta = frameDelta(state);
+            float e = fade * drawOut * dist;
+            state.plasmaEmitter.tick(delta, e);
+            state.coreEmitter.tick(delta, e * 0.80f);
+            state.soulEmitter.tick(delta, e * 0.75f);
+            state.vaporEmitter.tick(delta, e * 0.60f);
+        }
+
+        // Strike burst at the center during the same 0.28 to 0.62 window
+        // the old starburst pulsed in.
         float impact = strike(progress);
-        float scale = state.scale;
-        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        if (impact > 0.02f && !state.burstFired) {
+            state.burstFired = true;
+            int seed = (int) (state.seed ^ (state.seed >>> 32));
+            Vec3 center = new Vec3(state.x, state.y, state.z);
+            float s = state.scale;
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.plasma(0xFFD700, 3.0f, seed ^ 0x27D4EB2F, Vec3.ZERO, 0.30f),
+                MaterialEmitters.point(center), Math.round(26 * impact * s));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, 2.0f, seed ^ 0x165667B1, Vec3.ZERO, 0.22f),
+                MaterialEmitters.point(center), Math.round(14 * impact * s));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.soul(0x00F2FF, 2.6f, seed ^ 0x85EBCA6B, Vec3.ZERO, 0.18f)
+                    .withLifetimeFactor(0.5f),
+                MaterialEmitters.point(center), Math.round(10 * impact * s));
+        } else if (impact <= 0.02f) {
+            state.burstFired = false;
+        }
 
-        // span is the half-width of the old finisher blades; the blade arc
-        // radius is sized off it so the cross keeps its footprint.
-        float span = 4.6f * scale * drawOut;
-        float radius = span * 1.35f;
-
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-
-        // Main structure pass.
-        drawCross(poseStack, collector, KiRenderHelper.kiRenderType(),
-            state.seed, radius, span, scale, fade, impact, distScale, 1.0f, true);
-
-        // Outer layer (standard point 1): a wider, faint copy of both blades
-        // so the cross has a wispy rim around its dense core, the mod's
-        // layered translucency technique for glow.
-        drawCross(poseStack, collector, KiRenderHelper.kiAdditiveType(),
-            state.seed, radius * 1.16f, span, scale, fade, 0.0f, distScale,
-            LayeredRender.ALPHA_OUTER, false);
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    /**
-     * Composes one cross out of BespokeGeometry builders: two blade arcs
-     * rolled to an X, tip fans at the four arm ends, and, on the main pass
-     * only, the strike starburst. alphaMul scales every layer alpha for
-     * the additive pass.
-     */
-    private static void drawCross(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                                  long seed, float radius, float span, float scale,
-                                  float fade, float impact, float distScale, float alphaMul,
-                                  boolean withStarburst) {
-        // Each blade: stand the flat arc upright (rotate about X), roll it
-        // in its own plane (rotate about Z), and pull it back along its
-        // belly direction so the band straddles the origin like the old
-        // centered crescents did.
-        float[] rolls = {45.0f, -45.0f};
-        for (int b = 0; b < rolls.length; b++) {
-            long bladeSeed = seed + b * 0x9E3779B9L;
-            poseStack.pushPose();
-            poseStack.mulPose(new Matrix4f().rotation(Axis.ZP.rotationDegrees(rolls[b])));
-            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            poseStack.translate(-span * 0.55f, 0.0f, 0.0f);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.bladeArc(pose, buffer, bladeSeed, radius, 140.0f,
-                    1.0f, 0.84f, 0.0f, 0.90f * alphaMul, fade, distScale);
-                BespokeGeometry.bladeArc(pose, buffer, bladeSeed ^ 0x2B992DDFL, radius * 0.84f, 140.0f,
-                    0.0f, 0.95f, 1.0f, 0.95f * alphaMul, fade, distScale);
-                BespokeGeometry.bladeArc(pose, buffer, bladeSeed ^ 0x51ED2701L, radius * 0.72f, 140.0f,
-                    1.0f, 1.0f, 1.0f, 1.0f * alphaMul, fade, distScale);
-            });
-            poseStack.popPose();
+    private static void ensureEmitters(CrossSlashRenderState state, ClientLevel level) {
+        if (state.plasmaEmitter != null && state.emitterSeed == state.seed && state.emitterLevel == level) {
+            return;
         }
+        int seed = (int) (state.seed ^ (state.seed >>> 32));
 
-        // Tip fans at the four arm ends of the X, where the old rolled
-        // spurs quilled out from the crescent tips.
-        float arm = span * 0.66f;
-        float[][] tips = {{arm, arm}, {-arm, arm}, {arm, -arm}, {-arm, -arm}};
-        for (int t = 0; t < tips.length; t++) {
-            long tipSeed = seed ^ (0x85EBCA6BL + t * 131L);
-            float tx = tips[t][0];
-            float ty = tips[t][1];
-            poseStack.pushPose();
-            poseStack.translate(tx, ty, 0.0f);
-            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.shardFan(pose, buffer, tipSeed, 0.34f * scale,
-                    0.85f, 0.98f, 1.0f, 0.85f * alphaMul, fade, distScale);
-            });
-            poseStack.popPose();
-        }
+        // Plasma shed along the two diagonal swing paths of the finisher,
+        // sampled across the same growing span the old blades drew.
+        MaterialEmitters.Source blades = random -> {
+            Basis b = basis(state);
+            float span = span(state);
+            Vec3 diag = random.nextBoolean()
+                ? b.right().add(b.up()).normalize()
+                : b.right().subtract(b.up()).normalize();
+            double t = (random.nextDouble() * 2.0 - 1.0) * span * 0.66;
+            Vec3 center = new Vec3(state.x, state.y, state.z);
+            Vec3 pos = center.add(diag.scale(t))
+                .add(b.forward().scale((random.nextDouble() - 0.5) * 0.35));
+            Vec3 vel = b.forward().scale(0.02).add(diag.scale(t * 0.008));
+            return new MaterialEmitters.Sample(pos, vel);
+        };
+        // Soul light and vapor drifting through the whole effect volume.
+        MaterialEmitters.Source volume = random -> {
+            float span = span(state);
+            Vec3 center = new Vec3(state.x, state.y, state.z);
+            return MaterialEmitters.sphereVolume(center, Math.max(0.3, span * 0.34)).sample(random);
+        };
 
-        // Strike starburst at the center during the impact window.
-        if (withStarburst && impact > 0.02f) {
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, 0.1f);
-            poseStack.mulPose(new Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x27D4EB2FL, 1.15f * scale * impact,
-                    1.0f, 0.87f, 0.25f, 1.0f, impact, distScale);
-                BespokeGeometry.shardFan(pose, buffer, seed ^ 0x165667B1L, 1.15f * scale * impact * 0.62f,
-                    0.55f, 0.97f, 1.0f, 0.85f, impact, distScale);
-            });
-            poseStack.popPose();
-        }
+        state.plasmaEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFD700, 3.0f, seed, Vec3.ZERO, 0.05f),
+            blades, 160f, 280);
+        state.coreEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.plasma(0xFFFFFF, 2.0f, seed ^ 0x2B992DDF, Vec3.ZERO, 0.04f),
+            blades, 85f, 150);
+        // Merge wiring: soul (34 to 70 tick profile) and vapor (24 to 54)
+        // are factored toward the finisher's short host window (soul 0.5,
+        // vapor 0.6) so the cross slash does not shed an afterglow that
+        // outlives the entity by seconds. Plasma dies inside the window
+        // and is untouched.
+        state.soulEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.soul(0x00F2FF, 2.6f, seed ^ 0x51ED2701, Vec3.ZERO, 0.02f)
+                .withLifetimeFactor(0.5f),
+            volume, 55f, 110);
+        state.vaporEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.vapor(0xFFF2C0, 2.4f, seed ^ 0x85EBCA6B, new Vec3(0, 0.01, 0), 0.02f)
+                .withLifetimeFactor(0.6f),
+            volume, 32f, 70);
+        state.emitterSeed = state.seed;
+        state.emitterLevel = level;
+    }
+
+    private static float span(CrossSlashRenderState state) {
+        float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
+        float drawOut = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.2f));
+        return 4.6f * state.scale * drawOut;
+    }
+
+    private static Basis basis(CrossSlashRenderState state) {
+        Vec3 forward = Vec3.directionFromRotation(state.xRot, state.yRot);
+        Vec3 right = forward.cross(new Vec3(0, 1, 0));
+        right = right.lengthSqr() < 1e-6 ? new Vec3(1, 0, 0) : right.normalize();
+        Vec3 up = right.cross(forward).normalize();
+        return new Basis(forward, right, up);
+    }
+
+    private static float frameDelta(CrossSlashRenderState state) {
+        float prev = state.lastAge;
+        state.lastAge = state.age;
+        if (prev < 0f) return 1f / 20f;
+        float d = state.age - prev;
+        if (d <= 0f || d > 3f) return 1f / 20f;
+        return d / 20f;
     }
 
     private static float strike(float progress) {

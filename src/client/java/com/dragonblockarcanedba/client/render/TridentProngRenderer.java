@@ -1,26 +1,39 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.TridentProngEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
- * One shot: three barbed crimson needles in trident formation.
- * Bespoke pass: each needle is the same crossed crescent blade the swarm
- * shards use (TridentShardRenderer.submitBlade, BespokeGeometry.bladeArc),
- * smaller, with a shardFan barb burst at its base and a tornRibbon wake
- * that dies on impact. The seed comes from the entity UUID, so the
- * formation is identical on every client. No local geometry helpers remain.
+ * One shot: three needles in trident formation.
+ * No-shapes pass: the renderer draws no geometry at all. Each needle head
+ * is a dense hellfire plasma emission cluster at the same formation
+ * offsets, radii, intro fade, and post-impact dissolve the crescent blades
+ * used, with flame at the heads, embers at the needle bases where the
+ * barbs were, and a plasma trail shed behind each needle. The seed comes
+ * from the entity UUID, so the formation is identical on every client.
  */
 public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, TridentProngRenderer.ProngState> {
+
+    /** Shell color of the old needles, (0.36, 0.02, 0.04) as an RGB int. */
+    private static final int SHELL = 0x5C050A;
+    /** Hot core color of the old needles, (0.96, 0.24, 0.08) as an RGB int. */
+    private static final int CORE = 0xF53D14;
+    private static final float[] OFFSETS = { -0.26f, 0.0f, 0.26f };
+    private static final float[] RADII = { 0.95f, 1.25f, 0.95f };
+
     public TridentProngRenderer(EntityRendererProvider.Context context) {
         super(context);
     }
@@ -32,6 +45,7 @@ public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, Tri
         public int dieTick;
         /** Synced shape seed from the entity UUID. */
         public long seed = 0;
+        public UUID uuid;
     }
 
     public boolean shouldRender(TridentProngEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -55,11 +69,17 @@ public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, Tri
         state.age = entity.tickCount + partialTick;
         state.dieTick = entity.getDieTick();
         state.seed = entity.getUUID().getMostSignificantBits() ^ entity.getUUID().getLeastSignificantBits();
+        state.uuid = entity.getUUID();
     }
 
     @Override
     public void submit(ProngState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType type = KiRenderHelper.kiRenderType();
+        super.submit(state, poseStack, collector, cameraState);
+
+        ClientLevel level = Minecraft.getInstance() == null ? null : Minecraft.getInstance().level;
+        if (level == null || state.uuid == null) return;
+
+        // Same intro fade and post-impact dissolve the geometry version used.
         float intro = Math.min(1.0f, state.age / 2.0f);
         float fade = intro * intro * (3.0f - 2.0f * intro);
         if (state.dieTick > 0) {
@@ -67,50 +87,106 @@ public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, Tri
             float ease = t * t * (3.0f - 2.0f * t);
             fade *= 1.0f - ease;
         }
-        final float needleFade = fade;
-        final float segScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
-            cameraState, state.x, state.y, state.z);
-        float[] offsets = { -0.26f, 0.0f, 0.26f };
-        float[] radii = { 0.95f, 1.25f, 0.95f };
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        for (int i = 0; i < 3; i++) {
-            final long needleSeed = state.seed + i * 13L;
-            poseStack.pushPose();
-            poseStack.translate(offsets[i], 0.0, 0.0);
+        if (fade <= 0.01f) return;
 
-            // The needle: crossed crescent blade, slimmer in the horizontal
-            // plane so the three prongs stay distinct in formation.
-            TridentShardRenderer.submitBlade(poseStack, collector, type, needleSeed, radii[i],
-                0.36f, 0.02f, 0.04f, 0.96f * needleFade,
-                0.96f, 0.24f, 0.08f, 0.95f * needleFade,
-                0.6f, segScale);
-
-            // Barbs at the needle base.
-            poseStack.pushPose();
-            poseStack.translate(0.0, 0.0, -0.08);
-            collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-                BespokeGeometry.shardFan(pose, buffer, needleSeed + 5, 0.16f,
-                    1.0f, 0.26f, 0.1f, 0.85f * needleFade, 1.0f, segScale);
-            });
-            poseStack.popPose();
-
-            // Wake: two torn ribbons trailing behind the needle.
-            poseStack.pushPose();
-            poseStack.translate(0.0, 0.0, -0.1);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-                BespokeGeometry.tornRibbon(pose, buffer, needleSeed + 21, 0.95f, 0.12f, 0.04f,
-                    0.7f, 0.03f, 0.06f, 0.5f, needleFade, segScale);
-                BespokeGeometry.tornRibbon(pose, buffer, needleSeed + 27, 0.95f, 0.05f, 0.02f,
-                    1.0f, 0.18f, 0.06f, 0.75f, needleFade, segScale);
-            });
-            poseStack.popPose();
-
-            poseStack.popPose();
+        Emission emission = EMISSIONS.get(state.uuid);
+        if (emission == null || emission.level != level) {
+            emission = new Emission(level, (int) state.seed);
+            EMISSIONS.put(state.uuid, emission);
+            pruneEmissions();
         }
-        poseStack.popPose();
-        super.submit(state, poseStack, collector, cameraState);
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        Vec3 forward = Vec3.directionFromRotation(state.xRot, state.yRot);
+        double yawRad = Math.toRadians(state.yRot);
+        Vec3 right = new Vec3(Math.cos(yawRad), 0, Math.sin(yawRad));
+        for (int i = 0; i < 3; i++) {
+            emission.centers[i] = center.add(right.scale(OFFSETS[i]));
+        }
+        emission.forward = forward;
+        float envelope = fade * MaterialEmitters.distanceScale(center);
+        emission.tick(state.age, envelope);
+    }
+
+    /**
+     * Per shot emitter set, one cluster group per needle. The sources are
+     * data only: they read the needle centers and flight direction at
+     * sample time and hand MaterialEmitters points at the heads, at the
+     * needle bases, and along the wake paths. Nothing here draws anything.
+     */
+    private static final class Emission {
+        final ClientLevel level;
+        final Vec3[] centers = { Vec3.ZERO, Vec3.ZERO, Vec3.ZERO };
+        Vec3 forward = new Vec3(0, 0, 1);
+        float lastAge = Float.NaN;
+        long lastSeenNanos = System.nanoTime();
+        final MaterialEmitters.Emitter[] clusters = new MaterialEmitters.Emitter[3];
+        final MaterialEmitters.Emitter[] flames = new MaterialEmitters.Emitter[3];
+        final MaterialEmitters.Emitter[] trails = new MaterialEmitters.Emitter[3];
+        final MaterialEmitters.Emitter[] embers = new MaterialEmitters.Emitter[3];
+
+        Emission(ClientLevel level, int seed) {
+            this.level = level;
+            for (int i = 0; i < 3; i++) {
+                final int idx = i;
+                MaterialEmitters.Source headSource = random -> {
+                    Vec3 c = this.centers[idx];
+                    double r = 0.20 * RADII[idx];
+                    return new MaterialEmitters.Sample(new Vec3(
+                        c.x + (random.nextDouble() * 2.0 - 1.0) * r,
+                        c.y + (random.nextDouble() * 2.0 - 1.0) * r,
+                        c.z + (random.nextDouble() * 2.0 - 1.0) * r), Vec3.ZERO);
+                };
+                MaterialEmitters.Source baseSource = random -> {
+                    Vec3 c = this.centers[idx].subtract(this.forward.scale(0.10));
+                    return new MaterialEmitters.Sample(new Vec3(
+                        c.x + (random.nextDouble() * 2.0 - 1.0) * 0.10,
+                        c.y + (random.nextDouble() * 2.0 - 1.0) * 0.10,
+                        c.z + (random.nextDouble() * 2.0 - 1.0) * 0.10), Vec3.ZERO);
+                };
+                MaterialEmitters.Source trailSource = random -> {
+                    double t = random.nextDouble();
+                    Vec3 p = this.centers[idx].subtract(this.forward.scale(0.08 + 0.90 * t));
+                    return new MaterialEmitters.Sample(p, Vec3.ZERO);
+                };
+                clusters[i] = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(CORE, 1.25f * RADII[idx], seed + idx * 13, Vec3.ZERO, 0.02f),
+                    headSource, 85f * RADII[idx], 150);
+                flames[i] = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.flame(new Vec3(0, 0.02, 0), 0.03f),
+                    headSource, 38f * RADII[idx], 70);
+                trails[i] = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(SHELL, 0.95f * RADII[idx], seed + idx * 13 + 21, Vec3.ZERO, 0.015f),
+                    trailSource, 65f * RADII[idx], 120);
+                embers[i] = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.ember(Vec3.ZERO, 0.06f),
+                    baseSource, 20f, 40);
+            }
+        }
+
+        void tick(float age, float envelope) {
+            lastSeenNanos = System.nanoTime();
+            if (Float.isNaN(lastAge)) {
+                lastAge = age;
+                return;
+            }
+            float delta = Math.min(0.25f, Math.max(0f, (age - lastAge) / 20f));
+            lastAge = age;
+            if (delta <= 0f || envelope <= 0.01f) return;
+            for (int i = 0; i < 3; i++) {
+                clusters[i].tick(delta, envelope);
+                flames[i].tick(delta, envelope * 0.85f);
+                trails[i].tick(delta, envelope);
+                embers[i].tick(delta, envelope * 0.7f);
+            }
+        }
+    }
+
+    private static final Map<UUID, Emission> EMISSIONS = new HashMap<>();
+
+    /** Drop emitter sets for shots that have not rendered in a while. */
+    private static void pruneEmissions() {
+        if (EMISSIONS.size() < 48) return;
+        long cutoff = System.nanoTime() - 30_000_000_000L;
+        EMISSIONS.values().removeIf(e -> e.lastSeenNanos < cutoff);
     }
 }

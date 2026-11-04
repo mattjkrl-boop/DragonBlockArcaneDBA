@@ -2,11 +2,13 @@ package com.dragonblockarcanedba.client.fx;
 
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.network.AtmospherePayload;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.client.Minecraft;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -16,11 +18,12 @@ import java.util.List;
 /**
  * Client side of AtmosphereServer. Bespoke pass (BESPOKE-STANDARD rule 5):
  * the client renders weapon storms itself, because the server no longer
- * touches world weather. Three local pieces per storm volume:
+ * touches world weather. The local pieces per storm volume are:
  * gloom, lerped toward the strongest source the player stands in and read
- * by DbaPostFx for its grade; rain, the mod's RAIN particles falling inside
- * the volume around the player; and thunder, DbaSounds thunder scheduled
- * at random points in THUNDER volumes. No hard cuts anywhere.
+ * by DbaPostFx for its grade; RAIN streaks falling inside the volume around
+ * the player, deepened by vapor precipitation, ground mist, wind driven
+ * dust, and darkness material; and thunder, DbaSounds thunder scheduled at
+ * random points in THUNDER volumes. No hard cuts anywhere.
  */
 public final class AtmosphereClient {
     private AtmosphereClient() {}
@@ -102,6 +105,7 @@ public final class AtmosphereClient {
                 double y = playerPos.y + 13.0 + rand.nextDouble() * 5.0;
                 mc.level.addParticle(DbaParticles.RAIN, x, y, z, 0.0, -2.4, 0.0);
             }
+            emitMaterialLayers(mc, s, playerPos, reach);
         }
         if (s.thunder && clientTick >= s.nextThunderTick) {
             s.nextThunderTick = clientTick + 90 + rand.nextInt(170);
@@ -114,6 +118,80 @@ public final class AtmosphereClient {
                 rand.nextBoolean() ? DbaSounds.THUNDER_CRACK : DbaSounds.THUNDER_DARK,
                 SoundSource.WEATHER, 1.1f, 0.92f + rand.nextFloat() * 0.16f, false);
         }
+    }
+
+    /**
+     * Material depth over the rain streaks: a falling vapor veil in the same
+     * clipped cylinder, ground mist and wind driven dust on the terrain
+     * under the player, and darkness material drifting through the gloom
+     * volume. The post grade keeps its original strength and lerp; these
+     * particles give the gloom a body instead of leaving it as a flat
+     * screen tint.
+     */
+    private static void emitMaterialLayers(Minecraft mc, Source s, Vec3 playerPos, double reach) {
+        int seed = Double.hashCode(s.center.x) * 31 + Double.hashCode(s.center.z);
+
+        MaterialEmitters.Source precipitation = random -> {
+            for (int attempt = 0; attempt < 6; attempt++) {
+                double x = playerPos.x + (random.nextDouble() * 2.0 - 1.0) * reach;
+                double z = playerPos.z + (random.nextDouble() * 2.0 - 1.0) * reach;
+                double dx = x - s.center.x, dz = z - s.center.z;
+                if (dx * dx + dz * dz <= s.radius * s.radius) {
+                    double y = playerPos.y + 13.0 + random.nextDouble() * 5.0;
+                    return new MaterialEmitters.Sample(new Vec3(x, y, z), Vec3.ZERO);
+                }
+            }
+            return new MaterialEmitters.Sample(
+                    new Vec3(playerPos.x, playerPos.y + 15.0, playerPos.z), Vec3.ZERO);
+        };
+        MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.VAPOR, 0xA9C6DE, 0.72f,
+                        seed, new Vec3(0.0, -1.05, 0.0), 0.10f),
+                precipitation, 3);
+
+        if (clientTick % 4 != 0) return;
+
+        MaterialEmitters.Source groundArea = random -> {
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = Math.sqrt(random.nextDouble()) * Math.min(10.0, s.radius);
+            double x = playerPos.x + Math.cos(ang) * rr;
+            double z = playerPos.z + Math.sin(ang) * rr;
+            double dx = x - s.center.x, dz = z - s.center.z;
+            if (dx * dx + dz * dz > s.radius * s.radius) {
+                x = playerPos.x;
+                z = playerPos.z;
+            }
+            int groundY = mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    (int) Math.floor(x), (int) Math.floor(z));
+            return new MaterialEmitters.Sample(new Vec3(x, groundY + 0.22, z), Vec3.ZERO);
+        };
+        MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.MIST, 0x93A9BC, 1.55f,
+                        seed + 41, new Vec3(0.015, 0.005, 0.0), 0.025f),
+                groundArea, 3);
+        MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.DUST, 0x8E9BA6, 0.85f,
+                        seed + 67, new Vec3(0.20, 0.012, 0.03), 0.045f),
+                groundArea, 2);
+
+        MaterialEmitters.Source gloomVolume = random -> {
+            for (int attempt = 0; attempt < 6; attempt++) {
+                double half = Math.min(7.0, s.radius);
+                double x = playerPos.x + (random.nextDouble() * 2.0 - 1.0) * half;
+                double y = playerPos.y + 1.5 + (random.nextDouble() * 2.0 - 1.0) * 1.7;
+                double z = playerPos.z + (random.nextDouble() * 2.0 - 1.0) * half;
+                double dx = x - s.center.x, dz = z - s.center.z;
+                if (dx * dx + dz * dz <= s.radius * s.radius) {
+                    return new MaterialEmitters.Sample(new Vec3(x, y, z), Vec3.ZERO);
+                }
+            }
+            return new MaterialEmitters.Sample(
+                    new Vec3(playerPos.x, playerPos.y + 1.5, playerPos.z), Vec3.ZERO);
+        };
+        MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.DARKNESS, 0x0A0D13, 1.15f,
+                        seed + 97, Vec3.ZERO, 0.018f),
+                gloomVolume, s.gloom >= 0.7f ? 2 : 1);
     }
 
     public static boolean gloomActive() {

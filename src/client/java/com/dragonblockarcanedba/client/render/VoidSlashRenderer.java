@@ -1,28 +1,29 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.VoidSlashEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Void Slash in Minecraft 26.2.
- * Bespoke pass: the crescent is drawn with the shared BespokeGeometry
- * toolkit instead of the old hand-rolled equal-segment rings. Layered
- * bladeArc sweeps (dark aura, violet body, cyan core, white edge) carry
- * seeded nicks and noise-swollen profiles, and two tornRibbon smears
- * trail behind the cut where the old ring extrusion used to slip back.
- * The seed comes from the entity UUID, so every client draws the same
- * nicks. The synced tilt finally leans the crescent, as it was always
- * extracted to do.
+ * No-shapes pass: the crescent is no longer drawn. The cut plane and its
+ * synced tilt survive only as emission data: dense void plasma sampled
+ * along the arc the bladeArc layers used to trace, a cyan plasma core
+ * inside it, a thin white soul edge, and dark vapor shed behind the cut
+ * where the wake smears trailed. The open, close, and fade timing and the
+ * radius derivation are unchanged, and the seed still comes from the
+ * entity UUID.
  */
 public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlashRenderer.SlashRenderState> {
     public VoidSlashRenderer(EntityRendererProvider.Context context) {
@@ -66,73 +67,109 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
         state.ez = entity.getZ();
     }
 
+    /** Per-entity emission streams, keyed by the entity seed. Emission points are data only. */
+    private static final class Streams {
+        final ClientLevel level;
+        final MaterialEmitters.Emitter cut;
+        final MaterialEmitters.Emitter core;
+        final MaterialEmitters.Emitter edge;
+        final MaterialEmitters.Emitter wake;
+        long lastNanos = 0L;
+        long lastSeenNanos = 0L;
+        Vec3 center = Vec3.ZERO;
+        Vec3 forward = new Vec3(0, 0, 1);
+        Vec3 axisA = new Vec3(1, 0, 0);
+        Vec3 axisB = new Vec3(0, 1, 0);
+        float radius = 1f;
+
+        private Vec3 arcPoint(net.minecraft.util.RandomSource random, double radiusScale, double jitter) {
+            double theta = (random.nextDouble() * 2.0 - 1.0) * 1.35;
+            double rr = radius * radiusScale * (1.0 + (random.nextDouble() * 2.0 - 1.0) * jitter);
+            return center.add(axisA.scale(Math.sin(theta) * rr)).add(axisB.scale(Math.cos(theta) * rr));
+        }
+
+        Streams(ClientLevel level, long seed) {
+            this.level = level;
+            int s = (int) seed;
+            this.cut = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0x9905F2, 2.6f, s ^ 0xA2, Vec3.ZERO, 0.01f),
+                random -> new MaterialEmitters.Sample(arcPoint(random, 1.16, 0.12), forward.scale(-0.12)), 210f, 240);
+            this.core = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0x26EBFF, 1.5f, s ^ 0xA3, Vec3.ZERO, 0.008f),
+                random -> new MaterialEmitters.Sample(arcPoint(random, 1.04, 0.05), forward.scale(-0.10)), 130f, 150);
+            this.edge = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.soul(0xFFFFFF, 0.85f, s ^ 0xA4, Vec3.ZERO, 0.006f),
+                random -> new MaterialEmitters.Sample(arcPoint(random, 0.96, 0.02), forward.scale(-0.08)), 80f, 90);
+            this.wake = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0x2B004D, 3.0f, s ^ 0xB1, Vec3.ZERO, 0.015f),
+                random -> {
+                    Vec3 p = center.add(forward.scale(-random.nextDouble() * 1.6))
+                        .add(axisA.scale((random.nextDouble() * 2.0 - 1.0) * radius * 1.3))
+                        .add(axisB.scale((random.nextDouble() * 2.0 - 1.0) * radius * 1.3));
+                    return new MaterialEmitters.Sample(p, forward.scale(-0.05));
+                }, 60f, 70);
+        }
+    }
+
+    private final Map<Long, Streams> streams = new HashMap<>();
+
     @Override
     public void submit(SlashRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
         float progress = Math.min(1.0f, state.age / 40.0f);
         float open = ease(Math.min(1.0f, state.age / 6.0f));
         float close = ease(Math.max(0.0f, (progress - 0.70f) / 0.30f));
         float fade = (1.0f - close) * open;
         if (fade <= 0.01f) {
+            streams.remove(state.seed);
             super.submit(state, poseStack, collector, cameraState);
             return;
         }
 
-        float radius = (1.45f + 0.40f * open) * (1.0f - 0.62f * close);
-        float edgeLeft = 1.0f - close;
-        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-        long seed = state.seed;
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        // The crescent leans toward its synced tilt; the old renderer
-        // extracted the tilt and never drew with it.
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(state.tiltRight ? -15.0f : 15.0f)));
+        Vec3 center = new Vec3(state.ex, state.ey, state.ez);
+        float ds = MaterialEmitters.distanceScale(center);
+        float env = fade * ds;
+        if (env <= 0.01f) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
-        // Wake smears first (behind the cut): two torn ribbons crossing
-        // behind the arc plane, the follow-through the old extruded ring
-        // trail used to give. Length runs along local -Z in both frames.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0xB1L,
-                radius * 0.55f, radius * 1.5f, radius * 0.10f,
-                0.08f, 0.0f, 0.16f, 0.55f * fade, 1.0f, ds));
-        poseStack.popPose();
+        Streams found = streams.get(state.seed);
+        if (found == null || found.level != level) {
+            found = new Streams(level, state.seed);
+            streams.put(state.seed, found);
+        }
+        final Streams s = found;
+        long now = System.nanoTime();
+        float delta = s.lastNanos == 0L ? 1f / 60f : Math.min(0.05f, (now - s.lastNanos) / 1_000_000_000f);
+        s.lastNanos = now;
+        s.lastSeenNanos = now;
+        streams.values().removeIf(other -> other != s && now - other.lastSeenNanos > 4_000_000_000L);
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90.0f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0xB2L,
-                radius * 0.40f, radius * 1.3f, radius * 0.06f,
-                0.60f, 0.05f, 0.95f, 0.35f * fade, 1.0f, ds));
-        poseStack.popPose();
+        s.center = center;
+        s.forward = Vec3.directionFromRotation(state.xRot, state.yRot);
+        Vec3 right = s.forward.cross(new Vec3(0, 1, 0));
+        right = right.lengthSqr() < 0.001 ? new Vec3(1, 0, 0) : right.normalize();
+        Vec3 up = right.cross(s.forward).normalize();
+        // The crescent leans toward its synced tilt, as the old renderer
+        // drew it; the tilt now rotates the emission plane instead.
+        double tilt = Math.toRadians(state.tiltRight ? -15.0 : 15.0);
+        double cos = Math.cos(tilt);
+        double sin = Math.sin(tilt);
+        s.axisA = right.scale(cos).add(up.scale(sin));
+        s.axisB = up.scale(cos).add(right.scale(-sin));
+        s.radius = (1.45f + 0.40f * open) * (1.0f - 0.62f * close);
 
-        // The crescent itself: bladeArc layers in the cut plane. The
-        // builder draws in the XZ plane, so one X rotation lays it into
-        // the slash's XY plane facing the travel direction.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xA1L, radius * 1.30f, 360.0f,
-                0.08f, 0.0f, 0.16f, 0.80f * fade, 1.0f, ds);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xA2L, radius * 1.14f, 360.0f,
-                0.60f, 0.05f, 0.95f, 0.95f * fade, 1.0f, ds);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xA3L, radius * 1.04f, 360.0f,
-                0.15f, 0.92f, 1.0f, fade, 1.0f, ds);
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xA4L, radius * 0.96f, 360.0f,
-                1.0f, 1.0f, 1.0f, fade, 1.0f, ds);
-            if (edgeLeft > 0.03f) {
-                BespokeGeometry.bladeArc(pose, buffer, seed ^ 0xA5L, radius * 1.36f, 300.0f,
-                    0.20f, 0.95f, 1.0f, fade * edgeLeft, 1.0f, ds);
-            }
-        });
-        poseStack.popPose();
+        s.cut.tick(delta, env * 0.95f);
+        s.core.tick(delta, env);
+        s.edge.tick(delta, env * (1.0f - close));
+        s.wake.tick(delta, env * 0.55f);
 
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 

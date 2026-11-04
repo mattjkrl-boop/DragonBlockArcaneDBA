@@ -1,27 +1,33 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.GrandClashSparkEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Grand Clash Spark in Minecraft 26.2.
- * Bespoke pass: the deflection burst is built only from BespokeGeometry
- * builders, seeded from the entity UUID so every client draws the same
- * silhouette (the old per-frame java.util.Random is gone).
- * - A plume core flash in white-gold
- * - Two shardFan spike stars, one flat and one standing, for 3D volume
- * - Two brokenVortexBand shock rings twisting against each other
- * - An outer shardFan whose radius grows with the burst progress
+ * No-shapes conversion: this renderer draws no geometry. A projectile
+ * deflection reads as a short material burst at the clash point: dense
+ * white-gold valor plasma, steel sparks thrown outward, pale vapor, and a
+ * little stone dust. The 24 tick life and the shared lifecycle envelope
+ * are unchanged; only the presentation moved to material emission.
  */
 public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntity, GrandClashSparkRenderer.ClashRenderState> {
+
+    private final Map<String, Stream> streams = new HashMap<>();
 
     public GrandClashSparkRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -32,6 +38,7 @@ public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntit
         public float age = 0;
         public int maxLifetime = 10;
         public long seed = 0;
+        public int entityId = -1;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -56,77 +63,84 @@ public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntit
         state.age = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.entityId = entity.getId();
     }
 
     @Override
     public void submit(ClashRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
-        // Shared envelope: builds over the first 20 percent of the 24 tick
-        // life, peaks, then dissipates over the last 45 percent. The old
-        // 10 tick version sat at full alpha on tick one and only faded.
         float fade = com.dragonblockarcanedba.util.FxEnvelope.envelope(
             state.age, state.maxLifetime, 0.20f, 0.45f);
         if (fade <= 0.01f) return;
+
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
+
         float grow = com.dragonblockarcanedba.util.FxEnvelope.smoothstep(
             Math.min(1.0f, state.age / (state.maxLifetime * 0.20f)));
         float scale = state.scale * (0.55f + grow * 1.25f);
-        float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
-            cameraState, state.x, state.y, state.z);
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float envelope = fade * MaterialEmitters.distanceScale(center);
+        int seed = (int) state.seed;
+        String base = state.entityId + ":";
 
-        poseStack.pushPose();
+        emit(level, base + "plasma",
+            MaterialEmitters.Preset.plasma(0xFFF3B0, 1.85f * state.scale, seed,
+                Vec3.ZERO, 0.20f),
+            MaterialEmitters.sphereVolume(center, 0.48 * scale),
+            285f, 340, state.age, envelope);
+        emit(level, base + "sparks",
+            MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.34f),
+            MaterialEmitters.sphereVolume(center, 0.30 * scale),
+            195f, 240, state.age, envelope);
+        emit(level, base + "vapor",
+            MaterialEmitters.Preset.vapor(0xFFE9A8, 3.4f * state.scale, seed ^ 0x9A90,
+                new Vec3(0.0, 0.025, 0.0), 0.055f),
+            MaterialEmitters.sphereVolume(center, 0.82 * scale),
+            62f, 88, state.age, envelope * 0.78f);
+        emit(level, base + "dust",
+            MaterialEmitters.Preset.dust(0x8A7D68, 1.20f, seed ^ 0xD057,
+                Vec3.ZERO, 0.11f),
+            MaterialEmitters.sphereVolume(center, 0.62 * scale),
+            54f, 76, state.age, envelope * 0.82f);
 
-        SubmitNodeCollector.CustomGeometryRenderer geometry = (pose, buffer) -> {
-            // 1. Core flash: a white-gold plume stack.
-            BespokeGeometry.plume(pose, buffer, state.seed, 0.85f * scale, 1.1f * scale,
-                1.0f, 1.0f, 0.95f, fade, 1.0f, distScale);
-
-            // 2. Spike star lying flat, plus a standing copy for volume.
-            BespokeGeometry.shardFan(pose, buffer, state.seed ^ 0x5011L, 2.2f * scale,
-                1.0f, 0.95f, 0.40f, fade * 0.9f, 1.0f, distScale);
-            PoseStack standing = new PoseStack();
-            standing.last().pose().set(pose.pose());
-            standing.last().normal().set(pose.normal());
-            standing.mulPose(new org.joml.Matrix4f().rotation(
-                com.mojang.math.Axis.XP.rotationDegrees(90.0f)));
-            BespokeGeometry.shardFan(standing.last(), buffer, state.seed ^ 0x5022L, 1.9f * scale,
-                1.0f, 0.98f, 0.80f, fade * 0.8f, 1.0f, distScale);
-
-            // 3. Dual counter-twisting broken shock rings.
-            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0xB101L,
-                1.6f * scale, -0.12f * scale, 0.22f * scale, state.age * 0.5f,
-                1.0f, 0.85f, 0.15f, fade * 0.85f, distScale);
-            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0xB202L,
-                1.2f * scale, -0.08f * scale, 0.16f * scale, -state.age * 0.8f,
-                1.0f, 0.98f, 0.70f, fade * 0.95f, distScale);
-
-            // 4. Outer flying shards: a fan whose reach grows with progress
-            // (scale breathing, the silhouette itself stays seeded and still).
-            BespokeGeometry.shardFan(pose, buffer, state.seed ^ 0xF111L,
-                (1.3f + progress * 2.2f) * scale,
-                1.0f, 0.90f, 0.30f, fade * 0.8f, 1.0f, distScale);
-        };
-
-        // The burst reads best with volume from any angle: submit once flat,
-        // then again rotated 90 degrees around X so a second star stands up.
-        collector.submitCustomGeometry(poseStack, renderType, geometry);
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotationX((float) Math.PI / 2.0f));
-        collector.submitCustomGeometry(poseStack, renderType, geometry);
-        poseStack.popPose();
-
-        // Additive halo pass (light touch for a short burst): an oversized
-        // faint plume and one wide broken ring so the deflection blooms.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.plume(pose, buffer, state.seed ^ 0xAA10L,
-                1.35f * scale, 1.7f * scale,
-                1.0f, 1.0f, 0.95f, fade * 0.22f, 1.0f, distScale);
-            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0xAA20L,
-                1.84f * scale, -0.15f * scale, 0.25f * scale, state.age * 0.5f,
-                1.0f, 0.85f, 0.15f, fade * 0.14f, distScale);
-        });
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private void emit(ClientLevel level, String key, MaterialEmitters.Preset preset,
+                      MaterialEmitters.Source source, float ratePerSecond, int budgetPerSecond,
+                      float age, float envelope) {
+        if (envelope <= 0.01f) return;
+        long now = System.nanoTime();
+        streams.entrySet().removeIf(entry -> now - entry.getValue().lastSeenNanos > 30_000_000_000L);
+        Stream stream = streams.computeIfAbsent(key, ignored -> new Stream());
+        if (stream.emitter == null || stream.level != level) {
+            stream.emitter = new MaterialEmitters.Emitter(level, preset, stream.source, ratePerSecond, budgetPerSecond);
+            stream.level = level;
+            stream.lastAge = Float.NaN;
+        }
+        stream.source.delegate = source;
+        float delta = Float.isNaN(stream.lastAge) || age < stream.lastAge
+            ? 1.0f / 60.0f
+            : Math.min(0.10f, Math.max(0.0f, (age - stream.lastAge) / 20.0f));
+        stream.lastAge = age;
+        stream.lastSeenNanos = now;
+        stream.emitter.tick(delta, envelope);
+    }
+
+    private static final class Stream {
+        private final MutableSource source = new MutableSource();
+        private MaterialEmitters.Emitter emitter;
+        private ClientLevel level;
+        private float lastAge = Float.NaN;
+        private long lastSeenNanos;
+    }
+
+    private static final class MutableSource implements MaterialEmitters.Source {
+        private MaterialEmitters.Source delegate = MaterialEmitters.point(Vec3.ZERO);
+
+        @Override
+        public MaterialEmitters.Sample sample(RandomSource random) {
+            return delegate.sample(random);
+        }
     }
 }

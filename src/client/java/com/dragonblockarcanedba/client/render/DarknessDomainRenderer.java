@@ -1,33 +1,28 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.DarknessDomainEntity;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Entity Renderer for Darkness Sword (World of Darkness & Abyssal Eclipse) in Minecraft 26.2.
+ * Entity Renderer for Darkness Domain in Minecraft 26.2.
  *
- * Bespoke pass: the hand-rolled lat/long dome mesh, ring helper, and shard
- * pyramid helper are gone. The dome is two counter-rotating
- * BespokeGeometry.displacedDome shells (noise-displaced, seeded from the
- * entity UUID), the ground whirlpools and vortex column are
- * brokenVortexBand tubes, and the 16 orbiting spires are branch shards
- * leaning inward on the same orbit math as before. The shared
- * LayeredRender.drawVortexBands call around the funnel is unchanged.
- * Lightning is still not drawn here: the domain entity fires real branched
- * BoltEntity strikes, which have their own renderer. Every alpha is
- * multiplied by the entity's synced lifecycle fade, and segment counts
- * scale with camera distance through the shared standard.
+ * No-shapes pass: the dome shells, ground bands, orbiting spires, vortex
+ * tubes, rim bands, and anchor glow are gone. The domain is now a volume
+ * of darkness motes and soul vapor under the old dome profile, a sparse
+ * vapor film sampled on that boundary, ground swirl material, and a
+ * central column of hellish plasma. The synced radius and lifecycle fade
+ * still drive the whole presentation. Lightning remains with the real
+ * BoltEntity strikes fired by the domain entity.
  */
 public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity, DarknessDomainRenderer.DarknessDomainRenderState> {
 
@@ -41,6 +36,10 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
         public float fade = 0;
         public double px = 0, py = 0, pz = 0;
         public long seed = 0;
+        public MaterialEmitters.Emitter[] emitters;
+        public long emitterSeed = Long.MIN_VALUE;
+        public ClientLevel emitterLevel;
+        public float lastEmissionAge = Float.NaN;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -72,134 +71,143 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
 
     @Override
     public void submit(DarknessDomainRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        emitMaterials(state);
         super.submit(state, poseStack, collector, cameraState);
+    }
 
-        final float radius = state.radius;
-        final float age = state.age;
-        // Lifecycle fade from the entity: the dome builds in and dissipates,
-        // it never pops. Distance scale steps segment counts down and
-        // softens alpha far away.
-        final float fade = Math.max(0.0f, Math.min(1.0f, state.fade));
-        if (fade <= 0.01f) {
+    private static void emitMaterials(DarknessDomainRenderState state) {
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
             return;
         }
-        final float ds = LayeredRender.distScale(cameraState, state.px, state.py, state.pz);
-        final float aMul = fade * (float) Math.sqrt(ds);
-        final long seed = state.seed;
-        final float domeHeight = Math.min(26.0f, radius * 1.35f);
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
-        // 1. Quad-tier counter-rotating ground whirlpools: broken vortex
-        // bands hugging the floor, each in its own rotated pose so the gap
-        // patterns sweep at the old per-band speeds and directions.
-        for (int band = 0; band < 4; band++) {
-            final float bandRadius = radius * (0.30f + band * 0.23f) * 0.915f;
-            final float bandY = 0.08f + (band * 0.05f);
-            final float rotDeg = age * (band % 2 == 0 ? 1.0f : -1.3f) * (10.0f + band * 5.0f);
-            final float bandAlpha = (0.65f - (band * 0.08f)) * aMul;
-            final float red = band % 2 == 0 ? 0.65f : 0.20f;
-            final float blue = band % 2 == 0 ? 0.95f : 0.45f;
-            final long bandSeed = seed ^ (0xBA9DL + band * 977L);
-            final float bandTwist = band % 2 == 0 ? 1.5f : -1.9f;
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(rotDeg)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.brokenVortexBand(pose, buffer, bandSeed, bandRadius, bandY, bandY + 0.06f,
-                    bandTwist, red, 0.02f, blue, bandAlpha, ds);
-            });
-            poseStack.popPose();
+        float fade = Math.max(0.0f, Math.min(1.0f, state.fade));
+        if (fade <= 0.01f) {
+            state.lastEmissionAge = state.age;
+            return;
         }
 
-        // 2. The dome: two displaced dome shells counter-rotating. The
-        // outer shell sits at ground level, the inner crimson one a block
-        // up and slightly smaller, as the old inner mesh did.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 3.5f)));
-        poseStack.translate(0, 1.0f, 0);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD09E1L, radius,
-                0.15f, 0.0f, 0.24f, 0.55f, aMul, ds);
-        });
-        poseStack.popPose();
-
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-age * 5.5f)));
-        poseStack.translate(0, 2.0f, 0);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD09E2L, radius * 0.85f,
-                0.78f, 0.03f, 0.45f, 0.39f, aMul, ds);
-        });
-        poseStack.popPose();
-
-        // 3. 16 orbiting jagged obsidian spires leaning inward, drawn as
-        // branch shards on the unchanged orbit math.
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            int spireCount = 16;
-            float spireOrbitR = radius * 0.92f;
-            float spireRot = age * 12.0f;
-            for (int i = 0; i < spireCount; i++) {
-                double sAngle = (i / (double) spireCount) * Math.PI * 2.0 + Math.toRadians(spireRot);
-                float sx = (float) Math.cos(sAngle) * spireOrbitR;
-                float sz = (float) Math.sin(sAngle) * spireOrbitR;
-                float sy = 1.0f + (float) Math.sin(age * 0.15f + i * 0.8f) * 0.8f;
-                float spireHeight = 3.2f + (i % 3 == 0 ? 1.5f : 0.0f);
-                float leanX = -(float) Math.cos(sAngle) * 0.6f;
-                float leanZ = -(float) Math.sin(sAngle) * 0.6f;
-                BespokeGeometry.branch(pose, buffer, seed ^ (0x591E1L + i * 131L),
-                    new Vec3(sx, sy, sz), new Vec3(sx + leanX, sy + spireHeight, sz + leanZ),
-                    0.35f, 0.75f, 0.05f, 0.95f, aMul, aMul, ds);
+        float distance = MaterialEmitters.distanceScale(new Vec3(state.px, state.py, state.pz));
+        float envelope = fade * (0.35f + 0.65f * (float) Math.sqrt(Math.max(0.0f, distance)));
+        if (state.emitters == null || state.emitterSeed != state.seed || state.emitterLevel != level
+                || Float.isNaN(state.lastEmissionAge) || state.age < state.lastEmissionAge) {
+            state.emitters = createEmitters(state, level);
+            state.emitterSeed = state.seed;
+            state.emitterLevel = level;
+            for (MaterialEmitters.Emitter emitter : state.emitters) {
+                emitter.tick(0.05f, envelope);
             }
-        });
+            state.lastEmissionAge = state.age;
+            return;
+        }
 
-        // 4. Central vortex column: two counter-rotating broken bands, a
-        // violet outer tube and a warmer crimson core, spinning at the old
-        // funnel speeds.
-        final float eyeRadius = Math.max(1.8f, radius * 0.16f);
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 22.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xE7E1L, eyeRadius * 0.85f,
-                0f, domeHeight, 2.5f, 0.68f, 0.03f, 0.70f, 0.45f * aMul, ds);
-        });
-        poseStack.popPose();
+        float delta = Math.min(0.05f, Math.max(0.0f, (state.age - state.lastEmissionAge) / 20.0f));
+        state.lastEmissionAge = state.age;
+        if (delta > 0.0f) {
+            for (MaterialEmitters.Emitter emitter : state.emitters) {
+                emitter.tick(delta, envelope);
+            }
+        }
+    }
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-age * 30.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xE7E2L, eyeRadius * 0.55f,
-                0f, domeHeight, -2.0f, 0.90f, 0.03f, 0.60f, 0.35f * aMul, ds);
-        });
-        poseStack.popPose();
+    private static MaterialEmitters.Emitter[] createEmitters(DarknessDomainRenderState state, ClientLevel level) {
+        int seed = (int) state.seed;
+        float radius = Math.max(1.0f, state.radius);
+        float interiorRate = Math.min(330.0f, 205.0f + radius * 4.0f);
+        float groundRate = Math.min(190.0f, 115.0f + radius * 2.5f);
+        return new MaterialEmitters.Emitter[] {
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.DARKNESS, 0x12001F, 4.15f,
+                    seed ^ 0xD001, Vec3.ZERO, 0.006f),
+                domeVolumeSource(state, 0.026, 0.006), interiorRate, Math.round(interiorRate) + 30),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.SOUL, 0xC4B5FD, 1.95f,
+                    seed ^ 0xD002, Vec3.ZERO, 0.010f),
+                domeVolumeSource(state, 0.018, 0.013), 115.0f, 130),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.DARKNESS, 0x1E0033, 3.60f,
+                    seed ^ 0xD003, Vec3.ZERO, 0.006f),
+                domeSurfaceSource(state, 0.016), 95.0f, 110),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.VAPOR, 0x4C1D95, 5.25f,
+                    seed ^ 0xD004, Vec3.ZERO, 0.004f),
+                domeSurfaceSource(state, 0.010), 62.0f, 72),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.DARKNESS, 0x2A0045, 3.05f,
+                    seed ^ 0xD005, Vec3.ZERO, 0.008f),
+                groundSwirlSource(state, 0.052), groundRate, Math.round(groundRate) + 25),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0x8C0DF2, 1.60f,
+                    seed ^ 0xD006, Vec3.ZERO, 0.010f),
+                groundSwirlSource(state, 0.040), 58.0f, 68),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0xA605F2, 2.20f,
+                    seed ^ 0xD007, Vec3.ZERO, 0.008f),
+                columnSource(state, 0.16, 0.125), 145.0f, 160),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0xF21459, 1.50f,
+                    seed ^ 0xD008, Vec3.ZERO, 0.006f),
+                columnSource(state, 0.09, 0.165), 92.0f, 105)
+        };
+    }
 
-        // 5. Two rim bands circling the dome wall where the old rim rings
-        // floated, turning together at the old slow rate.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 5.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB191L, radius * 0.955f,
-                1.0f, 1.1f, 0.8f, 0.72f, 0.05f, 0.95f, 0.50f * aMul, ds);
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xB192L, radius * 0.82f,
-                0.5f, 0.6f, -0.8f, 0.35f, 0.02f, 0.70f, 0.20f * aMul, ds);
-        });
-        poseStack.popPose();
+    private static MaterialEmitters.Source domeVolumeSource(DarknessDomainRenderState state,
+                                                            double tangentSpeed, double upwardSpeed) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double radial = Math.sqrt(random.nextDouble()) * state.radius * 0.97;
+            double radialFraction = state.radius <= 0.0f ? 0.0 : radial / state.radius;
+            double maxY = domeHeight(state) * Math.sqrt(Math.max(0.0, 1.0 - radialFraction * radialFraction));
+            double y = random.nextDouble() * Math.max(0.15, maxY);
+            Vec3 pos = new Vec3(state.px + Math.cos(angle) * radial,
+                state.py + y, state.pz + Math.sin(angle) * radial);
+            Vec3 velocity = new Vec3(-Math.sin(angle) * tangentSpeed, upwardSpeed,
+                Math.cos(angle) * tangentSpeed);
+            return new MaterialEmitters.Sample(pos, velocity);
+        };
+    }
 
-        // Additive pass: a halo band around the vortex column, the shared
-        // ground anchor glow, and the shared layered vortex bands around
-        // the funnel, all driven by the same fade as the rest of the dome.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(age * 22.0f)));
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x4A10L, eyeRadius * 1.45f * 0.85f,
-                0f, domeHeight, 2.5f, 0.35f, 0.03f, 0.50f, 0.15f * aMul, ds);
-        });
-        poseStack.popPose();
+    private static MaterialEmitters.Source domeSurfaceSource(DarknessDomainRenderState state,
+                                                             double tangentSpeed) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double u = random.nextDouble();
+            double radial = state.radius * Math.sqrt(Math.max(0.0, 1.0 - u * u))
+                * (0.965 + random.nextDouble() * 0.045);
+            Vec3 pos = new Vec3(state.px + Math.cos(angle) * radial,
+                state.py + domeHeight(state) * u, state.pz + Math.sin(angle) * radial);
+            Vec3 velocity = new Vec3(-Math.sin(angle) * tangentSpeed, 0.004,
+                Math.cos(angle) * tangentSpeed);
+            return new MaterialEmitters.Sample(pos, velocity);
+        };
+    }
 
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            LayeredRender.drawAnchorGlow(pose, buffer, radius * 0.50f, 0.06f,
-                0.30f, 0.02f, 0.45f, 0.10f * aMul, ds);
-            LayeredRender.drawVortexBands(pose, buffer,
-                Math.max(1.8f, radius * 0.16f) * 1.05f, domeHeight, age,
-                0.45f, 0.05f, 0.85f, fade, ds);
-        });
+    private static MaterialEmitters.Source groundSwirlSource(DarknessDomainRenderState state,
+                                                             double tangentSpeed) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double radial = Math.sqrt(random.nextDouble()) * state.radius * 0.96;
+            Vec3 pos = new Vec3(state.px + Math.cos(angle) * radial,
+                state.py + 0.10 + random.nextDouble() * 0.22, state.pz + Math.sin(angle) * radial);
+            Vec3 velocity = new Vec3(-Math.sin(angle) * tangentSpeed, 0.010,
+                Math.cos(angle) * tangentSpeed);
+            return new MaterialEmitters.Sample(pos, velocity);
+        };
+    }
+
+    private static MaterialEmitters.Source columnSource(DarknessDomainRenderState state,
+                                                        double radiusFactor, double upwardSpeed) {
+        return random -> {
+            double angle = random.nextDouble() * Math.PI * 2.0;
+            double radial = Math.sqrt(random.nextDouble()) * Math.max(1.8, state.radius * radiusFactor);
+            Vec3 pos = new Vec3(state.px + Math.cos(angle) * radial,
+                state.py + random.nextDouble() * domeHeight(state), state.pz + Math.sin(angle) * radial);
+            Vec3 velocity = new Vec3(-Math.sin(angle) * 0.045, upwardSpeed,
+                Math.cos(angle) * 0.045);
+            return new MaterialEmitters.Sample(pos, velocity);
+        };
+    }
+
+    private static float domeHeight(DarknessDomainRenderState state) {
+        return Math.min(26.0f, Math.max(1.0f, state.radius) * 1.35f);
     }
 }

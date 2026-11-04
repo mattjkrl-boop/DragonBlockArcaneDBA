@@ -1,27 +1,39 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.LavaEruptionEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
 
-/** A lava wave that bows outward along the swing and burns down. */
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * The eruption is sampled as material throughout the same frontal volume
+ * its mechanics occupy. Flame and embers carry the front, ash rides the
+ * ground, and smoke and heat vapor rise off the wave as it burns down.
+ */
 public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, LavaEruptionRenderer.EruptState> {
+    private final Map<Integer, Emission> emissions = new HashMap<>();
+
     public LavaEruptionRenderer(EntityRendererProvider.Context context) {
         super(context);
     }
 
     public static class EruptState extends EntityRenderState {
+        public int entityId;
         public float age;
         public float yRot;
         public float reach;
@@ -47,6 +59,7 @@ public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, Lav
     @Override
     public void extractRenderState(LavaEruptionEntity entity, EruptState state, float partialTick) {
         super.extractRenderState(entity, state, partialTick);
+        state.entityId = entity.getId();
         state.age = entity.tickCount + partialTick;
         state.yRot = entity.getYRot();
         state.reach = entity.reachAt(state.age);
@@ -58,48 +71,110 @@ public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, Lav
 
     @Override
     public void submit(EruptState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        // The shared envelope drives the alpha, so the wave builds over its
-        // first ticks and burns down over its last instead of popping in at
-        // full alpha. Distance steps the segment count down (standard point 1).
-        float scale = LayeredRender.distScale(cameraState, state.posX, state.posY, state.posZ);
-        float env = FxEnvelope.envelope(state.age, 12.0f);
-        float remain = ease(Math.max(0.0f, 1.0f - state.age / 12.0f));
-        float height = 0.7f + 1.1f * ease(Math.min(1.0f, state.age / 4.0f));
-        long seed = state.seed;
-        RenderType type = KiRenderHelper.kiRenderType();
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        // Bespoke sheets (BESPOKE-STANDARD rule 1): the old uniform grid
-        // sheet is two seeded plumes now, uneven stacks of flame puffs
-        // pushed forward along the facing so the crown sits inside the
-        // cone the damage and the ground burn use. The outer plume is the
-        // dark mid sheet; the inner one is the brighter, taller core.
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, state.reach * 0.30f);
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-            BespokeGeometry.plume(pose, buffer, seed, state.reach * 0.60f, height,
-                0.45f, 0.07f, 0.02f, 0.8f * remain, env, scale);
-            BespokeGeometry.plume(pose, buffer, seed ^ 0xC02EL, state.reach * 0.33f, height * 1.3f,
-                1.0f, 0.55f, 0.10f, 0.9f * remain, env, scale);
-        });
-        poseStack.popPose();
-        collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
-            // Scorch mark at the base: a seeded star of wandering cracks,
-            // kept inside the reach the wave and the burn actually cover.
-            BespokeGeometry.crackStar(pose, buffer, seed ^ 0x5CA2L, Math.min(state.reach * 0.85f, 5.5f),
-                1.0f, 0.50f, 0.08f, LayeredRender.ALPHA_MID * remain, env, scale);
-            // Anchor glow at the origin only: a base splash around the caster
-            // the wave erupts from, kept well inside the wave's own reach so
-            // the glow never claims ground the wave does not cover.
-            LayeredRender.drawAnchorGlow(pose, buffer, Math.min(state.reach * 0.45f, 2.2f), 0.03f,
-                1.0f, 0.42f, 0.05f, LayeredRender.ALPHA_MID * env, scale);
-        });
-        poseStack.popPose();
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level != null && state.entityId != 0) {
+            Vec3 center = new Vec3(state.posX, state.posY, state.posZ);
+            float distance = MaterialEmitters.distanceScale(center);
+            float env = FxEnvelope.envelope(state.age, 12.0f);
+            float remain = ease(Math.max(0.0f, 1.0f - state.age / 12.0f));
+            float height = 0.7f + 1.1f * ease(Math.min(1.0f, state.age / 4.0f));
+            float strength = distance * env * (0.25f + 0.75f * remain);
+            Emission emission = emissions.get(state.entityId);
+            if (emission == null || emission.level != level || emission.seed != state.seed
+                    || state.age + 0.001f < emission.lastAge) {
+                emission = new Emission(level, state);
+                emissions.put(state.entityId, emission);
+            }
+            emission.update(state, strength, height);
+        }
         super.submit(state, poseStack, collector, cameraState);
     }
 
     private static float ease(float t) {
         float c = Mth.clamp(t, 0.0f, 1.0f);
         return c * c * (3.0f - 2.0f * c);
+    }
+
+    private static final class Emission {
+        private final ClientLevel level;
+        private final int seed;
+        private final List<MaterialEmitters.Emitter> emitters = new ArrayList<>();
+        private Vec3 center;
+        private Vec3 facing = new Vec3(0.0, 0.0, 1.0);
+        private Vec3 side = new Vec3(1.0, 0.0, 0.0);
+        private double reach = 1.0;
+        private double height = 1.0;
+        private float lastAge;
+
+        private Emission(ClientLevel level, EruptState state) {
+            this.level = level;
+            this.seed = state.seed;
+            this.center = position(state);
+            this.lastAge = state.age;
+            updateFrame(state, 1.0);
+
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.flame(Vec3.ZERO, 0.020f),
+                    random -> sampleCone(random, 0.05, 1.0), 880f, 1050));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.ember(Vec3.ZERO, 0.026f),
+                    random -> sampleCone(random, 0.05, 1.0), 360f, 460));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.ash(new Vec3(0.0, 0.010, 0.0), 0.024f),
+                    this::sampleGround, 110f, 150));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.smoke(0x2E130B, 1.10f, seed ^ 0xE207,
+                            new Vec3(0.0, 0.030, 0.0), 0.022f),
+                    random -> sampleCone(random, 0.45, 0.75), 150f, 210));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.vapor(0xA34A16, 1.00f, seed ^ 0xA11D,
+                            new Vec3(0.0, 0.016, 0.0), 0.020f),
+                    random -> sampleCone(random, 0.10, 0.90), 90f, 130));
+        }
+
+        private void update(EruptState state, float strength, double newHeight) {
+            float delta = Math.max(0.0f, Math.min(0.05f, (state.age - lastAge) / 20.0f));
+            lastAge = state.age;
+            updateFrame(state, newHeight);
+            for (MaterialEmitters.Emitter emitter : emitters) {
+                emitter.tick(delta, strength);
+            }
+        }
+
+        private void updateFrame(EruptState state, double newHeight) {
+            center = position(state);
+            reach = Math.max(0.25, state.reach);
+            height = Math.max(0.25, newHeight);
+            double yaw = Math.toRadians(state.yRot);
+            facing = new Vec3(-Math.sin(yaw), 0.0, Math.cos(yaw));
+            side = new Vec3(Math.cos(yaw), 0.0, Math.sin(yaw));
+        }
+
+        private MaterialEmitters.Sample sampleCone(RandomSource random, double yBase, double ySpan) {
+            double t = Math.sqrt(random.nextDouble());
+            double dist = reach * t;
+            double angle = (random.nextDouble() * 2.0 - 1.0) * 1.15;
+            Vec3 dir = facing.scale(Math.cos(angle)).add(side.scale(Math.sin(angle)));
+            Vec3 pos = center.add(dir.scale(dist));
+            double y = center.y + yBase + random.nextDouble() * height * ySpan * (1.10 - 0.55 * t);
+            pos = new Vec3(pos.x, y, pos.z);
+            Vec3 velocity = dir.scale(0.030 + 0.045 * t)
+                    .add(new Vec3(0.0, 0.035 + random.nextDouble() * 0.045, 0.0));
+            return new MaterialEmitters.Sample(pos, velocity);
+        }
+
+        private MaterialEmitters.Sample sampleGround(RandomSource random) {
+            double t = Math.sqrt(random.nextDouble());
+            double dist = reach * t;
+            double angle = (random.nextDouble() * 2.0 - 1.0) * 1.15;
+            Vec3 dir = facing.scale(Math.cos(angle)).add(side.scale(Math.sin(angle)));
+            Vec3 pos = center.add(dir.scale(dist));
+            pos = new Vec3(pos.x, center.y + 0.04, pos.z);
+            return new MaterialEmitters.Sample(pos, dir.scale(0.018 + 0.020 * t));
+        }
+
+        private static Vec3 position(EruptState state) {
+            return new Vec3(state.posX, state.posY, state.posZ);
+        }
     }
 }

@@ -1,35 +1,41 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.DelayedLaunchEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Telegraph for the Z Sword delayed launch. A violet gravity ring contracts
- * around the slam center as the delay runs down, with gold rune ticks that
- * spin faster near the end.
+ * Telegraph for the Z Sword delayed launch.
  *
- * Spectacle pass: the ring used to be hardcoded at 5.0 blocks shrinking to 1.2
- * while the slam that spawned it reached a radius of 18, so the warning covered
- * less than a third of the real area. The ring now starts at the true slam
- * radius (synced from the entity) and contracts to 35 percent of it, over the
- * true delay (40 to 80 ticks, also synced), and a faint anchor disc marks the
- * full footprint for the whole countdown.
- *
- * Bespoke pass: the footprint marker is a seeded crack star at the true
- * slam radius, the contracting rings are flat broken vortex bands, and the
- * rune ticks are small gold shard fans at the cardinal points.
+ * No-shapes pass: the telegraph draws no geometry and uses no ring,
+ * disc, or tick marks. Stone dust drifts across the full true slam
+ * footprint for the whole countdown, while violet gravity plasma and
+ * pale vapor are sampled inside the contracting radius and pulled
+ * inward faster as the launch approaches. Gold plasma concentrations
+ * at the four rotating cardinal data points replace the old rune
+ * ticks. The true radius, true delay, pulse, and rotation behavior
+ * carry over from the bespoke renderer.
  */
 public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, DelayedLaunchRenderer.DelayedLaunchRenderState> {
+
+    private static final int VIOLET = 0x9419FA;
+    private static final int GOLD = 0xFFD94D;
+    private static final int PALE_VIOLET = 0xC9B8FF;
+    private static final int STONE_DUST = 0x9A8668;
+
+    private final Map<Integer, Emission> emissions = new HashMap<>();
+
     public DelayedLaunchRenderer(EntityRendererProvider.Context context) {
         super(context);
     }
@@ -39,6 +45,7 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
         public float radius = 10.0f;
         public int delayTicks = 40;
         public long seed = 0;
+        public int entityId = -1;
     }
 
     @Override
@@ -53,63 +60,133 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
         state.radius = entity.getRadius();
         state.delayTicks = Math.max(1, entity.getDelayTicks());
         state.seed = entity.getSeed();
+        state.entityId = entity.getId();
     }
 
     @Override
     public void submit(DelayedLaunchRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        Minecraft minecraft = Minecraft.getInstance();
+        ClientLevel level = minecraft == null ? null : minecraft.level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
+
         float age = state.age;
         float progress = Math.min(1.0f, age / (float) state.delayTicks);
         float slamRadius = state.radius;
-
-        // Contracting ring: starts at the real slam radius, closing to 35
-        // percent of it at the launch tick.
         float radius = slamRadius * (1.0f - progress * 0.65f);
         float pulse = 0.60f + 0.40f * (float) Math.sin(age * (0.35 + progress * 0.85));
         float ringAlpha = (0.35f + progress * 0.45f) * pulse;
         float rot = age * (6.0f + progress * 30.0f);
-        float dist = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-
-        // Full footprint marker at the true slam radius for the whole
-        // countdown, faint, so the warning size equals the hit size.
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(rot * 0.5f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.crackStar(pose, buffer, state.seed, slamRadius,
-                0.58f, 0.10f, 0.98f, 1.0f, ringAlpha * 0.30f, dist));
-        poseStack.popPose();
-
-        // Contracting violet band and the tighter gold band inside it.
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0xC7L, radius,
-                0.02f, 0.16f, (float) Math.toRadians(rot), 0.58f, 0.10f, 0.98f, ringAlpha, dist);
-            BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0x601DL, radius * 0.62f,
-                0.02f, 0.12f, (float) Math.toRadians(-rot * 0.7f), 1.0f, 0.85f, 0.30f, ringAlpha * 0.9f, dist);
-        });
-
-        // Four rune ticks at the cardinal points, rotating as the launch nears.
-        for (int i = 0; i < 4; i++) {
-            double a = Math.toRadians(rot + i * 90.0);
-            float cx = (float) Math.cos(a) * radius;
-            float cz = (float) Math.sin(a) * radius;
-            long tickSeed = state.seed + i * 7L;
-            poseStack.pushPose();
-            poseStack.translate(cx, 0.10f, cz);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.shardFan(pose, buffer, tickSeed, 0.55f,
-                    1.0f, 0.95f, 0.55f, Math.min(1.0f, ringAlpha + 0.25f), 1.0f, dist));
-            poseStack.popPose();
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float dist = MaterialEmitters.distanceScale(center);
+        if (ringAlpha <= 0.01f || dist <= 0.01f) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
         }
 
-        // Additive halo pass: a wider faint violet glow fan under the
-        // telegraph so the warning glows against the ground as the launch
-        // nears, plus the shared anchor glow across the full slam footprint.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.glowFan(pose, buffer, state.seed ^ 0xAA10L, radius * 1.12f, 0.04f,
-                0.58f, 0.10f, 0.98f, ringAlpha * 0.35f, dist);
-            LayeredRender.drawAnchorGlow(pose, buffer,
-                slamRadius, 0.03f, 0.58f, 0.10f, 0.98f, ringAlpha * 0.22f, dist);
-        });
+        Emission emission = emissionFor(state, level);
+        emission.frame.center = center;
+        emission.frame.slamRadius = slamRadius;
+        emission.frame.currentRadius = radius;
+        emission.frame.progress = progress;
+        emission.frame.rot = rot;
+
+        float delta = emission.nextDelta();
+        float envelope = ringAlpha * dist;
+        emission.dust.tick(delta, envelope * 0.62f);
+        emission.plasma.tick(delta, envelope);
+        emission.vapor.tick(delta, envelope * 0.58f);
+        emission.gold.tick(delta, envelope * 0.92f);
+
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private Emission emissionFor(DelayedLaunchRenderState state, ClientLevel level) {
+        long now = System.nanoTime();
+        emissions.entrySet().removeIf(entry -> now - entry.getValue().lastSeenNanos > 5_000_000_000L);
+        Emission emission = emissions.get(state.entityId);
+        if (emission == null || emission.seed != state.seed) {
+            emission = new Emission(level, state.seed);
+            emissions.put(state.entityId, emission);
+        }
+        emission.lastSeenNanos = now;
+        return emission;
+    }
+
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        float slamRadius = 1.0f;
+        float currentRadius = 1.0f;
+        float progress = 0.0f;
+        float rot = 0.0f;
+    }
+
+    private static final class Emission {
+        final long seed;
+        final Frame frame = new Frame();
+        final MaterialEmitters.Emitter dust;
+        final MaterialEmitters.Emitter plasma;
+        final MaterialEmitters.Emitter vapor;
+        final MaterialEmitters.Emitter gold;
+        long lastSeenNanos = System.nanoTime();
+        long lastTickNanos = 0L;
+
+        Emission(ClientLevel level, long seed) {
+            this.seed = seed;
+            int baseSeed = (int) seed;
+            Frame f = frame;
+
+            MaterialEmitters.Source footprint = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double flat = Math.sqrt(random.nextDouble()) * f.slamRadius;
+                Vec3 pos = f.center.add(Math.cos(angle) * flat, 0.06, Math.sin(angle) * flat);
+                Vec3 inward = new Vec3(-Math.cos(angle), 0.0, -Math.sin(angle))
+                    .scale(0.07 + f.progress * 0.10).add(0.0, 0.020, 0.0);
+                return new MaterialEmitters.Sample(pos, inward);
+            };
+            MaterialEmitters.Source contracting = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double flat = Math.sqrt(random.nextDouble()) * f.currentRadius;
+                Vec3 pos = f.center.add(Math.cos(angle) * flat, 0.07 + random.nextDouble() * 0.42,
+                    Math.sin(angle) * flat);
+                Vec3 inward = new Vec3(-Math.cos(angle), 0.0, -Math.sin(angle))
+                    .scale(0.15 + f.progress * 0.22).add(0.0, 0.028, 0.0);
+                return new MaterialEmitters.Sample(pos, inward);
+            };
+            MaterialEmitters.Source cardinal = random -> {
+                int index = random.nextInt(4);
+                double angle = Math.toRadians(f.rot + index * 90.0);
+                Vec3 pos = f.center.add(Math.cos(angle) * f.currentRadius, 0.10,
+                    Math.sin(angle) * f.currentRadius);
+                Vec3 inward = new Vec3(-Math.cos(angle), 0.0, -Math.sin(angle)).scale(0.12);
+                return new MaterialEmitters.Sample(pos, inward);
+            };
+
+            dust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(STONE_DUST, 1.70f, baseSeed ^ 0xD057, Vec3.ZERO, 0.010f),
+                footprint, 60.0f, 135);
+            plasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(VIOLET, 2.15f, baseSeed ^ 0xC7, Vec3.ZERO, 0.010f),
+                contracting, 96.0f, 205);
+            vapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(PALE_VIOLET, 2.70f, baseSeed ^ 0x9A90, Vec3.ZERO, 0.010f),
+                contracting, 44.0f, 100);
+            gold = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(GOLD, 1.55f, baseSeed ^ 0x601D, Vec3.ZERO, 0.045f),
+                cardinal, 50.0f, 115);
+        }
+
+        float nextDelta() {
+            long now = System.nanoTime();
+            if (lastTickNanos == 0L) {
+                lastTickNanos = now;
+                return 1.0f / 60.0f;
+            }
+            float delta = Math.min(0.05f, (now - lastTickNanos) / 1_000_000_000.0f);
+            lastTickNanos = now;
+            return Math.max(0.001f, delta);
+        }
     }
 }

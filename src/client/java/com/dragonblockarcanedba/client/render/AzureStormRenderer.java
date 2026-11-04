@@ -1,32 +1,37 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.AzureStormEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+
 /**
  * Entity Renderer for Azure Storm Domain in Minecraft 26.2.
- * Renders a massive, cinematic 3D tempest weather domain:
- * - Double-layered displaced cyclone cloud dome (BespokeGeometry.displacedDome)
- * - Quad-tier counter-rotating ground whirlpool bands (brokenVortexBand)
- * - Branching atmospheric lightning discharges across the dome (branch)
- * - Central cyclonic tempest eye column of stacked broken bands
  *
- * Bespoke pass: every shape comes from BespokeGeometry, seeded by the
- * storm entity's synced render seed, so all clients draw the same torn,
- * irregular storm. Rain inside the storm zone is not drawn here at all:
- * the AtmosphereClient system renders storm rain for the zone the storm
- * server keeps open through AtmosphereServer.
+ * No-shapes pass: this renderer draws no geometry and no surfaces. The
+ * storm domain is particle weather: mist volumes filling the zone,
+ * vapor and suspended dust driven around the center by swirl velocities,
+ * a bright eye updraft of vapor and plasma, and lightning plasma emitted
+ * along seeded jagged arc paths inside the boundary. The arc paths are
+ * data only; nothing is rendered from them. Rain inside the storm zone
+ * stays the AtmosphereClient system's job, exactly as before: the storm
+ * server keeps the zone open and that system renders the rain. All
+ * emission takes the storm entity's synced render seed, and the lifetime
+ * fade envelope is the shared one the bespoke build used.
  */
 public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureStormRenderer.AzureStormRenderState> {
 
@@ -69,17 +74,158 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
         state.wz = entity.getZ();
     }
 
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        float radius = 12.0f;
+        float height = 12.0f;
+        List<List<Vec3>> arcs = List.of();
+        long arcBucket = Long.MIN_VALUE;
+    }
+
+    private static final class Emission {
+        final Frame frame = new Frame();
+        ClientLevel level;
+        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        float lastAge = -1f;
+    }
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
+
+    /**
+     * Points inside the storm cylinder, with a tangential swirl velocity
+     * around the center axis and a slight upward drift.
+     */
+    private static MaterialEmitters.Source cylinder(Frame frame, float radiusFrac, float heightFrac,
+                                                    float tangential, float up) {
+        return random -> {
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = frame.radius * radiusFrac * Math.sqrt(random.nextDouble());
+            double dx = Math.cos(ang) * rr;
+            double dz = Math.sin(ang) * rr;
+            Vec3 pos = new Vec3(
+                    frame.center.x + dx,
+                    frame.center.y + random.nextDouble() * frame.height * heightFrac,
+                    frame.center.z + dz);
+            Vec3 vel = new Vec3(-Math.sin(ang) * tangential, up, Math.cos(ang) * tangential);
+            return new MaterialEmitters.Sample(pos, vel);
+        };
+    }
+
+    /** Points inside the narrow eye column, rising and swirling. */
+    private static MaterialEmitters.Source eye(Frame frame) {
+        return random -> {
+            double ang = random.nextDouble() * Math.PI * 2.0;
+            double rr = frame.radius * 0.22 * Math.sqrt(random.nextDouble());
+            double dx = Math.cos(ang) * rr;
+            double dz = Math.sin(ang) * rr;
+            Vec3 pos = new Vec3(
+                    frame.center.x + dx,
+                    frame.center.y + random.nextDouble() * frame.height,
+                    frame.center.z + dz);
+            Vec3 vel = new Vec3(-Math.sin(ang) * 0.10, 0.20, Math.cos(ang) * 0.10);
+            return new MaterialEmitters.Sample(pos, vel);
+        };
+    }
+
+    /** Points along the current jagged arc paths. The paths are data only. */
+    private static MaterialEmitters.Source arcPlasma(Frame frame) {
+        return random -> {
+            if (frame.arcs.isEmpty()) return new MaterialEmitters.Sample(frame.center, Vec3.ZERO);
+            List<Vec3> path = frame.arcs.get(random.nextInt(frame.arcs.size()));
+            if (path.size() < 2) return new MaterialEmitters.Sample(path.get(0), Vec3.ZERO);
+            int i = random.nextInt(path.size() - 1);
+            Vec3 a = path.get(i);
+            Vec3 b = path.get(i + 1);
+            Vec3 tangent = b.subtract(a);
+            double len = tangent.length();
+            Vec3 dir = len < 1e-6 ? Vec3.ZERO : tangent.scale(1.0 / len);
+            return new MaterialEmitters.Sample(a.add(tangent.scale(random.nextDouble())), dir.scale(0.05));
+        };
+    }
+
+    /**
+     * Seeded jagged arc paths for one three-tick bucket, placed with the
+     * same numbers the bespoke build used for its in-storm discharges.
+     */
+    private static List<List<Vec3>> buildArcs(long seed, long bucket, Vec3 center, float radius) {
+        Random rng = new Random(seed ^ (bucket * 1000L));
+        List<List<Vec3>> arcs = new ArrayList<>();
+        int arcCount = 4;
+        for (int a = 0; a < arcCount; a++) {
+            double startAngle = rng.nextFloat() * Math.PI * 2.0;
+            float arcR = radius * (0.25f + rng.nextFloat() * 0.65f);
+            float sx = (float) Math.cos(startAngle) * arcR;
+            float sz = (float) Math.sin(startAngle) * arcR;
+            float sy = 7.0f + rng.nextFloat() * 9.0f;
+            float ex = sx + (rng.nextFloat() * 2.0f - 1.0f) * 2.0f;
+            float ez = sz + (rng.nextFloat() * 2.0f - 1.0f) * 2.0f;
+            float ey = Math.max(0.5f, sy - (7.0f + rng.nextFloat() * 6.0f));
+            Vec3 from = center.add(sx, sy, sz);
+            Vec3 to = center.add(ex, ey, ez);
+            Vec3 mid = from.add(to).scale(0.5).add(
+                    (rng.nextFloat() * 2.0f - 1.0f) * 0.8f,
+                    (rng.nextFloat() * 2.0f - 1.0f) * 0.4f,
+                    (rng.nextFloat() * 2.0f - 1.0f) * 0.8f);
+            arcs.add(List.of(from, mid, to));
+            if (rng.nextFloat() < 0.6f) {
+                Vec3 fork = new Vec3(
+                        mid.x + (rng.nextFloat() * 2.0f - 1.0f) * 1.6f,
+                        Math.max(center.y + 0.4, mid.y - (0.8f + rng.nextFloat())),
+                        mid.z + (rng.nextFloat() * 2.0f - 1.0f) * 1.6f);
+                arcs.add(List.of(mid, fork));
+            }
+        }
+        return arcs;
+    }
+
+    private Emission buildEmission(ClientLevel level, AzureStormRenderState state) {
+        Emission emission = new Emission();
+        emission.level = level;
+        Frame frame = emission.frame;
+        frame.center = new Vec3(state.wx, state.wy, state.wz);
+        frame.radius = state.radius;
+        frame.height = state.radius;
+        int seed = (int) state.seed;
+        emission.emitters = new MaterialEmitters.Emitter[]{
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.mist(0xBFDCEA, 3.6f, seed ^ 0x1157,
+                                new Vec3(0.0, 0.01, 0.0), 0.01f),
+                        cylinder(frame, 0.95f, 0.85f, 0.03f, 0.0f), 30f, 60),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.vapor(0x9FD8E8, 2.4f, seed ^ 0x9A90,
+                                new Vec3(0.0, 0.03, 0.0), 0.02f),
+                        cylinder(frame, 0.90f, 0.80f, 0.16f, 0.03f), 120f, 190),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.dust(0x6E7F86, 1.2f, seed ^ 0xD057,
+                                Vec3.ZERO, 0.02f),
+                        cylinder(frame, 0.95f, 0.60f, 0.20f, 0.0f), 60f, 100),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.vapor(0xF2FFFF, 1.8f, seed ^ 0xE7E0,
+                                new Vec3(0.0, 0.10, 0.0), 0.01f),
+                        eye(frame), 80f, 130),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0xD9FFFF, 1.0f, seed ^ 0xE7E1,
+                                new Vec3(0.0, 0.08, 0.0), 0.01f),
+                        eye(frame), 50f, 90),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0x00D9FF, 1.5f, seed ^ 0xA2C0,
+                                Vec3.ZERO, 0.005f),
+                        arcPlasma(frame), 170f, 280),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0xF2FFFF, 0.9f, seed ^ 0xC0DE,
+                                Vec3.ZERO, 0.005f),
+                        arcPlasma(frame), 90f, 150),
+        };
+        return emission;
+    }
+
     @Override
     public void submit(AzureStormRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
         float radius = state.radius;
         float age = state.age;
-        long seed = state.seed;
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
-        // Distance scale: far storms step their segment counts down.
-        float ds = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
 
         // Lifetime fade envelope from the shared FxEnvelope: in over the first
         // 20 ticks, out over the last 40, of whatever life this storm was
@@ -89,97 +235,33 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
         float decayFrac = Math.min(0.45f, 40.0f / life);
         float fade = FxEnvelope.envelope(age, life, buildFrac, decayFrac);
 
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+        Vec3 center = new Vec3(state.wx, state.wy, state.wz);
+        float ds = MaterialEmitters.distanceScale(center);
+        float envelope = fade * ds;
 
-            // Ground anchor glow: a soft splash grounding the dome to the world.
-            LayeredRender.drawAnchorGlow(pose, buffer, radius * 0.92f, 0.07f,
-                0.20f, 0.75f, 1.0f, 0.35f * fade, ds);
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level == null || envelope <= 0.01f) return;
 
-            // 1. Quad-Tier Ground Whirlpool (4 counter-rotating wind bands),
-            // now torn brokenVortexBand slices instead of perfect flat rings.
-            // Twist is the same spin the rings had: age times the band speed.
-            for (int band = 0; band < 4; band++) {
-                float rOuter = radius * (0.30f + band * 0.23f);
-                float y = 0.08f + (band * 0.06f);
-                float rotSpeed = (band % 2 == 0 ? 1.0f : -1.35f) * (14.0f + band * 7.0f);
-                float bandAlpha = (0.58f - (band * 0.09f)) * fade;
-
-                float red = band == 0 ? 0.4f : 0.0f;
-                float green = 0.75f + (band * 0.08f);
-                float blue = 1.0f;
-
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ (0xBA0DL + band * 131L),
-                    rOuter, y, y + 0.06f, (float) Math.toRadians(age * rotSpeed),
-                    red, green, blue, bandAlpha, ds);
-            }
-
-            // 2. Volumetric Double-Layered Cyclone Cloud Dome: two displaced
-            // shells, the inner at 0.8 of the radius and brighter, as before.
-            // A displaced dome's height equals its radius, so the shell tops
-            // out at the storm radius instead of the old 1.35x hemisphere.
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD09EAL,
-                radius, 0.04f, 0.48f, 0.82f, 0.34f, fade, ds);
-            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD09EBL,
-                radius * 0.8f, 0.10f, 0.62f, 1.0f, 0.26f, fade, ds);
-
-            // 3. Rain: not drawn by this renderer. The AtmosphereClient system
-            // renders storm rain inside the zone for the storm's whole life.
-
-            // 4. Central Tempest Eye Updraft Column: six stacked broken bands
-            // widening with height, near-white at the base cooling to a deeper
-            // storm cyan as the updraft climbs, same gradient as before.
-            float eyeHeight = radius;
-            float eyeRadius = radius * 0.18f;
-            int eyeLevels = 6;
-            for (int lvl = 0; lvl < eyeLevels; lvl++) {
-                float lt0 = lvl / (float) eyeLevels;
-                float lt1 = (lvl + 1) / (float) eyeLevels;
-                float ltMid = (lvl + 0.5f) / (float) eyeLevels;
-                float er = eyeRadius * (0.6f + 0.4f * ltMid);
-                float eyeR = 0.85f - (0.60f * ltMid);
-                float eyeG = 1.0f - (0.20f * ltMid);
-                float eyeB = 1.0f;
-                float twist = (float) Math.toRadians(age * (30.0f + lvl * 5.0f));
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ (0xE7E0L + lvl * 131L),
-                    er, lt0 * eyeHeight, lt1 * eyeHeight, twist,
-                    eyeR, eyeG, eyeB, 0.45f * fade, ds);
-            }
-
-            // 5. Atmospheric Lightning Discharges within the Storm Boundary:
-            // seeded branch ribbons, cyan sheath plus white core, reseeded on
-            // the same 3 tick cadence the old beam walker used. Placement comes
-            // from the toolkit's own seeded Rng fed by the synced storm seed.
-            long bucket = (long) (age / 3.0f);
-            BespokeGeometry.Rng rng = new BespokeGeometry.Rng(seed ^ (bucket * 1000L));
-            int arcCount = Math.max(2, Math.round(4 * ds));
-            for (int a = 0; a < arcCount; a++) {
-                double startAngle = rng.nextFloat() * Math.PI * 2.0;
-                float arcR = radius * (0.25f + rng.nextFloat() * 0.65f);
-                float sx = (float) Math.cos(startAngle) * arcR;
-                float sz = (float) Math.sin(startAngle) * arcR;
-                float sy = 7.0f + rng.nextFloat() * 9.0f;
-                float ex = sx + rng.signed() * 2.0f;
-                float ez = sz + rng.signed() * 2.0f;
-                float ey = Math.max(0.5f, sy - (7.0f + rng.nextFloat() * 6.0f));
-
-                long arcSeed = seed ^ (bucket * 1000L) ^ (0xA2C0L + a * 977L);
-                Vec3 from = new Vec3(sx, sy, sz);
-                Vec3 to = new Vec3(ex, ey, ez);
-                // Cyan sheath and the white core the lightning texture uses.
-                BespokeGeometry.branch(pose, buffer, arcSeed, from, to, 0.32f,
-                    0.0f, 0.85f, 1.0f, 0.75f, fade, ds);
-                BespokeGeometry.branch(pose, buffer, arcSeed ^ 0xC0DEL, from, to, 0.10f,
-                    0.95f, 1.0f, 1.0f, 0.95f, fade, ds);
-                // A shorter fork off the middle of the arc, as the old walker drew.
-                if (rng.nextFloat() < 0.6f) {
-                    Vec3 mid = from.add(to).scale(0.5);
-                    Vec3 fork = new Vec3(mid.x + rng.signed() * 1.6f,
-                        Math.max(0.4f, mid.y - (0.8f + rng.nextFloat())),
-                        mid.z + rng.signed() * 1.6f);
-                    BespokeGeometry.branch(pose, buffer, arcSeed ^ 0xF02EL, mid, fork, 0.14f,
-                        0.15f, 0.9f, 1.0f, 0.55f, fade, ds);
-                }
-            }
-        });
+        Emission emission = emissions.get(state.seed);
+        if (emission == null || emission.level != level || age < emission.lastAge - 1.0f) {
+            emission = buildEmission(level, state);
+            emissions.put(state.seed, emission);
+            if (emissions.size() > 64) emissions.clear();
+        }
+        emission.frame.center = center;
+        emission.frame.radius = radius;
+        emission.frame.height = radius;
+        long bucket = (long) (age / 3.0f);
+        if (bucket != emission.frame.arcBucket || emission.frame.arcs.isEmpty()) {
+            emission.frame.arcs = buildArcs(state.seed, bucket, center, radius);
+            emission.frame.arcBucket = bucket;
+        }
+        float delta = emission.lastAge < 0f ? 0.05f
+                : Math.min(0.05f, Math.max(0.0f, (age - emission.lastAge) / 20.0f));
+        emission.lastAge = age;
+        for (MaterialEmitters.Emitter emitter : emission.emitters) {
+            emitter.tick(delta, envelope);
+        }
     }
 }

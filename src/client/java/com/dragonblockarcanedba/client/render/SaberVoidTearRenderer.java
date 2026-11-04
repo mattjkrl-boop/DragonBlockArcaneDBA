@@ -1,33 +1,37 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.SaberVoidTearEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Saber Void Tear in Minecraft 26.2.
  *
- * <p>Bespoke pass: the hand-rolled diamond slit, equal segment rings,
- * 16 segment cone and curved spike strips are deleted. The slit is now
- * layered {@link BespokeGeometry} torn ribbons stood vertical (dark
- * violet halo, cyan layer, white core woven from both ends), the spikes
- * are jagged branch streaks, the sonic cone is a displaced dome shell,
- * and the dual counter-rotating shock rings are broken vortex bands.
- * Envelope timing, the destination boost, colors and alphas are unchanged
- * from the spectacle pass; only the silhouettes are seeded and torn.</p>
+ * <p>No-shapes pass: the slit ribbons, spike streaks, sonic dome, and
+ * shock bands are no longer drawn as geometry. The renderer emits
+ * darkness vapor around the tear volume, void plasma streaming inward
+ * along the slit, a white plasma core, and spatial glass dust thrown
+ * outward where the spikes used to read. Sampling follows the tear
+ * plane as data only. Envelope timing, the destination boost, colors,
+ * and alphas are unchanged in effect.</p>
  */
 public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, SaberVoidTearRenderer.VoidTearRenderState> {
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
 
     public SaberVoidTearRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -74,7 +78,7 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
         state.ey = entity.getY();
         state.ez = entity.getZ();
         // Synced seed: entity id plus the synced scale and destination flag,
-        // identical on every client, frame stable for the tear's life.
+        // identical on every client, stable for the tear's life.
         state.seed = entity.getId() * 0x9E3779B97F4A7C15L
             ^ Float.floatToIntBits(entity.getTearScale()) * 271L
             ^ (entity.isDestination() ? 0xDE57L : 0L);
@@ -83,132 +87,166 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
     @Override
     public void submit(VoidTearRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
-        if (progress >= 1.0f) return;
+        long key = state.seed;
+        if (progress >= 1.0f) {
+            emissions.remove(key);
+            return;
+        }
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return;
 
-        // Alpha rides the shared envelope as well as the local fade, so the
-        // tear builds in and seals shut on the same curve the entity's
-        // particles use, and never pops at either end.
+        pruneEmissions();
         float env = FxEnvelope.envelope(state.age, (float) state.maxLifetime, 0.25f, 0.35f);
         float fade = (1.0f - FxEnvelope.smoothstep(progress)) * Math.min(1.0f, env * 1.6f);
         float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.45f));
         float impact = strike(progress);
-        float scale = state.scale * (0.55f + 0.7f * open);
-        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-        // The synced destination flag renders as before: the tear the
-        // player arrives through is wider and burns at full core alpha, the
-        // origin tear they left is narrower and dimmer.
-        float slitBoost = state.isDestination ? 1.30f : 1.0f;
-        float coreBoost = state.isDestination ? 1.0f : 0.8f;
-        float fadeCore = fade * coreBoost;
-        long seed = state.seed;
-        float slitH = 1.35f * (0.4f + 0.6f * open) * state.scale;
-        float slitW = 0.12f * (1.0f - progress * 0.55f) * state.scale * slitBoost;
-        float haloLen = slitH * 3.0f;
-        float coreLen = slitH * 2.0f;
-        float coneFade = fade * (1.0f - FxEnvelope.smoothstep(Math.max(0.0f, (progress - 0.4f) / 0.6f)));
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        float ds = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-
-        // Rift slit, part 1: the dark violet halo as one tall torn ribbon.
-        // The ribbon runs along +X in its own frame; the translate and the
-        // two rotations stand it vertical in the tear's XY plane, centered.
-        poseStack.pushPose();
-        poseStack.translate(0, -haloLen * 0.5f, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x4A10L, haloLen, slitW * 5.0f, slitH * 0.30f,
-                0.15f, 0.0f, 0.32f, fadeCore * 0.55f, 1.0f, ds));
-        poseStack.popPose();
-
-        // Rift slit, part 2: the cyan layer, brightest at the bottom.
-        poseStack.pushPose();
-        poseStack.translate(0, -coreLen * 0.5f, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0xC9AAL, coreLen, slitW * 2.4f, slitH * 0.25f,
-                0.0f, 0.95f, 1.0f, fadeCore * 0.95f, 1.0f, ds));
-        poseStack.popPose();
-
-        // Rift slit, part 3: the white core woven from both ends, so the
-        // core burns at the top and the bottom of the slit, not one end.
-        poseStack.pushPose();
-        poseStack.translate(0, coreLen * 0.5f, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(-90f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x1117L, coreLen, slitW * 1.1f, slitH * 0.20f,
-                1.0f, 1.0f, 1.0f, fadeCore, 1.0f, ds));
-        poseStack.popPose();
-        poseStack.pushPose();
-        poseStack.translate(0, -coreLen * 0.5f, 0);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x1118L, coreLen, slitW * 1.1f, slitH * 0.20f,
-                1.0f, 1.0f, 1.0f, fadeCore, 1.0f, ds));
-        poseStack.popPose();
-
-        // Six rotating rift spikes as jagged branch streaks, each with the
-        // thin white core the old curved strips carried.
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            int spikeCount = 6;
-            for (int i = 0; i < spikeCount; i++) {
-                double angle = (i / (double) spikeCount) * Math.PI * 2.0 + (state.age * 0.12);
-                float spikeLen = 1.15f * scale;
-                Vec3 tip = new Vec3(Math.cos(angle) * spikeLen, Math.sin(angle) * spikeLen, 0);
-                float w = 0.20f * (0.45f + 0.55f * open);
-                BespokeGeometry.branch(pose, buffer, seed + i * 101L, Vec3.ZERO, tip,
-                    w, 0.0f, 0.85f, 1.0f, fade * 0.85f, 1.0f, ds);
-                BespokeGeometry.branch(pose, buffer, seed + i * 101L + 7L, Vec3.ZERO, tip,
-                    w * 0.28f, 1.0f, 1.0f, 1.0f, fade * 0.85f, 1.0f, ds);
+        Emission emission = emissions.get(key);
+        if (emission == null || emission.level != level || state.age < emission.lastAge - 0.01f) {
+            emission = new Emission(level, state);
+            emissions.put(key, emission);
+        }
+        emission.update(state, open);
+        float delta = emission.delta(state.age);
+        float strength = fade * ds;
+        if (strength > 0.01f) {
+            for (MaterialEmitters.Emitter emitter : emission.emitters) {
+                emitter.tick(delta, strength);
             }
-        });
-
-        // Sonic shell: the old forward cone is a displaced dome now, same
-        // white fade-out window after 40 percent of life. The extra X
-        // rotation points the dome's +Y axis down the tear's +Z.
-        if (coneFade > 0.02f) {
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.displacedDome(pose, buffer, seed ^ 0xD03EL, 1.4f * scale,
-                    1.0f, 1.0f, 1.0f, coneFade * 0.9f, 1.0f, ds));
-            poseStack.popPose();
+        }
+        if (impact > 0.75f && !emission.flashDone) {
+            emission.flashDone = true;
+            Vec3 center = emission.origin;
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.glassDust(0xBFEFFF, 0.95f, (int) (state.seed ^ 0xBADD1L), Vec3.ZERO, 0.55f),
+                MaterialEmitters.point(center), Math.max(4, Math.round(14 * ds)));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.plasma(0x4DD8FF, 0.90f, (int) (state.seed ^ 0xBADD2L), Vec3.ZERO, 0.35f),
+                MaterialEmitters.point(center), Math.max(3, Math.round(10 * ds)));
         }
 
-        // Dual counter-rotating shock rings as broken vortex bands. The
-        // bands circle the Y axis in their own frame; the X rotation lays
-        // them into the tear's XY plane, and the twist arguments carry the
-        // old opposed spin rates (age * 40 one way, age * -55 the other).
-        if (impact > 0.02f) {
-            float rOuter = 1.15f * scale * (0.45f + impact);
-            float rCounter = 0.95f * scale * (0.50f + impact);
-            float twistOuter = (float) Math.toRadians(state.age * 40.0);
-            float twistCounter = (float) Math.toRadians(-state.age * 55.0);
-            poseStack.pushPose();
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBADD1L,
-                    rOuter, 0.0f, 0.10f * scale, twistOuter,
-                    0.0f, 0.85f, 1.0f, impact * 0.9f, ds);
-                BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0xBADD2L,
-                    rCounter, 0.0f, 0.08f * scale, twistCounter,
-                    0.45f, 0.20f, 1.0f, impact * 0.65f, ds);
-            });
-            poseStack.popPose();
-        }
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private void pruneEmissions() {
+        long now = System.nanoTime();
+        emissions.values().removeIf(e -> now - e.lastSeenNanos > 5_000_000_000L);
     }
 
     private static float strike(float progress) {
         if (progress >= 0.48f) return 0.0f;
         return (float) Math.sin((progress / 0.48f) * Math.PI);
+    }
+
+    /**
+     * Per-effect emitter set, keyed by the synced seed on the renderer
+     * instance because render states are recreated on every extraction.
+     * Sources read the mutable fields below, refreshed each submit.
+     */
+    private static final class Emission {
+        final ClientLevel level;
+        final MaterialEmitters.Emitter[] emitters;
+        float lastAge = -1.0f;
+        long lastSeenNanos = System.nanoTime();
+        boolean flashDone = false;
+        Vec3 origin = Vec3.ZERO;
+        Matrix4f rotation = new Matrix4f();
+        float scale = 1.0f;
+        float slitH = 1.0f;
+        float slitW = 0.1f;
+        float haloLen = 3.0f;
+        float coreLen = 2.0f;
+
+        Emission(ClientLevel level, VoidTearRenderState state) {
+            this.level = level;
+            update(state, 0.0f);
+            int seed = (int) state.seed;
+            float baseScale = state.scale;
+
+            MaterialEmitters.Source darkness = random -> {
+                Vec3 local = new Vec3(
+                    (random.nextDouble() * 2.0 - 1.0) * 0.55 * scale,
+                    (random.nextDouble() * 2.0 - 1.0) * haloLen * 0.42,
+                    (random.nextDouble() * 2.0 - 1.0) * 0.55 * scale);
+                Vec3 inward = toWorldDirection(new Vec3(-local.x * 0.22, -local.y * 0.03, -local.z * 0.22));
+                return new MaterialEmitters.Sample(toWorld(local), inward);
+            };
+            MaterialEmitters.Source slit = random -> {
+                double y = (random.nextDouble() * 2.0 - 1.0) * coreLen * 0.5;
+                Vec3 local = new Vec3((random.nextDouble() * 2.0 - 1.0) * slitW * 2.4,
+                    y, (random.nextDouble() - 0.5) * 0.08 * scale);
+                Vec3 inward = toWorldDirection(new Vec3(-local.x * 0.45, -local.y * 0.02, 0));
+                return new MaterialEmitters.Sample(toWorld(local), inward);
+            };
+            MaterialEmitters.Source core = random -> {
+                double y = (random.nextDouble() * 2.0 - 1.0) * coreLen * 0.5;
+                Vec3 local = new Vec3((random.nextDouble() * 2.0 - 1.0) * slitW * 1.1,
+                    y, (random.nextDouble() - 0.5) * 0.05 * scale);
+                Vec3 inward = toWorldDirection(new Vec3(-local.x * 0.45, -local.y * 0.02, 0));
+                return new MaterialEmitters.Sample(toWorld(local), inward);
+            };
+            MaterialEmitters.Source glass = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double radius = scale * (0.20 + 0.95 * random.nextDouble());
+                Vec3 local = new Vec3(Math.cos(angle) * radius, Math.sin(angle) * radius,
+                    (random.nextDouble() - 0.5) * 0.20 * scale);
+                Vec3 outward = toWorldDirection(new Vec3(Math.cos(angle) * 0.34, Math.sin(angle) * 0.34, 0));
+                return new MaterialEmitters.Sample(toWorld(local), outward);
+            };
+
+            this.emitters = new MaterialEmitters.Emitter[] {
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.darkness(0x260052, 1.55f * baseScale, seed ^ 0x4A10, Vec3.ZERO, 0.04f),
+                    darkness, 170.0f, 220),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(0x4DD8FF, 1.00f * baseScale, seed ^ 0xC9AA, Vec3.ZERO, 0.04f),
+                    slit, 240.0f, 300),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.plasma(0xFFFFFF, 0.70f * baseScale, seed ^ 0x1117,
+                        Vec3.ZERO, 0.03f),
+                    core, 110.0f, 150),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.glassDust(0xBFEFFF, 0.95f * baseScale, seed ^ 0x5907, Vec3.ZERO, 0.08f),
+                    glass, 150.0f, 200)
+            };
+        }
+
+        void update(VoidTearRenderState state, float open) {
+            this.origin = new Vec3(state.ex, state.ey, state.ez);
+            this.rotation = new Matrix4f()
+                .rotationY((float) Math.toRadians(-state.yRot))
+                .rotateX((float) Math.toRadians(state.xRot));
+            this.scale = state.scale * (0.55f + 0.7f * open);
+            float slitBoost = state.isDestination ? 1.30f : 1.0f;
+            float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
+            this.slitH = 1.35f * (0.4f + 0.6f * open) * state.scale;
+            this.slitW = 0.12f * (1.0f - progress * 0.55f) * state.scale * slitBoost;
+            this.haloLen = this.slitH * 3.0f;
+            this.coreLen = this.slitH * 2.0f;
+        }
+
+        float delta(float age) {
+            this.lastSeenNanos = System.nanoTime();
+            if (this.lastAge < 0.0f) {
+                this.lastAge = age;
+                return 1.0f / 60.0f;
+            }
+            float d = Math.min(0.05f, Math.max(0.0f, (age - this.lastAge) / 20.0f));
+            this.lastAge = age;
+            return d;
+        }
+
+        Vec3 toWorld(Vec3 local) {
+            Vector3f v = this.rotation.transformPosition(new Vector3f(
+                (float) local.x, (float) local.y, (float) local.z));
+            return this.origin.add(v.x, v.y, v.z);
+        }
+
+        Vec3 toWorldDirection(Vec3 local) {
+            Vector3f v = this.rotation.transformDirection(new Vector3f(
+                (float) local.x, (float) local.y, (float) local.z));
+            return new Vec3(v.x, v.y, v.z);
+        }
     }
 }

@@ -1,32 +1,33 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
-import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
 
-import java.util.Random;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Entity Renderer for Hollow Afterimage in Minecraft 26.2.
- * Bespoke pass: the ghost is no longer a stack of colored boxes. The body
- * is a BespokeGeometry plume column (halo plume, skin-tinted body plume,
- * hair plume cap), the eye is a torn ribbon slit, the scanlines are torn
- * ribbon sheets, the speed wake is two torn ribbons trailing behind, the
- * footstep ripple is a jittered glow fan, and the disintegrating motes
- * are small torn ribbon flecks rising on the same seeded layout the old
- * diamond motes used. The public entity contract is untouched: same
- * synced skin and hair colors, same seed source (the entity UUID), same
- * 100 tick fade curve.
+ * No-shapes pass: the ghost is no longer drawn as geometry at all. It is a
+ * dissolving humanoid presence of soul and darkness particles emitted
+ * inside the volume the body occupies. The hair cap reads from a denser
+ * soul stream in the caster's synced hair color at head height, the eye
+ * slit from a small bright plasma cluster at the face, and the scanline
+ * character from six thin vapor bands at the old slice heights. The
+ * public entity contract is untouched: same synced skin and hair colors,
+ * same seed source (the entity UUID), same 100 tick fade curve, and the
+ * Dark Faded behavior in the entity is unchanged, so Katana and Saber
+ * afterimages read exactly the same way.
  */
 public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEntity, HollowAfterimageRenderer.AfterimageRenderState> {
 
@@ -73,137 +74,166 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
         state.ez = entity.getZ();
     }
 
+    /** Per-entity emission streams, keyed by the entity seed. Emission points are data only. */
+    private static final class Streams {
+        final ClientLevel level;
+        final MaterialEmitters.Emitter dark;
+        final MaterialEmitters.Emitter soul;
+        final MaterialEmitters.Emitter hair;
+        final MaterialEmitters.Emitter eye;
+        final MaterialEmitters.Emitter scan;
+        final MaterialEmitters.Emitter wake;
+        final MaterialEmitters.Emitter ground;
+        long lastNanos = 0L;
+        long lastSeenNanos = 0L;
+        Vec3 center = Vec3.ZERO;
+        Vec3 front = new Vec3(0, 0, -1);
+        Vec3 right = new Vec3(1, 0, 0);
+        float age = 0f;
+        float spread = 1f;
+        float ringR = 0.5f;
+
+        Streams(ClientLevel level, long seed, int bodyArgb, int hairArgb) {
+            this.level = level;
+            int s = (int) seed;
+            this.dark = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.darkness(bodyArgb, 2.3f, s ^ 0x11, new Vec3(0, 0.02, 0), 0.015f),
+                random -> {
+                    Vec3 c = center.add(0, 0.95, 0);
+                    return new MaterialEmitters.Sample(new Vec3(
+                        c.x + (random.nextDouble() * 2.0 - 1.0) * 0.30 * spread,
+                        c.y + (random.nextDouble() * 2.0 - 1.0) * 0.95,
+                        c.z + (random.nextDouble() * 2.0 - 1.0) * 0.30 * spread), Vec3.ZERO);
+                }, 100f, 110);
+            this.soul = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.soul(0x1AD9FF, 1.5f, s ^ 0x22, new Vec3(0, 0.05, 0), 0.02f),
+                random -> {
+                    Vec3 c = center.add(0, 0.92, 0);
+                    return new MaterialEmitters.Sample(new Vec3(
+                        c.x + (random.nextDouble() * 2.0 - 1.0) * 0.27 * spread,
+                        c.y + (random.nextDouble() * 2.0 - 1.0) * 0.92,
+                        c.z + (random.nextDouble() * 2.0 - 1.0) * 0.27 * spread), Vec3.ZERO);
+                }, 80f, 90);
+            this.hair = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.soul(hairArgb, 1.15f, s ^ 0x33, new Vec3(0, 0.03, 0), 0.012f),
+                random -> {
+                    Vec3 c = center.add(front.scale(0.04)).add(0, 1.56, 0);
+                    return new MaterialEmitters.Sample(new Vec3(
+                        c.x + (random.nextDouble() * 2.0 - 1.0) * 0.24,
+                        c.y + (random.nextDouble() * 2.0 - 1.0) * 0.17,
+                        c.z + (random.nextDouble() * 2.0 - 1.0) * 0.24), Vec3.ZERO);
+                }, 38f, 44);
+            this.eye = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xD9FBFF, 0.5f, s ^ 0x44, Vec3.ZERO, 0.004f),
+                random -> {
+                    Vec3 c = center.add(right.scale(-0.12)).add(0, 1.60, 0).add(front.scale(0.20));
+                    return new MaterialEmitters.Sample(new Vec3(
+                        c.x + (random.nextDouble() * 2.0 - 1.0) * 0.05,
+                        c.y + (random.nextDouble() * 2.0 - 1.0) * 0.03,
+                        c.z + (random.nextDouble() * 2.0 - 1.0) * 0.05), Vec3.ZERO);
+                }, 26f, 30);
+            this.scan = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0x00F2FF, 1.15f, s ^ 0x55, Vec3.ZERO, 0.006f),
+                random -> {
+                    int band = random.nextInt(6);
+                    float y = 0.15f + band * 0.32f + (float) Math.sin(age * 0.25f + band) * 0.06f;
+                    float sway = (float) Math.sin(age * 0.5f + band * 1.5f) * 0.06f;
+                    Vec3 p = center.add(right.scale(sway + (random.nextDouble() * 2.0 - 1.0) * 0.35))
+                        .add(0, y, 0).add(front.scale((random.nextDouble() * 2.0 - 1.0) * 0.25));
+                    return new MaterialEmitters.Sample(p, Vec3.ZERO);
+                }, 60f, 70);
+            this.wake = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0x1AD9FF, 1.3f, s ^ 0x61, Vec3.ZERO, 0.015f),
+                random -> {
+                    double t = random.nextDouble();
+                    Vec3 p = center.add(front.scale(-0.10 - 0.85 * t))
+                        .add(0, 0.55 + 0.45 * t + (random.nextDouble() * 2.0 - 1.0) * 0.25, 0)
+                        .add(right.scale((random.nextDouble() * 2.0 - 1.0) * 0.15));
+                    return new MaterialEmitters.Sample(p, front.scale(-0.05));
+                }, 46f, 55);
+            this.ground = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0x00D9FF, 1.6f, s ^ 0x71, new Vec3(0, 0.01, 0), 0.01f),
+                random -> {
+                    double ang = random.nextDouble() * Math.PI * 2.0;
+                    double rr = ringR * Math.sqrt(random.nextDouble());
+                    return new MaterialEmitters.Sample(new Vec3(
+                        center.x + Math.cos(ang) * rr, center.y + 0.04, center.z + Math.sin(ang) * rr), Vec3.ZERO);
+                }, 30f, 36);
+        }
+    }
+
+    private final Map<Long, Streams> streams = new HashMap<>();
+
     @Override
     public void submit(AfterimageRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         // The entity lives 100 ticks; this used to stop at 80, leaving the last
         // second invisible while the afterimage still applied its debuff.
         float maxLife = 100.0f;
         float progress = Math.min(1.0f, state.age / maxLife);
-        if (progress >= 1.0f) return;
+        if (progress >= 1.0f) {
+            streams.remove(state.seed);
+            return;
+        }
+
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
         float alpha = Math.max(0.05f, 0.90f * (1.0f - (progress * progress)));
         float pulse = 0.85f + 0.15f * (float) Math.sin(state.age * 0.35f);
-        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
-        long seed = state.seed;
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        Vec3 center = new Vec3(state.ex, state.ey, state.ez);
+        float ds = MaterialEmitters.distanceScale(center);
+        float env = alpha * pulse * ds;
+        if (env <= 0.01f) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
         // Body colors, unchanged from the box era: the spectral body is
         // tinted by the caster's synced skin color, the cap by hair color.
         float skinR = KiRenderHelper.red(state.skinColor);
         float skinG = KiRenderHelper.green(state.skinColor);
         float skinB = KiRenderHelper.blue(state.skinColor);
-        float bodyR = 0.10f + skinR * 0.45f;
-        float bodyG = 0.04f + skinG * 0.30f;
-        float bodyB = 0.22f + skinB * 0.45f;
-        float hairR = KiRenderHelper.red(state.hairColor);
-        float hairG = KiRenderHelper.green(state.hairColor);
-        float hairB = KiRenderHelper.blue(state.hairColor);
+        int bodyArgb = ((int) ((0.10f + skinR * 0.45f) * 255f) << 16)
+            | ((int) ((0.04f + skinG * 0.30f) * 255f) << 8)
+            | (int) ((0.22f + skinB * 0.45f) * 255f);
+        int hairArgb = state.hairColor & 0xFFFFFF;
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+        Streams found = streams.get(state.seed);
+        if (found == null || found.level != level) {
+            found = new Streams(level, state.seed, bodyArgb, hairArgb);
+            streams.put(state.seed, found);
+        }
+        final Streams s = found;
+        long now = System.nanoTime();
+        float delta = s.lastNanos == 0L ? 1f / 60f : Math.min(0.05f, (now - s.lastNanos) / 1_000_000_000f);
+        s.lastNanos = now;
+        s.lastSeenNanos = now;
+        streams.values().removeIf(other -> other != s && now - other.lastSeenNanos > 4_000_000_000L);
 
-        // Body column at the base pose: outer halo plume, the skin-tinted
-        // body plume inside it, and the footstep ripple as a glow fan
-        // whose radius still breathes with age.
-        float ringR = (0.5f + (state.age * 0.03f) % 0.8f);
-        float ringA = alpha * (1.0f - (ringR / 1.3f));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.plume(pose, buffer, seed ^ 0x11L, 0.46f, 1.95f,
-                0.10f, 0.85f, 1.0f, alpha * 0.35f * pulse, 1.0f, ds);
-            BespokeGeometry.plume(pose, buffer, seed ^ 0x22L, 0.36f, 1.85f,
-                bodyR, bodyG, bodyB, alpha * 0.85f, 1.0f, ds);
-            if (ringA > 0.01f) {
-                BespokeGeometry.glowFan(pose, buffer, seed ^ 0x71L, ringR, 0.03f,
-                    0.0f, 0.85f, 1.0f, ringA, ds);
-            }
-        });
+        double yawRad = Math.toRadians(state.yRot);
+        s.center = center;
+        s.front = new Vec3(Math.sin(yawRad), 0, -Math.cos(yawRad));
+        s.right = new Vec3(Math.cos(yawRad), 0, Math.sin(yawRad));
+        s.age = state.age;
+        // The presence dissolves outward as it dies: the emission volume
+        // widens while the envelope thins, on the old fade curve.
+        s.spread = 1.0f + progress * 0.35f;
+        s.ringR = 0.5f + (state.age * 0.03f) % 0.8f;
 
-        // Hair cap: a short plume over the head of the column, in the
-        // caster's synced hair color (the head spans y 1.4 to 1.82).
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 1.56f, -0.04f);
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.plume(pose, buffer, seed ^ 0x33L, 0.27f, 0.34f,
-                hairR, hairG, hairB, alpha * 0.9f, 1.0f, ds));
-        poseStack.popPose();
-
-        // The spatial eye slit: a short torn ribbon standing vertical at
-        // the face, where the bright box used to sit (y 1.55 to 1.65,
-        // front z -0.22 to -0.18).
-        poseStack.pushPose();
-        poseStack.translate(-0.12f, 1.60f, -0.20f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x44L, 0.24f, 0.10f, 0.0f,
-                0.85f, 0.98f, 1.0f, alpha * 0.95f, 1.0f, ds));
-        poseStack.popPose();
-
-        // Holographic scanline slices: torn ribbon sheets at the same six
-        // heights, swaying with the same age terms as the old slices.
-        int sliceCount = 6;
-        for (int s = 0; s < sliceCount; s++) {
-            float sliceY = 0.15f + (s * 0.32f) + (float) Math.sin((state.age * 0.25f) + s) * 0.06f;
-            float sliceOffset = (float) Math.sin((state.age * 0.5f) + s * 1.5f) * 0.06f;
-            long sliceSeed = seed ^ (0x50L + s);
-            poseStack.pushPose();
-            poseStack.translate(-0.35f + sliceOffset, sliceY, 0.0f);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.tornRibbon(pose, buffer, sliceSeed, 0.70f, 0.50f, 0.0f,
-                    0.0f, 0.95f, 1.0f, alpha * 0.65f, 1.0f, ds));
-            poseStack.popPose();
+        s.dark.tick(delta, env);
+        s.soul.tick(delta, env * 0.9f);
+        s.hair.tick(delta, env * 0.9f);
+        s.eye.tick(delta, env * 0.95f);
+        s.scan.tick(delta, env * 0.65f);
+        s.wake.tick(delta, env * 0.45f);
+        float ringA = alpha * (1.0f - (s.ringR / 1.3f));
+        if (ringA > 0.01f) {
+            s.ground.tick(delta, ringA * pulse * ds);
         }
 
-        // Speed wake: two torn ribbons trailing behind the dash stance.
-        // The Y rotation lays each ribbon's length along +Z (behind the
-        // ghost, which faces -Z in this frame); the bend lifts the tail
-        // to the old ribbons' end heights.
-        float ribbonAlpha = alpha * 0.45f;
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.8f, 0.1f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x61L, 0.85f, 0.30f, 0.6f,
-                0.1f, 0.85f, 1.0f, ribbonAlpha, 1.0f, ds));
-        poseStack.popPose();
-
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.3f, 0.1f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x62L, 0.70f, 0.40f, 0.5f,
-                0.1f, 0.85f, 1.0f, ribbonAlpha * 0.8f, 1.0f, ds));
-        poseStack.popPose();
-
-        // Disintegrating motes: the old diamond motes' positions, from the
-        // same seeded Random sequence, now drawn as tiny torn flecks.
-        // Count steps down with camera distance like every other layer.
-        Random rng = new Random(state.seed);
-        int moteCount = FxEnvelope.segments(16, ds, 5);
-        for (int m = 0; m < moteCount; m++) {
-            float moteProg = (progress + (m / 16.0f)) % 1.0f;
-            float mx = (rng.nextFloat() - 0.5f) * 0.95f;
-            float my = moteProg * 2.4f;
-            float mz = (rng.nextFloat() - 0.5f) * 0.95f;
-            float mMoteAlpha = alpha * (1.0f - moteProg);
-            if (mMoteAlpha <= 0.01f) continue;
-            long moteSeed = seed ^ (0x80L + m);
-            float moteYaw = m * 47.0f;
-            poseStack.pushPose();
-            poseStack.translate(mx, my, mz);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(moteYaw)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.tornRibbon(pose, buffer, moteSeed, 0.14f, 0.07f, 0.05f,
-                    0.1f, 0.85f, 1.0f, mMoteAlpha, 1.0f, ds));
-            poseStack.popPose();
-        }
-
-        // Additive halo pass: a wider plume shell so the afterimage glows
-        // at its silhouette instead of only tinting flat.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) ->
-            BespokeGeometry.plume(pose, buffer, seed ^ 0x19L, 0.48f, 1.95f,
-                0.10f, 0.80f, 1.0f, alpha * 0.16f * pulse, 1.0f, ds));
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 }

@@ -1,31 +1,47 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.ZGravitySlamEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 /**
  * Entity Renderer for Z-Sword Gravity Slam in Minecraft 26.2.
  *
- * Bespoke pass: the dome is a seeded displaced dome squashed to the
- * spectacle pass height, the trenches are two layered crack stars (violet
- * base, gold core), the rim is a broken vortex band, the erupted monoliths
- * are torn ribbons stood upright and leaned outward, and the geysers are
- * plumes at seeded trench endpoints. All shapes take the entity's synced
- * seed, so the fracture pattern is frame stable and shared by every viewer.
+ * No-shapes pass: the slam draws no geometry. Its footprint is carried
+ * by compressed stone dust and pale vapor driven outward across the
+ * ground, violet and gold gravity plasma rising through the trench
+ * area, and physical block chunks using the struck ground material.
+ * The old monolith positions survive only as data: each seeded anchor
+ * carries a dense falling column of dust, debris, and heavy plasma
+ * instead of a slab or ribbon. The geyser stage is an upward plasma
+ * and dust eruption on the strike envelope. Lifecycle, radius, power,
+ * and seed behavior carry over from the bespoke renderer.
  */
 public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGravitySlamRenderer.ZGravitySlamRenderState> {
+
+    private static final int GOLD = 0xFFD133;
+    private static final int VIOLET = 0x5914A6;
+    private static final int PALE_GOLD = 0xFFF2A6;
+    private static final int STONE_DUST = 0x9A8668;
+    private static final int DARK_STONE = 0x77675A;
+
+    private final Map<Integer, Emission> emissions = new HashMap<>();
 
     public ZGravitySlamRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -37,6 +53,8 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
         public float age = 0;
         public int lifetime = 50;
         public long seed = 0;
+        public int entityId = -1;
+        public BlockState groundState = Blocks.STONE.defaultBlockState();
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -62,11 +80,19 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
         state.age = entity.tickCount + partialTicks;
         state.lifetime = entity.getLifetime();
         state.seed = entity.getSeed();
+        state.entityId = entity.getId();
+        BlockState below = entity.level().getBlockState(entity.blockPosition().below());
+        state.groundState = below == null || below.isAir() ? Blocks.STONE.defaultBlockState() : below;
     }
 
     @Override
     public void submit(ZGravitySlamRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        super.submit(state, poseStack, collector, cameraState);
+        Minecraft minecraft = Minecraft.getInstance();
+        ClientLevel level = minecraft == null ? null : minecraft.level;
+        if (level == null) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
 
         float radius = state.radius;
         float power = state.powerRatio;
@@ -75,114 +101,168 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
         float fade = 1.0f - smooth(progress);
         float grow = smooth(Math.min(1.0f, progress / 0.48f));
         float impact = strike(progress);
-        // Late decay factor: monoliths sink and trenches shorten as they fade
-        // instead of standing at full height while only their alpha drops.
         float decay = smooth(Math.max(0.0f, (progress - 0.60f) / 0.40f));
-        float dist = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        RenderType renderType = KiRenderHelper.kiRenderType();
-
-        float rCol = 1.0f;
-        float gCol = 0.82f;
-        float bCol = 0.20f;
-
+        Vec3 center = new Vec3(state.x, state.y, state.z);
+        float dist = MaterialEmitters.distanceScale(center);
         float shockR = radius * grow;
-        if (fade > 0.04f && shockR > 0.05f) {
-            float domeH = (2.2f + power * 2.6f) * (0.35f + 0.65f * fade);
-
-            // 1. Shockwave dome: a displaced hemisphere squashed to domeH.
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.05f, 0.0f);
-            poseStack.scale(1.0f, domeH / shockR, 1.0f);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                BespokeGeometry.displacedDome(pose, buffer, state.seed, shockR,
-                    rCol, gCol, bCol, 0.5f, fade, dist));
-            poseStack.popPose();
-
-            // Rim wall and inner ground mark, then the trench crack stars.
-            float trenchReach = radius * grow * (1.0f - decay * 0.45f);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.brokenVortexBand(pose, buffer, state.seed ^ 0xB1L, shockR,
-                    0.02f, 0.35f, age * 0.15f, rCol, gCol, bCol, fade * 0.72f, dist);
-                BespokeGeometry.crackStar(pose, buffer, state.seed ^ 0xC2L, shockR * 0.36f,
-                    1.0f, 0.96f, 0.72f, 1.0f, fade * (0.55f + 0.45f * impact), dist);
-                // Radiating tectonic trenches: violet base star, gold core star.
-                BespokeGeometry.crackStar(pose, buffer, state.seed ^ 0x7EL, trenchReach * 0.72f,
-                    0.35f, 0.08f, 0.65f, 0.95f, fade, dist);
-                BespokeGeometry.crackStar(pose, buffer, state.seed ^ 0xD3L, trenchReach * 0.58f,
-                    1.0f, 0.95f, 0.45f, 1.0f, fade, dist);
-            });
+        if (fade <= 0.04f || shockR <= 0.05f || dist <= 0.01f) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
         }
 
-        // 2. Erupted monolith slabs: torn ribbons stood upright, leaned
-        // radially outward. Placement math is unchanged from the spectacle
-        // pass; only the shape source changed.
-        if (fade > 0.04f) {
-            Random rng = new Random(state.seed);
-            int rockCount = 18 + (int) (power * 10); // 18 to 28 monoliths
+        Emission emission = emissionFor(state, level);
+        emission.frame.center = center;
+        emission.frame.radius = radius;
+        emission.frame.grow = grow;
+        emission.frame.decay = decay;
+        emission.frame.impact = impact;
+
+        float delta = emission.nextDelta();
+        float envelope = fade * dist;
+        emission.groundDust.tick(delta, envelope);
+        emission.vapor.tick(delta, envelope * 0.82f);
+        emission.plasma.tick(delta, envelope * (0.55f + 0.45f * impact));
+        emission.debris.tick(delta, envelope * (0.40f + 0.60f * impact));
+        emission.columnDust.tick(delta, envelope);
+        emission.geyserPlasma.tick(delta, impact * envelope);
+
+        super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private Emission emissionFor(ZGravitySlamRenderState state, ClientLevel level) {
+        long now = System.nanoTime();
+        emissions.entrySet().removeIf(entry -> now - entry.getValue().lastSeenNanos > 5_000_000_000L);
+        Emission emission = emissions.get(state.entityId);
+        if (emission == null || emission.seed != state.seed) {
+            emission = new Emission(level, state.seed, state.powerRatio, state.groundState);
+            emissions.put(state.entityId, emission);
+        }
+        emission.lastSeenNanos = now;
+        return emission;
+    }
+
+    private static final class Frame {
+        Vec3 center = Vec3.ZERO;
+        float radius = 1.0f;
+        float grow = 1.0f;
+        float decay = 0.0f;
+        float impact = 0.0f;
+    }
+
+    private static final class Emission {
+        final long seed;
+        final Frame frame = new Frame();
+        final float[] columnAngles;
+        final float[] columnDistFracs;
+        final float[] columnHeights;
+        final float[] columnWidths;
+        final float[] columnTilts;
+        final MaterialEmitters.Emitter groundDust;
+        final MaterialEmitters.Emitter vapor;
+        final MaterialEmitters.Emitter plasma;
+        final MaterialEmitters.Emitter debris;
+        final MaterialEmitters.Emitter columnDust;
+        final MaterialEmitters.Emitter geyserPlasma;
+        long lastSeenNanos = System.nanoTime();
+        long lastTickNanos = 0L;
+
+        Emission(ClientLevel level, long seed, float power, BlockState groundState) {
+            this.seed = seed;
+            int baseSeed = (int) seed;
+            Frame f = frame;
+
+            int rockCount = 18 + (int) (power * 10);
+            columnAngles = new float[rockCount];
+            columnDistFracs = new float[rockCount];
+            columnHeights = new float[rockCount];
+            columnWidths = new float[rockCount];
+            columnTilts = new float[rockCount];
+            Random rng = new Random(seed);
             for (int r = 0; r < rockCount; r++) {
-                double rockAngle = (r / (double) rockCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.35);
-                float rockDist = radius * grow * (0.22f + rng.nextFloat() * 0.70f);
-
-                float rx = (float) Math.cos(rockAngle) * rockDist;
-                float rz = (float) Math.sin(rockAngle) * rockDist;
-
-                float maxH = (1.8f + power * 2.2f) + rng.nextFloat() * (2.0f + power * 1.5f);
-                // Monoliths sink back into the ground through the decay window.
-                float slabHeight = maxH * grow * (1.0f - decay * 0.60f);
-                float slabWidth = 0.22f + rng.nextFloat() * 0.16f;
-
-                // Outward leaning angle
-                float tiltFactor = 0.30f + rng.nextFloat() * 0.30f;
-                if (slabHeight <= 0.05f) continue;
-
-                long rockSeed = state.seed + r * 131L;
-                float yawDeg = 180.0f - (float) Math.toDegrees(rockAngle);
-                poseStack.pushPose();
-                poseStack.translate(rx, 0.05f, rz);
-                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(yawDeg)));
-                poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-                collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                    BespokeGeometry.tornRibbon(pose, buffer, rockSeed, slabHeight, slabWidth * 1.1f,
-                        slabHeight * tiltFactor, 0.65f, 0.20f, 0.95f, 0.95f, fade, dist);
-                    BespokeGeometry.tornRibbon(pose, buffer, rockSeed + 1L, slabHeight * 0.94f, slabWidth * 0.42f,
-                        slabHeight * tiltFactor, 0.85f, 0.45f, 1.0f, 0.9f, fade, dist);
-                });
-                poseStack.popPose();
+                columnAngles[r] = (float) ((r / (double) rockCount) * Math.PI * 2.0 + rng.nextDouble() * 0.35);
+                columnDistFracs[r] = 0.22f + rng.nextFloat() * 0.70f;
+                columnHeights[r] = (1.8f + power * 2.2f) + rng.nextFloat() * (2.0f + power * 1.5f);
+                columnWidths[r] = 0.22f + rng.nextFloat() * 0.16f;
+                columnTilts[r] = 0.30f + rng.nextFloat() * 0.30f;
             }
+
+            MaterialEmitters.Source ground = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double flat = Math.sqrt(random.nextDouble()) * f.radius * f.grow;
+                Vec3 pos = f.center.add(Math.cos(angle) * flat, 0.07, Math.sin(angle) * flat);
+                Vec3 outward = new Vec3(Math.cos(angle), 0.0, Math.sin(angle))
+                    .scale(0.22 + random.nextDouble() * 0.22).add(0.0, 0.10 + random.nextDouble() * 0.10, 0.0);
+                return new MaterialEmitters.Sample(pos, outward);
+            };
+            MaterialEmitters.Source columns = random -> {
+                int index = random.nextInt(columnAngles.length);
+                Vec3 anchor = columnAnchor(f, index);
+                double local = (random.nextDouble() * 2.0 - 1.0) * columnWidths[index] * 0.62;
+                double localZ = (random.nextDouble() * 2.0 - 1.0) * columnWidths[index] * 0.62;
+                double height = columnHeights[index] * f.grow * (1.0f - f.decay * 0.60f);
+                Vec3 pos = anchor.add(local, random.nextDouble() * Math.max(0.05, height), localZ);
+                Vec3 outward = new Vec3(Math.cos(columnAngles[index]), 0.0, Math.sin(columnAngles[index]))
+                    .scale(columnTilts[index] * 0.05);
+                Vec3 fall = outward.add((random.nextDouble() - 0.5) * 0.03,
+                    -(0.17 + random.nextDouble() * 0.22), (random.nextDouble() - 0.5) * 0.03);
+                return new MaterialEmitters.Sample(pos, fall);
+            };
+            MaterialEmitters.Source debrisSource = random -> {
+                int index = random.nextInt(columnAngles.length);
+                Vec3 anchor = columnAnchor(f, index);
+                double local = (random.nextDouble() * 2.0 - 1.0) * columnWidths[index] * 0.80;
+                double localZ = (random.nextDouble() * 2.0 - 1.0) * columnWidths[index] * 0.80;
+                double height = columnHeights[index] * f.grow * (1.0f - f.decay * 0.60f);
+                Vec3 pos = anchor.add(local, random.nextDouble() * Math.max(0.05, height * 0.30), localZ);
+                Vec3 outward = new Vec3(Math.cos(columnAngles[index]), 0.0, Math.sin(columnAngles[index]))
+                    .scale(0.16 + random.nextDouble() * 0.24);
+                return new MaterialEmitters.Sample(pos, outward.add(0.0, 0.22 + random.nextDouble() * 0.25, 0.0));
+            };
+            MaterialEmitters.Source geyser = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double flat = Math.sqrt(random.nextDouble()) * f.radius * f.grow * 0.82;
+                Vec3 pos = f.center.add(Math.cos(angle) * flat, 0.08, Math.sin(angle) * flat);
+                Vec3 up = new Vec3((random.nextDouble() - 0.5) * 0.08,
+                    0.42 + random.nextDouble() * 0.30, (random.nextDouble() - 0.5) * 0.08);
+                return new MaterialEmitters.Sample(pos, up);
+            };
+
+            groundDust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(STONE_DUST, 2.35f, baseSeed ^ 0xD057, Vec3.ZERO, 0.012f),
+                ground, 168.0f, 340);
+            vapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(PALE_GOLD, 3.05f, baseSeed ^ 0x9A90, Vec3.ZERO, 0.010f),
+                ground, 82.0f, 175);
+            plasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(VIOLET, 2.20f, baseSeed ^ 0x7E1A, Vec3.ZERO, 0.012f),
+                ground, 104.0f, 220);
+            debris = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, groundState),
+                    Vec3.ZERO, 0.05f),
+                debrisSource, 58.0f, 130);
+            columnDust = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.dust(DARK_STONE, 2.00f, baseSeed ^ 0xC010, Vec3.ZERO, 0.008f),
+                columns, 148.0f, 315);
+            geyserPlasma = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(GOLD, 2.45f, baseSeed ^ 0x6E15, Vec3.ZERO, 0.012f),
+                geyser, 138.0f, 285);
         }
 
-        // 3. Vertical erupting singularity geysers at seeded trench
-        // endpoints. They erupt on the strike envelope (peak near the damage
-        // tick) and are gone by mid life.
-        if (impact > 0.03f && fade > 0.04f) {
-            float geyserH = (2.5f + power * 3.0f) * impact;
-            float geyserW = 0.30f + power * 0.25f;
-            BespokeGeometry.Rng grng = new BespokeGeometry.Rng(state.seed ^ 0x6E15L);
-            for (int g = 0; g < 5; g++) {
-                double gAngle = grng.range(0.0f, (float) (Math.PI * 2.0));
-                float gDist = radius * grow * (1.0f - decay * 0.45f) * grng.range(0.7f, 1.05f);
-                float gx = (float) Math.cos(gAngle) * gDist;
-                float gz = (float) Math.sin(gAngle) * gDist;
-                long geyserSeed = state.seed ^ 0x6E15L ^ (g * 77L);
-                poseStack.pushPose();
-                poseStack.translate(gx, 0.05f, gz);
-                collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                    BespokeGeometry.plume(pose, buffer, geyserSeed, geyserW * 1.4f, geyserH,
-                        1.0f, 0.90f, 0.30f, 0.95f, impact * fade, dist);
-                    BespokeGeometry.plume(pose, buffer, geyserSeed + 3L, geyserW * 0.8f, geyserH * 1.15f,
-                        0.60f, 0.15f, 0.95f, 0.7f, impact * fade, dist);
-                });
-                poseStack.popPose();
-            }
+        Vec3 columnAnchor(Frame f, int index) {
+            float dist = f.radius * f.grow * columnDistFracs[index];
+            return new Vec3(f.center.x + Math.cos(columnAngles[index]) * dist,
+                f.center.y + 0.05, f.center.z + Math.sin(columnAngles[index]) * dist);
         }
 
-        // Anchor glow pass: a soft gold disc under the slam so the footprint
-        // reads as grounded light, fading with the envelope.
-        if (fade > 0.04f) {
-            float glowR = radius * grow;
-            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) ->
-                LayeredRender.drawAnchorGlow(pose, buffer,
-                    glowR, 0.03f, rCol, gCol, bCol, fade * 0.30f, dist));
+        float nextDelta() {
+            long now = System.nanoTime();
+            if (lastTickNanos == 0L) {
+                lastTickNanos = now;
+                return 1.0f / 60.0f;
+            }
+            float delta = Math.min(0.05f, (now - lastTickNanos) / 1_000_000_000.0f);
+            lastTickNanos = now;
+            return Math.max(0.001f, delta);
         }
     }
 

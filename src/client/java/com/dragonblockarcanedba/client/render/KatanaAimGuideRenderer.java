@@ -1,33 +1,34 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
-import com.dragonblockarcanedba.client.render.ki.LayeredRender;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KatanaAimGuideEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Entity Renderer for Katana Aim Guide in Minecraft 26.2.
- * Renders the Heaven Splitter aim guide from the shared BespokeGeometry
- * toolkit (BESPOKE-STANDARD rule 1): the beam is two crossed torn ribbon
- * sheets (a cyan sheath sheet and a white core sheet, one horizontal and
- * one vertical, so the line reads from every angle), brighter ribbon bands
- * travel down it, the calibrating reticles are full blade arcs with shard
- * fan brackets, the terminal reticle is a blade arc with a white shard fan
- * cross, and the traveling energy nodes are small shard fans. The beam
- * length is the entity's synced max range, which the item keeps equal to
- * the real dash distance at the current charge. Alpha fades in over the
- * first 3 ticks and out over the entity's FADE_TICKS once the stance ends,
- * so the beam never pops. All geometry is seeded from the entity UUID; no
- * local draw helpers remain.
+ * The guide beam, reticle rings, brackets, and traveling nodes are gone.
+ * This renderer supplies the guide origin, look direction, range, charge,
+ * and lifecycle as data to the shared material emitters. Cyan ki plasma
+ * drifts along the aim path with a tighter white plasma stream inside
+ * it, pale air vapor moves around the path, and denser plasma gathers at
+ * the terminal point and at the old six-block calibration distances.
+ * The beam length remains the entity's synced max range. Alpha from the
+ * old lifecycle becomes emission density here: a fade in over the first
+ * three ticks and a fade out over FADE_TICKS once the stance ends.
  */
 public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity, KatanaAimGuideRenderer.AimGuideRenderState> {
 
@@ -45,6 +46,7 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         public boolean onRight = true;
         public int fadeStart = -1;
         public long seed = 0;
+        public UUID uuid = new UUID(0L, 0L);
         public double wx = 0, wy = 0, wz = 0;
     }
 
@@ -73,6 +75,7 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         state.age = entity.tickCount + partialTicks;
         state.fadeStart = entity.getFadeStart();
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.uuid = entity.getUUID();
         state.wx = entity.getX();
         state.wy = entity.getY();
         state.wz = entity.getZ();
@@ -91,175 +94,173 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
 
     @Override
     public void submit(AimGuideRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
         float charge = state.chargeRatio;
         float range = state.maxRange;
         float age = state.age;
         float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.5f);
-        // Lifecycle: smoothstep fade in over 3 ticks, fade out over FADE_TICKS.
         float alpha = (0.55f + charge * 0.45f) * pulse * FxEnvelope.smoothstep(Math.min(1.0f, age / 3.0f));
         if (state.fadeStart >= 0) {
             float fadeT = (age - state.fadeStart) / (float) KatanaAimGuideEntity.FADE_TICKS;
             if (fadeT >= 1.0f) return;
             alpha *= 1.0f - FxEnvelope.smoothstep(fadeT);
         }
-        final float alphaF = alpha;
-        float distScale = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
-        long seed = state.seed;
+        if (alpha <= 0.01f) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.level == null) return;
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
+        Vec3 base = new Vec3(state.wx, state.wy, state.wz);
+        float dist = MaterialEmitters.distanceScale(base);
+        if (dist <= 0.01f) return;
 
+        double yaw = Math.toRadians(state.yRot);
+        double pitch = Math.toRadians(state.xRot);
+        double cosYaw = Math.cos(yaw), sinYaw = Math.sin(yaw);
+        double cosPitch = Math.cos(pitch), sinPitch = Math.sin(pitch);
+        Vec3 right = new Vec3(cosYaw, 0, sinYaw);
+        Vec3 up = new Vec3(-sinYaw * sinPitch, cosPitch, cosYaw * sinPitch);
+        Vec3 forward = new Vec3(-sinYaw * cosPitch, -sinPitch, cosYaw * cosPitch);
+
+        Vec3 guideOrigin = base;
         if (state.isFirstPersonOwner) {
             float sideSign = state.onRight ? -1.0f : 1.0f;
-            poseStack.translate(sideSign * 0.35f, -0.46f, 0.30f);
+            guideOrigin = base.add(right.scale(sideSign * 0.35)).add(up.scale(-0.46)).add(forward.scale(0.30));
         }
-
         float zStart = state.isFirstPersonOwner ? 0.25f : 0.4f;
-        float beamLen = range - zStart;
-        float sheathRadius = 0.035f + (charge * 0.025f);
-        float coreRadius = 0.012f + (charge * 0.008f);
 
-        // 1 and 2. The beam: crossed torn ribbon sheets run from zStart to
-        // the terminal point. A -90 degree yaw turns the ribbon length down
-        // +Z; the second sheet adds a 90 degree roll around the beam axis so
-        // its width stands vertical. Cyan sheath outside, white core inside.
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, zStart);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed, beamLen, sheathRadius * 2.4f, 0.0f,
-                0.0f, 0.85f, 1.0f, 0.65f, alphaF, distScale);
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x1111L, beamLen, coreRadius * 2.4f, 0.0f,
-                1.0f, 1.0f, 1.0f, 0.95f, alphaF, distScale);
-        });
-        poseStack.popPose();
+        Anchor anchor = anchorFor(state, mc.level);
+        anchor.guideOrigin = guideOrigin;
+        anchor.right = right;
+        anchor.up = up;
+        anchor.forward = forward;
+        anchor.range = range;
+        anchor.charge = charge;
+        anchor.zStart = zStart;
+        anchor.stationCount = (int) (range / 6.0f);
 
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, zStart);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(90.0f)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x2222L, beamLen, sheathRadius * 2.4f, 0.0f,
-                0.0f, 0.85f, 1.0f, 0.65f, alphaF, distScale);
-            BespokeGeometry.tornRibbon(pose, buffer, seed ^ 0x3333L, beamLen, coreRadius * 2.4f, 0.0f,
-                1.0f, 1.0f, 1.0f, 0.95f, alphaF, distScale);
-        });
-        poseStack.popPose();
-
-        // Start ring at the beam origin: a full white blade arc stood into
-        // the XY plane, spinning with age.
-        float startRingR = (0.16f + charge * 0.10f) * 1.25f;
-        float startRot = age * 28.0f;
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, zStart + 0.2f);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(startRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x4444L, startRingR, 360.0f,
-                1.0f, 1.0f, 1.0f, 1.0f, alphaF, distScale);
-        });
-        poseStack.popPose();
-
-        // 2b. Energy flow bands: brighter ribbon segments travel down the
-        // beam so the guide reads as flowing energy, not a static line.
-        int bandCount = 3;
-        for (int b = 0; b < bandCount; b++) {
-            float bandProg = (age * 0.10f + (b / (float) bandCount)) % 1.0f;
-            float bandZ = zStart + bandProg * (range - zStart);
-            float bandEnd = Math.min(range, bandZ + 1.4f);
-            float bandAlpha = 0.55f * (1.0f - bandProg * 0.35f);
-            long bandSeed = seed ^ (0x5500L + b);
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, bandZ);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.tornRibbon(pose, buffer, bandSeed, bandEnd - bandZ, sheathRadius * 2.4f * 1.2f, 0.0f,
-                    0.55f, 0.95f, 1.0f, bandAlpha, alphaF, distScale);
-            });
-            poseStack.popPose();
+        float delta = anchor.deltaSeconds(mc.isPaused());
+        if (delta > 0f) {
+            float envelope = alpha * dist;
+            anchor.sheath.tick(delta, envelope);
+            anchor.core.tick(delta, envelope);
+            anchor.vapor.tick(delta, envelope * 0.7f);
+            anchor.terminal.tick(delta, envelope);
+            if (anchor.stationCount > 0) anchor.stations.tick(delta, envelope * 0.8f);
         }
-
-        // 3. Calibrating reticle stations along the guide line (every 6
-        // blocks): a full cyan blade arc ring with a pale shard fan bracket,
-        // counter rotating per station.
-        int stationCount = (int) (range / 6.0f);
-        for (int s = 1; s <= stationCount; s++) {
-            float stationDist = s * 6.0f;
-            if (state.isFirstPersonOwner && stationDist < 3.0f) continue;
-            float ringR = (0.18f + charge * 0.12f) * (1.0f + 0.1f * (float) Math.sin(age * 0.3f + s));
-            float ringRot = age * (15.0f + s * 10.0f);
-            long stationSeed = seed ^ (0x6600L + s);
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, stationDist);
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(ringRot)));
-            poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.bladeArc(pose, buffer, stationSeed, ringR * 1.25f, 360.0f,
-                    0.1f, 0.9f, 1.0f, 0.75f, alphaF, distScale);
-                BespokeGeometry.shardFan(pose, buffer, stationSeed ^ 0x77L, ringR * 1.4f,
-                    0.85f, 0.98f, 1.0f, 0.85f, alphaF, distScale);
-            });
-            poseStack.popPose();
-        }
-
-        // 4. Terminal reticle at the endpoint: a counter rotating cyan blade
-        // arc with a white shard fan cross standing in for the old bracket
-        // and crosshair spokes.
-        float endR = 0.30f + (charge * 0.20f);
-        float endRot = -age * 40.0f;
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, range);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(endRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x8888L, endR * 1.25f, 360.0f,
-                0.0f, 0.95f, 1.0f, 0.90f, alphaF, distScale);
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x9999L, endR * 1.6f,
-                1.0f, 1.0f, 1.0f, 1.0f, alphaF, distScale);
-        });
-        poseStack.popPose();
-
-        // 5. High velocity energy nodes traveling down the beam: small shard
-        // fans lying in the XZ plane at each node's z.
-        int nodeCount = 4;
-        for (int n = 0; n < nodeCount; n++) {
-            float nodeProg = (age * 0.15f + (n / (float) nodeCount)) % 1.0f;
-            float nodeZ = 0.5f + nodeProg * (range - 0.5f);
-            float nodeAlpha = 1.0f - nodeProg * 0.3f;
-            long nodeSeed = seed ^ (0xAA00L + n);
-            poseStack.pushPose();
-            poseStack.translate(0.0f, 0.0f, nodeZ);
-            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-                BespokeGeometry.shardFan(pose, buffer, nodeSeed, 0.14f * (1.0f + charge * 0.5f),
-                    1.0f, 1.0f, 1.0f, nodeAlpha, alphaF, distScale);
-            });
-            poseStack.popPose();
-        }
-
-        // Additive halo pass: the terminal reticle and the beam sheath get a
-        // soft bloom so the aim point glows against the world.
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, range);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(endRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90.0f)));
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.bladeArc(pose, buffer, seed ^ 0x8888L, endR * 1.25f * 1.25f, 360.0f,
-                0.0f, 0.95f, 1.0f, 0.20f, alphaF, distScale);
-        });
-        poseStack.popPose();
-
-        poseStack.pushPose();
-        poseStack.translate(0.0f, 0.0f, zStart);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-90.0f)));
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            BespokeGeometry.tornRibbon(pose, buffer, seed, beamLen, sheathRadius * 3.8f, 0.0f,
-                0.0f, 0.85f, 1.0f, 0.10f, alphaF, distScale);
-        });
-        poseStack.popPose();
-
-        poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static Anchor anchorFor(AimGuideRenderState state, ClientLevel level) {
+        long now = System.nanoTime();
+        Anchor anchor = ANCHORS.get(state.uuid);
+        if (anchor == null || anchor.level != level) {
+            anchor = new Anchor(level, (int) state.seed);
+            ANCHORS.put(state.uuid, anchor);
+        }
+        anchor.lastSeenNanos = now;
+        Iterator<Map.Entry<UUID, Anchor>> it = ANCHORS.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<UUID, Anchor> entry = it.next();
+            if (!entry.getKey().equals(state.uuid) && now - entry.getValue().lastSeenNanos > 4_000_000_000L) {
+                it.remove();
+            }
+        }
+        return anchor;
+    }
+
+    private static final Map<UUID, Anchor> ANCHORS = new HashMap<>();
+
+    private static final class Anchor {
+        private final ClientLevel level;
+        private final int seed;
+        private long lastSeenNanos;
+        private long lastTickNanos;
+        private Vec3 guideOrigin = Vec3.ZERO;
+        private Vec3 right = new Vec3(1, 0, 0);
+        private Vec3 up = new Vec3(0, 1, 0);
+        private Vec3 forward = new Vec3(0, 0, 1);
+        private float range = 16f;
+        private float charge = 0f;
+        private float zStart = 0.4f;
+        private int stationCount = 0;
+        private final MaterialEmitters.Emitter sheath;
+        private final MaterialEmitters.Emitter core;
+        private final MaterialEmitters.Emitter vapor;
+        private final MaterialEmitters.Emitter terminal;
+        private final MaterialEmitters.Emitter stations;
+
+        private Anchor(ClientLevel level, int seed) {
+            this.level = level;
+            this.seed = seed;
+            this.sheath = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0x00D9FF, 1.05f, seed, Vec3.ZERO, 0.010f),
+                pathSource(0.055), 176f, 202);
+            this.core = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFFFFFF, 0.72f, seed ^ 0x1111, Vec3.ZERO, 0.007f),
+                pathSource(0.020), 126f, 148);
+            this.vapor = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(0xBFEFFF, 1.80f, seed ^ 0x2222, Vec3.ZERO, 0.014f),
+                pathSource(0.110), 38f, 50);
+            this.terminal = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0x00F2FF, 1.50f, seed ^ 0x3333, Vec3.ZERO, 0.016f),
+                volumeSource(true), 62f, 78);
+            this.stations = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xD9FAFF, 1.20f, seed ^ 0x4444, Vec3.ZERO, 0.013f),
+                volumeSource(false), 34f, 46);
+        }
+
+        private Vec3 start() {
+            return guideOrigin.add(forward.scale(zStart));
+        }
+
+        private Vec3 end() {
+            return guideOrigin.add(forward.scale(range));
+        }
+
+        private MaterialEmitters.Source pathSource(double radiusBase) {
+            return random -> {
+                double t = random.nextDouble();
+                double radius = (radiusBase + charge * radiusBase * 0.65) * Math.sqrt(random.nextDouble());
+                double ang = random.nextDouble() * Math.PI * 2.0;
+                Vec3 pos = start().add(forward.scale(Math.max(0.0, range - zStart) * t))
+                    .add(right.scale(Math.cos(ang) * radius))
+                    .add(up.scale(Math.sin(ang) * radius));
+                return new MaterialEmitters.Sample(pos, forward.scale(0.015));
+            };
+        }
+
+        private MaterialEmitters.Source volumeSource(boolean terminalPoint) {
+            return random -> {
+                Vec3 center;
+                double radius;
+                if (terminalPoint) {
+                    center = end();
+                    radius = 0.30 + charge * 0.20;
+                } else {
+                    int station = stationCount <= 0 ? 0 : 1 + random.nextInt(stationCount);
+                    center = guideOrigin.add(forward.scale(station * 6.0));
+                    radius = 0.24 + charge * 0.14;
+                }
+                double z = random.nextDouble() * 2.0 - 1.0;
+                double ang = random.nextDouble() * Math.PI * 2.0;
+                double rr = Math.cbrt(random.nextDouble()) * radius;
+                double flat = Math.sqrt(Math.max(0.0, 1.0 - z * z)) * rr;
+                Vec3 pos = center
+                    .add(right.scale(Math.cos(ang) * flat))
+                    .add(up.scale(Math.sin(ang) * flat))
+                    .add(forward.scale(z * rr));
+                return new MaterialEmitters.Sample(pos, forward.scale(0.006));
+            };
+        }
+
+        private float deltaSeconds(boolean paused) {
+            long now = System.nanoTime();
+            if (lastTickNanos == 0L) {
+                lastTickNanos = now;
+                return paused ? 0f : 0.016f;
+            }
+            float delta = Math.min(0.05f, (now - lastTickNanos) / 1_000_000_000.0f);
+            lastTickNanos = now;
+            return paused ? 0f : delta;
+        }
     }
 }

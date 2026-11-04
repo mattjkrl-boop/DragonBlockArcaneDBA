@@ -1,6 +1,6 @@
 package com.dragonblockarcanedba.effect;
 
-import com.dragonblockarcanedba.particle.DbaDustOptions;
+import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -30,7 +30,7 @@ public class MarkedByEvilEffect extends MobEffect {
         double py = entity.getY() + entity.getBbHeight() * 0.5;
 
         level.sendParticles(
-            new DbaDustOptions(0xFF0033, 1.8f),
+            DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0xFF0033, 1.8f, entity.getId() * 31 + entity.tickCount),
             px, py, pz,
             1, 0, 0.05, 0, 0.01
         );

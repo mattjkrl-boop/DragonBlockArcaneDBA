@@ -1,22 +1,28 @@
 package com.dragonblockarcanedba.client.render.ki;
 
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KiSpiralBeamEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * A spiral beam is a white ribbon core wrapped in a broken vortex sheath:
- * short seeded band segments stacked along the beam, each rolled a step
- * further than the last, so the sheath winds 3.5 turns over the full length
- * and keeps turning with age.
+ * No-shapes pass: this renderer draws no geometry. A spiral beam is a
+ * white plasma core stream along the path, wrapped by technique-colored
+ * plasma whose emission points wind 3.5 turns over the beam length as
+ * data, plus vapor winding with it and an impact plume of plasma and
+ * smoke at the terminus. The winding lives in where particles are born
+ * and how they drift, not in any rendered band or helix.
  */
 public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiSpiralBeamRenderer.SpiralBeamRenderState> {
 
@@ -39,52 +45,133 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
         state.ageInTicks = entity.tickCount + partialTicks;
         state.scale = entity.getScale();
         state.seed = entity.getSeed();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
+    }
+
+    /** Mutable per-frame emission data read by the sources. Data only. */
+    private static final class Frame {
+        Vec3 from = Vec3.ZERO;
+        Vec3 to = Vec3.ZERO;
+        Vec3 dir = Vec3.ZERO;
+        Vec3 u = new Vec3(1, 0, 0);
+        Vec3 v = new Vec3(0, 1, 0);
+        float length = 1f;
+        float helixRadius = 0.28f;
+        float phase = 0f;
+    }
+
+    private static final class Emission {
+        final Frame frame = new Frame();
+        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        float lastAge = -1f;
+    }
+
+    private final Map<Long, Emission> emissions = new HashMap<>();
+
+    private static MaterialEmitters.Source beamPath(Frame frame) {
+        return random -> {
+            double t = random.nextDouble();
+            Vec3 pos = frame.from.add(frame.to.subtract(frame.from).scale(t));
+            return new MaterialEmitters.Sample(pos, frame.dir.scale(0.05));
+        };
+    }
+
+    /** Points winding around the path: the spiral as emission data. */
+    private static MaterialEmitters.Source helix(Frame frame) {
+        return random -> {
+            double t = random.nextDouble();
+            double ang = frame.phase + t * Math.PI * 2.0 * 3.5;
+            double rr = frame.helixRadius * (0.75 + random.nextDouble() * 0.45);
+            Vec3 offset = frame.u.scale(Math.cos(ang) * rr).add(frame.v.scale(Math.sin(ang) * rr));
+            Vec3 pos = frame.from.add(frame.dir.scale(t * frame.length)).add(offset);
+            Vec3 tangent = frame.u.scale(-Math.sin(ang)).add(frame.v.scale(Math.cos(ang)));
+            return new MaterialEmitters.Sample(pos, frame.dir.scale(0.05).add(tangent.scale(0.05)));
+        };
+    }
+
+    private static Vec3 lookDir(float yRot, float xRot) {
+        double yaw = Math.toRadians(yRot);
+        double pitch = Math.toRadians(xRot);
+        double cosP = Math.cos(pitch);
+        return new Vec3(-Math.sin(yaw) * cosP, -Math.sin(pitch), Math.cos(yaw) * cosP);
+    }
+
+    private static void updateFrame(Frame frame, SpiralBeamRenderState state) {
+        frame.from = new Vec3(state.wx, state.wy, state.wz);
+        frame.dir = lookDir(state.yRot, state.xRot);
+        frame.to = frame.from.add(frame.dir.scale(state.length));
+        frame.length = state.length;
+        frame.helixRadius = 0.28f * Math.max(0.2f, state.scale);
+        frame.phase = state.ageInTicks * 0.35f;
+        Vec3 u = frame.dir.cross(new Vec3(0, 1, 0));
+        if (u.lengthSqr() < 1e-6) u = new Vec3(1, 0, 0); else u = u.normalize();
+        frame.u = u;
+        frame.v = u.cross(frame.dir).normalize();
+    }
+
+    private Emission buildEmission(ClientLevel level, SpiralBeamRenderState state) {
+        Emission emission = new Emission();
+        updateFrame(emission.frame, state);
+        Frame frame = emission.frame;
+        int seed = state.seed;
+        float scale = Math.max(0.2f, state.scale);
+        float pathRate = Math.min(1000f, Math.max(300f, state.length * 13.0f));
+        emission.emitters = new MaterialEmitters.Emitter[]{
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(0xFFFFFF, 1.35f * scale, seed,
+                                Vec3.ZERO, 0.02f),
+                        beamPath(frame), pathRate * 0.55f, 700),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(state.color, 2.5f * scale, seed ^ 0x0E111,
+                                Vec3.ZERO, 0.03f),
+                        beamPath(frame), pathRate * 0.45f, 600),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(state.color, 2.1f * scale, seed ^ 0x0CA11,
+                                Vec3.ZERO, 0.02f),
+                        helix(frame), 620f, 760),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.vapor(state.color, 2.9f * scale, seed ^ 0x0BEEF,
+                                Vec3.ZERO, 0.03f),
+                        helix(frame), 110f, 150),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.plasma(state.color, 2.6f * scale, seed ^ 0x01AC7,
+                                Vec3.ZERO, 0.16f),
+                        random -> new MaterialEmitters.Sample(frame.to, frame.dir.scale(0.22)), 240f, 320),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.smoke(state.color, 2.8f * scale, seed ^ 0x05107,
+                                new Vec3(0.0, 0.05, 0.0), 0.07f),
+                        random -> new MaterialEmitters.Sample(frame.to, frame.dir.scale(0.10)), 50f, 75),
+        };
+        return emission;
     }
 
     @Override
     public void submit(SpiralBeamRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float r = KiRenderHelper.red(state.color);
-        float g = KiRenderHelper.green(state.color);
-        float b = KiRenderHelper.blue(state.color);
-        RenderType renderType = KiRenderHelper.kiRenderType();
-        float beamLength = state.length;
-        float phaseDeg = (float) Math.toDegrees(state.ageInTicks * 0.35f);
-        float scale = state.scale;
-        float coreW = 0.16f * scale;
-        float helix = 0.28f * scale;
-        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
-        long seed = state.seed;
-        int segs = FxEnvelope.segments(16, distScale, 6);
-        float segLen = beamLength / segs;
-        float totalTurnDeg = 3.5f * 360f;
+        float distScale = FxEnvelope.distScale(Math.sqrt(state.distanceToCameraSq));
+        float envelope = distScale;
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            coreRibbon(pose, buffer, seed, beamLength, coreW, distScale, 0f);
-            coreRibbon(pose, buffer, seed ^ 0x9E3779B9L, beamLength, coreW, distScale, 90f);
-            for (int i = 0; i < segs; i++) {
-                PoseStack.Pose p = pose.copy();
-                p.translate(0f, 0f, i * segLen);
-                p.rotate(Axis.ZP.rotationDegrees(phaseDeg + totalTurnDeg * (i / (float) segs)));
-                p.rotate(Axis.XP.rotationDegrees(90f));
-                BespokeGeometry.brokenVortexBand(p, buffer, seed + i * 131L, helix, 0f, segLen, 0f,
-                    r, g, b, 0.85f, distScale);
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level != null && envelope > 0.01f) {
+            long key = ((long) state.seed << 32) ^ (state.color & 0xFFFFFFFFL);
+            Emission emission = emissions.get(key);
+            if (emission == null || state.ageInTicks < emission.lastAge - 1.0f) {
+                emission = buildEmission(level, state);
+                emissions.put(key, emission);
+                if (emissions.size() > 64) emissions.clear();
             }
-        });
-        poseStack.popPose();
+            updateFrame(emission.frame, state);
+            float delta = emission.lastAge < 0f ? 0.05f
+                    : Math.min(0.05f, Math.max(0.0f, (state.ageInTicks - emission.lastAge) / 20.0f));
+            emission.lastAge = state.ageInTicks;
+            for (MaterialEmitters.Emitter emitter : emission.emitters) {
+                emitter.tick(delta, envelope);
+            }
+        }
 
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    /** One white torn ribbon lying along the beam axis: roll around the axis, then turn the run onto +Z. */
-    private static void coreRibbon(PoseStack.Pose pose, VertexConsumer buffer, long seed,
-                                   float length, float width, float distScale, float rollDeg) {
-        PoseStack.Pose p = pose.copy();
-        p.rotate(Axis.ZP.rotationDegrees(rollDeg));
-        p.rotate(Axis.YP.rotationDegrees(-90f));
-        BespokeGeometry.tornRibbon(p, buffer, seed, length, width, 0f, 1f, 1f, 1f, 0.95f, 1f, distScale);
     }
 
     public static class SpiralBeamRenderState extends EntityRenderState {
@@ -95,5 +182,8 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
         public float ageInTicks = 0;
         public float scale = 1.0f;
         public int seed = 0;
+        public double wx = 0;
+        public double wy = 0;
+        public double wz = 0;
     }
 }

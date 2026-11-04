@@ -1,37 +1,38 @@
 package com.dragonblockarcanedba.client.render;
 
-import com.dragonblockarcanedba.client.render.ki.BespokeGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.BlasterBoltEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Entity Renderer for Blaster Bolt in MC 26.2.
- * Bespoke pass: the regular 12-sided plasma tube, cone, and hand-rolled
- * lash fins are gone. The bolt is now built from BespokeGeometry pieces,
- * seeded from the bolt entity's synced seed:
- * - The body is crossed torn ribbons in three planes and three layers
- *   (soft edge sheath, heat-colored body, white-hot core), running from
- *   just behind the nose back to a torn point, spinning at the old
- *   body rate.
- * - The nose cone is a shard fan flare across the flight axis.
- * - The four stabilizer fins are jagged branch ribbons swept from the
- *   nose out and back, each with a thin white core pass, at the old
- *   fin positions and spin.
- * - A counter-spinning shard fan closes the tail wake.
- * Size, heat palette, pulse, and the impact collapse math are unchanged
- * from the spectacle pass; the collapse feeds the ribbon lengths and
- * the shared die envelope.
+ * No-shapes pass: this renderer draws no geometry. The bolt is a dense
+ * cluster of ki plasma particles sampled along its real flight path,
+ * with a white-hot plasma core near the nose, vapor shedding off the
+ * tail, and steel sparks at the head. Emission runs through persistent
+ * per-entity MaterialEmitters Emitter channels, so the accumulator
+ * and per-second budgets survive across frames; the channels rebuild
+ * only when the heat or size bucket changes. Size, heat palette,
+ * pulse, and the impact collapse math are unchanged from the bespoke
+ * pass; the collapse now drives emission density and particle scale
+ * instead of mesh size. The entity's own server trail and impact
+ * bursts are untouched.
  */
 public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, BlasterBoltRenderer.BlasterBoltRenderState> {
+    private static final Map<Integer, Emission> EMISSIONS = new ConcurrentHashMap<>();
+
     public BlasterBoltRenderer(EntityRendererProvider.Context context) {
         super(context);
     }
@@ -45,6 +46,21 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         public int impactAge = -1;
         public int seed = 0;
         public boolean isFirstPersonOwner = false;
+        public int entityId = -1;
+        public Vec3 origin = Vec3.ZERO;
+        public Vec3 direction = new Vec3(0, 0, 1);
+    }
+
+    /** Per-entity emission channels plus the live frame they sample from. */
+    private static final class Emission {
+        float lastAge = Float.NaN;
+        String signature = "";
+        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        Vec3 center = Vec3.ZERO;
+        Vec3 dir = new Vec3(0, 0, 1);
+        float drawHead = 0.0f;
+        float drawTail = 0.0f;
+        float drawRadius = 0.0f;
     }
 
     @Override
@@ -62,8 +78,12 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         state.age = entity.tickCount + partialTicks;
         state.impactAge = entity.getImpactAge();
         state.seed = entity.getSeed();
+        state.entityId = entity.getId();
+        state.origin = entity.getPosition(partialTicks);
+        Vec3 look = entity.getLookAngle();
+        state.direction = look.lengthSqr() > 1.0e-6 ? look.normalize() : new Vec3(0, 0, 1);
 
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null &&
             (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) &&
             mc.options.getCameraType().isFirstPerson());
@@ -71,11 +91,11 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
 
     @Override
     public void submit(BlasterBoltRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        RenderType renderType = KiRenderHelper.kiRenderType();
+        super.submit(state, poseStack, collector, cameraState);
 
-        poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc.level;
+        if (level == null) return;
 
         float age = state.age;
         float pulse = 1.0f + 0.08f * (float) Math.sin(age * 2.5f);
@@ -112,95 +132,86 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         final float drawHead = headLength * (1.0f - impactEase * 0.70f);
         final float drawTail = tailLength * (1.0f - impactEase * 0.20f);
 
-        double camDist = cameraState.pos.distanceTo(new Vec3(state.x, state.y, state.z));
-        final float distScale = com.dragonblockarcanedba.util.FxEnvelope.distScale(camDist);
-        final long seed = state.seed;
-        final float spin = age * 20.0f;
+        float distScale = MaterialEmitters.distanceScale(state.origin);
+        float envelope = boltDie * distScale * (state.isFirstPersonOwner ? 0.75f : 1.0f);
+        if (envelope <= 0.01f) return;
 
-        // Body: crossed torn ribbons in three planes, three layers each.
-        // The ribbons start just behind the nose and tear back to a point,
-        // so the bolt keeps the old extent: nose at +drawHead (covered by
-        // the shard flare below), widest at the origin, gone by -drawTail.
-        for (int p = 0; p < 3; p++) {
-            float planeDeg = spin + p * 60.0f;
-            ribbon(poseStack, collector, renderType, seed ^ 0x50F7L,
-                drawHead * 0.34f, planeDeg, drawHead * 0.66f + drawTail * 0.85f, drawRadius * 2.44f, 0.06f,
-                r, g, b, 0.22f, boltDie, distScale);
-            ribbon(poseStack, collector, renderType, seed ^ 0xB0D1L,
-                drawHead * 0.40f, planeDeg, drawHead * 0.60f + drawTail, drawRadius * 2.0f, 0.10f,
-                r, g, b, 0.88f, boltDie, distScale);
-            ribbon(poseStack, collector, renderType, seed ^ 0xC02EL,
-                drawHead * 0.34f, planeDeg, drawHead * 0.51f + drawTail * 0.55f, drawRadius * 0.76f, 0.04f,
-                1.0f, 0.97f, 0.82f, 1.0f, boltDie, distScale);
+        Emission em = EMISSIONS.computeIfAbsent(state.entityId, id -> new Emission());
+        em.center = state.origin;
+        em.dir = state.direction;
+        em.drawHead = drawHead;
+        em.drawTail = drawTail;
+        em.drawRadius = drawRadius;
+
+        float delta;
+        if (Float.isNaN(em.lastAge) || age < em.lastAge) {
+            delta = 1.0f / 60.0f;
+        } else {
+            delta = Math.min(0.10f, Math.max(0.0f, (age - em.lastAge) / 20.0f));
         }
+        em.lastAge = age;
+        if (delta <= 0f) return;
 
-        // Nose flare: a shard fan across the flight axis where the cone was.
-        axisFan(poseStack, collector, renderType, drawHead * 0.55f, spin + 15.0f, (pose, buffer) ->
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x905EL, drawRadius * 1.35f,
-                r, g, b, 0.90f, boltDie, distScale));
-
-        // Stabilizer fins: branch ribbons swept from the nose out to the
-        // old fin span and back toward the tail, edge color outside and a
-        // thin white core pass inside, spinning at the old fin rate.
-        final float finSpan = drawRadius * 2.3f;
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            for (int f = 0; f < 4; f++) {
-                double angle = (f / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 12.0f);
-                float ox = (float) Math.cos(angle);
-                float oy = (float) Math.sin(angle);
-                Vec3 p0 = new Vec3(ox * drawRadius * 0.25f, oy * drawRadius * 0.25f, drawHead * 0.28f);
-                Vec3 p1 = new Vec3(ox * finSpan * 0.92f, oy * finSpan * 0.92f, -drawHead * 0.2f);
-                Vec3 p2 = new Vec3(ox * finSpan * 0.38f, oy * finSpan * 0.38f, -drawTail * 0.55f);
-                long finSeed = seed ^ (0xF100L + f * 37L);
-                BespokeGeometry.branch(pose, buffer, finSeed, p0, p1,
-                    drawRadius * 0.30f, r, g, b, 0.88f, boltDie, distScale);
-                BespokeGeometry.branch(pose, buffer, finSeed ^ 0x21L, p1, p2,
-                    drawRadius * 0.30f, r, g, b, 0.88f, boltDie, distScale);
-                BespokeGeometry.branch(pose, buffer, finSeed ^ 0x22L, p0, p1,
-                    drawRadius * 0.10f, 1.0f, 0.96f, 0.78f, 1.0f, boltDie, distScale);
-                BespokeGeometry.branch(pose, buffer, finSeed ^ 0x23L, p1, p2,
-                    drawRadius * 0.10f, 1.0f, 0.96f, 0.78f, 1.0f, boltDie, distScale);
-            }
-        });
-
-        // Tail wake: a counter-spinning shard fan near the torn tail end.
-        axisFan(poseStack, collector, renderType, -drawTail * 0.82f, -age * 30.0f, (pose, buffer) ->
-            BespokeGeometry.shardFan(pose, buffer, seed ^ 0x7A11L, drawRadius * 1.05f,
-                r, g, b, 0.50f, boltDie, distScale));
-
-        poseStack.popPose();
-        super.submit(state, poseStack, collector, cameraState);
+        int bodyColor = argb(r, g, b);
+        String signature = System.identityHashCode(level) + "|" + bodyColor + "|"
+            + Math.round(drawRadius * 16.0f) + "|" + overcharged;
+        if (!signature.equals(em.signature)) {
+            em.signature = signature;
+            em.emitters = buildEmitters(level, em, state.seed, bodyColor, drawRadius, overcharged);
+        }
+        for (MaterialEmitters.Emitter emitter : em.emitters) {
+            emitter.tick(delta, envelope);
+        }
+        if (EMISSIONS.size() > 256) EMISSIONS.clear();
     }
 
-    /**
-     * One torn ribbon of the bolt body. The pose is spun on the flight
-     * axis by planeDeg, then the ribbon's local +X length is laid onto
-     * -Z, so the ribbon starts at zOrigin and tears backward.
-     */
-    private static void ribbon(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                               long seed, float zOrigin, float planeDeg, float length, float width, float bend,
-                               float r, float g, float b, float alpha, float envelope, float distScale) {
-        poseStack.pushPose();
-        poseStack.translate(0, 0, zOrigin);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(planeDeg)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            BespokeGeometry.tornRibbon(pose, buffer, seed, length, width, bend, r, g, b, alpha, envelope, distScale));
-        poseStack.popPose();
+    private static MaterialEmitters.Emitter[] buildEmitters(ClientLevel level, Emission em, int seed,
+                                                            int bodyColor, float radius, boolean overcharged) {
+        MaterialEmitters.Source bodyPath = random -> MaterialEmitters.path(
+            em.center.add(em.dir.scale(-em.drawTail * 0.90)),
+            em.center.add(em.dir.scale(em.drawHead * 0.65)), 0.0).sample(random);
+        MaterialEmitters.Source corePath = random -> MaterialEmitters.path(
+            em.center.add(em.dir.scale(-em.drawTail * 0.45)),
+            em.center.add(em.dir.scale(em.drawHead * 0.50)), 0.0).sample(random);
+        MaterialEmitters.Source noseVolume = random -> MaterialEmitters.sphereVolume(
+            em.center.add(em.dir.scale(em.drawHead * 0.55)),
+            Math.max(0.05, em.drawRadius * 0.75)).sample(random);
+        MaterialEmitters.Source tailPath = random -> MaterialEmitters.path(
+            em.center.add(em.dir.scale(-em.drawTail)),
+            em.center.add(em.dir.scale(-em.drawTail * 0.35)), 0.0).sample(random);
+
+        return new MaterialEmitters.Emitter[] {
+            // Body: ki plasma along the whole flight segment.
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(bodyColor, Math.max(0.6f, radius * 11.0f),
+                    seed ^ 0xB0D1, Vec3.ZERO, radius * 0.05f),
+                bodyPath, overcharged ? 340f : 260f, 420),
+            // Core: a shorter, brighter plasma run through the middle.
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(0xFFF7D1, Math.max(0.4f, radius * 6.5f),
+                    seed ^ 0xC02E, Vec3.ZERO, radius * 0.03f),
+                corePath, 170f, 240),
+            // Nose cluster: plasma bunched where the cone used to be.
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.plasma(bodyColor, Math.max(0.5f, radius * 8.0f),
+                    seed ^ 0x905E, Vec3.ZERO, radius * 0.04f),
+                noseVolume, 110f, 160),
+            // Steel sparks thrown off the head.
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK, new Vec3(0, 0, 0), 0.10f),
+                noseVolume, 65f, 100),
+            // Tail wake: heat vapor drifting backward off the tail end.
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.vapor(bodyColor, Math.max(0.8f, radius * 14.0f),
+                    seed ^ 0x7A11, new Vec3(0, 0, 0), 0.025f),
+                tailPath, 60f, 90)
+        };
     }
 
-    /** A shard fan standing across the flight axis at distance z, spun on the axis. */
-    private interface FanDraw {
-        void draw(PoseStack.Pose pose, com.mojang.blaze3d.vertex.VertexConsumer buffer);
-    }
-
-    private static void axisFan(PoseStack poseStack, SubmitNodeCollector collector, RenderType renderType,
-                                float z, float spinDeg, FanDraw draw) {
-        poseStack.pushPose();
-        poseStack.translate(0, 0, z);
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.ZP.rotationDegrees(spinDeg)));
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
-        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> draw.draw(pose, buffer));
-        poseStack.popPose();
+    private static int argb(float r, float g, float b) {
+        int ri = Math.max(0, Math.min(255, Math.round(r * 255f)));
+        int gi = Math.max(0, Math.min(255, Math.round(g * 255f)));
+        int bi = Math.max(0, Math.min(255, Math.round(b * 255f)));
+        return (ri << 16) | (gi << 8) | bi;
     }
 }

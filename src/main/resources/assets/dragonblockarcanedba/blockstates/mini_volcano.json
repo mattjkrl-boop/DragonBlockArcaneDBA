@@ -1,1 +1,7 @@
-{"variants":{"":{"model":"dragonblockarcanedba:block/mini_volcano"}}}
+{
+  "variants": {
+    "": {
+      "model": "dragonblockarcanedba:block/mini_volcano"
+    }
+  }
+}
