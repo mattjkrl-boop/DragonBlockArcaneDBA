@@ -24,15 +24,20 @@ import java.util.Map;
 /**
  * Entity Renderer for Saber Void Tear in Minecraft 26.2.
  *
- * <p>Complex pass: a flat fan of seeded spatial shard meshes now
- * rings the tear in its own plane, with two tendrils streaming
- * inward through the shader tendril canvas, plus WISP_CURL and
- * ASH_FLAKE complex sprites. The darkness vapor, void plasma, white
- * core, and spatial glass dust emission stays as the filler layer
- * only. Pieces submit through the normal depth tested collector
- * path in the tear plane, so the existing wall occlusion behavior
- * is unchanged. Envelope timing, the destination boost, colors,
- * and alphas are unchanged in effect.</p>
+ * <p>Complex pass: seeded spatial shard meshes ring the tear in its
+ * own plane, with two tendrils streaming inward through the shader
+ * tendril canvas, plus WISP_CURL and ASH_FLAKE complex sprites. The
+ * darkness vapor, void plasma, white core, and spatial glass dust
+ * emission stays as the filler layer only. Pieces submit through
+ * the normal depth tested collector path in the tear plane, so the
+ * existing wall occlusion behavior is unchanged. Envelope timing,
+ * the destination boost, colors, and alphas are unchanged in
+ * effect.</p>
+ *
+ * <p>Attack upgrade pass: the shard set is composed as one large
+ * shard crowning the tear mouth with two smaller shards flanking
+ * it, and the mouth bursts double their ASH_FLAKE count and gain a
+ * SHARD_CHIP burst at the same density.</p>
  */
 public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, SaberVoidTearRenderer.VoidTearRenderState> {
 
@@ -132,16 +137,24 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
             MaterialEmitters.burst(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.30f),
                 MaterialEmitters.point(center), Math.max(3, Math.round(10 * ds)));
+            // Attack upgrade: the mouth sprite layers double. The
+            // ASH_FLAKE burst doubles its count, and a SHARD_CHIP
+            // burst joins it at the same doubled density.
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.42f),
+                MaterialEmitters.point(center), Math.max(4, Math.round(16 * ds)));
             MaterialEmitters.burst(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, Vec3.ZERO, 0.38f),
-                MaterialEmitters.point(center), Math.max(2, Math.round(8 * ds)));
+                MaterialEmitters.point(center), Math.max(4, Math.round(16 * ds)));
         }
 
         // Pieces layer in the tear plane, under the same synced
-        // rotation the emission uses. Five solid shards form a flat
-        // fan around the slit (5 times 288 vertices) and two energy
-        // tendrils stream inward (near 770 vertices), for a total
-        // near 2210, inside the class M budget of 2500.
+        // rotation the emission uses. Attack upgrade composition:
+        // one large solid shard crowns the tear mouth and two
+        // smaller shards flank it at seeded offsets (3 times 288
+        // vertices), and two energy tendrils stream inward (near
+        // 770 vertices), for a total near 1630, inside the class M
+        // budget of 2500.
         float pieceEnv = open * fade;
         if (pieceEnv > 0.02f && ds > 0.05f) {
             float sc = emission.scale;
@@ -154,11 +167,11 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
             ComplexGeometry.submitSolid(collector, poseStack,
                 (pose, buffer) -> {
                     ComplexGeometry.Rng rng = new ComplexGeometry.Rng(seed ^ 0x5A17L);
-                    for (int i = 0; i < 5; i++) {
-                        double ang = (i / 5.0) * Math.PI * 2.0 + rng.signed() * 0.35;
+                    for (int i = 0; i < 3; i++) {
+                        double ang = Math.PI * 0.5 + (i - 1) * 0.96 + rng.signed() * 0.22;
                         Vec3 radial = new Vec3(Math.cos(ang), Math.sin(ang), 0);
                         Vec3 o = radial.scale(slitH * 0.38);
-                        float len = 0.55f * sc * rng.range(0.8f, 1.25f);
+                        float len = (i == 1 ? 1.02f : 0.55f) * sc * rng.range(0.9f, 1.15f);
                         ComplexGeometry.shard(pose, buffer, seed + i * 0x9E37L,
                             o, radial, len, len * 0.36f,
                             0x3D1A78, 0xBFEFFF, 0.95f, pieceEnv);

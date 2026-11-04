@@ -35,6 +35,13 @@ import java.util.Map;
  * flame and embers carrying the front, ash on the ground, and smoke
  * and heat vapor rising off the wave as it burns down. The entity
  * already spawns a DebrisSpawner field for the big physical chunks.
+ *
+ * Attack upgrade pass: the crack web gained a second, smaller
+ * crackFan layer at its core (the builder derives its branch count
+ * from the seed, so the extra branches ride as an inner layer), and
+ * every eruption rendered here reports itself to
+ * LavaFieldWallRenderer, which keeps the basalt wall standing on the
+ * pool field's edge for the field's own 200 tick life.
  */
 public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, LavaEruptionRenderer.EruptState> {
     private final Map<Integer, Emission> emissions = new HashMap<>();
@@ -98,14 +105,23 @@ public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, Lav
             }
             emission.update(state, strength, height);
 
+            // The eruption establishes the pool field; report it so
+            // the field's basalt wall rises on its edge and stands
+            // for the field's life (see LavaFieldWallRenderer).
+            LavaFieldWallRenderer.noteField(level, state.entityId, state.seed,
+                    state.posX, state.posY, state.posZ, state.yRot, state.age, state.lightCoords);
+
             // Pieces layer, in local space (pose origin is the eruption
             // origin at ground level, axes world aligned). The crown
             // sits at the wave front inside the damage cone, and the
             // crack web is centered forward of the origin at 0.30 of
             // reach with a radius of 0.62 of reach, so its tips stay
-            // inside the cone reach. Vertex estimate at distScale 1.0:
-            // nine tongues about 432, crackFan about 560 to 700, for
-            // roughly 1100 total, inside the class L budget of 6000.
+            // inside the cone reach. A second crackFan at 0.55 of the
+            // radius and lower alpha layers extra branches into the
+            // web's core. Vertex estimate at distScale 1.0: nine
+            // tongues about 432, crackFan about 560 to 700, the inner
+            // fan about 450, for roughly 1550 total, inside the class
+            // L budget of 6000.
             final long pieceSeed = state.seed;
             final float pieceEnv = env;
             final float pieceDs = distance;
@@ -129,6 +145,9 @@ public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, Lav
                 ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                         ComplexGeometry.crackFan(pose, buffer, pieceSeed ^ 0xC9E1L,
                                 crackRadius, 0xFFF2B0, 0xFF5A00, 0.95f, pieceEnv, pieceDs));
+                ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                        ComplexGeometry.crackFan(pose, buffer, pieceSeed ^ 0xC9E2L,
+                                crackRadius * 0.55f, 0xFFF2B0, 0xFF5A00, 0.60f, pieceEnv, pieceDs));
                 poseStack.popPose();
             }
         }

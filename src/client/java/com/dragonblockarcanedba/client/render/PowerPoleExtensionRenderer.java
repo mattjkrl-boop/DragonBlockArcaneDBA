@@ -27,6 +27,10 @@ import java.util.Map;
  * strand bowed to the other side of the path, both through the dissolve
  * shader with the tendril canvas, so the rush of air around the pole
  * reads as coiling strands with torn pinches instead of a glow tube.
+ * Attack upgrade pass: a third strand crosses the shaft diagonally so
+ * the three strands braid around the pole instead of lying in one
+ * plane, and SPARK_STREAK sprites now shed along the whole shaft at
+ * stream speed, not only at the tip.
  * The complex particle layer is SPARK_STREAK sprites at the leading
  * tip. The material filler stays as before: pale vapor displaced by
  * the rush, crimson plasma in three heat bands along the stream, a
@@ -148,11 +152,15 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         float envelope = alphaMult * distScale * Math.min(1.0f, 0.35f + currentLength / 18.0f);
         rig.tick(delta, envelope);
 
-        // Pieces layer: two tendril wind strands in local space, from
+        // Pieces layer: three tendril wind strands in local space, from
         // the local start offset to the tip at the live extension
         // length. The builder curl and pinch windows do the coiling;
-        // the caller only bows each strand to opposite sides of the
-        // path so they read as air wrapping the pole, not one line.
+        // the caller bows the first two strands to opposite sides of
+        // the path, and the third crosses the shaft diagonally (starts
+        // left and high, ends right and low, control pushed left), so
+        // the three strands braid around the pole as air wrapping it,
+        // not one line. Each strand carries its own seed, so the
+        // builder curl phases sit apart around the shaft.
         Vec3 localFrom = origin.subtract(new Vec3(state.x, state.y, state.z));
         Vec3 localTo = localFrom.add(forward.scale(currentLength));
         Vec3 right = rightVector(state.yRot);
@@ -164,6 +172,9 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         final Vec3 gFrom2 = localFrom.add(right.scale(0.10 * fpScale));
         final Vec3 gTo2 = localTo.add(right.scale(0.10 * fpScale));
         final Vec3 gCtrl2 = mid.add(right.scale(0.10 * fpScale)).add(up.scale(-currentLength * 0.04));
+        final Vec3 gFrom3 = localFrom.add(right.scale(-0.10 * fpScale)).add(up.scale(0.10 * fpScale));
+        final Vec3 gTo3 = localTo.add(right.scale(0.06 * fpScale)).add(up.scale(-0.10 * fpScale));
+        final Vec3 gCtrl3 = mid.add(right.scale(-0.16 * fpScale)).add(up.scale(currentLength * 0.035));
         final float gEnv = alphaMult;
         final float gDist = distScale;
         final long gSeed = state.seed;
@@ -172,6 +183,8 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
                 0xF7D774, 0xFF3829, 0.92f, gEnv, gDist);
             ComplexGeometry.tendril(pose, buffer, gSeed ^ 0xE11DL, gFrom2, gCtrl2, gTo2, 0.15f,
                 0xFF5940, 0x94141C, 0.90f, gEnv, gDist);
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0xB9A1DL, gFrom3, gCtrl3, gTo3, 0.22f,
+                0xFFC46B, 0xD91414, 0.91f, gEnv, gDist);
         });
 
         if (age >= 12.0f) {
@@ -255,6 +268,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         final MaterialEmitters.Emitter tipDust;
         final MaterialEmitters.Emitter tipSparks;
         final MaterialEmitters.Emitter tipStreaks;
+        final MaterialEmitters.Emitter shaftStreaks;
         float lastAge = 0.0f;
         long lastSeenGameTime = 0L;
         boolean started = false;
@@ -289,6 +303,13 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             this.tipStreaks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.18f),
                 tipSource(frame), 28.0f, 40);
+            // Attack upgrade: the same streak slivers shed along the
+            // whole shaft at stream speed, so the pole's rush throws
+            // sparks off its full length while it extends, not just
+            // off the leading tip.
+            this.shaftStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.16f),
+                segmentSource(frame, 0.05, 1.0, 0.55), 26.0f, 40);
         }
 
         float deltaFor(float age) {
@@ -312,6 +333,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             tipDust.tick(delta, envelope * frame.fpScale);
             tipSparks.tick(delta, envelope);
             tipStreaks.tick(delta, envelope);
+            shaftStreaks.tick(delta, envelope);
         }
     }
 }

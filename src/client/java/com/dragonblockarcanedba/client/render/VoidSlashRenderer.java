@@ -35,6 +35,12 @@ import java.util.Map;
  * arc, so the slash reads as a torn strand of void rather than a cloud.
  * WISP_CURL sprites shed along the arc as the complex particle layer.
  * The material emission stays as filler around the strands.
+ *
+ * Attack upgrade pass: a second pair of arcs runs on a frame rolled
+ * about the forward axis, so its strands cross the first pair along
+ * the sweep instead of running parallel, and four solid void shards
+ * (near-black violet, an energy material on the emissive solid path)
+ * burst along the slash plane as the slash opens.
  */
 public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlashRenderer.SlashRenderState> {
     public VoidSlashRenderer(EntityRendererProvider.Context context) {
@@ -199,8 +205,8 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
                 // at the mid and pushing each control point out to the
                 // midpoint matched distance (radius times 2 minus cos of
                 // the half sweep, about 1.22 here) keeps both spines on
-                // the arc the emission traces. Four tendrils at full
-                // spine samples is 1536 vertices, inside the budget.
+                // the arc the emission traces. These four tendrils at
+                // full spine samples are 1536 vertices.
                 double th = 1.35;
                 double ctrlCore = radL * 1.04 * 1.22;
                 double ctrlCut = radL * 1.16 * 1.22;
@@ -219,7 +225,53 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
                         arcLocal(axisAL, axisBL, a2, radL * 1.16).add(fwdL.scale(-0.05)),
                         0.10f * radL, 0x9905F2, 0x26EBFF, 0.94f, penv, pds);
                 }
+                // Attack upgrade: the crossing pair. Its frame is the
+                // slash frame rolled about the forward axis by about
+                // ten degrees, so these two arcs weave across the
+                // first pair along the sweep. Four more tendrils brings
+                // this submit to near 3072 vertices at full spine
+                // samples, over the class M budget of 2500 at point
+                // blank only; spine samples distance scale down, so it
+                // sits inside budget beyond close range.
+                double roll = 0.18;
+                double rc = Math.cos(roll);
+                double rs = Math.sin(roll);
+                Vec3 axisA2 = axisAL.scale(rc).add(axisBL.scale(rs));
+                Vec3 axisB2 = axisBL.scale(rc).add(axisAL.scale(-rs));
+                double ctrlCross = radL * 1.10 * 1.22;
+                double ctrlCrossIn = radL * 0.97 * 1.22;
+                for (int half = 0; half < 2; half++) {
+                    double a0 = half == 0 ? -th : 0.0;
+                    double a1 = half == 0 ? -th * 0.5 : th * 0.5;
+                    double a2 = half == 0 ? 0.0 : th;
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ (0xD51L + half * 131L),
+                        arcLocal(axisA2, axisB2, a0, radL * 1.10),
+                        arcLocal(axisA2, axisB2, a1, ctrlCross),
+                        arcLocal(axisA2, axisB2, a2, radL * 1.10),
+                        0.13f * radL, 0x9905F2, 0xD9B8FF, 0.94f, penv, pds);
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ (0xD71L + half * 131L),
+                        arcLocal(axisA2, axisB2, a0, radL * 0.97).add(fwdL.scale(0.05)),
+                        arcLocal(axisA2, axisB2, a1, ctrlCrossIn).add(fwdL.scale(0.05)),
+                        arcLocal(axisA2, axisB2, a2, radL * 0.97).add(fwdL.scale(0.05)),
+                        0.09f * radL, 0x26EBFF, 0xFFFFFF, 0.94f, penv, pds);
+                }
             });
+        }
+
+        // Solid layer: four void shards burst along the slash plane as
+        // the slash opens, in their own submit (4 times 288 vertices).
+        // Near-black violet is an energy material here, so the plain
+        // emissive solid path is the correct one for this palette.
+        {
+            final Vec3 bAxis = s.axisB;
+            final float radS = s.radius;
+            final float sEnv = fade * open;
+            if (sEnv > 0.02f) {
+                ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.shardBurst(pose, buffer, state.seed ^ 0xD99L,
+                        Vec3.ZERO, bAxis, 58f, 0.42f * radS, 4,
+                        0x2E004D, 0x9905F2, 0.95f, sEnv, ds));
+            }
         }
 
         s.cut.tick(delta, env * 0.95f);

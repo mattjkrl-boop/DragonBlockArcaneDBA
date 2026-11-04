@@ -24,9 +24,10 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Dimensional Rift in Minecraft 26.2.
- * Complex pass: a layered composition. The pieces layer is three
- * shader tendrils streaming inward from the rim to the tear heart,
- * following
+ * Complex pass: a layered composition. The pieces layer is four
+ * shader tendrils streaming inward from the rim to the tear heart
+ * (three from the complex pass, a fourth added by the attack upgrade
+ * pass), following
  * the same orbit phase the emission clusters use. The complex particle
  * layer is WISP_CURL sprites streaming inward with the soul stream. The
  * shared material system stays as filler only: darkness smoke filling
@@ -256,15 +257,17 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
             // Pieces layer, class M, in entity local space: the tear
             // heart sits mid fissure, where the fissure column emission
             // samples. The shard burst that used to be drawn here is
-            // gone: since the entity objects pass it is 5 real
-            // FragmentEntity instances the entity spawns server side at
-            // tick 2, so the pieces layer in this renderer is the three
-            // inward tendrils alone. Vertex accounting at full detail:
-            // the tendrils run at reduced detail scale (17 spine
-            // samples, 272 vertices each, 816), inside the class M
-            // budget of 2500. The tendrils follow the same lifecycle
-            // fade as the emission, and the tendril rims follow the
-            // same orbit phase as the clusters.
+            // gone: since the entity objects pass it is real
+            // FragmentEntity instances the entity spawns server side
+            // (5 at tick 2, 4 more at the tick 20 peak beat from the
+            // attack upgrade pass), so the pieces layer in this
+            // renderer is the inward tendrils alone, four of them
+            // since the attack upgrade pass. Vertex accounting at full
+            // detail: the tendrils run at reduced detail scale (17
+            // spine samples, 272 vertices each, 1088), inside the
+            // class M budget of 2500. The tendrils follow the same
+            // lifecycle fade as the emission, and the tendril rims
+            // follow the same orbit phase as the clusters.
             if (fade > 0.02f) {
                 final float geoEnv = fade;
                 final float geoDs = com.dragonblockarcanedba.util.FxEnvelope.distScale(
@@ -276,7 +279,7 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
                 final long pseed = state.seed;
                 ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
                     Vec3 heart = new Vec3(0.0, tearY, 0.0);
-                    for (int i = 0; i < 3; i++) {
+                    for (int i = 0; i < 4; i++) {
                         double ang = orbit + i * 2.399963229728653 + (pseed & 7) * 0.11;
                         double cosA = Math.cos(ang);
                         double sinA = Math.sin(ang);

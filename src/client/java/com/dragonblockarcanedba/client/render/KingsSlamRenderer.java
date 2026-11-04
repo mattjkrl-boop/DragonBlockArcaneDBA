@@ -28,7 +28,10 @@ import java.util.Random;
  * Complex pass: a layered composition at class L. The pieces layer is two
  * ComplexGeometry builders at full disc radius: fracturePlates as solid
  * fractured ground plates through submitSolid, and a crackFan of glowing
- * energy cracks through submitEnergy on the dissolve shader. These are the
+ * energy cracks through submitEnergy on the dissolve shader. The attack
+ * upgrade layers a second, shorter crackFan inside the web and stands
+ * six short rock spikes at the disc rim through submitSolidLit, erupting
+ * as the slam front reaches them. These are the
  * fast near-field fragments and energy structure; the big physical chunks
  * are the DebrisSpawner field the entity already spawns server side. The
  * complex particle layer is a large SHARD_CHIP burst at impact plus a
@@ -249,6 +252,39 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                     ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
                             geoRadius * 0.94f, 0xFFE9B0, hotColor, 0.95f, geoFade, geoDist));
+            // Attack upgrade: a second, shorter crack fan layered
+            // inside the main web, so the disc's crack structure reads
+            // branched and dense at the center instead of one clean
+            // fan. crackFan has no branch-count parameter, so the
+            // spec's extra branches land as this inner fan (change
+            // request filed in the owner report).
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4B1L,
+                            geoRadius * 0.55f, 0xFFE9B0, hotColor, 0.95f, geoFade, geoDist));
+            // Attack upgrade: six short rock spikes scattered at the
+            // disc rim, erupting as the slam front reaches them. Each
+            // spike is its own SCATTER call of one, centered on a
+            // seeded rim point, so the six stand at the rim instead of
+            // filling the disc. They rise on the disc's own growth
+            // (full height just after the front passes), hold, and
+            // crack away with the slam's fade envelope. Physical rock
+            // in the same low-chroma stone family as the fissure wall,
+            // drawn lit through submitSolidLit: no glow on stone.
+            final float spikeRise = FxEnvelope.smoothstep(
+                    Math.max(0.0f, Math.min(1.0f, (life - 0.38f) / 0.20f)));
+            final int slamLight = state.lightCoords;
+            ComplexGeometry.submitSolidLit(collector, poseStack, slamLight, (pose, buffer) -> {
+                ComplexGeometry.Rng rimRng = new ComplexGeometry.Rng(geoSeed ^ 0x5917L);
+                for (int i = 0; i < 6; i++) {
+                    double ang = i * (Math.PI * 2.0 / 6.0) + rimRng.signed() * 0.35;
+                    float rimR = geoRadius * 0.93f;
+                    Vec3 spikeCenter = new Vec3(Math.cos(ang) * rimR, 0.0, Math.sin(ang) * rimR);
+                    ComplexGeometry.spikeEruption(pose, buffer, geoSeed ^ 0x5917L + i * 0x9E37L,
+                            spikeCenter, new Vec3(0.0, 0.0, 1.0), ComplexGeometry.SpikeLayout.SCATTER, 1, 0.55f,
+                            0.55f, spikeRise, 0.0f,
+                            0x2B241E, 0x77644C, 0.95f, geoFade, geoDist);
+                }
+            });
         }
     }
 }

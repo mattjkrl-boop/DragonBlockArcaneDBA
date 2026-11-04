@@ -97,7 +97,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
             state.dustEmitter.tick(delta, e * 0.80f);
             state.wispEmitter.tick(delta, e * 0.90f);
 
-            // Pieces layer: a fan of five valor tendrils lashing out of the
+            // Pieces layer: a fan of seven valor tendrils lashing out of the
             // core at the caster chest, in the local frame of the entity.
             // The fan reach follows the same gather radius the motes stream
             // in from, so the strands grow with the charge ratio.
@@ -107,7 +107,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
             final float genv = env;
             ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
                 ComplexGeometry.tendrilFan(pose, buffer, gseed, new Vec3(0, 0.9, 0),
-                    new Vec3(0, 1, 0), 118f, fanLen, 5, 0.17f,
+                    new Vec3(0, 1, 0), 118f, fanLen, 7, 0.17f,
                     0xFFD700, 0xFFF2C0, 0.92f, genv, geoDist));
         }
 

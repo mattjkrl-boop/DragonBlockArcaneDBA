@@ -15,6 +15,8 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Vector4f;
 
 /**
  * Entity Renderer for Dimensional Slash in Minecraft 26.2.
@@ -22,7 +24,11 @@ import net.minecraft.world.phys.Vec3;
  * one thick ComplexGeometry tendril strand with torn pinches swept tip
  * to tip across the cut plane and bowed along the old crescent belly,
  * with a thinner white core strand and a reversed rim strand nested in
- * it, all through the shader tendril canvas. The complex particle layer
+ * it, all through the shader tendril canvas. Attack upgrade: two more
+ * strands ride the bow above and below it on seeded phase offsets so
+ * the five never swell in sync, an in-air crack fan tears across the
+ * slash plane at the cut's center, and crystal shards burst at the two
+ * ends. The complex particle layer
  * is SHARD_CHIP spatial fragments fraying off the two pinched tips. The
  * material emission stays as filler only, sampled across the cut plane
  * the entity is actually travelling on:
@@ -147,6 +153,11 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         float scaleAll = fpScale * tearScale;
         float halfWidth = 2.20f * scaleAll;
         int seed = state.seed;
+        // Seeded phase offsets for the two upgrade strands: same swell
+        // rate as the body pulse, phases rolled off the slash seed, so
+        // the five strands breathe out of step with each other.
+        float hiPulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f + 1.7f + (seed & 7) * 0.31f);
+        float loPulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f + 3.9f + (seed & 7) * 0.53f);
         // During the linger the plasma dies down while the glass dust and
         // darkness of the closing tear take over.
         float plasmaEnv = envelope * (lingerT >= 0.0f ? 1.0f - 0.55f * lingerT : 1.0f);
@@ -207,13 +218,17 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
                 28f, 40).tick(delta, residueEnv);
         }
 
-        // Pieces layer, class L on one builder type at full strand count:
-        // three tendrils in the cut plane, drawn in entity local space
-        // along the same right, up, and forward basis the emission samples.
-        // The bezier control sits twice as far along up as the belly the
-        // cut plane samples, so the strands crest on the same bowed line.
-        // Vertices: three tendrils at at most 24 samples each stay near
-        // 1150, inside the class L budget of 6000.
+        // Pieces layer, class L: five tendrils in the cut plane, drawn
+        // in entity local space along the same right, up, and forward
+        // basis the emission samples. The bezier control sits twice as
+        // far along up as the belly the cut plane samples, so the
+        // strands crest on the same bowed line. The attack upgrade's
+        // two extra strands crest above and sag below the bow on
+        // seeded phase offsets, an in-air crack fan tears across the
+        // slash plane at the center, and crystal shards burst at the
+        // ends. Vertices: five tendrils stay near 1900, the crack fan
+        // a few hundred, the four end shards about 1150, inside the
+        // class L budget of 6000.
         float pieceEnv = fade * (lingerT >= 0.0f ? 1.0f - 0.55f * lingerT : 1.0f);
         if (pieceEnv > 0.02f) {
             ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
@@ -235,6 +250,50 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
                 ComplexGeometry.tendril(pose, buffer, seed ^ 0xD53C,
                     rimFrom, rimControl, rimTo,
                     0.28f * scaleAll, 0xFF1A59, 0xA60DF2, 0.90f, pieceEnv, distScale);
+                Vec3 hiFrom = right.scale(-halfWidth * 0.88f).add(up.scale(0.16f * scaleAll));
+                Vec3 hiTo = right.scale(halfWidth * 0.88f).add(up.scale(0.16f * scaleAll));
+                Vec3 hiControl = up.scale(1.34f * scaleAll).add(forward.scale(0.04f * scaleAll));
+                ComplexGeometry.tendril(pose, buffer, seed ^ 0xD54D,
+                    hiFrom, hiControl, hiTo,
+                    0.20f * scaleAll * hiPulse, 0xFF1A59, 0xA60DF2, 0.88f, pieceEnv, distScale);
+                Vec3 loFrom = right.scale(-halfWidth * 0.93f).add(up.scale(-0.04f * scaleAll));
+                Vec3 loTo = right.scale(halfWidth * 0.93f).add(up.scale(-0.04f * scaleAll));
+                Vec3 loControl = up.scale(0.62f * scaleAll).add(forward.scale(-0.20f * scaleAll));
+                ComplexGeometry.tendril(pose, buffer, seed ^ 0xD55E,
+                    loFrom, loControl, loTo,
+                    0.22f * scaleAll * loPulse, 0xA60DF2, 0xFFFFFF, 0.85f, pieceEnv, distScale);
+            });
+
+            // The in-air dimensional crack: a crack fan laid into the
+            // slash plane at the cut's center. The pose basis maps the
+            // fan's ground plane onto the cut plane (local X along the
+            // cut, local Z across it, local Y out along the flight
+            // direction), so the cracks tear across the cut itself
+            // instead of lying on the ground under it.
+            poseStack.pushPose();
+            Matrix4f slashBasis = new Matrix4f();
+            slashBasis.setColumn(0, new Vector4f((float) right.x, (float) right.y, (float) right.z, 0.0f));
+            slashBasis.setColumn(1, new Vector4f((float) forward.x, (float) forward.y, (float) forward.z, 0.0f));
+            slashBasis.setColumn(2, new Vector4f((float) up.x, (float) up.y, (float) up.z, 0.0f));
+            slashBasis.setColumn(3, new Vector4f(0.0f, 0.0f, 0.0f, 1.0f));
+            poseStack.mulPose(slashBasis);
+            final float fanRadius = halfWidth * 0.80f;
+            final float fanDetail = Math.min(distScale, 0.62f);
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.crackFan(pose, buffer, seed ^ 0xC4A7L, fanRadius,
+                    0xFFFFFF, 0xA60DF2, 0.90f, pieceEnv, fanDetail));
+            poseStack.popPose();
+
+            // Crystal shards at the cut's ends: two per end, bursting
+            // outward along the cut axis. Warp glass is an energy
+            // material, so the solid emissive path stays correct here.
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
+                for (int s = -1; s <= 1; s += 2) {
+                    Vec3 cutEnd = right.scale(s * halfWidth * 0.95f).add(up.scale(0.05f * scaleAll));
+                    ComplexGeometry.shardBurst(pose, buffer, seed ^ (s < 0 ? 0x5A31L : 0x5A32L), cutEnd,
+                        right.scale(s), 55f, 0.50f * scaleAll, 2,
+                        0x2A0A4A, 0xE8CCFF, 0.95f, pieceEnv, distScale);
+                }
             });
         }
 

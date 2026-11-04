@@ -29,7 +29,11 @@ import java.util.Random;
  * stone dust over dark stone, growing with the shock radius; the
  * energy pieces layer is a crackFan web at the same point, pale gold
  * hot at the center running out to violet at the tips, drawn on the
- * shader through submitEnergy. These are the fast near field structure:
+ * shader through submitEnergy. Attack upgrade pass: at the launch
+ * tick this renderer takes over the gravity curtain from
+ * DelayedLaunchRenderer and slams it down (rockWall through
+ * submitSolidLit, three heaved companion chunks, a full-radius
+ * crackFan flash, and one-shot dust and block chunk bursts). These are the fast near field structure:
  * the entity already spawns a DebrisSpawner field for the big physical
  * chunks. The complex particle layer is a one shot SHARD_CHIP burst
  * plus a SPARK_STREAK burst on the strike envelope. The filler layer
@@ -123,6 +127,7 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
         emission.frame.grow = grow;
         emission.frame.decay = decay;
         emission.frame.impact = impact;
+        emission.frame.bandRadius = radius * 0.66f;
 
         float delta = emission.nextDelta();
         float envelope = fade * dist;
@@ -152,6 +157,69 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
             ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC9ACL,
                 plateRadius * 1.05f, PALE_GOLD, VIOLET, 0.95f, crackEnv, distF));
 
+        // Gravity curtain drop (attack upgrade pass): the curtain that
+        // DelayedLaunchRenderer heaved up during the countdown finishes
+        // its SLAM here. The launch delay is the item's own formula
+        // (40 plus power times 40, the same ticks the slam entity pins
+        // for), and the placement helpers are DelayedLaunchRenderer's,
+        // so at the launch tick this renderer picks the wall up at the
+        // exact sink (0.45) and hang the telegraph left it at, then
+        // drops it over four ticks while a full-radius crackFan flashes
+        // at the base and a one-shot dust ring and block chunk burst
+        // fire at the wall base. The real DebrisSpawner field at this
+        // same moment is the launch entity's own, count unchanged.
+        float launchDelay = 40.0f + power * 40.0f;
+        if (age >= launchDelay && age <= launchDelay + 6.0f) {
+            float sinkT = Math.min(1.0f, (age - launchDelay) / 4.0f);
+            float sink = 0.45f + 0.55f * sinkT;
+            float[] spot = DelayedLaunchRenderer.curtainSpot(state.x, state.z);
+            Vec3 facing = new Vec3(spot[0], 0.0, spot[1]);
+            Vec3 right = new Vec3(-spot[1], 0.0, spot[0]);
+            float wallLen = DelayedLaunchRenderer.curtainLength(radius);
+            float wallHeight = DelayedLaunchRenderer.curtainHeight(radius);
+            float hang = 1.05f * (1.0f - sink);
+            Vec3 wallOrigin = facing.scale(radius * 0.66)
+                .add(right.scale(spot[2] * wallLen * 0.15))
+                .add(0.0, hang, 0.0);
+            long wallSeed = DelayedLaunchRenderer.curtainSeed(state.x, state.z);
+            float wallEnv = fade;
+            float sinkF = sink;
+            int light = state.lightCoords;
+
+            emission.frame.wallBase = center.add(wallOrigin.x, 0.0, wallOrigin.z);
+            emission.frame.wallRight = right;
+            emission.frame.wallFacing = facing;
+            emission.frame.wallHalf = wallLen * 0.5f;
+            emission.burstSlam();
+
+            ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) -> {
+                ComplexGeometry.rockWall(pose, buffer, wallSeed,
+                    wallOrigin, facing, wallLen, wallHeight, 0.45f,
+                    1.0f, sinkF, DARK_STONE, STONE_DUST, 0.98f, wallEnv, distF);
+                // Three big heaved companion chunks clustered along the
+                // wall line: jagged rock the gravity tore loose with
+                // the curtain, sinking with it. Few and large on
+                // purpose; their form carries the weight, not a count.
+                ComplexGeometry.Rng crng = new ComplexGeometry.Rng(wallSeed ^ 0xCEA5EL);
+                for (int i = 0; i < 3; i++) {
+                    float along = crng.signed() * wallLen * 0.40f;
+                    float out = crng.range(-0.4f, 0.9f);
+                    float len = wallHeight * crng.range(0.45f, 0.75f);
+                    Vec3 dir = new Vec3(facing.x * crng.range(-0.25f, 0.45f), 1.0,
+                        facing.z * crng.range(-0.25f, 0.45f)).normalize();
+                    float chunkY = (1.0f - sinkF) * len * 0.30f - sinkF * len * 0.45f;
+                    Vec3 o = wallOrigin.add(right.scale(along)).add(facing.scale(out))
+                        .add(0.0, chunkY - hang, 0.0);
+                    ComplexGeometry.shard(pose, buffer, wallSeed + 0x77L + i * 131L,
+                        o, dir, len, len * 0.36f, DARK_STONE, STONE_DUST, 0.98f, wallEnv);
+                }
+            });
+            float flashEnv = fade * (1.0f - sinkT * 0.7f);
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xF1A5L,
+                    radius * 0.95f, PALE_GOLD, VIOLET, 0.95f, flashEnv, distF));
+        }
+
         super.submit(state, poseStack, collector, cameraState);
     }
 
@@ -173,12 +241,19 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
         float grow = 1.0f;
         float decay = 0.0f;
         float impact = 0.0f;
+        float bandRadius = 1.0f;
+        Vec3 wallBase = Vec3.ZERO;
+        Vec3 wallRight = new Vec3(1.0, 0.0, 0.0);
+        Vec3 wallFacing = new Vec3(0.0, 0.0, 1.0);
+        float wallHalf = 1.0f;
     }
 
     private static final class Emission {
         final long seed;
         final ClientLevel level;
+        final BlockState groundState;
         boolean impactBurstDone = false;
+        boolean slamBurstDone = false;
         final Frame frame = new Frame();
         final float[] columnAngles;
         final float[] columnDistFracs;
@@ -197,6 +272,7 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
         Emission(ClientLevel level, long seed, float power, BlockState groundState) {
             this.seed = seed;
             this.level = level;
+            this.groundState = groundState;
             int baseSeed = (int) seed;
             Frame f = frame;
 
@@ -302,6 +378,44 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
             MaterialEmitters.burst(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.20f),
                 burstSource, 20);
+        }
+
+        /**
+         * One shot SLAM dressing at the curtain drop: a dust ring at
+         * the curtain band and twelve real block chunks thrown off the
+         * wall base, in the struck ground's own material. Fires once
+         * per emission instance, on the first frame of the drop window.
+         * The server-side DebrisSpawner field at the same moment is the
+         * launch entity's own and is not touched here.
+         */
+        void burstSlam() {
+            if (slamBurstDone) return;
+            slamBurstDone = true;
+            Frame f = frame;
+            int baseSeed = (int) seed;
+            MaterialEmitters.Source ringSource = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                Vec3 pos = f.center.add(Math.cos(angle) * f.bandRadius, 0.15,
+                    Math.sin(angle) * f.bandRadius);
+                Vec3 outward = new Vec3(Math.cos(angle), 0.0, Math.sin(angle))
+                    .scale(0.10 + random.nextDouble() * 0.10)
+                    .add(0.0, 0.06 + random.nextDouble() * 0.08, 0.0);
+                return new MaterialEmitters.Sample(pos, outward);
+            };
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.dust(STONE_DUST, 2.30f, baseSeed ^ 0xD057, Vec3.ZERO, 0.012f),
+                ringSource, 30);
+            MaterialEmitters.Source chunkSource = random -> {
+                double along = (random.nextDouble() * 2.0 - 1.0) * f.wallHalf;
+                Vec3 pos = f.wallBase.add(f.wallRight.scale(along)).add(0.0, 0.25, 0.0);
+                Vec3 velocity = f.wallFacing.scale(0.06 + random.nextDouble() * 0.10)
+                    .add(0.0, 0.28 + random.nextDouble() * 0.26, 0.0);
+                return new MaterialEmitters.Sample(pos, velocity);
+            };
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, groundState),
+                    Vec3.ZERO, 0.05f),
+                chunkSource, 12);
         }
 
         Vec3 columnAnchor(Frame f, int index) {

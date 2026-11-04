@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render.ki;
 
 import com.dragonblockarcanedba.util.FxEnvelope;
+import com.dragonblockarcanedba.util.SeedHash;
+import com.dragonblockarcanedba.util.SpikePlacement;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -48,9 +50,7 @@ public final class ComplexGeometry {
     // ---------------------------------------------------------------- RNG
 
     private static long mix(long z) {
-        z = (z ^ (z >>> 30)) * 0xbf58476d1ce4e5b9L;
-        z = (z ^ (z >>> 27)) * 0x94d049bb133111ebL;
-        return z ^ (z >>> 31);
+        return SeedHash.mix(z);
     }
 
     /** Deterministic splitmix stream. Same seed, same sequence, every client. */
@@ -84,17 +84,15 @@ public final class ComplexGeometry {
         }
     }
 
-    /** Lattice hash in 0..1 for (seed, index). */
+    /** Lattice hash in 0..1 for (seed, index). Delegates to the common
+     * SeedHash so server code reproduces the identical values. */
     private static float hash1(long seed, int i) {
-        return (mix(seed + i * 0x9E3779B97F4A7C15L) >>> 40) * (1.0f / (1 << 24));
+        return SeedHash.hash1(seed, i);
     }
 
     /** Smooth value noise in 0..1, stable for a given seed. */
     private static float noise1(long seed, float x) {
-        int i = (int) Math.floor(x);
-        float f = x - i;
-        float u = f * f * (3f - 2f * f);
-        return hash1(seed, i) * (1f - u) + hash1(seed, i + 1) * u;
+        return SeedHash.noise1(seed, x);
     }
 
     // ---------------------------------------------------------------- submit helpers
@@ -675,10 +673,38 @@ public final class ComplexGeometry {
     public static int crackFan(PoseStack.Pose pose, VertexConsumer buffer, long seed,
                                float radius, int hotArgb, int coolArgb,
                                float alpha, float envelope, float distScale) {
+        return crackFanImpl(pose, buffer, seed, radius, hotArgb, coolArgb,
+                alpha, envelope, distScale, 9, true);
+    }
+
+    /**
+     * Explicit-count variant (attack upgrade merge): the fan draws
+     * baseCracks cracks at full detail instead of the standard nine
+     * plus density jitter, for hosts whose spec names a small exact
+     * count (a short fan dressing a slash line or a dash mark). The
+     * deterministic fork replay contract is unchanged: each crack's
+     * walk and fork seeds derive from the fan seed and the crack index
+     * alone, so a fork origin recomputes exactly. Distance scaling
+     * still applies through FxEnvelope.segments with a floor of
+     * baseCracks minus two (never below two).
+     */
+    public static int crackFan(PoseStack.Pose pose, VertexConsumer buffer, long seed,
+                               float radius, int hotArgb, int coolArgb,
+                               float alpha, float envelope, float distScale, int baseCracks) {
+        return crackFanImpl(pose, buffer, seed, radius, hotArgb, coolArgb,
+                alpha, envelope, distScale, baseCracks, false);
+    }
+
+    private static int crackFanImpl(PoseStack.Pose pose, VertexConsumer buffer, long seed,
+                                    float radius, int hotArgb, int coolArgb,
+                                    float alpha, float envelope, float distScale,
+                                    int baseCracks, boolean densityJitter) {
         if (envelope <= 0.01f || alpha <= 0.01f || radius <= 0f) return 0;
         Matrix4f mat = pose.pose();
         Rng rng = new Rng(seed);
-        int cracks = FxEnvelope.segments(9, distScale, 6) + rng.nextInt(3);
+        int cracks = FxEnvelope.segments(baseCracks, distScale,
+                Math.max(2, baseCracks - (densityJitter ? 3 : 2)))
+                + (densityJitter ? rng.nextInt(3) : 0);
         int verts = 0;
         for (int k = 0; k < cracks; k++) {
             float ang = (float) (Math.PI * 2.0 * k / cracks) + rng.signed() * 0.30f;
@@ -952,12 +978,24 @@ public final class ComplexGeometry {
      * Slab count derives from length (about one slab per 1.15 blocks,
      * clamped to the specced 6 to 14), and each slab is a closed irregular
      * plate 0.7 to 1.6 blocks wide (boundary jitter plus per-slab insets)
-     * with seeded tilt, lean, face offset, and height variance from 0.70 to
-     * 1.16 of height. Cracks between slabs are real gaps and offset faces,
-     * not texture: adjacent slabs share a jittered boundary line but draw
-     * inset from it, at different depths and leans. arc is the wall's total
-     * bend in radians (0 for a straight wall, positive bows the center
-     * toward facing, shallow values like 0.2 to 0.6 read as a curved front).
+     * with seeded tilt, lean, and face offset. Slab heights follow a
+     * grouped ridge profile (attack upgrade merge): two to three seeded
+     * peak clusters along the wall with rolling noise between them, so
+     * tall slabs arrive in clusters and the ridge line rolls instead of
+     * flipping a coin per slab; the per-slab factor runs about 0.60 to
+     * 1.24 of height. Cracks between slabs are real gaps and offset
+     * faces, not texture: adjacent slabs share a jittered boundary line
+     * but draw inset from it, at different depths and leans. arc is the
+     * wall's total bend in radians (0 for a straight wall). Sign
+     * convention, as shipped and verified from the placement math: the
+     * wall's center stays at origin and the ends swing by arc, so a
+     * POSITIVE arc swings the ends toward facing and leaves the center
+     * recessed (the wall reads concave from the facing side), and a
+     * NEGATIVE arc swings the ends away so the center bows toward
+     * facing (convex from the facing side). With facing pointed at a
+     * circle's center and arc set to length over that circle's radius,
+     * the positive form wraps the wall exactly onto the circle. Shallow
+     * values like 0.2 to 0.6 read as a curved front either way.
      *
      * Animation contract: riseFactor and sinkFactor are plain 0 to 1
      * progress values from the host's envelope; the builder eases them
@@ -1029,11 +1067,28 @@ public final class ComplexGeometry {
             float inset = rng.range(0.02f, 0.07f);
             float halfW = (bounds[i + 1] - bounds[i]) * 0.5f - inset;
             float th = rng.range(0.30f, 0.52f);
-            float faceOff = rng.range(-0.05f, 0.09f);
-            float topH = height * rng.range(0.70f, 1.16f);
-            float tiltDy = height * rng.range(-0.10f, 0.10f);
-            float lean = height * rng.range(-0.06f, 0.10f);
-            float bulge = rng.range(0.03f, 0.12f);
+            float faceOff = rng.range(-0.09f, 0.13f);
+            // Grouped ridge profile: this slab's height factor rides a
+            // ridge line built from three seeded peak clusters plus
+            // rolling noise, so tall slabs cluster and the top edge
+            // rolls like a heaved ridge instead of per-slab coin flips.
+            float heightU = rng.nextFloat();
+            float ridgeX = clamp01(sC / length + 0.5f);
+            float ridge = 0f;
+            for (int pk = 0; pk < 3; pk++) {
+                float peakAt = hash1(seed, 905 + pk);
+                float peakAmp = 0.55f + 0.45f * hash1(seed, 915 + pk);
+                float peakWid = 0.10f + 0.13f * hash1(seed, 925 + pk);
+                float dx = ridgeX - peakAt;
+                ridge = Math.max(ridge, peakAmp
+                        * (float) Math.exp(-(dx * dx) / (2f * peakWid * peakWid)));
+            }
+            ridge = clamp01(ridge * 0.85f + 0.35f * noise1(seed ^ 0x51D5L, ridgeX * 3.0f));
+            float topH = height * Math.max(0.60f, Math.min(1.24f,
+                    0.68f + 0.52f * ridge + (heightU - 0.5f) * 0.18f));
+            float tiltDy = height * rng.range(-0.16f, 0.16f);
+            float lean = height * rng.range(-0.13f, 0.17f);
+            float bulge = rng.range(0.03f, 0.17f);
             float baseY = -0.45f;
             float topL = topH + tiltDy, topR = topH - tiltDy;
             Vec3 fbl = wallCorner(pc, tc, nc, -halfW, baseY, faceOff);
@@ -1217,6 +1272,14 @@ public final class ComplexGeometry {
      * radius; FAN bursts forward in a wedge around facing at a hit
      * point; BODY radiates out of the space around a body, with center
      * at body height and radius the offset from the body's axis.
+     * Placement is clustered in every layout but BODY (attack upgrade
+     * merge): LINE, RING, and FAN group their spikes into contiguous
+     * tufts of two to four with bare space between groups, SCATTER
+     * pulls each spike toward one of a few seeded cluster centers, and
+     * ground layouts multiply lengths by a further seeded 0.84 to 1.18
+     * so neighbors never stand alike. RING placement (angles and
+     * radius fractions) comes from the shared util SpikePlacement, so
+     * a server entity can reproduce the drawn ring exactly.
      *
      * Animation contract: riseFactor and sinkFactor are plain 0 to 1
      * progress values from the host's envelope, eased inside (ease-out
@@ -1261,15 +1324,30 @@ public final class ComplexGeometry {
             Vec3 pos, dir, emergence;
             switch (layout) {
                 case LINE -> {
-                    float along = n == 1 ? 0f : (i / (float) (n - 1) - 0.5f) * 2f * rad;
+                    // Clustered march (attack upgrade merge): spikes run
+                    // in contiguous tufts of two to four along the line,
+                    // compressed toward jittered group centers with bare
+                    // ground between groups, never an even row.
+                    float uniformAlong = n == 1 ? 0f : (i / (float) (n - 1) - 0.5f) * 2f * rad;
+                    int groups = n <= 3 ? 1 : n <= 7 ? 2 : 3;
+                    int g = SpikePlacement.groupOf(n, groups, i);
+                    int gStart = SpikePlacement.groupStart(n, groups, g);
+                    int gSize = SpikePlacement.groupSize(n, groups, g);
+                    float groupMid = n == 1 ? 0f
+                            : ((gStart + (gSize - 1) * 0.5f) / (float) (n - 1) - 0.5f) * 2f * rad;
+                    float centerAlong = groupMid + (hash1(seed, 600 + g) - 0.5f) * 0.36f * rad / groups;
+                    float along = centerAlong + (uniformAlong - groupMid) * 0.36f;
                     pos = center.add(f.scale(along)).add(right.scale(rng.signed() * 0.25f));
                     dir = coneDir(up, rng.range(0.0f, 0.22f), rng);
                     emergence = up;
                 }
                 case RING -> {
-                    float ang = (float) (Math.PI * 2.0 * i / n) + rng.signed() * 0.15f;
+                    // Placement comes from the shared SpikePlacement
+                    // helper (clustered tufts, jittered radius) so a
+                    // server entity reproduces this exact ring.
+                    float ang = SpikePlacement.ringAngle(seed, i, n);
                     Vec3 radial = new Vec3(Math.cos(ang), 0, Math.sin(ang));
-                    pos = center.add(radial.scale(rad));
+                    pos = center.add(radial.scale(rad * SpikePlacement.ringRadiusFrac(seed, i, n)));
                     float tilt = rng.range(0.15f, 0.42f);
                     dir = up.scale(Math.cos(tilt)).add(radial.scale(Math.sin(tilt))).normalize();
                     emergence = up;
@@ -1278,11 +1356,37 @@ public final class ComplexGeometry {
                     float ang = rng.nextFloat() * (float) Math.PI * 2f;
                     float rr = rad * (float) Math.sqrt(rng.nextFloat());
                     pos = center.add(Math.cos(ang) * rr, 0, Math.sin(ang) * rr);
+                    // Cluster pull: each spike keeps a third of its
+                    // rolled offset from a seeded cluster center, so
+                    // the disc fills as grown tufts, not uniform grit.
+                    int clusters = 2 + (int) (hash1(seed, 820) * 3f);
+                    int c = Math.min(clusters - 1, (int) (hash1(seed, 850 + i) * clusters));
+                    float cAng = hash1(seed, 830 + c) * (float) Math.PI * 2f;
+                    float cRad = rad * 0.78f * (float) Math.sqrt(hash1(seed, 840 + c));
+                    Vec3 cPos = center.add(Math.cos(cAng) * cRad, 0, Math.sin(cAng) * cRad);
+                    pos = cPos.add(pos.subtract(cPos).scale(0.32));
                     dir = coneDir(up, rng.range(0.0f, 0.50f), rng);
                     emergence = up;
                 }
                 case FAN -> {
-                    float spreadAng = n == 1 ? 0f : (i / (float) (n - 1) * 2f - 1f) * 0.96f;
+                    // Clustered wedge: the fan bursts as two or three
+                    // tufts around facing instead of an even comb.
+                    float spreadAng;
+                    if (n == 1) {
+                        spreadAng = 0f;
+                    } else {
+                        int groups = n <= 5 ? 2 : 3;
+                        int g = SpikePlacement.groupOf(n, groups, i);
+                        int gStart = SpikePlacement.groupStart(n, groups, g);
+                        int gSize = SpikePlacement.groupSize(n, groups, g);
+                        int local = i - gStart;
+                        float groupCenter = groups == 1 ? 0f
+                                : (g / (float) (groups - 1) * 2f - 1f) * 0.78f;
+                        float localOff = gSize == 1 ? 0f
+                                : (local / (float) (gSize - 1) - 0.5f) * 0.34f;
+                        spreadAng = groupCenter + localOff
+                                + (hash1(seed, 640 + i) - 0.5f) * 0.06f;
+                    }
                     Vec3 out = rotate(f, up, spreadAng);
                     float dist = rad * rng.range(0.35f, 1.0f);
                     pos = center.add(out.scale(dist));
@@ -1307,6 +1411,14 @@ public final class ComplexGeometry {
             float len = (roll < 0.55f ? rng.range(1.2f, 1.9f)
                     : roll < 0.85f ? rng.range(1.9f, 2.6f)
                     : rng.range(2.6f, 3.2f)) * sizeScale;
+            if (layout != SpikeLayout.BODY) {
+                // Stronger height variance on top of the class rolls
+                // (attack upgrade merge): neighboring spikes differ by
+                // up to a fifth again, so no two in a set stand alike.
+                // BODY keeps its rolled lengths: its hosts cap the
+                // longest class against a fitted band around the body.
+                len *= 0.84f + 0.34f * hash1(seed, 660 + i);
+            }
             float girth = len * rng.range(0.15f, 0.23f);
             // Per-spike stagger: each spike's rise runs on its own offset
             // window, so sets erupt in sequence. Sink is shared and fast.

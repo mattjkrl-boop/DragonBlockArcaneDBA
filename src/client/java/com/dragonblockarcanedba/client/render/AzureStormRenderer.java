@@ -26,9 +26,10 @@ import java.util.Random;
  * Entity Renderer for Azure Storm Domain in Minecraft 26.2.
  *
  * Complex pass: the storm is a layered composition. The pieces layer
- * is two tendrilFan groups of wind lashes standing in the storm
- * volume, offset to opposite sides of the eye and reseeded every
- * eight ticks so the lashes keep moving, drawn through the shader
+ * is two tendrilFan groups of four wind lashes each standing in the
+ * storm volume, offset to opposite sides of the eye and reseeded every
+ * eight ticks so the lashes keep moving, plus a four shard burst shed
+ * at the rim on a ten tick cadence, drawn through the shader
  * submit helper with the tendril canvas. The complex particle layer
  * is ASH_FLAKE grit and WISP_CURL wisps carried on the same swirl
  * velocities as the filler. The material emission from the no-shapes
@@ -286,17 +287,36 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
         // on opposite sides of the eye, tilted with the swirl, and the
         // seed bucket rolls every eight ticks so the strands re-lash
         // instead of hanging frozen while the filler weather moves.
+        // A small storm-glass burst is shed at the rim for the first
+        // three ticks of each ten tick bucket.
         final float geoR = radius;
+        final float geoAge = age;
         final float geoEnv = envelope;
         final float geoDs = ds;
+        final int geoLight = state.lightCoords;
         final long lashSeed = state.seed ^ 0x1A57L ^ ((long) (age / 8.0f) * 0x9E37L);
         ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
             ComplexGeometry.tendrilFan(pose, buffer, lashSeed,
                     new Vec3(geoR * 0.34, 1.0, -geoR * 0.18), new Vec3(-0.15, 1.0, 0.10),
-                    38f, geoR * 0.62f, 2, 0.34f, 0x9FD8E8, 0xD9FFFF, 0.88f, geoEnv, geoDs);
+                    38f, geoR * 0.62f, 4, 0.34f, 0x9FD8E8, 0xD9FFFF, 0.88f, geoEnv, geoDs);
             ComplexGeometry.tendrilFan(pose, buffer, lashSeed ^ 0x51EDL,
                     new Vec3(-geoR * 0.30, 1.0, geoR * 0.26), new Vec3(0.12, 1.0, -0.15),
-                    38f, geoR * 0.62f, 2, 0.34f, 0x9FD8E8, 0xD9FFFF, 0.88f, geoEnv, geoDs);
+                    38f, geoR * 0.62f, 4, 0.34f, 0x9FD8E8, 0xD9FFFF, 0.88f, geoEnv, geoDs);
         });
+        float shedPhase = geoAge % 10.0f;
+        if (shedPhase < 3.0f) {
+            long shedBucket = (long) (geoAge / 10.0f);
+            long shedSeed = lashSeed ^ 0x5ED0L ^ (shedBucket * 0x9E37L);
+            double shedAngle = new Random(shedSeed).nextFloat() * Math.PI * 2.0;
+            double shedCos = Math.cos(shedAngle);
+            double shedSin = Math.sin(shedAngle);
+            final Vec3 shedOrigin = new Vec3(shedCos * geoR * 0.92, 1.30, shedSin * geoR * 0.92);
+            final Vec3 shedAxis = new Vec3(-shedSin, 0.45, shedCos);
+            final float shedEnv = geoEnv * (1.0f - shedPhase / 3.0f);
+            ComplexGeometry.submitSolidLit(collector, poseStack, geoLight, (pose, buffer) ->
+                    ComplexGeometry.shardBurst(pose, buffer, shedSeed, shedOrigin, shedAxis,
+                            58.0f, 0.55f, 4, 0x1E6F8E, 0xD9FFFF,
+                            0.95f, shedEnv, geoDs));
+        }
     }
 }

@@ -25,9 +25,13 @@ import java.util.Map;
  * telegraph web on the ground inside the contracting radius, gold
  * hot at the center running out to violet at the tips, drawn on the
  * shader through submitEnergy; in the last tenth of the countdown a
- * tendril lash fans upward from the center as the launch fires. The
- * complex particle layer is a one shot SPARK_STREAK burst in that
- * same launch window. The filler layer is unchanged and uses no ring,
+ * tendril lash fans upward from the center as the launch fires.
+ * Attack upgrade pass: a rockWall gravity curtain (submitSolidLit)
+ * heaves up along the slam's front edge across the countdown, hangs
+ * tilted on the gravity envelope, and starts its drop in the last
+ * four ticks; ZGravitySlamRenderer finishes the drop. The complex
+ * particle layer is a one shot SPARK_STREAK burst in that same
+ * launch window. The filler layer is unchanged and uses no ring,
  * disc, or tick marks: stone dust drifts across the full true slam
  * footprint for the whole countdown, violet gravity plasma and pale
  * vapor are sampled inside the contracting radius and pulled inward
@@ -41,6 +45,9 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
     private static final int GOLD = 0xFFD94D;
     private static final int PALE_VIOLET = 0xC9B8FF;
     private static final int STONE_DUST = 0x9A8668;
+    private static final int DARK_STONE = 0x77675A;
+    /** How high the gravity curtain hangs above the ground at full rise. */
+    private static final float CURTAIN_HANG = 1.05f;
 
     private final Map<Integer, Emission> emissions = new HashMap<>();
 
@@ -118,6 +125,44 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
             ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC9ACL,
                 webRadius, GOLD, VIOLET, 0.92f, webEnv, distF));
 
+        // Gravity curtain (attack upgrade pass): a rockWall the gravity
+        // beat heaves out of the ground along the slam's front edge
+        // during the countdown. The RISE is stretched across the launch
+        // delay (full height at 80 percent), the slabs hang tilted
+        // above the ground on the gravity envelope, and in the last
+        // four ticks the drop begins (sink to 0.45); ZGravitySlamRenderer
+        // completes the SLAM from the identical placement at the launch
+        // tick, so the handoff is seamless. Placement, seed, and factor
+        // math live in the static helpers at the bottom of this file
+        // and are called by that renderer too, so both draw one wall.
+        // The wall is the visual body of the existing
+        // launch-and-drop beat: the delay, radius, and the launch's
+        // debris field counts are untouched. Physical stone, drawn lit.
+        float rise = smooth(Math.min(1.0f, age / (state.delayTicks * 0.80f)));
+        float sinkStart = Math.max(4.0f, state.delayTicks - 4.0f);
+        float sink = age <= sinkStart ? 0.0f
+            : smooth(Math.min(1.0f, (age - sinkStart) / 4.0f)) * 0.45f;
+        if (rise > 0.01f) {
+            float[] spot = curtainSpot(state.x, state.z);
+            Vec3 facing = new Vec3(spot[0], 0.0, spot[1]);
+            Vec3 right = new Vec3(-spot[1], 0.0, spot[0]);
+            float wallLen = curtainLength(slamRadius);
+            float wallHeight = curtainHeight(slamRadius);
+            float hang = CURTAIN_HANG * rise * (1.0f - sink);
+            Vec3 wallOrigin = facing.scale(slamRadius * 0.66)
+                .add(right.scale(spot[2] * wallLen * 0.15))
+                .add(0.0, hang, 0.0);
+            long wallSeed = curtainSeed(state.x, state.z);
+            float wallEnv = Math.min(1.0f, 0.55f + progress * 0.45f) * dist;
+            float riseF = rise;
+            float sinkF = sink;
+            int light = state.lightCoords;
+            ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) ->
+                ComplexGeometry.rockWall(pose, buffer, wallSeed,
+                    wallOrigin, facing, wallLen, wallHeight, 0.45f,
+                    riseF, sinkF, DARK_STONE, STONE_DUST, 0.98f, wallEnv, distF));
+        }
+
         // Launch window: the last tenth of the countdown fires the
         // tendril lash and the spark streak burst, once per entity.
         if (progress >= 0.90f) {
@@ -143,6 +188,37 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
         }
         emission.lastSeenNanos = now;
         return emission;
+    }
+
+    // Gravity curtain placement, shared with ZGravitySlamRenderer by
+    // identical math (the two entities sit at the same position but
+    // carry different seeds, so the curtain is keyed to the position
+    // hash instead: same spot, same facing, same wall, every client).
+    // Returns {facingX, facingZ, lateralShiftFrac}.
+    static float[] curtainSpot(double x, double z) {
+        ComplexGeometry.Rng rng = new ComplexGeometry.Rng(curtainSeed(x, z));
+        float ang = rng.nextFloat() * (float) (Math.PI * 2.0);
+        return new float[]{(float) Math.cos(ang), (float) Math.sin(ang), rng.nextFloat() * 2.0f - 1.0f};
+    }
+
+    static long curtainSeed(double x, double z) {
+        return ((long) Math.floor(x) * 3129871L) ^ ((long) Math.floor(z) * 116129L) ^ 0x6A11EL;
+    }
+
+    /** Wall length for the slam radius: 8 to 10 slabs at any power. */
+    static float curtainLength(float radius) {
+        return Math.max(9.5f, Math.min(11.5f, radius * 1.05f));
+    }
+
+    /** Wall height for the slam radius: tall, heavy slabs, 2.4 to 3.4. */
+    static float curtainHeight(float radius) {
+        float p = Math.max(0.0f, Math.min(1.0f, (radius - 6.0f) / 12.0f));
+        return 2.4f + p * 1.0f;
+    }
+
+    private static float smooth(float t) {
+        float x = Math.max(0.0f, Math.min(1.0f, t));
+        return x * x * (3.0f - 2.0f * x);
     }
 
     private static final class Frame {

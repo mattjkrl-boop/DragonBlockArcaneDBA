@@ -25,8 +25,11 @@ import java.util.Map;
  * tendril fan: three seeded clusters on the charge ring lash tendrils
  * toward the sword core at center plus one block, drawn on the shader
  * through submitEnergy with the tendril canvas, gold at the root
- * brightening to near white gold at the core. The complex particle
- * layer is SPARK_STREAK sprites streaming through the same volume.
+ * brightening to near white gold at the core. Attack upgrade pass:
+ * four big stone shards hang above the core through submitSolidLit
+ * while the charge builds, then drop and shatter on release. The
+ * complex particle layer is SPARK_STREAK sprites streaming through
+ * the same volume.
  * Gravity plasma, pale vapor, and stone dust stay as the filler layer,
  * sampled across the ground and through the funnel volume by the shared
  * material emitters, always moving toward the sword core. Levitating
@@ -40,6 +43,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
     private static final int BRIGHT_GOLD = 0xFFF2A6;
     private static final int PALE_GOLD = 0xFFE9A8;
     private static final int STONE_DUST = 0x9A8668;
+    private static final int DARK_STONE = 0x77675A;
 
     private final Map<Integer, Emission> emissions = new HashMap<>();
 
@@ -107,6 +111,18 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         emission.frame.center = center;
         emission.frame.radius = baseRadius;
         emission.frame.funnelHeight = 2.4f + charge * 1.4f;
+
+        // Suspended shard drop (attack upgrade pass): while the charge
+        // builds, fadeTicks is negative and the shards hang; when the
+        // charge releases, the fade runs and the shards fall with it.
+        float fadeT = state.fadeTicks < 0 ? 0.0f
+            : Math.min(1.0f, state.fadeTicks / (float) ZChargeEntity.FADE_LENGTH);
+        float shardDrop = fadeT * fadeT * 1.55f;
+        emission.frame.shardDrop = shardDrop;
+        if (state.fadeTicks >= 0) {
+            emission.burstShatter();
+        }
+
         float delta = emission.nextDelta();
         float envelope = baseAlpha * dist;
         emission.plasma.tick(delta, envelope);
@@ -143,6 +159,36 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
             });
         }
 
+        // Suspended stone shards (attack upgrade pass): four big stone
+        // shards the gravity charge holds above the blade core, turning
+        // slowly on the charge ring's rotation with a small bob. When
+        // the charge releases they drop on the fade envelope, tilting
+        // outward as they fall, and shatter (the burstShatter one-shot
+        // above) as the fade takes them. Few and large on purpose:
+        // levitated rock, drawn lit like every physical piece.
+        if (geoEnv > 0.02f) {
+            long shardSeed = state.seed;
+            float dropF = shardDrop;
+            float fadeTF = fadeT;
+            float ageF = age;
+            float envF = geoEnv;
+            int light = state.lightCoords;
+            ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) -> {
+                float orbit = ageF * 0.07f;
+                for (int i = 0; i < 4; i++) {
+                    double a = orbit + i * (Math.PI * 0.5);
+                    float bob = fadeTF > 0.0f ? 0.0f
+                        : (float) Math.sin(ageF * 0.18f + i * 1.7f) * 0.06f;
+                    Vec3 o = new Vec3(Math.cos(a) * 0.42, 1.85 + bob - dropF, Math.sin(a) * 0.42);
+                    Vec3 dir = new Vec3(Math.cos(a) * (0.30 + fadeTF * 0.55), 1.0,
+                        Math.sin(a) * (0.30 + fadeTF * 0.55)).normalize();
+                    float len = 0.70f + (i % 2) * 0.18f;
+                    ComplexGeometry.shard(pose, buffer, shardSeed + 0x5A1DL + i * 104729L,
+                        o, dir, len, len * 0.36f, DARK_STONE, STONE_DUST, 0.97f, envF);
+                }
+            });
+        }
+
         super.submit(state, poseStack, collector, cameraState);
     }
 
@@ -162,10 +208,13 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         Vec3 center = Vec3.ZERO;
         float radius = 1.0f;
         float funnelHeight = 2.4f;
+        float shardDrop = 0.0f;
     }
 
     private static final class Emission {
         final long seed;
+        final ClientLevel level;
+        boolean shatterDone = false;
         final Frame frame = new Frame();
         final MaterialEmitters.Emitter plasma;
         final MaterialEmitters.Emitter vapor;
@@ -177,6 +226,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
 
         Emission(ClientLevel level, long seed) {
             this.seed = seed;
+            this.level = level;
             int baseSeed = (int) seed;
             Frame f = frame;
 
@@ -216,6 +266,30 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
             streaks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.04f),
                 volume, 28.0f, 36);
+        }
+
+        /**
+         * One shot SHARD_CHIP burst at the suspended shards' height the
+         * moment the charge releases: the held stones shatter as they
+         * drop. Fires once per emission instance.
+         */
+        void burstShatter() {
+            if (shatterDone) return;
+            shatterDone = true;
+            Frame f = frame;
+            MaterialEmitters.Source shatterSource = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double flat = random.nextDouble() * 0.45;
+                Vec3 pos = f.center.add(Math.cos(angle) * flat, 1.80 - f.shardDrop,
+                    Math.sin(angle) * flat);
+                Vec3 outward = new Vec3(Math.cos(angle), 0.0, Math.sin(angle))
+                    .scale(0.10 + random.nextDouble() * 0.14)
+                    .add(0.0, -0.05 - random.nextDouble() * 0.10, 0.0);
+                return new MaterialEmitters.Sample(pos, outward);
+            };
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.10f),
+                shatterSource, 18);
         }
 
         float nextDelta() {

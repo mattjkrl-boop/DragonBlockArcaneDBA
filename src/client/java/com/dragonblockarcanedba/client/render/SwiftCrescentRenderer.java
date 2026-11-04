@@ -14,6 +14,7 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
@@ -124,6 +125,65 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
         ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
             ComplexGeometry.tendril(pose, buffer, state.seed ^ 0xC3E5, arcFrom, arcControl, arcTo,
                 0.36f * baseScale, 0xFFFFFF, arcLip, 0.92f, fade, dist));
+
+        // Attack upgrade: the crescent gains its second lip. A mirror
+        // tendril bows off the opposite side of the same two tips,
+        // seeded apart and at 60 percent of the main arc's alpha, so
+        // the cut reads as a bladed crescent with two edges instead of
+        // one floating strand.
+        Vec3 arcControl2 = anchor.forward.scale(-0.88 * baseScale).add(anchor.up.scale(0.55 * baseScale));
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendril(pose, buffer, state.seed ^ 0x5A17, arcFrom, arcControl2, arcTo,
+                0.30f * baseScale, 0xFFFFFF, arcLip, 0.55f, fade, dist));
+
+        // Attack upgrade: steel shards ride the arc's leading edge at
+        // the swing's peak tick, three seeded clusters of two along the
+        // belly of the cut (six shards, size class S). Each cluster
+        // sheds along the arc's own tangent at its point on the curve,
+        // the way real fragments leave a moving edge, and the shards
+        // are drawn lit so the steel reads as physical metal, not glow.
+        if (impact > 0.02f) {
+            final float shardEnv = fade * impact;
+            final int shardLight = state.lightCoords;
+            ComplexGeometry.submitSolidLit(collector, poseStack, shardLight, (pose, buffer) -> {
+                float[] edgeT = {0.32f, 0.5f, 0.68f};
+                for (int i = 0; i < edgeT.length; i++) {
+                    float t = edgeT[i];
+                    float s = 1.0f - t;
+                    Vec3 edge = arcFrom.scale(s * s)
+                        .add(arcControl.scale(2 * s * t))
+                        .add(arcTo.scale(t * t));
+                    Vec3 tangent = arcControl.subtract(arcFrom).scale(2 * s)
+                        .add(arcTo.subtract(arcControl).scale(2 * t));
+                    ComplexGeometry.shardBurst(pose, buffer, state.seed ^ (0x51B0 + i * 0x9E37L),
+                        edge, tangent, 38.0f, 0.34f * baseScale, 2,
+                        0xFF8E9DAE, 0xFFF2F8FF, 0.95f, shardEnv, dist);
+                }
+            });
+        }
+
+        // Attack upgrade: when the swing is aimed low and the cut runs
+        // close over the ground, the arc's contact bites a short crack
+        // fan into the ground under the belly, flashing hardest at the
+        // strike tick. crackFan exposes no branch count parameter (see
+        // the change request in the owner report), so the fan is kept
+        // short by radius.
+        if (state.xRot >= 20.0f) {
+            Vec3 contact = center.add(anchor.forward.scale(0.55 * baseScale));
+            int groundY = mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                (int) Math.floor(contact.x), (int) Math.floor(contact.z));
+            double drop = state.wy - groundY;
+            if (drop > 0.0 && drop <= 2.2 * baseScale + 0.5) {
+                final float crackEnv = fade * open * (0.25f + 0.75f * impact);
+                poseStack.pushPose();
+                poseStack.translate(anchor.forward.x * 0.55 * baseScale, -drop + 0.03,
+                    anchor.forward.z * 0.55 * baseScale);
+                ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, state.seed ^ 0xC9A1, 0.85f * baseScale,
+                        0xFFFFFF, arcLip, 0.85f, crackEnv, dist, 3));
+                poseStack.popPose();
+            }
+        }
 
         float delta = anchor.deltaSeconds(mc.isPaused());
         if (delta > 0f) {

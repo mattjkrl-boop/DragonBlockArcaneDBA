@@ -129,6 +129,29 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
                 ComplexGeometry.tendril(pose, buffer, gseed ^ 0x51ED2701L, bFrom, ctrl, bTo, width,
                     0xFFD700, 0x00F2FF, 0.95f, genv, geoDist);
             });
+
+            // Attack upgrade: the cross gains a solid heart. Four steel
+            // shards lie along each slash plane (eight in total), shed
+            // from the crossing point on the crossing tick, bright steel
+            // running to gold tips, drawn lit as physical metal. Each
+            // plane's four are two half bursts of two, one per arm, so
+            // the shards stay on the diagonal line instead of coning
+            // off it.
+            final float crossEnv = genv * strike(progress);
+            if (crossEnv > 0.02f) {
+                final int shardLight = state.lightCoords;
+                final float shardUnit = 0.50f * state.scale;
+                ComplexGeometry.submitSolidLit(collector, poseStack, shardLight, (pose, buffer) -> {
+                    ComplexGeometry.shardBurst(pose, buffer, gseed ^ 0xCA11L, Vec3.ZERO, diagA,
+                        26.0f, shardUnit, 2, 0xFFE8F1F8, 0xFFFFD700, 0.95f, crossEnv, geoDist);
+                    ComplexGeometry.shardBurst(pose, buffer, gseed ^ 0xCA12L, Vec3.ZERO, diagA.scale(-1.0),
+                        26.0f, shardUnit, 2, 0xFFE8F1F8, 0xFFFFD700, 0.95f, crossEnv, geoDist);
+                    ComplexGeometry.shardBurst(pose, buffer, gseed ^ 0xCA13L, Vec3.ZERO, diagB,
+                        26.0f, shardUnit, 2, 0xFFE8F1F8, 0xFFFFD700, 0.95f, crossEnv, geoDist);
+                    ComplexGeometry.shardBurst(pose, buffer, gseed ^ 0xCA14L, Vec3.ZERO, diagB.scale(-1.0),
+                        26.0f, shardUnit, 2, 0xFFE8F1F8, 0xFFFFD700, 0.95f, crossEnv, geoDist);
+                });
+            }
         }
 
         // Strike burst at the center during the same 0.28 to 0.62 window

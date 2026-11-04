@@ -26,7 +26,8 @@ import net.minecraft.world.phys.Vec3;
  * preserved as the emission envelope.
  *
  * Complex pass: a tendril wake trails above the falling blade as alpha
- * veil strands (darkness smoke made structured), with ember fragments
+ * veil strands (darkness smoke made structured), and three dark steel
+ * shard pieces ride the rolling blade arc. Ember fragments
  * and spark streaks shed at the leading tip. The material emission stays
  * as filler around the strands.
  */
@@ -95,6 +96,24 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
             ComplexGeometry.tendrilFan(pose, buffer, seed ^ 0xB1D1L,
                 new Vec3(0.0, 1.55, 0.0), new Vec3(0.0, 1.0, 0.0), 30.0f, 2.5f, 3,
                 0.34f, 0x8C0DF2, 0x2A0045, 0.92f, envelope, distScale));
+        // Three physical dark steel shards ride the same roll the
+        // emission samples around the falling body: one near each end
+        // and one at the center, each aligned to the roll tangent and
+        // tipped downward so they travel with the blade arc.
+        final double roll = Math.toRadians(state.yRot + state.age * 18.0f);
+        final Vec3 side = new Vec3(Math.cos(roll), 0.0, Math.sin(roll));
+        final Vec3 tangent = new Vec3(-Math.sin(roll), 0.0, Math.cos(roll));
+        ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) -> {
+            for (int i = 0; i < 3; i++) {
+                double along = 1.25 - i * 1.25;
+                Vec3 origin = side.scale(0.16).add(new Vec3(0.0, along, 0.0));
+                Vec3 dir = tangent.scale(0.78).add(new Vec3(0.0, -0.46, 0.0));
+                float length = 0.98f - i * 0.16f;
+                ComplexGeometry.shard(pose, buffer, seed ^ (0xB1D2L + i * 131L),
+                    origin, dir, length, length * 0.20f,
+                    0xFF0B0A10, 0xFF8A8694, 0.95f, envelope);
+            }
+        });
     }
 
     private static void emitMaterials(DarknessBladeRenderState state) {

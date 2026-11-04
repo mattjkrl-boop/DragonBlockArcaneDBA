@@ -50,6 +50,35 @@ public class OxFissureEntity extends Projectile {
             if (this.tickCount == 1) {
                 com.dragonblockarcanedba.fx.SlamDebris.burst(serverLevel, pos, 2.5, com.dragonblockarcanedba.fx.SlamDebris.Profile.OX_FISSURE);
             }
+
+            // Wall rise debris (attack upgrade, visual only): real ground
+            // chunks thrown up along the line while the renderer's rock
+            // wall heaves out of the trench, on the King's Slam pattern
+            // (SlamDebris on tick 1, the DebrisSpawner field on tick 2).
+            // No damage, no destruction: DebrisEntity pieces are pure
+            // presentation and the fissure's damage beat below is
+            // unchanged.
+            if (this.tickCount == 2) {
+                float riseDensity = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                int riseCount = Math.round(10f * riseDensity);
+                if (riseCount > 0) {
+                    LivingEntity riseOwner = this.getOwner() instanceof LivingEntity living ? living : null;
+                    com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, riseOwner, pos, riseCount, 2.0, 1.4, 14);
+                }
+            }
+
+            // Wall slam debris (attack upgrade, visual only): the wall
+            // the renderer raises slams flat at tick 12; a burst of 14
+            // real chunks marks the impact along the line on the same
+            // tick the renderer's slam crack fan lands.
+            if (this.tickCount == 12) {
+                float slamDensity = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                int slamCount = Math.round(14f * slamDensity);
+                if (slamCount > 0) {
+                    LivingEntity slamOwner = this.getOwner() instanceof LivingEntity living ? living : null;
+                    com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, slamOwner, pos, slamCount, 2.2, 1.8, 16);
+                }
+            }
             LivingEntity owner = this.getOwner() instanceof LivingEntity living ? living : null;
 
             // Ambient magma/flame embers, scaled by effect density (redesign T5)

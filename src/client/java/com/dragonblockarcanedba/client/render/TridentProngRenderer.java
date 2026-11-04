@@ -119,7 +119,7 @@ public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, Tri
         // forward and right are the world flight axes). Vertex estimate
         // at distScale 1.0: three shard meshes at 288 each is 864, three
         // tendril wakes at reduced segment scale about 770, three flame
-        // tongue clusters of 3 tongues about 430. Total about 2070,
+        // tongue clusters of 4 tongues about 576. Total about 2210,
         // inside the class M budget of 2500.
         final long geoSeed = state.seed;
         final float pieceEnv = fade;
@@ -141,7 +141,7 @@ public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, Tri
             for (int i = 0; i < 3; i++) {
                 Vec3 base = right.scale(OFFSETS[i]).subtract(forward.scale(0.50 * RADII[i]));
                 ComplexGeometry.flameTongues(pose, buffer, geoSeed ^ (0xF1A5L + i * 131L),
-                    base, 0.24f * RADII[i], 0.55f * RADII[i], 3,
+                    base, 0.24f * RADII[i], 0.55f * RADII[i], 4,
                     0xFFF0C0, CORE, 0.95f, pieceEnv, sway + i * 1.7f, pieceDs);
             }
         });

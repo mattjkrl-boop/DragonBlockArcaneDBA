@@ -25,9 +25,10 @@ import java.util.Map;
  * Entity Renderer for Sonic Quake Impact Shockwave in Minecraft 26.2.
  *
  * Complex pass: the quake is a layered composition. The pieces layer
- * is fracturePlates plus a crackFan, both expanding with the wave
+ * is fracturePlates plus two crackFans, all expanding with the wave
  * radius so the ground breaks and the energy web spreads exactly as
- * far as the crest has reached, never ahead of it. The plates submit
+ * far as the crest has reached, never ahead of it. The second fan is
+ * mirrored at 0.6 radius so its forks run against the main web. The plates submit
  * solid with faceted shading; the cracks submit through the shader.
  * The complex particle layer is SHARD_CHIP: a one-shot burst at the
  * epicenter on the first frames plus chips shed along the crest. The
@@ -229,6 +230,20 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                     ComplexGeometry.crackFan(pose, buffer, crackSeed, crackRadius,
                             0xFFFFFF, 0x4DF2FF, 0.90f, geoEnv, geoDs));
+            // Counter fan at 0.6 radius: the mirrored local pose flips
+            // the fork chirality, so the inner web reads as forks
+            // running back against the main fan instead of copying it.
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+                PoseStack mirrored = new PoseStack();
+                mirrored.last().pose().set(pose.pose());
+                mirrored.last().normal().set(pose.normal());
+                mirrored.pushPose();
+                mirrored.scale(-1.0f, 1.0f, 1.0f);
+                ComplexGeometry.crackFan(mirrored.last(), buffer, crackSeed ^ 0x5A17L,
+                        crackRadius * 0.60f, 0xFFFFFF, 0x4DF2FF,
+                        0.82f, geoEnv, geoDs);
+                mirrored.popPose();
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

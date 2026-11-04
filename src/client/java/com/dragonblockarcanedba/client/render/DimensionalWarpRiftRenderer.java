@@ -15,13 +15,15 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Dimensional Warp Rift in Minecraft 26.2.
  * Complex pass: a layered composition. The pieces layer carries two
  * builders: two shader tendrils streaming inward from the rim to the
  * heart, and a shader crackFan on the rift's ground plane at the same
- * radius as the marked disk. The spatial glass shard fan at the tear
+ * radius as the marked disk. A destination rift draws that crack web a
+ * second time mirrored, so arrival reads as violent as departure. The spatial glass shard fan at the tear
  * used to be a third, drawn builder; it is now real FragmentEntity
  * pieces the host spawns server side on its first tick
  * (ENTITY-STANDARD). The complex particle layer is WISP_CURL sprites pulled
@@ -196,15 +198,20 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
         // Pieces layer, class M with two builders, drawn in entity
         // local space (the heart sits at local y 1.4, as in the emission).
         // Vertex accounting at full detail: the two inward tendrils are
-        // at most 384 each (768), and the crack fan runs at reduced
-        // detail scale as the second builder (at most about 450), for a
-        // worst case near 1220, inside the class M budget of 2500. The
+        // at most 384 each (768), and the crack fan, branch-boosted by
+        // the attack upgrade, runs at most about 600; a destination
+        // rift draws the fan twice (the second mirrored), for a worst
+        // case near 1970, inside the class M budget of 2500. The
         // tendrils and cracks follow the shared lifecycle envelope. The
         // shard fan is no longer drawn here: the host spawns it as real
         // FragmentEntity pieces on its first tick (ENTITY-STANDARD).
+        // Attack upgrade: the fan's crack count runs two branches
+        // richer. crackFan derives its count from segments(9, detail,
+        // 6), so the boost rides the detail scale (plus 2/9 adds
+        // exactly two base cracks above the detail floor).
         float geoEnv = env;
         float crackRadius = radius * 1.02f;
-        float crackDetail = distScale * 0.70f;
+        float crackDetail = distScale * 0.70f + 2.0f / 9.0f;
         if (geoEnv > 0.02f) {
             ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
                 Vec3 heartLocal = new Vec3(0.0, 1.4, 0.0);
@@ -223,6 +230,20 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                 ComplexGeometry.crackFan(pose, buffer, seed ^ 0xC4ACL,
                     crackRadius, 0xFFFFFF, 0x8C1AFF, 0.90f, geoEnv, crackDetail));
+
+            // Attack upgrade: a destination rift also draws the same
+            // crack web mirrored across its local X axis, so arrival
+            // tears the ground as violently as departure. Same seed,
+            // radius, and colors; only the pose is mirrored, so the
+            // two webs are true mirror images over the rift heart.
+            if (state.isDestination) {
+                poseStack.pushPose();
+                poseStack.mulPose(new Matrix4f().scale(-1.0f, 1.0f, 1.0f));
+                ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, seed ^ 0xC4ACL,
+                        crackRadius, 0xFFFFFF, 0x8C1AFF, 0.90f, geoEnv, crackDetail));
+                poseStack.popPose();
+            }
         }
 
         super.submit(state, poseStack, collector, cameraState);

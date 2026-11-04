@@ -27,8 +27,9 @@ import java.util.Random;
  *
  * Complex pass: a layered composition on the shatter plane, which is the
  * camera plane the existing crack spokes and dial ghost already use. The
- * pieces layer in this renderer is a shader crackFan of temporal energy
- * on that plane through submitEnergy, running on the shared radial
+ * pieces layer in this renderer is two shader crackFans of temporal
+ * energy on that plane through submitEnergy (the main fan plus a
+ * smaller counter-rotated fan, attack upgrade pass), running on the shared radial
  * gradient, near-white at the heart to the ghost cyan 0x65D8FF at the
  * tips, so the pieces present the old dial color split as a single
  * continuous gradient instead of two offset copies. The five solid
@@ -115,9 +116,11 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
 
     /**
      * Pieces layer, class M, on the billboarded shatter plane. Vertex
-     * accounting at full detail: the crackFan is at most 11 cracks whose
+     * accounting at full detail: each crackFan is at most 11 cracks whose
      * main walks emit 528 vertices plus at most 264 of fork vertices
-     * (792), inside the class M budget of 2500 with room to spare since
+     * (792); the attack upgrade pass runs two of them (the main fan and a
+     * smaller counter-rotated one), so the layer tops out at 1584,
+     * inside the class M budget of 2500 with room to spare since
      * the Entity Objects Pass moved the five solid shards (1440
      * vertices here before) onto FragmentEntity and its own renderer.
      * Peak alpha is honest: 0.92 on the shader cracks, whose faintness
@@ -149,6 +152,16 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
             flat.rotate(Axis.XP.rotation((float) (-Math.PI / 2.0)));
             ComplexGeometry.crackFan(flat, buffer, pieceSeed ^ 0xC4ACEL,
                     crackRadius, 0xFFFFFF, 0x65D8FF, 0.92f, pieceFade, pieceDist);
+            // Attack upgrade pass: a second, smaller crackFan on the same
+            // plane, spun half a crack spacing the other way (the in-plane
+            // Y rotation lands before the lay-flat X rotation) so its
+            // branches interleave the main fan's instead of tracing over
+            // them, at 0.62 of the radius and one step dimmer.
+            PoseStack.Pose flatCounter = pose.copy();
+            flatCounter.rotate(Axis.YP.rotation(-0.35f));
+            flatCounter.rotate(Axis.XP.rotation((float) (-Math.PI / 2.0)));
+            ComplexGeometry.crackFan(flatCounter, buffer, pieceSeed ^ 0xC4B0L,
+                    crackRadius * 0.62f, 0xFFFFFF, 0x65D8FF, 0.85f, pieceFade, pieceDist);
         });
         poseStack.popPose();
     }

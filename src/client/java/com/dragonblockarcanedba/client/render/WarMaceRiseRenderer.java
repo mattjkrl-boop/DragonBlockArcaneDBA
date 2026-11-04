@@ -27,7 +27,9 @@ import java.util.Map;
  * (submitEnergy), and a SHARD_CHIP burst plus a short chip stream throw
  * stone fragments off the base ring. Those pieces are the fast near
  * field structure of the launch; everything below stays as the filler
- * layer. The crescent itself is a path, and a path is data: bronze
+ * layer. The attack upgrade pass adds a second, wider plate ring
+ * outside the first and two more crackFan branches, so the base reads
+ * as two uneven heave rings. The crescent itself is a path, and a path is data: bronze
  * plasma is emitted along the same 250 degree arc, in the
  * same facing plane, climbing at the same 0.22 blocks per tick the hit
  * volume climbs, so what the target sees is still what hits it. The main
@@ -167,9 +169,21 @@ public class WarMaceRiseRenderer extends EntityRenderer<WarMaceRiseEntity, WarMa
         ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
             ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xF9A7L,
                 1.05f, 0.16f, GHOST_LOW, 0x4A3826, 0.92f, geoEnv, geoDist));
+        // Attack upgrade: one more plate ring outside the first, lower
+        // and wider, so the lifted stone at the base reads as two
+        // uneven heave rings instead of a single fan.
+        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xF9A8L,
+                1.62f, 0.09f, GHOST_MID, 0x4A3826, 0.88f, geoEnv, geoDist));
+        // Attack upgrade: crackFan branches plus 2. The builder derives
+        // its crack count from distScale (segments(9, distScale, 6)),
+        // so this call passes a boosted scale: 11 base branches at full
+        // detail instead of 9, scaling down with distance like the
+        // rest. There is no explicit branch count parameter; see the
+        // owner report's change requests.
         ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
             ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC9ACL,
-                1.35f, WISP, GHOST_LOW, 0.95f, geoEnv, geoDist));
+                1.35f, WISP, GHOST_LOW, 0.95f, geoEnv, geoDist * 1.22f));
         pruneEmissions(state.entityId);
 
         super.submit(state, poseStack, collector, cameraState);

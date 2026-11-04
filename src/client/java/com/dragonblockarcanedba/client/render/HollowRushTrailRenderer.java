@@ -37,6 +37,10 @@ import java.util.Map;
  * strands swept across the slash arc on the third dash. WISP_CURL
  * sprites shed along the helical stream paths and across the arc as the
  * complex particle layer. The material emission stays as filler.
+ *
+ * Attack upgrade pass: a SHARD_CHIP shed layer joins the wisps on both
+ * dash shapes, and an extra tendril pair at half alpha mirrors the
+ * first pair so the corridor and the third dash arc read woven.
  */
 public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntity, HollowRushTrailRenderer.TrailRenderState> {
 
@@ -104,6 +108,8 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
         final MaterialEmitters.Emitter arcVapor;
         final MaterialEmitters.Emitter wispStream;
         final MaterialEmitters.Emitter wispArc;
+        final MaterialEmitters.Emitter chipStream;
+        final MaterialEmitters.Emitter chipArc;
         long lastNanos = 0L;
         long lastSeenNanos = 0L;
         Vec3 start = Vec3.ZERO;
@@ -179,6 +185,22 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
             this.wispArc = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.03f),
                 random -> new MaterialEmitters.Sample(arcPoint(random, 1.05), dir.scale(-0.08)), 30f, 36);
+            // Attack upgrade: shard chips shed along the same helical
+            // stream paths and across the same arc as the wisps.
+            this.chipStream = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.03f),
+                random -> {
+                    double t = random.nextDouble();
+                    double strand = random.nextBoolean() ? 0.0 : Math.PI;
+                    double ang = strand + t * Math.PI * 3.0 + age * 0.3;
+                    double r = 0.56 * widthScale * (0.75 + 0.25 * Math.sin(t * Math.PI));
+                    Vec3 p = start.add(dir.scale(t * len))
+                        .add(right.scale(Math.cos(ang) * r)).add(up.scale(Math.sin(ang) * r));
+                    return new MaterialEmitters.Sample(p, dir.scale(0.10));
+                }, 30f, 36);
+            this.chipArc = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.03f),
+                random -> new MaterialEmitters.Sample(arcPoint(random, 1.05), dir.scale(-0.08)), 30f, 36);
         }
 
         private Vec3 arcPoint(net.minecraft.util.RandomSource random, double radiusScale) {
@@ -247,9 +269,10 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
 
         // Pieces layer: tendrils along the rush path, in local space (the
         // pose sits at the trail origin, unrotated, so the synced dash
-        // direction is a plain offset). Two strands on a normal dash is
-        // 768 vertices at full spine samples, four on the third dash arc
-        // is 1536, both well inside the class M budget.
+        // direction is a plain offset). Attack upgrade counts: four
+        // strands on a normal dash is 1536 vertices at full spine
+        // samples, six on the third dash arc is 2304, both inside the
+        // class M budget of 2500.
         {
             final Vec3 dirL = s.dir;
             final Vec3 rightL = s.right;
@@ -288,6 +311,19 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
                             arcPointLocal(arcC, rightL, upL, a2, slashR * 0.88),
                             0.18f * wsL, 0x26F2FF, 0x730DF2, 0.92f, penv, pds);
                     }
+                    // Attack upgrade: one extra inner arc at half
+                    // alpha, drawn as two half tendrils on the same
+                    // closing radius curve.
+                    for (int half = 0; half < 2; half++) {
+                        double a0 = half == 0 ? -th : 0.0;
+                        double a1 = half == 0 ? -th * 0.5 : th * 0.5;
+                        double a2 = half == 0 ? 0.0 : th;
+                        ComplexGeometry.tendril(pose, buffer, pseed ^ (0xB77L + half * 131L),
+                            arcPointLocal(arcC, rightL, upL, a0, slashR * 0.74),
+                            arcPointLocal(arcC, rightL, upL, a1, slashR * 0.74 * 1.44),
+                            arcPointLocal(arcC, rightL, upL, a2, slashR * 0.74),
+                            0.12f * wsL, 0x26F2FF, 0xFFFFFF, 0.46f, penv, pds);
+                    }
                 });
             } else {
                 Vec3 mid = dirL.scale(lenL * 0.5);
@@ -300,6 +336,17 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
                         rightL.scale(0.18 * wsL), mid.add(rightL.scale(0.10 * wsL)).add(upL.scale(-0.06 * wsL)),
                         end.add(rightL.scale(-0.05 * wsL)), 0.16f * wsL,
                         0x730DF2, 0x26F2FF, 0.92f, penv, pds);
+                    // Attack upgrade: a second pair mirrored across
+                    // the path at half alpha, so the corridor reads
+                    // woven instead of a single ribbon pair.
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xB55L,
+                        rightL.scale(-0.18 * wsL), mid.add(rightL.scale(-0.10 * wsL)).add(upL.scale(0.06 * wsL)),
+                        end.add(rightL.scale(0.05 * wsL)), 0.22f * wsL,
+                        0x730DF2, 0x26F2FF, 0.46f, penv, pds);
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xB66L,
+                        upL.scale(-0.14 * wsL), mid.add(upL.scale(-0.16 * wsL)),
+                        end.add(upL.scale(-0.05 * wsL)), 0.13f * wsL,
+                        0xBF1AFF, 0x26E6FF, 0.46f, penv, pds);
                 });
             }
         }
@@ -309,11 +356,13 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
             s.arcCore.tick(delta, env);
             s.arcVapor.tick(delta, env * 0.6f);
             s.wispArc.tick(delta, env * 0.8f);
+            s.chipArc.tick(delta, env * 0.8f);
         } else {
             s.corridor.tick(delta, env * 0.70f);
             s.core.tick(delta, env * 0.85f);
             s.stream.tick(delta, env);
             s.wispStream.tick(delta, env * 0.85f);
+            s.chipStream.tick(delta, env * 0.85f);
             s.ends.tick(delta, env);
         }
 

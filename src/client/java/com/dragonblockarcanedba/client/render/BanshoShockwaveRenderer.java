@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.BanshoShockwaveEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -26,7 +27,16 @@ import net.minecraft.world.phys.Vec3;
  * plates submit solid with facet shading. Radial waves draw them flat
  * in the world XZ plane at the origin; cone and orient-to-impact waves
  * draw them under the same yaw and pitch rotation the emission frame
- * uses. The complex particle layer is a few SHARD_CHIP sprites at the
+ * uses. On top of the scour, the attack upgrade pass adds the PUSH
+ * WALL: the wavefront itself heaves up as ground, a rockWall front row
+ * of 7 to 9 slabs with a lower backing ridge row behind it, in a
+ * palette sampled from the ground under the origin and drawn lit
+ * through submitSolidLit, leaning into the travel direction and riding
+ * the wave's existing expansion. Cone waves carry one wall across
+ * their front; radial waves carry three arcs of it around the ring.
+ * The backing row sinks first as the wave dies, the front row follows,
+ * and the existing BLOCK_CHUNKS debris stream supplies the crumble.
+ * The complex particle layer is a few SHARD_CHIP sprites at the
  * wave front. The material emission from the no-shapes pass stays as
  * filler: cone waves are a rushing vapor front with a pale plasma core,
  * launch dust, and mist; radial waves are a vapor front sampled across
@@ -262,7 +272,11 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
         // scour lifting the surface, not a slam crater. Vertex count at
         // full distance scale: the crack fan stays under its 900 vertex
         // budget and the plates under about 480, for a total under 1400,
-        // inside the class M budget of 2500.
+        // inside the class M budget of 2500. The push wall below draws
+        // in its own lit submits: the cone wall is one submit of at
+        // most 16 slabs (1152 vertices); each radial arc is its own
+        // submit of at most 9 slabs (648), front row and backing row
+        // separately, six submits around the ring.
         if (alpha > 0.01f && distanceScale > 0.01f) {
             final float scourRadius = state.isCone
                     ? Math.max(0.4f, state.coneRadius)
@@ -271,6 +285,28 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
             final long geoSeed = state.seed;
             final float geoEnv = alpha * distanceScale;
             final float geoDs = distanceScale;
+            // Push wall palette: sampled from the ground block under the
+            // wave origin and blended toward soil, so the heaved wall
+            // reads as the local earth (grass country reads browner than
+            // the turf top, sand stays sandy) instead of a fixed tint.
+            // Weathered stone is the fallback when there is no ground
+            // under the origin to sample.
+            int sampledRoot = 0x4A4238;
+            int sampledTip = 0x8A7B68;
+            if (level != null) {
+                BlockPos groundPos = BlockPos.containing(state.ex, state.ey - 0.5, state.ez);
+                BlockState ground = level.getBlockState(groundPos);
+                if (!ground.isAir()) {
+                    int col = ground.getMapColor(level, groundPos).col;
+                    if (col != 0) {
+                        int base = mixRgb(col, 0x6B5138, 0.45f);
+                        sampledRoot = scaleRgb(base, 0.50f);
+                        sampledTip = lightenRgb(base, 0.30f);
+                    }
+                }
+            }
+            final int wallRoot = sampledRoot;
+            final int wallTip = sampledTip;
             poseStack.pushPose();
             if (state.isCone || state.orientToImpact) {
                 poseStack.mulPose(new org.joml.Matrix4f()
@@ -283,9 +319,139 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                     ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4ACL,
                             scourRadius * 1.05f, 0xCFFFEF, 0x26FFA6, 0.95f, geoEnv, geoDs));
+            if (state.isCone) {
+                drawConeWall(state, poseStack, collector, geoSeed, geoEnv, geoDs, wallRoot, wallTip);
+            } else if (state.currentRadius >= 3.0f) {
+                drawRingWall(state, poseStack, collector, geoSeed, geoEnv, geoDs, wallRoot, wallTip);
+            }
             poseStack.popPose();
         }
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /**
+     * The cone wave's push wall, in the rotated cone frame (local z is
+     * the travel direction): a front row of 7 to 9 slabs across the
+     * wavefront at 0.88 of the cone length and a lower backing ridge
+     * row half a block behind it, the whole wall leaned 0.16 radians
+     * into the travel direction. The wall rises over the first 3 ticks
+     * and rides the cone's existing expansion; as the wave dies the
+     * backing row sinks first (from progress 0.50) and the front row
+     * follows (from 0.62), so the ridge collapses rear-first while the
+     * front is still being shoved.
+     */
+    private void drawConeWall(ShockwaveRenderState state, PoseStack poseStack,
+                              SubmitNodeCollector collector, long geoSeed,
+                              float geoEnv, float geoDs, int wallRoot, int wallTip) {
+        float progress = state.progress;
+        float wallLen = Math.max(4.8f, Math.min(9.8f, state.coneRadius * 2.0f));
+        float frontZ = state.coneLength * 0.88f;
+        float rise = FxEnvelope.smoothstep(Math.min(1.0f, state.age / 3.0f));
+        float sinkFront = progress <= 0.62f ? 0.0f
+                : FxEnvelope.smoothstep(Math.min(1.0f, (progress - 0.62f) / 0.38f));
+        float sinkBack = progress <= 0.50f ? 0.0f
+                : FxEnvelope.smoothstep(Math.min(1.0f, (progress - 0.50f) / 0.50f));
+        poseStack.pushPose();
+        poseStack.mulPose(new org.joml.Matrix4f().rotateX(0.16f));
+        ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) -> {
+            ComplexGeometry.rockWall(pose, buffer, geoSeed ^ 0x5C19L,
+                    new Vec3(0.0, 0.0, frontZ), new Vec3(0.0, 0.0, 1.0),
+                    wallLen, 1.25f, -0.45f, rise, sinkFront,
+                    wallRoot, wallTip, 0.97f, geoEnv, geoDs);
+            ComplexGeometry.rockWall(pose, buffer, geoSeed ^ 0x5C23L,
+                    new Vec3(0.0, 0.0, frontZ - 0.55f), new Vec3(0.0, 0.0, 1.0),
+                    wallLen * 0.8f, 0.72f, -0.45f, rise, sinkBack,
+                    wallRoot, wallTip, 0.97f, geoEnv, geoDs);
+        });
+        poseStack.popPose();
+    }
+
+    /**
+     * The radial wave's push wall: three arcs of the front row around
+     * the expanding ring, one centered on the wave's facing and the
+     * others 120 degrees apart, each with its own height so the ring's
+     * ridge line is uneven, and a lower backing arc behind each front
+     * arc. The arc parameter is set from the current radius (arc equals
+     * minus length over radius), so every arc hugs the ring's own
+     * circle at every size and rides the existing expansion outward.
+     * Wall length grows with the radius: the slab count reaches the
+     * specced 7 to 9 once the front passes radius 5, and sits at the
+     * builder's 6 slab floor before that, because a full-length wall
+     * on a young ring would wrap past its neighbours. Rise, hold, and
+     * the rear-first crumble match the cone wall's beats.
+     */
+    private void drawRingWall(ShockwaveRenderState state, PoseStack poseStack,
+                              SubmitNodeCollector collector, long geoSeed,
+                              float geoEnv, float geoDs, int wallRoot, int wallTip) {
+        float progress = state.progress;
+        float ringR = state.currentRadius;
+        float wallLen = Math.max(4.8f, Math.min(9.8f, ringR * 1.5f));
+        float wallArc = -(wallLen / ringR);
+        float backR = ringR - 0.55f;
+        float backLen = wallLen * 0.8f;
+        float backArc = -(backLen / backR);
+        float rise = FxEnvelope.smoothstep(Math.min(1.0f, Math.max(0.0f, state.age - 1.5f) / 3.0f));
+        float sinkFront = progress <= 0.60f ? 0.0f
+                : FxEnvelope.smoothstep(Math.min(1.0f, (progress - 0.60f) / 0.40f));
+        float sinkBack = progress <= 0.48f ? 0.0f
+                : FxEnvelope.smoothstep(Math.min(1.0f, (progress - 0.48f) / 0.52f));
+        // In the orient-to-impact frame the pose is already rotated and
+        // local z is the facing; in the plain frame the arcs phase off
+        // the wave's world facing. Either way one arc centers forward.
+        double baseAng = state.orientToImpact
+                ? Math.PI / 2.0
+                : Math.atan2(forward(state).z, forward(state).x);
+        float[] heights = {1.30f, 1.48f, 1.22f};
+        for (int k = 0; k < 3; k++) {
+            double ang = baseAng + k * (Math.PI * 2.0 / 3.0);
+            float rotY = (float) (Math.PI / 2.0 - ang);
+            float h = heights[k];
+            long arcSeed = geoSeed ^ (0x5C19L + k * 131L);
+            poseStack.pushPose();
+            poseStack.translate(Math.cos(ang) * ringR, 0.0, Math.sin(ang) * ringR);
+            poseStack.mulPose(new org.joml.Matrix4f().rotationY(rotY).rotateX(0.16f));
+            ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) ->
+                    ComplexGeometry.rockWall(pose, buffer, arcSeed,
+                            Vec3.ZERO, new Vec3(0.0, 0.0, 1.0),
+                            wallLen, h, wallArc, rise, sinkFront,
+                            wallRoot, wallTip, 0.97f, geoEnv, geoDs));
+            poseStack.popPose();
+            long backSeed = geoSeed ^ (0x5C23L + k * 131L);
+            float backH = h * 0.55f;
+            poseStack.pushPose();
+            poseStack.translate(Math.cos(ang) * backR, 0.0, Math.sin(ang) * backR);
+            poseStack.mulPose(new org.joml.Matrix4f().rotationY(rotY).rotateX(0.16f));
+            ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) ->
+                    ComplexGeometry.rockWall(pose, buffer, backSeed,
+                            Vec3.ZERO, new Vec3(0.0, 0.0, 1.0),
+                            backLen, backH, backArc, rise, sinkBack,
+                            wallRoot, wallTip, 0.97f, geoEnv, geoDs));
+            poseStack.popPose();
+        }
+    }
+
+    /** Scales a 0xRRGGBB color's channels by a factor, clamped. */
+    private static int scaleRgb(int rgb, float factor) {
+        int r = Math.min(255, Math.round(((rgb >> 16) & 0xFF) * factor));
+        int g = Math.min(255, Math.round(((rgb >> 8) & 0xFF) * factor));
+        int b = Math.min(255, Math.round((rgb & 0xFF) * factor));
+        return (r << 16) | (g << 8) | b;
+    }
+
+    /** Blends two 0xRRGGBB colors, t of the way from a to b. */
+    private static int mixRgb(int a, int b, float t) {
+        int r = Math.round(((a >> 16) & 0xFF) * (1.0f - t) + ((b >> 16) & 0xFF) * t);
+        int g = Math.round(((a >> 8) & 0xFF) * (1.0f - t) + ((b >> 8) & 0xFF) * t);
+        int bl = Math.round((a & 0xFF) * (1.0f - t) + (b & 0xFF) * t);
+        return (r << 16) | (g << 8) | bl;
+    }
+
+    /** Moves a 0xRRGGBB color's channels toward white by t. */
+    private static int lightenRgb(int rgb, float t) {
+        int r = Math.round(((rgb >> 16) & 0xFF) + (255 - ((rgb >> 16) & 0xFF)) * t);
+        int g = Math.round(((rgb >> 8) & 0xFF) + (255 - ((rgb >> 8) & 0xFF)) * t);
+        int b = Math.round((rgb & 0xFF) + (255 - (rgb & 0xFF)) * t);
+        return (r << 16) | (g << 8) | b;
     }
 
     private static MaterialEmitters.Sample coneSample(ShockwaveRenderState state, RandomSource random, boolean core) {

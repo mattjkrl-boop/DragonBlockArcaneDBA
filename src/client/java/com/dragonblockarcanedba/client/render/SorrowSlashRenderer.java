@@ -6,6 +6,8 @@ import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SorrowSlashEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -14,6 +16,7 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -27,7 +30,12 @@ import java.util.Map;
  * Complex pass: the slash gains a body again, as two shader tendrils
  * swept along the crescent arc the old crescent traced: a thick violet
  * to cyan-white strand on the crest arc and a thinner soul strand
- * trailing behind it along the travel direction. WISP_CURL sprites
+ * trailing behind it along the travel direction. Attack upgrade pass:
+ * the tendrils double to two pairs (a forward echo of the crest and a
+ * deep trailing strand, seeded apart so their curl phases differ),
+ * five violet crystal sorrow shards fan along the arc as solid pieces,
+ * and when the slash sweeps close over solid ground its low point
+ * scores a short crack fan into that ground. WISP_CURL sprites
  * sampled across the swept volume are the complex particle layer, with
  * a wisp burst added to the impact pop. The material trail stays as
  * filler only: void plasma for the crest and the cyan edge, soul wisps
@@ -175,6 +183,28 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
         }
     }
 
+    /**
+     * The ground point under a slash low point, or null when the slash
+     * is not sweeping close over solid ground: scans down up to 4
+     * blocks for the first solid top and accepts it when the low point
+     * sits between 0.25 above it sunk and 2.5 blocks above it.
+     * Read-only client query; changes no state.
+     */
+    private static Vec3 groundCrackPoint(ClientLevel level, Vec3 lowPoint) {
+        int startY = (int) Math.floor(lowPoint.y);
+        for (int dy = 0; dy <= 4; dy++) {
+            BlockPos bp = BlockPos.containing(lowPoint.x, startY - dy, lowPoint.z);
+            BlockState bs = level.getBlockState(bp);
+            var shape = bs.getCollisionShape(level, bp);
+            if (shape.isEmpty()) continue;
+            double groundTop = bp.getY() + shape.max(Direction.Axis.Y);
+            double clearance = lowPoint.y - groundTop;
+            return clearance >= -0.25 && clearance <= 2.5
+                ? new Vec3(lowPoint.x, groundTop, lowPoint.z) : null;
+        }
+        return null;
+    }
+
     private static Vec3 rotateAroundAxis(Vec3 vector, Vec3 axis, double angle) {
         double cos = Math.cos(angle);
         double sin = Math.sin(angle);
@@ -239,15 +269,28 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
             float distScale = MaterialEmitters.distanceScale(center);
             float envelope = fade * distScale;
 
+            // The arc's low point against the world, for the grounded
+            // crack fan below: only a slash sweeping close over solid
+            // ground scores the ground; a slash flying high does not.
+            final Vec3 crackFinal = fade > 0.02f
+                ? groundCrackPoint(level, center.subtract(up.scale(rig.halfHeight * 0.9)))
+                : null;
+
             // Pieces layer, class M, in entity local space: the synced
             // right, up, and forward axes are plain offsets here, the
             // same basis the emission sampler uses, so the strands hug
             // the swept volume and inherit the reap tilt. The crest
             // strand runs end to end across the span with its control
             // pushed up the arc; the soul strand repeats the arc
-            // trailing behind the travel direction. Two tendrils at
-            // full spine samples are 768 vertices worst case, inside
-            // the class M budget of 2500.
+            // trailing behind the travel direction. Attack upgrade:
+            // a second pair rides with them, a forward echo of the
+            // crest pushed toward the travel direction and a deep
+            // trailing strand behind the soul strand, each with its
+            // own seed so the builder curl phases sit apart. Four
+            // tendrils at full spine samples are 1536 vertices worst
+            // case, inside the class M budget of 2500 for this submit;
+            // the shard burst and the crack fan are separate submits
+            // with their own budgets (1440 and about 550 worst case).
             if (fade > 0.02f) {
                 final Vec3 rightL = right;
                 final Vec3 upL = up;
@@ -269,7 +312,48 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
                         from.add(back).add(upL.scale(-heightL * 0.12)),
                         control.add(back), to.add(back).add(upL.scale(-heightL * 0.12)),
                         0.28f * scaleL, 0xB84DFF, 0xCC0DD9, 0.90f, geoEnv, geoDs);
+                    // Second pair, seeded apart from the first pair so
+                    // their curl phases differ: a forward echo of the
+                    // crest, and a deep strand trailing behind the soul
+                    // strand, so the arc reads as two braided pairs.
+                    Vec3 fwdOff = fwdL.scale(0.38 * scaleL);
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xD33L,
+                        from.add(fwdOff).add(upL.scale(-heightL * 0.05)),
+                        control.add(fwdOff).add(upL.scale(heightL * 0.08)),
+                        to.add(fwdOff).add(upL.scale(-heightL * 0.05)),
+                        0.38f * scaleL, 0x9900E6, 0xB84DFF, 0.92f, geoEnv, geoDs);
+                    Vec3 backOff = fwdL.scale(-0.78 * scaleL);
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xD44L,
+                        from.add(backOff).add(upL.scale(-heightL * 0.20)),
+                        control.add(backOff).add(upL.scale(-heightL * 0.05)),
+                        to.add(backOff).add(upL.scale(-heightL * 0.20)),
+                        0.20f * scaleL, 0x9900E6, 0x3D0A66, 0.88f, geoEnv, geoDs);
                 });
+                // Sorrow shards: five violet crystal shards fanned in
+                // the arc plane around the travel axis, deep violet at
+                // the root running to bright violet at the tips.
+                // submitSolid per the audit spec: energy crystal, the
+                // same family call as the curse glass elsewhere.
+                ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.shardBurst(pose, buffer, pseed ^ 0x5A11L,
+                        upL.scale(heightL * 0.15), fwdL, 150f, 0.55f * scaleL, 5,
+                        0x3D0A66, 0xB84DFF, 0.95f, geoEnv, geoDs));
+                // Grounded crack fan at the arc's low point: short
+                // violet cracks scored into the ground the slash is
+                // sweeping over. The builder draws in its local XZ
+                // plane, so the fan rides a copy of the pose moved to
+                // the ground point under the low point.
+                if (crackFinal != null) {
+                    final Vec3 crackOff = crackFinal.subtract(new Vec3(state.x, state.y, state.z));
+                    ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+                        PoseStack fanStack = new PoseStack();
+                        fanStack.last().pose().set(pose.pose());
+                        fanStack.last().normal().set(pose.normal());
+                        fanStack.translate(crackOff.x, crackOff.y, crackOff.z);
+                        ComplexGeometry.crackFan(fanStack.last(), buffer, pseed ^ 0xC4ACL,
+                            1.15f * scaleL, 0xF5EEFF, 0x9900E6, 0.90f, geoEnv, geoDs);
+                    });
+                }
             }
 
             // The impact burst keeps its opening pop, now as material bursts

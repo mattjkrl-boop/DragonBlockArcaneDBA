@@ -33,6 +33,14 @@ import java.util.Map;
  * plasma, pale vapor, impact dust, and steel sparks, followed by a
  * brief expanding wash of the same materials in the strike plane.
  *
+ * Attack upgrade pass: the impact stops being one fan carrying the
+ * whole hit. The crackFan gains a mirrored twin at half radius whose
+ * forks lean against the first fan's, a ring of fracture plates at
+ * the hit radius, and five stone chips burst at the contact point.
+ * The plates and chips are physical ground matter, so they draw
+ * through the lit path (submitSolidLit) in an earth palette; the fans
+ * stay energy. Sprite emission counts are unchanged.
+ *
  * Lifecycle math is unchanged from the bespoke renderer: the expansion
  * eases out over the first 8 ticks and the whole event fades with the
  * smoothstep of age over the entity lifetime.
@@ -119,13 +127,17 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
         }
         rig.tick(delta, fade * distScale);
 
-        // Pieces layer: a small crack fan on the strike plane. The
-        // crackFan builder draws in its local XZ plane, so the piece
-        // rotates a copy of the submitted pose to carry that plane
-        // onto the strike plane, exactly as the filler wash is framed.
+        // Pieces layer: crack fans on the strike plane. The crackFan
+        // builder draws in its local XZ plane, so each piece rotates
+        // a copy of the submitted pose to carry that plane onto the
+        // strike plane, exactly as the filler wash is framed. The
+        // second fan sits at half radius on a pose mirrored across an
+        // in-plane axis, so its forks lean against the first fan's
+        // forks instead of echoing them.
         final Vec3 gForward = direction(state.yRot, state.xRot);
         final Vector3f gFwd = new Vector3f((float) gForward.x, (float) gForward.y, (float) gForward.z);
         final float gRadius = state.scale * (0.70f + 0.60f * shockProgress);
+        final float gScale = state.scale;
         final float gEnv = fade;
         final float gDist = distScale;
         final long gSeed = state.seed;
@@ -134,7 +146,36 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
             flat.rotate(new Quaternionf().rotateTo(new Vector3f(0.0f, 1.0f, 0.0f), gFwd));
             ComplexGeometry.crackFan(flat, buffer, gSeed ^ 0xC9ACL, gRadius,
                 0xFFF7D6, 0xE32636, 0.95f, gEnv, gDist);
+            PoseStack.Pose mirrored = pose.copy();
+            mirrored.rotate(new Quaternionf().rotateTo(new Vector3f(0.0f, 1.0f, 0.0f), gFwd));
+            mirrored.rotate(new Quaternionf().rotationX((float) Math.PI));
+            ComplexGeometry.crackFan(mirrored, buffer, gSeed ^ 0xC9ADL, gRadius * 0.5f,
+                0xFFF7D6, 0xE32636, 0.90f, gEnv, gDist);
         });
+
+        // Physical pieces, lit path only: a fracture plate ring at
+        // the hit radius (the builder emits 6 to 10 plates by
+        // distance), and five stone chips burst along the strike
+        // direction at the contact point. Both ride the render
+        // state's packed light, like the fragment renderer, so the
+        // stone reads as world matter, never as glow. Form follows
+        // real cracked ground, not game tiles: the lift stays low so
+        // the plates hug the surface and tilt like slabs shifted by
+        // the blow instead of popping up, and the palettes stay
+        // muted and close toned (gray-brown earth for the plates, a
+        // tight dark to mid stone range for the chips), because real
+        // broken rock does not shade like a crystal gradient.
+        final int gLight = state.lightCoords;
+        final float gLift = 0.06f * gScale;
+        ComplexGeometry.submitSolidLit(collector, poseStack, gLight, (pose, buffer) -> {
+            PoseStack.Pose flat = pose.copy();
+            flat.rotate(new Quaternionf().rotateTo(new Vector3f(0.0f, 1.0f, 0.0f), gFwd));
+            ComplexGeometry.fracturePlates(flat, buffer, gSeed ^ 0x91A7L, gRadius,
+                gLift, 0xA79B84, 0x4E463A, 0.95f, gEnv, gDist);
+        });
+        ComplexGeometry.submitSolidLit(collector, poseStack, gLight, (pose, buffer) ->
+            ComplexGeometry.shardBurst(pose, buffer, gSeed ^ 0x5719L, Vec3.ZERO, gForward,
+                70f, 0.28f * gScale, 5, 0x7A6C52, 0x96876A, 0.95f, gEnv, gDist));
 
         if (age >= maxLife) {
             RIGS.remove(state.entityId);

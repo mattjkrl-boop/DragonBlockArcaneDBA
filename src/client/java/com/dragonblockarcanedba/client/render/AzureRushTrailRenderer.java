@@ -32,7 +32,8 @@ import java.util.Map;
  * centerline stations (head, middle, and tail sections, each a bezier
  * through its stations), drawn through the shader submit helper with
  * the tendril canvas. The complex particle layer is WISP_CURL sprites
- * shed through the shell volume. The material emission from the
+ * shed through the shell volume, with a SPARK_STREAK layer at twice
+ * the wisp rate and cap. The material emission from the
  * no-shapes pass stays as filler: a bright plasma core stream, vapor
  * shed through the old shell volume, rain sprayed off the moving
  * wake, and a brighter plasma stream inside the old shock lip station
@@ -277,6 +278,10 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
                         MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL,
                                 Vec3.ZERO, 0.02f),
                         wake(frame, 1), 26f, 40),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK,
+                                Vec3.ZERO, 0.02f),
+                        wake(frame, 1), 52f, 80),
         };
         return emission;
     }

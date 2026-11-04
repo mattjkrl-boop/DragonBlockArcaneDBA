@@ -25,9 +25,10 @@ import java.util.Map;
  * Entity Renderer for Z-Sword Massive Kinetic Shockwave in Minecraft 26.2.
  *
  * Complex pass: layered composition. The pieces layer sits at the
- * wave origin on the ground plane: a small fracturePlates fan in
- * stone colors through submitSolid plus a crackFan web through
- * submitEnergy, near white at the center running out to gold. Both
+ * wave origin on the ground plane: fracturePlates fans in stone
+ * colors through submitSolidLit (two rings since the attack upgrade
+ * pass) plus crackFan webs through submitEnergy, near white at the
+ * center running out to gold. Both
  * ride the strike envelope and are gone by about tick 40, so the
  * ground reads as fracturing where the wave breaks loose instead of
  * carrying plates for its whole travel. The complex particle layer
@@ -151,8 +152,16 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         emission.apex.tick(delta, impact * envelope);
         emission.chips.tick(delta, envelope * 0.90f);
 
-        // Pieces layer at the origin: small plates plus crack web,
-        // strong on the strike envelope and faded out by about tick 40.
+        // Pieces layer at the origin: plates plus crack web, strong on
+        // the strike envelope and faded out by about tick 40.
+        // Attack upgrade pass: one more plate ring at 1.3 times radius
+        // in a smaller lift class, and a second seeded crackFan inside
+        // the first for the denser branching (the crackFan builder has
+        // no branch-count parameter; the extra fan is how the count
+        // goes up from this side of the foundation). Both plate rings
+        // are physical stone and draw through submitSolidLit, so the
+        // whole composition takes world light uniformly; the original
+        // ring moved off submitSolid for the same reason.
         float geoEnv = fade * (age <= 18.0f
             ? 0.45f + 0.55f * impact
             : Math.max(0.0f, 1.0f - (age - 18.0f) / 22.0f));
@@ -162,12 +171,19 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
             float lift = 0.16f + charge * 0.18f;
             float envF = geoEnv;
             float distF = dist;
-            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+            int light = state.lightCoords;
+            ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) ->
                 ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xF9A7L,
                     plateRadius, lift, STONE_DUST, DARK_STONE, 0.96f, envF, distF));
+            ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) ->
+                ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xF9A7L ^ 0x130DL,
+                    plateRadius * 1.30f, lift * 0.55f, STONE_DUST, DARK_STONE, 0.85f, envF, distF));
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                 ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC9ACL,
                     plateRadius * 1.20f, CORE, GOLD, 0.95f, envF, distF));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC9ACL ^ 0xB2A9L,
+                    plateRadius * 0.62f, CORE, GOLD, 0.80f, envF, distF));
         }
 
         super.submit(state, poseStack, collector, cameraState);

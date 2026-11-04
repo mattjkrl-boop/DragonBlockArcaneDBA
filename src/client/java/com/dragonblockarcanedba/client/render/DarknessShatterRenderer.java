@@ -27,7 +27,8 @@ import net.minecraft.world.phys.Vec3;
  * Complex pass: the crack fan is now the shatter web itself, drawn as
  * shader energy at the expanding shock radius, with dark fracture plates
  * lifted over it as solid faceted slabs, purple hot at the center and
- * near black at the rim. Shard chips ride the outward ground flow. The
+ * near black at the rim, plus a second smaller plate ring out at 1.25
+ * radius. Shard chips ride the outward ground flow. The
  * material emission stays as filler under and between the pieces.
  */
 public class DarknessShatterRenderer extends EntityRenderer<DarknessShatterEntity, DarknessShatterRenderer.ShatterRenderState> {
@@ -107,6 +108,14 @@ public class DarknessShatterRenderer extends EntityRenderer<DarknessShatterEntit
         ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
             ComplexGeometry.fracturePlates(pose, buffer, seed ^ 0x5502L,
                 radius * 0.85f, 0.38f, 0x4C1D95, 0x12001F, 0.95f, envelope, distScale));
+        // Second plate ring at 1.25 radius, lower lift and smaller
+        // scale than the inner ring. It rides the same expanding
+        // shock until the shock reaches the ring's full radius, then
+        // holds that radius while the shatter fades.
+        final float outerRadius = Math.min(radius * 1.25f, state.radius * 1.25f);
+        ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) ->
+            ComplexGeometry.fracturePlates(pose, buffer, seed ^ 0x5503L,
+                outerRadius, 0.22f, 0x3B1470, 0x09000F, 0.95f, envelope, distScale));
     }
 
     private static void emitMaterials(ShatterRenderState state) {

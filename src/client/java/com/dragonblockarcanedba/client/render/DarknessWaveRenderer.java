@@ -25,10 +25,11 @@ import net.minecraft.world.phys.Vec3;
  * and matched to the entity hitbox. The lifecycle math is unchanged:
  * opens over 5 ticks, full to tick 45, gone at tick 60.
  *
- * Complex pass: three tendril strands span the wave front as its body,
- * built on the same forward, right, and up basis the emission samples,
- * bowed forward at the center and torn by the tendril pinch windows.
- * They submit through the veil path so the body reads as darkness smoke
+ * Complex pass: a four strand tendrilFan spans the wave front as its
+ * body, built on the same forward, right, and up basis the emission
+ * samples, bowed forward by the fan controls and torn by the tendril
+ * pinch windows.
+ * It submits through the veil path so the body reads as darkness smoke
  * with a purple core gradient, not additive glow. Ember fragments shed
  * from the front. The material emission stays as filler around them.
  */
@@ -105,21 +106,16 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         Vec3 up = right.cross(forward).normalize();
         double span = waveSpan(state);
         double centerY = waveHeight(state) * 0.35;
-        double[] laneOffset = {-0.55, 0.05, 0.60};
-        float[] laneWidth = {0.36f, 0.50f, 0.36f};
-        // Tendril body along the wave: one strand per lane across the
-        // front, endpoints at the rim and the control point bowed
-        // forward, so the front bulges the way the emission volume does.
-        ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
-            for (int i = 0; i < laneOffset.length; i++) {
-                Vec3 base = up.scale(centerY + laneOffset[i] * waveHeight(state) * 0.5);
-                Vec3 from = base.add(right.scale(-span)).add(forward.scale(0.10));
-                Vec3 to = base.add(right.scale(span)).add(forward.scale(0.10));
-                Vec3 control = base.add(forward.scale(0.65)).add(up.scale(i % 2 == 0 ? 0.14 : -0.14));
-                ComplexGeometry.tendril(pose, buffer, seed ^ (0xDA50L + i * 131L),
-                    from, control, to, laneWidth[i], 0x3B0764, 0xA605F2, 0.92f, envelope, distScale);
-            }
-        });
+        Vec3 fanOrigin = up.scale(centerY)
+            .add(right.scale(-span)).add(forward.scale(0.10));
+        // Tendril fan along the wave: four strands leave the left rim
+        // on the rightward axis, their seeded controls bowing them
+        // forward and vertically apart, so the front bulges the way
+        // the emission volume does while staying one woven body.
+        ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendrilFan(pose, buffer, seed ^ 0xDA50L,
+                fanOrigin, right, 16.0f, (float) (span * 1.90), 4,
+                0.44f, 0x3B0764, 0xA605F2, 0.92f, envelope, distScale));
     }
 
     private static void emitMaterials(DarknessWaveRenderState state) {

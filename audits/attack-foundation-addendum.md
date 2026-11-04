@@ -39,12 +39,20 @@ rockWall parameters:
 - length: wall length in blocks. Slab count derives from it, about
   one slab per 1.15 blocks, clamped to 6 to 14 slabs; each slab ends
   up 0.7 to 1.6 blocks wide after boundary jitter and insets.
-- height: nominal wall height. Individual slab tops run 0.70 to 1.16
-  of it, with seeded tilt and lean.
-- arc: total bend in radians. 0 is a straight wall; positive bows the
-  center toward facing (0.2 to 0.6 reads as a shallow curved front,
-  a full ring segment for the War Mace rim uses about 1.2 with the
-  wall centered on the rim arc); negative bows away.
+- height: nominal wall height. Individual slab tops follow a grouped
+  ridge profile (attack upgrade merge), running about 0.60 to 1.24
+  of it in seeded peak clusters, with seeded tilt and lean.
+- arc: total bend in radians. 0 is a straight wall. Sign convention
+  as shipped in the placement math (merge correction: this paragraph
+  originally stated it backwards): the wall's center stays at origin
+  and the ends swing, so positive swings the ends toward facing and
+  leaves the center recessed (concave from the facing side), and
+  negative bows the center toward facing (convex). 0.2 to 0.6 reads
+  as a shallow curved front either way. With facing pointed at a
+  circle's center and arc set to length over that circle's radius,
+  the positive form wraps the wall exactly onto the circle (the War
+  Mace rim segments, about 1.2 to 1.8, use this with the wall
+  centered on the rim arc).
 - rootArgb / tipArgb: base (buried) to top gradient, same convention
   as shard and fracturePlates. Alpha is literal opacity (solid
   discipline, no shader life remap), so fade the SETTLE beat through

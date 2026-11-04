@@ -15,6 +15,8 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Vector4f;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,6 +31,10 @@ import java.util.Map;
  * and darkness vapor emission stays as the filler layer only. Cut
  * growth, envelope fade, colors, and the strike window are
  * unchanged.</p>
+ *
+ * <p>Attack upgrade pass: two more tendrils join on staggered spans
+ * with their own seeded phase, and a crackFan webs the slash plane
+ * at the line midpoint as an in-air void crack.</p>
  */
 public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimensionalLineSlashEntity, SaberDimensionalLineSlashRenderer.LineSlashRenderState> {
 
@@ -135,8 +141,13 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
 
         // Pieces layer: the pose frame is world aligned at the entity
         // origin, so the synced line direction is used directly as
-        // local geometry. Two tendril strands, near 770 vertices,
-        // inside the class M budget of 2500.
+        // local geometry. Attack upgrade: the tendrils go from two to
+        // four, the added pair running staggered spans (shorter,
+        // shifted along the line) with their own seeded noise phase,
+        // and a crackFan webs the slash plane at the line midpoint as
+        // an in-air void crack. Vertices: four tendrils near 1536 in
+        // the energy submit and the crackFan near 900 in its own, both
+        // inside the class M budget of 2500 per submit.
         float pieceEnv = cut * fade;
         if (pieceEnv > 0.02f && ds > 0.05f && emission.halfLen > 0.10f) {
             Vec3 dir = emission.dir;
@@ -157,7 +168,32 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
                         from.add(up.scale(0.08 * sc)), bow.scale(-0.7).add(up.scale(0.08 * sc)),
                         to.add(up.scale(0.08 * sc)),
                         0.18f * sc, 0x4DD8FF, 0x3D1A78, 0.90f, pieceEnv, ds);
+                    ComplexGeometry.tendril(pose, buffer, seed ^ 0x11E3L,
+                        from.add(up.scale(-0.09 * sc)).add(dir.scale(half * 0.12)),
+                        bow.scale(0.55).add(up.scale(-0.09 * sc)),
+                        to.add(up.scale(-0.09 * sc)).add(dir.scale(-half * 0.10)),
+                        0.15f * sc, 0xBFEFFF, 0x4DD8FF, 0.90f, pieceEnv, ds);
+                    ComplexGeometry.tendril(pose, buffer, seed ^ 0x11E4L,
+                        from.add(side.scale(0.10 * sc)).add(dir.scale(-half * 0.08)),
+                        bow.scale(-0.45).add(side.scale(0.10 * sc)),
+                        to.add(side.scale(0.10 * sc)).add(dir.scale(half * 0.14)),
+                        0.12f * sc, 0x4DD8FF, 0xFFFFFF, 0.90f, pieceEnv, ds);
                 });
+            // In-air crack at the midpoint: the crackFan walks its
+            // local XZ plane, so the pose basis maps local X to the
+            // line direction and local Z to the slash plane's up,
+            // leaving local Y (the fan's flat normal) on the side axis.
+            Matrix4f basis = new Matrix4f();
+            basis.setColumn(0, new Vector4f((float) dir.x, (float) dir.y, (float) dir.z, 0.0f));
+            basis.setColumn(1, new Vector4f((float) side.x, (float) side.y, (float) side.z, 0.0f));
+            basis.setColumn(2, new Vector4f((float) up.x, (float) up.y, (float) up.z, 0.0f));
+            basis.setColumn(3, new Vector4f(0.0f, 0.0f, 0.0f, 1.0f));
+            poseStack.pushPose();
+            poseStack.mulPose(basis);
+            ComplexGeometry.submitEnergy(collector, poseStack,
+                (pose, buffer) -> ComplexGeometry.crackFan(pose, buffer, seed ^ 0xC4ACL,
+                    1.05f * sc, 0xBFEFFF, 0x3D1A78, 0.90f, pieceEnv, ds, 4));
+            poseStack.popPose();
         }
 
         super.submit(state, poseStack, collector, cameraState);

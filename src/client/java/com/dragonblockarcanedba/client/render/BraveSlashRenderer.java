@@ -100,6 +100,9 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
             final Vec3 from2 = gb.right().scale(-gspan * 0.40).add(gb.forward().scale(0.08));
             final Vec3 to2 = gb.right().scale(gspan * 0.40).add(gb.forward().scale(0.08));
             final Vec3 ctrl2 = gb.forward().scale(0.50);
+            final Vec3 from3 = gb.right().scale(-gspan * 0.30).add(gb.forward().scale(0.14));
+            final Vec3 to3 = gb.right().scale(gspan * 0.30).add(gb.forward().scale(0.14));
+            final Vec3 ctrl3 = gb.forward().scale(0.70);
             final float genv = fade;
             final float geoDist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
             final long gseed = state.seed;
@@ -108,7 +111,19 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
                     0xFFD700, 0xFFF2C0, 0.95f, genv, geoDist);
                 ComplexGeometry.tendril(pose, buffer, gseed ^ 0x51ED2701L, from2, ctrl2, to2, 0.17f,
                     0xFFFFFF, 0xFFD700, 0.95f, genv, geoDist);
+                ComplexGeometry.tendril(pose, buffer, gseed ^ 0x2B992DDFL, from3, ctrl3, to3, 0.11f,
+                    0xFFF2C0, 0xFFD700, 0.95f, genv, geoDist);
             });
+
+            // Attack upgrade: three steel shards burst at the arc apex,
+            // the crest point of the cut where the main strand's bezier
+            // peaks, bright steel to gold tips, drawn lit as physical
+            // metal riding the slash's leading edge.
+            final Vec3 apex = gb.forward().scale(0.36);
+            final int apexLight = state.lightCoords;
+            ComplexGeometry.submitSolidLit(collector, poseStack, apexLight, (pose, buffer) ->
+                ComplexGeometry.shardBurst(pose, buffer, gseed ^ 0xA9E1L, apex, gb.forward(),
+                    40.0f, 0.45f, 3, 0xFFE8F1F8, 0xFFFFD700, 0.95f, genv, geoDist));
         }
 
         // Strike flash: a one-shot plasma burst at the belly of the cut

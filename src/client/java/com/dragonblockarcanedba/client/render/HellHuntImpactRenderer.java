@@ -27,7 +27,9 @@ import java.util.Map;
  * cracks runs across the impact ground through the additive shader, hot
  * at the center and crimson at the tips, and four darkness tendril
  * lashes burst outward and upward from the center through the veil
- * shader. The complex particle layer is EMBER_FRAGMENT sprites, burst
+ * shader. Attack upgrade pass: a clustered eruption of ten dark iron
+ * spikes bursts from the ground around the hunted target on the impact
+ * beat, inside the crack fan, drawn lit as physical iron. The complex particle layer is EMBER_FRAGMENT sprites, burst
  * at the opening and emitted across the ground while the impact lives,
  * plus SPARK_STREAK sprites thrown from the ground area. The material
  * emission from the no-shapes pass stays as filler over the real scar
@@ -125,6 +127,38 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
         ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                 ComplexGeometry.crackFan(pose, buffer, pieceSeed ^ 0xC9AC1L, crackRadius,
                         0xFFFFFF, 0xF20D33, 0.95f, pieceEnv, pieceDs));
+        // Physical layer: dark iron spikes burst from the ground
+        // around the hunted target on the impact beat, inside the
+        // crack fan: the hunt made physical. RISE over the first
+        // 5 ticks, HOLD 4, then retract over 5, all inside the impact's
+        // existing life (35 or 50 ticks), so the spikes are gone long
+        // before the scar fades. Iron is physical matter, so the set
+        // draws through submitSolidLit with the state's light coords,
+        // never on the emissive path. The eruption is composed as two
+        // overlapping calls, never one even ring: six big spikes at
+        // full builder scale on the outer radius and four shorter
+        // ones clustered on an inner radius, different seeds, so the
+        // spacing, leans, and heights land uneven and grouped like a
+        // real eruption. Ten spikes at 384 vertices each is 3840 at
+        // full distance scale, in its own submit; both radii ride the
+        // crack fan's spread, so the spikes stand inside the cracks
+        // at every growth stage.
+        final float spikeRise = FxEnvelope.smoothstep(Math.min(1.0f, age / 5.0f));
+        final float spikeSink = age <= 9.0f ? 0.0f
+                : FxEnvelope.smoothstep(Math.min(1.0f, (age - 9.0f) / 5.0f));
+        final float spikeOuterRadius = crackRadius * 0.68f;
+        final float spikeInnerRadius = crackRadius * 0.42f;
+        final int spikeLight = state.lightCoords;
+        ComplexGeometry.submitSolidLit(collector, poseStack, spikeLight, (pose, buffer) -> {
+            ComplexGeometry.spikeEruption(pose, buffer, pieceSeed ^ 0x59E1L,
+                    Vec3.ZERO, new Vec3(1.0, 0.0, 0.0), ComplexGeometry.SpikeLayout.RING, 6,
+                    spikeOuterRadius, 1.0f, spikeRise, spikeSink,
+                    0xFF141519, 0xFF4A5058, 1.0f, pieceEnv, pieceDs);
+            ComplexGeometry.spikeEruption(pose, buffer, pieceSeed ^ 0x59E2L,
+                    Vec3.ZERO, new Vec3(1.0, 0.0, 0.0), ComplexGeometry.SpikeLayout.RING, 4,
+                    spikeInnerRadius, 0.55f, spikeRise, spikeSink,
+                    0xFF141519, 0xFF4A5058, 1.0f, pieceEnv, pieceDs);
+        });
         ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
             for (int i = 0; i < 4; i++) {
                 double ang = i * Math.PI * 0.5 + (pieceSeed & 63L) / 63.0 * 0.7;

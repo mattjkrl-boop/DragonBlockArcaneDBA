@@ -27,10 +27,12 @@ import net.minecraft.world.phys.Vec3;
  * still drive the whole presentation. Lightning remains with the real
  * BoltEntity strikes fired by the domain entity.
  *
- * Complex pass (class L, two builder types): six rim tendrils climb the
- * dome boundary as alpha veil strands, and an energy crack fan webs the
+ * Complex pass (class L): six rim tendrils climb the
+ * dome boundary as alpha veil strands, an energy crack fan webs the
  * domain base through the shader path, hot pink at the center cooling
- * to hellish purple at the tips. Ash flakes fall inside the volume. The
+ * to hellish purple at the tips, and a ring of ten large dark stone
+ * spikes rises at the rim on the channel envelope, holds with the
+ * domain, then retracts with a shard chip burst as it tears down. Ash flakes fall inside the volume. The
  * material emission stays as filler behind and between the pieces.
  */
 public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity, DarknessDomainRenderer.DarknessDomainRenderState> {
@@ -49,6 +51,8 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
         public long emitterSeed = Long.MIN_VALUE;
         public ClientLevel emitterLevel;
         public float lastEmissionAge = Float.NaN;
+        public boolean spikeChipBurstDone = false;
+        public long spikeChipSeed = Long.MIN_VALUE;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -116,6 +120,57 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
         ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
             ComplexGeometry.crackFan(pose, buffer, seed ^ 0xD100L,
                 radius, 0xF21459, 0x8C0DF2, 0.95f, envelope, distScale));
+        // Eclipse spike rim: ten large physical basalt spikes stand
+        // at the rim as deliberate stones, not a uniform bar. The
+        // builder's seeded length classes and per-spike rise stagger
+        // vary their heights and arrival order. The synced fade is the
+        // channel envelope, so it drives the rise during build and
+        // the hold at full fade. Once age is past the build and fade
+        // falls, the same value becomes the retract sink. The bodies
+        // are world lit stone; the violet layer is a slightly larger
+        // low alpha veil shell, present only as seams at the edges.
+        final float spikeRise = fade;
+        final float spikeSink = state.age > DarknessDomainEntity.BUILD_TICKS
+            ? Math.max(0.0f, 1.0f - fade) : 0.0f;
+        final float spikeRadius = radius * 0.98f;
+        ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) ->
+            ComplexGeometry.spikeEruption(pose, buffer, seed ^ 0xD512L,
+                Vec3.ZERO, new Vec3(1.0, 0.0, 0.0), ComplexGeometry.SpikeLayout.RING,
+                10, spikeRadius, 1.12f, spikeRise, spikeSink,
+                0xFF050408, 0xFF332A3A, 0.96f, envelope, distScale));
+        ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.spikeEruption(pose, buffer, seed ^ 0xD512L,
+                Vec3.ZERO, new Vec3(1.0, 0.0, 0.0), ComplexGeometry.SpikeLayout.RING,
+                10, spikeRadius, 1.18f, spikeRise, spikeSink,
+                0xFF5B21B6, 0xFFC084FC, 0.22f, envelope, distScale));
+        if (spikeSink > 0.0f) {
+            burstSpikeChips(state);
+        }
+    }
+
+    private static void burstSpikeChips(DarknessDomainRenderState state) {
+        if (state.spikeChipBurstDone && state.spikeChipSeed == state.seed) {
+            return;
+        }
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) {
+            return;
+        }
+        state.spikeChipBurstDone = true;
+        state.spikeChipSeed = state.seed;
+        MaterialEmitters.burst(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                new Vec3(0.0, -0.03, 0.0), 0.10f),
+            random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double radial = Math.max(1.0f, state.radius) * (0.94 + random.nextDouble() * 0.08);
+                Vec3 pos = new Vec3(state.px + Math.cos(angle) * radial,
+                    state.py + 0.12 + random.nextDouble() * 0.50,
+                    state.pz + Math.sin(angle) * radial);
+                Vec3 velocity = new Vec3(-Math.cos(angle) * 0.045, -0.020,
+                    -Math.sin(angle) * 0.045);
+                return new MaterialEmitters.Sample(pos, velocity);
+            }, 36);
     }
 
     private static void emitMaterials(DarknessDomainRenderState state) {

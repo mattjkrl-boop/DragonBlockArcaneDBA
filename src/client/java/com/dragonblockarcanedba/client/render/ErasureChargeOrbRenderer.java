@@ -20,12 +20,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Entity Renderer for Erasure Cannon Muzzle Charge Orb in MC 26.2.
- * Complex pass: layered composition, class M. The pieces layer is a
- * tendrilFan of five lashes rooted at the orb center through
- * submitEnergy with the tendril canvas, white-hot at the root to the
- * body cyan at the tips, whose fan axis orbits around the aim
- * direction with age so the lashes sweep around the orb instead of
- * sitting as a fixed fan. The lashes are the structured body; the
+ * Attack upgrade pass: layered composition, class M. The pieces
+ * layer is a tendrilFan of five lashes rooted at the orb center
+ * through submitEnergy with the tendril canvas, white-hot at the
+ * root to the body cyan at the tips, whose fan axis orbits around
+ * the aim direction with age so the lashes sweep around the orb
+ * instead of sitting as a fixed fan, plus a second fan call of two
+ * shorter lashes at an offset orbit phase (seven strands in all),
+ * and an orbiting pair of solid erasure shards through submitSolid
+ * circling the orb against the lash sweep. The lashes and shards
+ * are the structured body; the
  * no-shapes cluster stays as filler only underneath them: a dense,
  * churning cluster of ki plasma particles at the muzzle, a white-hot
  * core volume, a cyan plasma body, vapor drifting at the boundary,
@@ -149,13 +153,18 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
 
         // Pieces layer, in entity local space: the orb center relative
         // to the entity origin (zero in third person, the hand offset
-        // in first person). Five tendrils at full spine samples is
-        // 1920 vertices, inside the class M budget of 2500. The fan
-        // axis is a unit vector in the synced right and up basis
-        // rotating with age, so the lash cone orbits the aim line.
+        // in first person). The main fan is five tendrils at full
+        // spine samples (1920 vertices), the second fan call adds two
+        // shorter lashes at an offset orbit phase (768), and the
+        // orbiting shard pair is two shards (576): each submit stays
+        // inside the class M budget of 2500. The fan axis is a unit
+        // vector in the synced right and up basis rotating with age,
+        // so the lash cone orbits the aim line.
         final Vec3 geoCenter = center.subtract(state.origin);
         final Vec3 orbitDir = state.right.scale(Math.cos(age * 0.85f))
             .add(state.up.scale(Math.sin(age * 0.85f))).normalize();
+        final Vec3 orbitDir2 = state.right.scale(Math.cos(age * 0.85f + 2.1f))
+            .add(state.up.scale(Math.sin(age * 0.85f + 2.1f))).normalize();
         final float geoLength = orbRadius * (2.0f + chargeEase * 0.80f);
         final float geoWidth = Math.max(0.09f, orbRadius * 0.30f);
         final float geoEnv = 0.25f + chargeEase * 0.75f;
@@ -164,6 +173,31 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
             ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0x0B17L,
                 geoCenter, orbitDir, 128.0f, geoLength, 5, geoWidth,
                 0xFFFFFF, 0x37E6FF, 0.92f, geoEnv, distScale));
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0x0B22L,
+                geoCenter, orbitDir2, 128.0f, geoLength * 0.78f, 2, geoWidth * 0.80f,
+                0xFFFFFF, 0x37E6FF, 0.88f, geoEnv, distScale));
+        // Orbiting shard pair: two solid erasure crystals circling
+        // the orb in the right and up plane, opposite each other,
+        // each drawn along its own direction of travel so the pair
+        // reads as blades in orbit around the charge, not decoration
+        // pinned to it. Their size tracks the orb radius.
+        final float shardOrbitA = age * 1.15f;
+        final float shardOrbitR = orbRadius * 1.32f;
+        final float shardLen = Math.max(0.08f, orbRadius * 0.78f);
+        final float shardGirth = Math.max(0.03f, orbRadius * 0.34f);
+        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
+            for (int k = 0; k < 2; k++) {
+                double ang = shardOrbitA + k * Math.PI;
+                Vec3 radial = state.right.scale(Math.cos(ang)).add(state.up.scale(Math.sin(ang)));
+                Vec3 tangent = state.right.scale(-Math.sin(ang)).add(state.up.scale(Math.cos(ang)));
+                Vec3 shardOrigin = geoCenter.add(radial.scale(shardOrbitR))
+                    .add(tangent.scale(-shardLen * 0.45));
+                ComplexGeometry.shard(pose, buffer, geoSeed ^ (0x0E31L + k * 131L),
+                    shardOrigin, tangent, shardLen, shardGirth,
+                    0x37E6FF, 0xFFFFFF, 0.92f, geoEnv);
+            }
+        });
 
         float delta;
         if (Float.isNaN(em.lastAge) || age < em.lastAge) {

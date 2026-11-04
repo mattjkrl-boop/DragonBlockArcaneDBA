@@ -22,15 +22,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Curse Chain as a layered composition. The pieces layer is one taut
- * tendril run along the chain path itself: a quadratic bezier through the
- * first, middle, and last link centers, so on the bind arc it follows the
- * arc from one side of the target to the other and in flight it runs
- * straight down the trail, with the tendril builder's own mid-spine curl
- * kept small by the short chord. It is drawn under the same scale, yaw, and
- * pitch transform the old link geometry used, on the tendril canvas
- * through the shader. The complex particle layer is spark streaks shed at
- * the link centers. The material emission stays as filler: the same seven
+ * Curse Chain as a layered composition. The pieces layer is a paired
+ * chain: two taut tendrils run along the chain path itself, quadratic
+ * beziers through the first, middle, and last link centers, the second
+ * strand offset sideways and bowed lower so the pair reads as one
+ * braided chain, so on the bind arc it follows the arc from one side
+ * of the target to the other and in flight it runs straight down the
+ * trail, with the tendril builder's own mid-spine curl kept small by
+ * the short chord. While the chain is bound, three curse glass shards
+ * crystallize at the anchor point at the bind. It is drawn under the
+ * same scale, yaw, and pitch transform the old link geometry used,
+ * on the tendril canvas through the shader. The complex particle
+ * layer is spark streaks shed at the link centers. The material emission stays as filler: the same seven
  * link centers on the bind arc and six on the flight trail, transformed
  * into world space, with darkness smoke and curse plasma emitted along the
  * segments between them and soul wisps gathering at the centers, glyph
@@ -121,9 +124,12 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
             centers.add(worldPoint(state, origin, local, baseScale));
         }
 
-        // Pieces layer: one taut tendril along the chain path, through the
+        // Pieces layer: a paired chain along the chain path, through the
         // first, middle, and last link centers in the renderer's own local
         // space, under the same pose transform as the emission layout.
+        // The second strand is the first shifted sideways by a seeded
+        // perpendicular and bowed a touch lower, thinner and dimmer, so
+        // the two read as one doubled chain rather than two chains.
         {
             final Vec3 tendrilFrom = localCenters.get(0);
             final Vec3 tendrilControl = localCenters.get(localCenters.size() / 2);
@@ -133,13 +139,34 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
             final float tendrilEnv = alphaMul;
             final float tendrilDs = ds;
             final float tendrilWidth = attached ? 0.34f : 0.27f;
+            Vec3 chainDir = tendrilTo.subtract(tendrilFrom);
+            Vec3 chainPerp = new Vec3(-chainDir.z, 0, chainDir.x);
+            chainPerp = chainPerp.lengthSqr() < 1.0e-6 ? new Vec3(1, 0, 0) : chainPerp.normalize();
+            final Vec3 pairFrom = tendrilFrom.add(chainPerp.scale(0.10));
+            final Vec3 pairControl = tendrilControl.add(chainPerp.scale(0.17)).add(new Vec3(0, -0.05, 0));
+            final Vec3 pairTo = tendrilTo.add(chainPerp.scale(0.10));
+            final float pairWidth = tendrilWidth * 0.72f;
+            final float pairAlpha = tendrilAlpha * 0.85f;
+            final boolean chainAttached = attached;
             poseStack.pushPose();
             poseStack.scale(baseScale, baseScale, baseScale);
             poseStack.mulPose(new Matrix4f().rotationY((float) Math.toRadians(-state.yRot)));
             poseStack.mulPose(new Matrix4f().rotationX((float) Math.toRadians(state.xRot)));
-            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
                 ComplexGeometry.tendril(pose, buffer, tendrilSeed ^ 0x7E11L, tendrilFrom, tendrilControl, tendrilTo,
-                    tendrilWidth, 0xA60DD9, 0xF20D33, tendrilAlpha, tendrilEnv, tendrilDs));
+                    tendrilWidth, 0xA60DD9, 0xF20D33, tendrilAlpha, tendrilEnv, tendrilDs);
+                ComplexGeometry.tendril(pose, buffer, tendrilSeed ^ 0x7E22L, pairFrom, pairControl, pairTo,
+                    pairWidth, 0xA60DD9, 0xF20D33, pairAlpha, tendrilEnv, tendrilDs);
+            });
+            // Attack upgrade: three curse glass shards crystallize at
+            // the anchor point while the chain is bound. In flight
+            // there is no anchor yet, so the burst waits for the bind.
+            if (chainAttached) {
+                ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.shardBurst(pose, buffer, tendrilSeed ^ 0xA11CL, new Vec3(0, 0.05, 0),
+                        new Vec3(0, 1, 0), 70f, 0.55f, 3,
+                        0x380852, 0xBF0DFF, 0.90f, tendrilEnv, tendrilDs));
+            }
             poseStack.popPose();
         }
 

@@ -119,6 +119,33 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
             ComplexGeometry.tendrilFan(pose, buffer, state.seed ^ 0xC4A6EL, hiltLocal, new Vec3(0, 1, 0),
                 58.0f, lashLength, 5, lashWidth, 0xFFFFFF, 0x00D9FF, 0.92f, lashEnvelope, dist));
 
+        // Attack upgrade: three steel shards circle the stance at hilt
+        // height, widening slightly as the charge climbs, so the fan
+        // reads as gathering steel and not only light. The circle is
+        // deliberately broken as a form: each shard keeps its own
+        // radius, speed, bob, and size, and flies tipped inward and
+        // off plane, so the three read as loose steel swirling in on
+        // separate paths, never as a rigid ring. Drawn lit as
+        // physical metal.
+        final float orbitRadius = 0.50f + charge * 0.25f;
+        final int orbitLight = state.lightCoords;
+        ComplexGeometry.submitSolidLit(collector, poseStack, orbitLight, (pose, buffer) -> {
+            for (int i = 0; i < 3; i++) {
+                double a = age * (0.10 + i * 0.021) + i * 2.35;
+                float r = orbitRadius * (0.86f + i * 0.13f);
+                float bob = (float) Math.sin(age * (0.07 + i * 0.017) + i * 2.1) * (0.07f + i * 0.03f);
+                Vec3 pos = right.scale(Math.cos(a) * r)
+                    .add(forward.scale(Math.sin(a) * r))
+                    .add(0, 0.75 + bob, 0);
+                Vec3 tangent = right.scale(-Math.sin(a)).add(forward.scale(Math.cos(a)));
+                Vec3 radialIn = right.scale(-Math.cos(a)).add(forward.scale(-Math.sin(a)));
+                Vec3 dir = tangent.scale(0.82).add(radialIn.scale(0.28))
+                    .add(0, i == 1 ? 0.30 : -0.12, 0);
+                ComplexGeometry.shard(pose, buffer, state.seed ^ (0x0AB1 + i * 0x9E37L),
+                    pos, dir, 0.30f + i * 0.06f, 0.11f, 0xFF9FB8C8, 0xFFFFFFFF, 0.95f, lashEnvelope);
+            }
+        });
+
         float delta = anchor.deltaSeconds(mc.isPaused());
         if (delta > 0f) {
             float envelope = alpha * pulse * dist;

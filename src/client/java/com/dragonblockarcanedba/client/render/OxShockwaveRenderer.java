@@ -26,7 +26,8 @@ import java.util.Map;
  * Entity Renderer for Ox King's Groundbreaker Shockwave in Minecraft 26.2.
  * Complex pass: a layered composition at class L. The pieces layer is two
  * ComplexGeometry builders: fracturePlates as solid fractured ground at
- * the origin through submitSolid, and a crackFan of glowing energy cracks
+ * the origin through submitSolid (the attack upgrade adds a second,
+ * inner ring of the same plates), and a crackFan of glowing energy cracks
  * through submitEnergy on the dissolve shader, spreading outward with the
  * wave front. These are the fast near-field fragments and energy
  * structure; the big physical chunks are the debris the entity already
@@ -224,6 +225,12 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
             ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
                     ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0x9A7EL,
                             plateRadius, plateLift, 0xFF8C1F, 0x4A3826, 0.95f, geoFade, geoDist));
+            // Attack upgrade: one inner ring of the same plates inside
+            // the main fan, so the fractured ground reads in two tiers
+            // instead of a single ring of slabs.
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0x9A7FL,
+                            plateRadius * 0.45f, plateLift * 0.75f, 0xFF8C1F, 0x4A3826, 0.95f, geoFade, geoDist));
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                     ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
                             crackRadius, 0xFFE9B0, 0xFF8C1F, 0.95f, geoFade, geoDist));

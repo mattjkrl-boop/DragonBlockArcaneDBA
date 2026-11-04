@@ -130,6 +130,58 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
                 0xFFFFFF, 0x00D9FF, 0.90f, fade, dist));
         poseStack.popPose();
 
+        // Attack upgrade: a crown of six crystal shards hangs above the
+        // split point at strand height. The shards are placed one by
+        // one in the wall plane, spread along a shallow arc over the
+        // split point, each at its own length and hanging tilt with a
+        // slight out of plane lean, like fractured glass caught in
+        // the cut, never a uniform spray from one point. Drawn lit so
+        // the glass reads as physical crystal, not as glow. The split
+        // geometry itself does not move; the crown decorates the point
+        // the existing strand and crack fan already mark.
+        Vec3 crownAt = crackMid.add(up.scale(anchor.wallHeight * 0.55f));
+        final int crownLight = state.lightCoords;
+        final Vec3 crownRight = right;
+        final Vec3 crownUp = up;
+        final Vec3 crownForward = forward;
+        final float crownScale = scale;
+        poseStack.pushPose();
+        poseStack.translate(crownAt.x, crownAt.y, crownAt.z);
+        ComplexGeometry.submitSolidLit(collector, poseStack, crownLight, (pose, buffer) -> {
+            for (int i = 0; i < 6; i++) {
+                float frac = (i - 2.5f) / 2.5f;
+                Vec3 pos = crownRight.scale(frac * 1.15f * crownScale)
+                    .add(crownUp.scale((0.42f - 0.30f * frac * frac) * crownScale));
+                Vec3 dir = crownRight.scale(frac * 0.8f)
+                    .add(crownUp.scale(-0.55f))
+                    .add(crownForward.scale(i % 2 == 0 ? 0.16f : -0.13f));
+                float len = (0.45f + 0.13f * ((i * 7) % 3)) * crownScale;
+                ComplexGeometry.shard(pose, buffer, state.seed ^ (0xC901 + i * 0x9E37L),
+                    pos, dir, len, len * 0.34f, 0xFF8FD8E8, 0xFFFFFFFF, 0.95f, fade);
+            }
+        });
+        poseStack.popPose();
+
+        // Attack upgrade: a second crack fan mirrored onto the split
+        // wall's own face at half the ground fan's radius, so the cut
+        // webs the wall it opens and not only the floor beneath it.
+        // The basis maps the fan plane (local XZ, normal +Y) onto the
+        // wall plane: local X to -right, local Y to forward, local Z
+        // to up, which also floats the fan 0.03 toward the front face.
+        Vec3 wallCrackAt = crackMid.add(up.scale(anchor.wallHeight * 0.52f));
+        poseStack.pushPose();
+        poseStack.translate(wallCrackAt.x, wallCrackAt.y, wallCrackAt.z);
+        org.joml.Matrix4f wallBasis = new org.joml.Matrix4f();
+        wallBasis.setColumn(0, new org.joml.Vector4f((float) -right.x, (float) -right.y, (float) -right.z, 0f));
+        wallBasis.setColumn(1, new org.joml.Vector4f((float) forward.x, (float) forward.y, (float) forward.z, 0f));
+        wallBasis.setColumn(2, new org.joml.Vector4f((float) up.x, (float) up.y, (float) up.z, 0f));
+        wallBasis.setColumn(3, new org.joml.Vector4f(0f, 0f, 0f, 1f));
+        poseStack.mulPose(wallBasis);
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.crackFan(pose, buffer, state.seed ^ 0xCAFE, state.dashLength * 0.26f,
+                0xFFFFFF, 0x00D9FF, 0.85f, fade, dist));
+        poseStack.popPose();
+
         float delta = anchor.deltaSeconds(mc.isPaused());
         if (delta > 0f) {
             float envelope = fade * dist;

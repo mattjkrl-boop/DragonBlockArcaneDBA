@@ -24,7 +24,7 @@ import org.joml.Vector3f;
  * Complex pass: the beam is a layered composition. The pieces layer is a
  * chained ComplexGeometry tendril core along the synced beam path (two
  * strands, segmented so the bezier curl stays tight over a long beam)
- * plus a six strand tendrilFan of impact lashes at the terminus, both
+ * plus a seven strand tendrilFan of impact lashes at the terminus, both
  * through submitEnergy with the tendril canvas so every energy piece
  * gets the shader treatment. The complex particle layer is SPARK_STREAK
  * sprites at the terminus. The no-shapes material emission stays as
@@ -184,7 +184,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         // to the origin), through the normal depth tested shader path.
         // Vertex count at distScale 1.0: the core chain is at most four
         // segments times two strands times 384 vertices (3072), plus the
-        // fan at six tendrils times 384 (2304), for 5376 of the 6000
+        // fan at seven tendrils times 384 (2688), for 5760 of the 6000
         // class L budget.
         final Vec3 startRel = start.subtract(origin);
         final Vec3 endRel = end.subtract(origin);
@@ -223,7 +223,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
                 }
             }
             ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0xFA11L,
-                endRel, fanDir, 58.0f, 2.6f * geoPulse * geoFp, 6,
+                endRel, fanDir, 58.0f, 2.6f * geoPulse * geoFp, 7,
                 0.34f * geoPulse * geoFp, CYAN, WHITE, 0.92f, geoEnv, geoDs);
         });
     }

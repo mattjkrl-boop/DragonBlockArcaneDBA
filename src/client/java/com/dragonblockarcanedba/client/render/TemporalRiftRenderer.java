@@ -26,7 +26,12 @@ import java.util.Map;
  *
  * Complex pass: a layered composition. The pieces layer is three
  * shader tendrils streaming inward from the field rim to the tear
- * heart through the tendril canvas. The temporal glass shards at the
+ * heart through the tendril canvas, plus a temporal glass spike ring
+ * standing at the rim (attack upgrade pass): two uneven spikeEruption
+ * rings drawn lit, five large spikes at 0.82 of the radius and three
+ * smaller ones at 0.97, rising over the first 20 ticks and sinking
+ * away on the reversal beat, where the host drops real FragmentEntity
+ * glass from the same ring positions. The temporal glass shards at the
  * heart are real FragmentEntity pieces, spawned server side by the
  * host and drawn by the fragment renderer, not by this renderer. The
  * complex particle layer
@@ -191,6 +196,42 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
                 }
             });
             poseStack.popPose();
+
+            // Glass spike ring at the rim, in the unrotated world frame
+            // (the spikes stand on the ground; the pose rotation above
+            // serves the tendrils alone). Two uneven rings instead of
+            // one even bar: five large spikes at 0.82 of the full radius
+            // and three smaller ones at 0.97, on separate seeds and size
+            // classes, so the set reads as clustered crystal growth
+            // rather than a uniform fence. Palette is the heart
+            // fragments' own (deep blue root, pale ice tip), drawn lit
+            // through submitSolidLit because standing glass is physical
+            // matter, not energy. Rise runs over the first 20 ticks on
+            // the builder's staggered ease-out, hold follows, and the
+            // sink runs 4 ticks from the reversal tick, the beat where
+            // TemporalRiftEntity drops the ring as real fragments.
+            // Vertex accounting: 384 per spike, so the main ring submit
+            // is 1920 and the outer cluster submit 1152, each inside
+            // the class M budget of 2500.
+            float spikeRise = FxEnvelope.smoothstep(Math.min(1.0f, age / 20.0f));
+            float spikeSink = age <= (float) TemporalRiftEntity.REVERSAL_TICK ? 0.0f
+                : FxEnvelope.smoothstep(Math.min(1.0f,
+                    (age - (float) TemporalRiftEntity.REVERSAL_TICK) / 4.0f));
+            if (spikeRise > 0.0f && age < (float) TemporalRiftEntity.REVERSAL_TICK + 5.0f) {
+                final float sRise = spikeRise;
+                final float sSink = spikeSink;
+                final int spikeLight = state.lightCoords;
+                ComplexGeometry.submitSolidLit(collector, poseStack, spikeLight, (pose, buffer) ->
+                    ComplexGeometry.spikeEruption(pose, buffer, pseed ^ 0x7E51L,
+                        Vec3.ZERO, Vec3.ZERO, ComplexGeometry.SpikeLayout.RING, 5,
+                        state.radius * 0.82f, 0.90f, sRise, sSink,
+                        0x2F6DB3, 0xDDF7FF, 0.96f, geoEnv, geoDs));
+                ComplexGeometry.submitSolidLit(collector, poseStack, spikeLight, (pose, buffer) ->
+                    ComplexGeometry.spikeEruption(pose, buffer, pseed ^ 0x7E67L,
+                        Vec3.ZERO, Vec3.ZERO, ComplexGeometry.SpikeLayout.RING, 3,
+                        state.radius * 0.97f, 0.55f, sRise, sSink,
+                        0x2F6DB3, 0xDDF7FF, 0.96f, geoEnv, geoDs));
+            }
         }
 
         super.submit(state, poseStack, collector, cameraState);

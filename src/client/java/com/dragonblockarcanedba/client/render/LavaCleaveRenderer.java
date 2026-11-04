@@ -26,8 +26,11 @@ import java.util.Map;
 /**
  * The traveling cleave is a layered composition at class M. The pieces
  * layer is one thick torn tendril along the travel path as the wave
- * body, in a flame gradient on the shader, plus a small cluster of
- * flame tongues at the leading contact point. The complex particle
+ * body, in a flame gradient on the shader, plus two rows of flame
+ * tongues along the crescent (the attack upgrade pass added the
+ * trailing row) and a burst of four basalt shards at the leading
+ * contact point, drawn lit through submitSolidLit: physical rock the
+ * wave throws ahead of itself, never emissive. The complex particle
  * layer is EMBER_FRAGMENT shed across the swept area. The material
  * emission from the no-shapes pass stays as filler only: flame,
  * embers, ash, smoke, and heat vapor sampled across the area the swing
@@ -110,8 +113,10 @@ public class LavaCleaveRenderer extends EntityRenderer<LavaCleaveEntity, LavaCle
             // center, axes world aligned). Direction comes from the
             // real velocity, with rotation as fallback, matching the
             // frame the emission sweeps. Vertex estimate at distScale
-            // 1.0: one tendril about 384, four tongues about 192, for
-            // roughly 580 total, inside the class M budget of 2500.
+            // 1.0: one tendril about 384, two tongue rows of four
+            // about 192 each, and the four shard burst at about 290
+            // per shard about 1160, for roughly 1930 total, inside
+            // the class M budget of 2500.
             final Vec3 vel = new Vec3(state.velX, state.velY, state.velZ);
             final Vec3 travelDir = vel.lengthSqr() > 0.000001
                     ? vel.normalize() : directionFromRot(state.yRot, state.xRot);
@@ -134,6 +139,23 @@ public class LavaCleaveRenderer extends EntityRenderer<LavaCleaveEntity, LavaCle
                         ComplexGeometry.flameTongues(pose, buffer, pieceSeed ^ 0xF1C1L,
                                 travelDir.scale(0.45), 0.55f, 0.85f, 4,
                                 0xFFF2B0, 0xE63A00, 0.92f, pieceEnv, sway, pieceDs));
+                // Second tongue row, trailing the contact point along
+                // the wave body: shorter tongues on the same sway, so
+                // the crescent reads as two rows of flame over the
+                // tendril instead of a single cluster at its head.
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                        ComplexGeometry.flameTongues(pose, buffer, pieceSeed ^ 0xF1C2L,
+                                travelDir.scale(-0.30), 0.50f, 0.62f, 4,
+                                0xFFF2B0, 0xE63A00, 0.92f, pieceEnv, sway, pieceDs));
+                // Basalt shards bursting off the leading contact point
+                // for the whole flight (the cleave's hit beat is its
+                // travel): physical rock, world lit, dark basalt root
+                // to worn grey brown tips.
+                final int cleaveLight = state.lightCoords;
+                ComplexGeometry.submitSolidLit(collector, poseStack, cleaveLight, (pose, buffer) ->
+                        ComplexGeometry.shardBurst(pose, buffer, pieceSeed ^ 0xBA17L,
+                                travelDir.scale(0.55), travelDir, 50.0f, 0.55f, 4,
+                                0xFF1B1512, 0xFF57493A, 0.95f, pieceEnv, pieceDs));
             }
         }
         super.submit(state, poseStack, collector, cameraState);

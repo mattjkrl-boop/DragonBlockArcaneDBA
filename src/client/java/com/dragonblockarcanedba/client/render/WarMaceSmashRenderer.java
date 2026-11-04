@@ -48,6 +48,16 @@ import java.util.Random;
  * surface), physical debris chunks of the actual ground block, steel
  * sparks, and an early impact plume of pale dust and embers.
  *
+ * The attack upgrade pass adds the crater rim wall to the pieces
+ * layer: two clustered rockWall arc segments in ground-sampled rock
+ * on the lit path (submitSolidLit), a main arc of wide slabs and a
+ * shorter, lower cluster arc shouldering inside it, rising with the
+ * composition's build, holding through its peak, and slamming down
+ * over 3 ticks as the plates settle, where the entity answers with a
+ * burst of 12 real debris chunks. Sprite rates on the six largest
+ * filler emitters are trimmed about a tenth so the wall stays
+ * readable; no other piece or sprite counts changed.
+ *
  * Identity is preserved: the bronze theme colors, the bow height profile,
  * the radius growth from the entity, the synced seed, and the shared
  * FxEnvelope lifecycle (build 15 percent, dissipate 35 percent) all carry
@@ -83,6 +93,7 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         public boolean heavy;
         public float radius;
         public int seed;
+        public float yRot;
         public double ex;
         public double ey;
         public double ez;
@@ -109,6 +120,7 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         state.heavy = entity.isHeavy();
         state.radius = entity.radiusAt(state.age);
         state.seed = entity.getSeed();
+        state.yRot = entity.getYRot();
         state.ex = entity.getX();
         state.ey = entity.getY();
         state.ez = entity.getZ();
@@ -167,7 +179,7 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
             MaterialEmitters.burst(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
                     new Vec3(0.0, 0.38, 0.0), 0.22f),
-                disc(emission.frame, 0.9f, 0.04f, 0.12f), 48);
+                disc(emission.frame, 0.9f, 0.04f, 0.12f), 42);
         }
 
         // Pieces layer, in the local ground frame, gated on ground
@@ -193,6 +205,37 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                 ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
                     crackRadius, HOT_CORE, BRONZE, 0.95f, geoEnv, geoDist));
+
+            // Crater rim wall (attack upgrade pass): real rock heaving
+            // up around the rim, in a palette sampled from the ground
+            // under the impact and drawn on the lit path, never
+            // emissive. Two clustered arc segments, not a neat ring: a
+            // main arc of six wide slabs in front of the caster, and a
+            // shorter, lower cluster arc shouldering inside its flank
+            // at a smaller radius, so the rim reads as uneven heaved
+            // rock with a mountain profile. The beat follows the
+            // foundation factor contract on this composition's own
+            // age: RISE over the first 30 percent of life, HOLD
+            // through the envelope peak, then SLAM down over 3 ticks
+            // as the plate and crack composition settles. At the
+            // slam's end tick the entity answers with a DebrisSpawner
+            // burst of 12 real chunks (see WarMaceSmashEntity), so the
+            // wall ends as rubble, not as a fade.
+            float wallRise = FxEnvelope.smoothstep(Math.min(1f, state.age / (life * 0.30f)));
+            float wallSink = state.age <= life * 0.55f ? 0f
+                : FxEnvelope.smoothstep(Math.min(1f, (state.age - life * 0.55f) / 3f));
+            if (wallSink < 1f) {
+                int[] wallPalette = groundWallPalette(level, center);
+                double yawRad = Math.toRadians(state.yRot);
+                Vec3 forward = new Vec3(-Math.sin(yawRad), 0.0, Math.cos(yawRad));
+                float rimRadius = state.heavy ? 5.0f : 4.0f;
+                drawWallArc(collector, poseStack, state.lightCoords, geoSeed ^ 0x9A11L,
+                    forward, 0.20f, rimRadius, 7.2f, state.heavy ? 2.1f : 1.8f,
+                    wallRise, wallSink, wallPalette[0], wallPalette[1], geoEnv, geoDist);
+                drawWallArc(collector, poseStack, state.lightCoords, geoSeed ^ 0x9A12L,
+                    forward, -0.95f, rimRadius * 0.80f, 5.6f, state.heavy ? 1.55f : 1.3f,
+                    wallRise, wallSink, wallPalette[0], wallPalette[1], geoEnv, geoDist);
+            }
         }
         pruneEmissions(state.entityId);
 
@@ -322,6 +365,65 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
     }
 
     /**
+     * One arc segment of the crater rim wall. The segment midpoint sits
+     * on the rim circle at centerAngle from the caster's forward, the
+     * wall faces the crater center so the builder's arc curvature wraps
+     * the rim (length over radius is the bend), and the slabs draw
+     * through submitSolidLit with the frame's light coords: physical
+     * rock under world lighting, never on the emissive path.
+     */
+    private static void drawWallArc(SubmitNodeCollector collector, PoseStack poseStack, int lightCoords,
+                                    long seed, Vec3 forward, float centerAngle, float radius, float length,
+                                    float height, float rise, float sink,
+                                    int rootArgb, int tipArgb, float envelope, float distScale) {
+        double cos = Math.cos(centerAngle);
+        double sin = Math.sin(centerAngle);
+        Vec3 dir = new Vec3(forward.x * cos + forward.z * sin, 0.0, -forward.x * sin + forward.z * cos);
+        Vec3 origin = dir.scale(radius);
+        Vec3 facing = dir.scale(-1.0);
+        float arc = length / radius;
+        ComplexGeometry.submitSolidLit(collector, poseStack, lightCoords, (pose, buffer) ->
+            ComplexGeometry.rockWall(pose, buffer, seed, origin, facing, length, height, arc,
+                rise, sink, rootArgb, tipArgb, 0.98f, envelope, distScale));
+    }
+
+    /**
+     * Ground-sampled wall palette: the map color of the block under
+     * the impact point, pulled toward rock (desaturated a third of the
+     * way to its own luminance) so heaved ground reads as earth and
+     * stone rather than a flat colored slab. Root is the same tone
+     * darkened for the buried base. Grass samples as its dirt body,
+     * not the green top.
+     */
+    private static int[] groundWallPalette(ClientLevel level, Vec3 center) {
+        BlockState state = groundState(level, center);
+        if (state.is(Blocks.GRASS_BLOCK)) {
+            state = Blocks.DIRT.defaultBlockState();
+        }
+        BlockPos pos = BlockPos.containing(center.x, center.y - 0.5, center.z);
+        int col = state.getMapColor(level, pos).col;
+        if (col == 0) {
+            col = 0x7A7A7A;
+        }
+        return new int[]{rockTone(col, 0.45f), rockTone(col, 1.0f)};
+    }
+
+    /** One palette tone: the color desaturated toward its luminance, then scaled. */
+    private static int rockTone(int rgb, float brightness) {
+        float r = (rgb >> 16) & 0xFF;
+        float g = (rgb >> 8) & 0xFF;
+        float b = rgb & 0xFF;
+        float lum = 0.30f * r + 0.59f * g + 0.11f * b;
+        r = (r + (lum - r) * 0.35f) * brightness;
+        g = (g + (lum - g) * 0.35f) * brightness;
+        b = (b + (lum - b) * 0.35f) * brightness;
+        int ri = Math.max(0, Math.min(255, Math.round(r)));
+        int gi = Math.max(0, Math.min(255, Math.round(g)));
+        int bi = Math.max(0, Math.min(255, Math.round(b)));
+        return 0xFF000000 | (ri << 16) | (gi << 8) | bi;
+    }
+
+    /**
      * The material emitter bundle for one smash. Ground disc dust and a
      * bright plasma splash replace the glow fan; three rim swirl layers
      * replace the broken vortex bands; dust and vapor through the shell
@@ -374,28 +476,28 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
             BlockState ground = groundState(level, center);
             this.discDust = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(BRONZE, 1.9f, seed ^ 0x610F, Vec3.ZERO, 0.05f),
-                disc(frame, 1.02f, 0.03f, 0.22f), 230f * big, 300);
+                disc(frame, 1.02f, 0.03f, 0.22f), 205f * big, 300);
             this.splashPlasma = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(SPLASH, 0.95f, seed ^ 0x6110, Vec3.ZERO, 0.02f),
                 disc(frame, 1.02f, 0.02f, 0.08f), 60f * big, 90);
             this.rimDustA = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(BRONZE, 1.7f, seed ^ 0xBA01, Vec3.ZERO, 0.02f),
-                rimSwirl(frame, 0.82f, 0.10f, 1.0f, 1.0f, 0.55f), 200f * big, 280);
+                rimSwirl(frame, 0.82f, 0.10f, 1.0f, 1.0f, 0.55f), 180f * big, 280);
             this.rimDustB = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(BRONZE, 1.9f, seed ^ 0xBA02, Vec3.ZERO, 0.02f),
-                rimSwirl(frame, 0.88f, 0.06f, 0.78f, -1.0f, 0.70f), 115f * big, 170);
+                rimSwirl(frame, 0.88f, 0.06f, 0.78f, -1.0f, 0.70f), 104f * big, 170);
             this.rimVapor = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(PALE, 2.3f, seed ^ 0xBA03, Vec3.ZERO, 0.015f),
                 rimSwirl(frame, 0.95f, 0.03f, 0.55f, 1.0f, 0.40f), 55f * big, 85);
             this.shellDust = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(BRONZE, 2.1f, seed ^ 0xD001, Vec3.ZERO, 0.03f),
-                shellVolume(frame, 1.0f, 1.0f), 165f * big, 230);
+                shellVolume(frame, 1.0f, 1.0f), 148f * big, 230);
             this.shellVapor = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(shellColor, 2.5f, seed ^ 0xD003, Vec3.ZERO, 0.02f),
                 shellVolume(frame, 1.0f, 1.0f), 75f * big, 110);
             this.corePlasma = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(HOT_CORE, 1.15f, seed ^ 0xD002, Vec3.ZERO, 0.015f),
-                shellVolume(frame, 0.62f, 0.85f), 120f * big, 170);
+                shellVolume(frame, 0.62f, 0.85f), 108f * big, 170);
             this.crackDust = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(CRACK_DARK, 1.25f, seed ^ 0xCA01, Vec3.ZERO, 0.01f),
                 cracks(frame, armAngles, armLengths), 90f * big, 130);
@@ -411,7 +513,7 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
                 disc(frame, 0.9f, 0.04f, 0.12f), 65f * big, 95);
             this.plumeDust = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(PALE, 1.8f, seed ^ 0xD057, new Vec3(0.0, 0.17, 0.0), 0.05f),
-                plume(frame, heavy ? 2.3f : 1.5f), 150f * big, 200);
+                plume(frame, heavy ? 2.3f : 1.5f), 135f * big, 200);
             this.plumeEmber = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.ember(new Vec3(0.0, 0.24, 0.0), 0.06f),
                 plume(frame, heavy ? 2.3f : 1.5f), 38f * big, 60);

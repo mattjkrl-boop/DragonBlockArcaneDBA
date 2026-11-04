@@ -250,12 +250,15 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
         // Pieces layer: veil tendrils shaped around the silhouette, in
         // local space (the pose sits at the entity feet, unrotated, so the
         // synced front and right vectors are plain offsets). A rising fan
-        // of three strands from the feet, two strands curling up the sides
-        // of the body, and one short strand at the hair cap: six tendrils
-        // at full spine samples is 2304 vertices, inside the class M
-        // budget of 2500. Alpha stays honest for a veil body and the fade
-        // rides the envelope, so the shader dissolves the strands only in
-        // the tail of the same 100 tick curve.
+        // of strands from the feet (three in the complex pass, five after
+        // the attack upgrade), two strands curling up the sides of the
+        // body, and one short strand at the hair cap: eight tendrils at
+        // full spine samples is 3072 vertices, over the class M budget
+        // of 2500 at point blank only; spine samples distance scale
+        // down, so it sits inside budget beyond close range. Alpha stays
+        // honest for a veil body and the fade rides the envelope, so the
+        // shader dissolves the strands only in the tail of the same 100
+        // tick curve.
         float pieceEnv = (1.0f - progress * progress) * pulse;
         if (pieceEnv > 0.02f && ds > 0.05f) {
             final Vec3 frontL = s.front;
@@ -267,7 +270,7 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
             final float pds = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
             ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
                 ComplexGeometry.tendrilFan(pose, buffer, pseed ^ 0xA11L,
-                    new Vec3(0, 0.12, 0), new Vec3(0, 1, 0), 20f, 1.80f * spreadL, 3,
+                    new Vec3(0, 0.12, 0), new Vec3(0, 1, 0), 20f, 1.80f * spreadL, 5,
                     0.15f, 0x1AD9FF, tipHair, 0.88f, pieceEnv, pds);
                 for (int side = -1; side <= 1; side += 2) {
                     Vec3 from = rightL.scale(0.34 * side * spreadL).add(0, 0.30, 0);

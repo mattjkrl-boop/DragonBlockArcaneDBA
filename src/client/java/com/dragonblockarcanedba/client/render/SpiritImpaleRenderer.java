@@ -21,9 +21,11 @@ import net.minecraft.world.phys.Vec3;
  *
  * Complex pass: the impale is a layered composition. The pieces layer is
  * a ComplexGeometry shard mesh as the central spirit spike body (soul
- * gradient, submitSolid) with four smaller seeded ring shards around it,
- * plus a two strand tendril wake curling up the pillar through
- * submitEnergy with the tendril canvas. The complex particle layer is
+ * gradient, submitSolid) with five smaller seeded ring shards around it,
+ * plus a four strand tendril wake curling up the pillar through
+ * submitEnergy with the tendril canvas. Attack upgrade pass: one more
+ * ring shard than the complex pass, the main shard one size class up,
+ * and the wake strands doubled. The complex particle layer is
  * WISP_CURL sprites rising through the pillar volume. The no-shapes
  * material emission stays as filler only: soul material fills the impact
  * volume and rises through the old pillar space, plasma concentrates
@@ -145,28 +147,34 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
                 24.0f, 40, delta, emission);
         }
 
-        // Pieces layer, class M, in entity local space through the
-        // normal depth tested paths. Vertex count at distScale 1.0:
-        // five shards at 288 vertices (1440) plus two tendrils at 384
-        // (768), for 2208 of the 2500 class M budget.
+        // Pieces layer, class M per submit, in entity local space
+        // through the normal depth tested paths. Vertex counts at
+        // distScale 1.0: six shards at 288 vertices (1728 of the 2500
+        // class M budget) on the solid submit, four wake tendrils at
+        // 384 (1536 of 2500) on the energy submit.
         if (slam > 0.05f && pillarHeight > 0.30f) {
             final long geoSeed = state.seed;
             final float geoEnv = fade;
             final float geoDs = distScale;
             final float spikeLength = pillarHeight;
             final float spikeGirth = pillarRadius;
+            // Main shard one size class up (attack upgrade spec): a
+            // longer, stouter central crystal that spears out of the
+            // soul pillar, with the wakes following its dimensions.
+            final float mainLength = spikeLength * 1.22f;
+            final float mainGirth = spikeGirth * 1.45f;
             final float ringRadius = swordRingRadius;
             final float ringLength = 1.85f * scale * slam;
             final float ringGirth = 0.30f * scale;
             final float wakeRadius = baseRadius * 0.55f;
             ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
                 ComplexGeometry.shard(pose, buffer, geoSeed ^ 0x5AA1L,
-                    Vec3.ZERO, new Vec3(0.0, 1.0, 0.0), spikeLength, spikeGirth,
+                    Vec3.ZERO, new Vec3(0.0, 1.0, 0.0), mainLength, mainGirth,
                     CYAN, WHITE, 0.96f, geoEnv);
                 ComplexGeometry.Rng ringRng = new ComplexGeometry.Rng(geoSeed ^ 0xB161L);
                 float angleOffset = ringRng.nextFloat() * 0.6f;
-                for (int i = 0; i < 4; i++) {
-                    double ang = angleOffset + i * (Math.PI * 2.0 / 4.0);
+                for (int i = 0; i < 5; i++) {
+                    double ang = angleOffset + i * (Math.PI * 2.0 / 5.0);
                     double cos = Math.cos(ang);
                     double sin = Math.sin(ang);
                     Vec3 ringPos = new Vec3(cos * ringRadius, 0.0, sin * ringRadius);
@@ -177,15 +185,15 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
                 }
             });
             ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
-                for (int s = 0; s < 2; s++) {
-                    double a0 = s * Math.PI + 0.7;
+                for (int s = 0; s < 4; s++) {
+                    double a0 = s * (Math.PI / 2.0) + 0.7;
                     double a1 = a0 + 0.9;
                     double a2 = a0 + 1.6;
                     Vec3 wakeFrom = new Vec3(Math.cos(a0) * wakeRadius, 0.05, Math.sin(a0) * wakeRadius);
                     Vec3 wakeControl = new Vec3(Math.cos(a1) * wakeRadius * 0.70,
-                        spikeLength * 0.55, Math.sin(a1) * wakeRadius * 0.70);
-                    Vec3 wakeTo = new Vec3(Math.cos(a2) * spikeGirth * 0.40,
-                        spikeLength * 0.96, Math.sin(a2) * spikeGirth * 0.40);
+                        mainLength * 0.55, Math.sin(a1) * wakeRadius * 0.70);
+                    Vec3 wakeTo = new Vec3(Math.cos(a2) * mainGirth * 0.40,
+                        mainLength * 0.96, Math.sin(a2) * mainGirth * 0.40);
                     ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0xACE0L + s * 0x101L),
                         wakeFrom, wakeControl, wakeTo, 0.30f * scale,
                         CYAN, WHITE, 0.90f, geoEnv, geoDs);

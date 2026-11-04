@@ -27,7 +27,9 @@ import java.util.Map;
  * stream behind the projectile as its wake through the veil shader,
  * crimson at the head and tearing into darkness at the tail, and a
  * small cluster of flame tongues licks at the head through the additive
- * shader. The complex particle layer is an EMBER_FRAGMENT trail shed
+ * shader. Attack upgrade pass: the tongue cluster gains a row and
+ * three iron shards escort the head in flight, drawn lit as physical
+ * iron. The complex particle layer is an EMBER_FRAGMENT trail shed
  * along the flight segment. The material emission from the no-shapes
  * pass stays as filler: a dense cluster at the projectile position and
  * a trail along the actual movement segment, crimson plasma at the
@@ -106,8 +108,10 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
                 // projectile position, axes unrotated). Direction comes
                 // from the real velocity, with rotation as fallback.
                 // Two wake tendrils at full spine samples are about 768
-                // vertices and four head tongues about 192, for roughly
-                // 960 total, inside the class M budget of 2500.
+                // vertices and five head tongues about 240, and the
+                // three escort shards add about 864 in their own lit
+                // submit, for roughly 1870 total, inside the class M
+                // budget of 2500.
                 final Vec3 vel = state.velocity == null ? Vec3.ZERO : state.velocity;
                 final Vec3 dir = vel.lengthSqr() > 1.0e-4
                         ? vel.normalize() : directionFromRot(state.yRot, state.xRot);
@@ -130,11 +134,26 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
                             dir.scale(-1.55).add(side.scale(0.22)), 0.17f,
                             0xF20D33, 0x26030B, 0.88f, pieceEnv, pieceDs);
                 });
-                // Small flame tongues at the head of the projectile.
+                // Flame tongues at the head of the projectile, one row
+                // more than the complex pass flew.
                 ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
                         ComplexGeometry.flameTongues(pose, buffer, pieceSeed ^ 0xF1B1L,
-                                dir.scale(0.38), 0.24f, 0.62f, 4,
+                                dir.scale(0.38), 0.24f, 0.62f, 5,
                                 0xFFF3D6, 0xF20D33, 0.95f, pieceEnv, sway, pieceDs));
+                // Physical escort: three iron shards shed at launch and
+                // riding the flight in a loose cone around the travel
+                // axis at the head, in the same body envelope as the
+                // tongues, so they fade in at spawn and out at the end
+                // of the flight with everything else. Iron is physical
+                // matter, so the burst draws through submitSolidLit
+                // with the state's light coords, never on the emissive
+                // path. The formation is seeded from the projectile, so
+                // every client flies the same escort.
+                final int escortLight = state.lightCoords;
+                ComplexGeometry.submitSolidLit(collector, poseStack, escortLight, (pose, buffer) ->
+                        ComplexGeometry.shardBurst(pose, buffer, pieceSeed ^ 0xE5C0L,
+                                dir.scale(0.30), dir, 52.0f, 0.55f, 3,
+                                0xFF1D2024, 0xFF7C848C, 0.95f, pieceEnv, pieceDs));
 
                 EmissionRig rig = rigFor(level, state.seed, center, age);
                 rig.tick(center, state.velocity, envelope, age);

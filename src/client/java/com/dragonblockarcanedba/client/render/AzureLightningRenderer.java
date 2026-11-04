@@ -23,8 +23,8 @@ import java.util.Map;
  * Telegraph renderer for AzureLightningEntity.
  *
  * Complex pass: the warning is a layered composition. The pieces layer
- * is a crackFan electric web crawling outward inside the warned disc
- * plus a tendrilFan of small arcs during the telegraph, both drawn
+ * is a crackFan electric web crawling outward inside the warned disc,
+ * carrying two extra branches at full viewing distance, plus a tendrilFan of small arcs during the telegraph, both drawn
  * through the shader submit helpers. The complex particle layer is
  * SPARK_STREAK sprites rising in the telegraph. The material emission
  * from the no-shapes pass stays as filler: lightning plasma motes
@@ -200,9 +200,14 @@ public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity,
             final float webRadius = radius * 0.78f * (0.45f + 0.55f * t);
             final float geoEnv = (0.30f + 0.70f * t) * (blink > 0.9f ? 1.0f : 0.88f) * ds;
             final long crackSeed = state.seed ^ 0xC4ACL;
+            // crackFan has no branch count parameter: its branch count
+            // is the distance scaled segment count, so a 1.22 density
+            // factor is the in-foundation way to carry two extra
+            // branches at full distance scale (11 in place of 9).
+            final float branchDs = Math.min(1.25f, ds * 1.22f);
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                     ComplexGeometry.crackFan(pose, buffer, crackSeed, webRadius,
-                            0xFFFFFF, main, 0.92f, geoEnv, ds));
+                            0xFFFFFF, main, 0.92f, geoEnv, branchDs));
             // Small arcs lashing up from the disc, reseeded every two
             // ticks so they jump like real discharge while every client
             // draws the same arc in the same tick window.

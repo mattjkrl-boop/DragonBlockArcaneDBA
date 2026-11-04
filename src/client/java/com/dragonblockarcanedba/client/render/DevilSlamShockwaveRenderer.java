@@ -5,6 +5,7 @@ import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DevilSlamShockwaveEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -23,11 +24,15 @@ import java.util.UUID;
  * Entity Renderer for Devil Slam Shockwave in Minecraft 26.2.
  * Complex pass: layered composition at class L, built to the reference
  * picture of this slam. The pieces layer carries the structure: a solid
- * fracturePlates brimstone fan over the crater (submitSolid), a crackFan
- * magma web glowing through it on the shader (submitEnergy), and
- * flameTongues rising from the crater ring on the shader with the flame
- * canvas. These are the fast near field structure: the entity already
- * spawns a DebrisSpawner field server side for the big physical chunks.
+ * fracturePlates brimstone fan over the crater (submitSolid), a ring of
+ * brimstone spikes erupting between the plates and the crack web on the
+ * slam beat (spikeEruption on the world-lit path, blackstone and basalt
+ * bodies; the magma shows only as the crack web's thin energy seams,
+ * never as spike bodies), a crackFan magma web glowing through it on
+ * the shader (submitEnergy), and flameTongues rising from the crater
+ * ring on the shader with the flame canvas. These are the fast near
+ * field structure: the entity already spawns a DebrisSpawner field
+ * server side for the big physical chunks.
  * The complex particle layer is an EMBER_FRAGMENT and SHARD_CHIP burst
  * at ground contact (age 1, matching the server burst) and an ASH_FLAKE
  * burst later as the slam settles. The material emission stays as the
@@ -58,6 +63,10 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
     private static final int PLATE_DARK = 0x1E0D08;
     /** White hot base color of the crater flame tongues. */
     private static final int TONGUE_HOT = 0xFFF0C0;
+    /** Near-black blackstone color at the buried base of a brimstone spike. */
+    private static final int SPIKE_ROOT = 0xFF1A1216;
+    /** Grey-brown basalt color at the point of a brimstone spike. */
+    private static final int SPIKE_TIP = 0xFF4A4038;
 
     public DevilSlamShockwaveRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -141,9 +150,10 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
         // Pieces layer, in local space (pose origin is the slam center at
         // ground level). Vertex estimate at distScale 1.0: fracturePlates
         // about 410 (10 plates, seeded gaps, 48 vertices each at most),
-        // crackFan about 560 (9 to 11 cracks plus forks), flameTongues
-        // 432 (9 tongues, 6 segments). Total about 1400, inside the class
-        // L budget of 6000, with three builder types.
+        // spikeEruption 4224 (11 spikes at 384 each), crackFan about 560
+        // (9 to 11 cracks plus forks), flameTongues 432 (9 tongues, 6
+        // segments). Total about 5630, inside the class L budget of 6000,
+        // with four builder types.
         if (fade > 0.01f && grow > 0.01f && shockR > 0.1f && dist > 0.01f) {
             final long geoSeed = state.seed;
             final float pieceEnv = fade;
@@ -158,6 +168,23 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
             ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
                 ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xB21DL,
                     plateR, 0.42f, PLATE_HOT, PLATE_DARK, 0.97f, pieceEnv, pieceDs));
+            // Brimstone spike ring (attack upgrade pass): 11 physical
+            // spikes erupting between the plates and the crack web on the
+            // slam beat. RISE runs 6 ticks with the builder's per-spike
+            // stagger, HOLD is rise 1 while the seal holds, and the settle
+            // is the shared envelope fall with sink left at 0, so the
+            // spikes crack away standing as the seal dies. The ring sits
+            // at the plates' own 0.90 sizing so the composition layers
+            // inside the seal instead of crowding past it. Bodies are
+            // blackstone and basalt on the world-lit path; the magma
+            // layer stays the crack web below, never the spike bodies.
+            final float spikeRise = FxEnvelope.smoothstep(Math.min(1.0f, age / 6.0f));
+            final int pieceLight = state.lightCoords;
+            ComplexGeometry.submitSolidLit(collector, poseStack, pieceLight, (pose, buffer) ->
+                ComplexGeometry.spikeEruption(pose, buffer, geoSeed ^ 0x5917L,
+                    Vec3.ZERO, new Vec3(0, 0, -1), ComplexGeometry.SpikeLayout.RING, 11,
+                    shockR * 0.90f, 1.0f, spikeRise, 0f,
+                    SPIKE_ROOT, SPIKE_TIP, 0.97f, pieceEnv, pieceDs));
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                 ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
                     shockR * 0.95f, MAGMA_HOT, HOT, 0.95f, pieceEnv, pieceDs));

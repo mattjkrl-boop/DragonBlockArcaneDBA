@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.BraveShockwaveEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -135,6 +136,17 @@ public class BraveShockwaveRenderer extends EntityRenderer<BraveShockwaveEntity,
                 ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                     ComplexGeometry.crackFan(pose, buffer, gseed ^ 0x51ED2701L, crackRadius,
                         0xFFFFFF, 0xFFD700, 0.95f, genv, geoDist));
+                // Attack upgrade: one flameTongues ring in brave gold
+                // licking off the plate rim, on the rim convention the
+                // slam family already uses (tongue disc radius just
+                // past the plate radius). The plates themselves are
+                // unchanged; the flames ride the same expanding radius.
+                final float flameSway = state.age * 0.45f;
+                final float flameRadius = currentRadius * 1.05f;
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                    ComplexGeometry.flameTongues(pose, buffer, gseed ^ 0xF1B7L,
+                        new Vec3(0, 0.06, 0), flameRadius, 1.05f, 9,
+                        0xFFF2C0, 0xFFD700, 0.90f, genv, flameSway, geoDist));
             }
         }
 

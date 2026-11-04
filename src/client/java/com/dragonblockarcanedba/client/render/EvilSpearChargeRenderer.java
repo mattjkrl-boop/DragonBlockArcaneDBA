@@ -27,7 +27,10 @@ import java.util.Map;
  * run inward from the gathering ring to the core at spear height as veil
  * tendrils on the alpha shader, rooted in near black darkness and ending
  * in crimson at the core, and a small cluster of flame tongues licks at
- * the spear tip through the additive shader. The complex particle layer
+ * the spear tip through the additive shader. Attack upgrade pass: six
+ * shorter dark iron spikes erupt out of the space around the caster's
+ * body as the charge builds, hold at full charge, and retract on
+ * release, drawn lit as physical iron. The complex particle layer
  * is EMBER_FRAGMENT sprites shed from the ground ring. The material
  * emission from the no-shapes pass stays as filler: darkness smoke
  * gathering at ground level, hellfire embers and flame moving through
@@ -133,6 +136,47 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
                                 new Vec3(0.0, 0.82, 0.0), 0.30f + charge * 0.14f,
                                 0.55f + charge * 0.50f, 4,
                                 0xFFF3D6, 0xF20D33, 0.95f, pieceEnv, sway, pieceDs));
+                // Physical layer: Carter's body-space beat. Six shorter
+                // dark iron spikes erupt out of the space around the
+                // caster's body (BODY layout, center at body height),
+                // angled outward and up like a burst of spearheads.
+                // They rise with the charge ratio itself, so they finish
+                // emerging exactly at full charge, hold while the charge
+                // holds, and retract along their own axes across the
+                // existing release fade. Charge timing and release rules
+                // are the entity's and are untouched; this only reads
+                // them. Iron is physical matter: submitSolidLit only.
+                // The six are composed as two grouped bursts, never an
+                // even ring: four main spikes at offset 0.62 from the
+                // body axis and a shorter offset pair at 0.85, a third
+                // of a turn out of phase, so the burst clusters unevenly
+                // around the body. Six spikes at 384 vertices each is
+                // 2304 at full distance scale, in its own submit. The
+                // 0.56 size scale caps the longest class at the spec's
+                // 1.8 blocks (builder length classes run 1.2 to 3.2
+                // times the scale); the pair runs 0.42.
+                final float spikeRiseF = FxEnvelope.smoothstep(charge);
+                if (spikeRiseF > 0.01f) {
+                    final float spikeSinkF = state.releaseTicks >= 0
+                            ? FxEnvelope.smoothstep(Math.min(1.0f,
+                                    state.releaseTicks / (float) EvilSpearChargeEntity.RELEASE_FADE_TICKS))
+                            : 0.0f;
+                    final double spikePhase = (pieceSeed & 1023L) / 1023.0 * Math.PI * 2.0;
+                    final Vec3 spikeFacing = new Vec3(Math.cos(spikePhase), 0.0, Math.sin(spikePhase));
+                    final Vec3 spikePairFacing = new Vec3(
+                            Math.cos(spikePhase + 1.05), 0.0, Math.sin(spikePhase + 1.05));
+                    final int spikeLight = state.lightCoords;
+                    ComplexGeometry.submitSolidLit(collector, poseStack, spikeLight, (pose, buffer) -> {
+                        ComplexGeometry.spikeEruption(pose, buffer, pieceSeed ^ 0xB0D1L,
+                                new Vec3(0.0, 1.0, 0.0), spikeFacing, ComplexGeometry.SpikeLayout.BODY, 4,
+                                0.62f, 0.56f, spikeRiseF, spikeSinkF,
+                                0xFF141519, 0xFF4A5058, 1.0f, pieceEnv, pieceDs);
+                        ComplexGeometry.spikeEruption(pose, buffer, pieceSeed ^ 0xB0D2L,
+                                new Vec3(0.0, 1.0, 0.0), spikePairFacing, ComplexGeometry.SpikeLayout.BODY, 2,
+                                0.85f, 0.42f, spikeRiseF, spikeSinkF,
+                                0xFF141519, 0xFF4A5058, 1.0f, pieceEnv, pieceDs);
+                    });
+                }
 
                 EmissionRig rig = rigFor(level, state.seed, center, age);
                 rig.tick(center, charge, radius, envelope, age);

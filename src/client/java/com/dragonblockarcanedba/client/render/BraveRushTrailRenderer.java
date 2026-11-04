@@ -147,6 +147,36 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
                     tail.add(gb.right().scale(-sideOff * 0.35)), sideWidth,
                     0xFFD700, 0xFFF2C0, 0.92f, genv, geoDist);
             });
+
+            // Attack upgrade: the rush sheds steel as it runs. Two
+            // small shards drop off the path every 6 ticks, five shed
+            // sets over the trail's 30 tick life, each set appearing at
+            // its station along the path as its shed tick passes and
+            // holding with the trail envelope, so the dash leaves steel
+            // behind it and not only light. Drawn lit as physical
+            // metal.
+            final float shedAge = state.age;
+            final int shedLight = state.lightCoords;
+            ComplexGeometry.submitSolidLit(collector, poseStack, shedLight, (pose, buffer) -> {
+                for (int s = 0; s < 5; s++) {
+                    float shedTick = s * 6.0f;
+                    if (shedAge < shedTick) break;
+                    float setEnv = genv * FxEnvelope.smoothstep(Math.min(1.0f, (shedAge - shedTick) / 2.0f));
+                    if (setEnv <= 0.01f) continue;
+                    // Seeded per set placement jitter and size, so the
+                    // shed steel lands as scattered debris along the
+                    // path, never as beads on a string.
+                    ComplexGeometry.Rng shedRng = new ComplexGeometry.Rng(gseed ^ (0x77E5L + s * 0x101L));
+                    Vec3 shedAt = gb.forward().scale(tipZ - glen * ((s + 1.0f) / 6.0f)
+                            + (shedRng.nextFloat() - 0.5f) * 0.5f * gscale)
+                        .add(gb.right().scale((shedRng.nextFloat() - 0.5f) * 0.30f * gscale))
+                        .add(gb.up().scale((shedRng.nextFloat() - 0.5f) * 0.30f * gscale));
+                    float shedUnit = (0.26f + shedRng.nextFloat() * 0.09f) * gscale;
+                    ComplexGeometry.shardBurst(pose, buffer, gseed ^ (0x5EEDL + s * 0x101L), shedAt,
+                        gb.forward().scale(-1.0), 50.0f, shedUnit, 2,
+                        0xFFE8F1F8, 0xFFFFD700, 0.95f, setEnv, geoDist);
+                }
+            });
         }
 
         // Strike wake: a one-shot burst at the trail tip during the same

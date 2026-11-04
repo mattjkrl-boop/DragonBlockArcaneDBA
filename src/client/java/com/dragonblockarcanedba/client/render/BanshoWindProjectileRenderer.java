@@ -19,13 +19,16 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Layered presentation for the Bansho wind projectile (class M). The
- * pieces layer is a double tendril spiral wake: two ComplexGeometry
- * tendrils whose bezier control points sit on opposite sides of the
- * flight axis and rotate with the same 0.80 spin phase the body
- * sampling uses, so the pair twists around the axis behind the head,
- * drawn through the shader submit helper with the tendril canvas under
- * the same yaw and pitch rotation the emission frame uses. This is a
- * pair of torn, pinched strands, not the deleted clean helix mesh. The
+ * pieces layer is a triple tendril spiral wake plus a solid core:
+ * three ComplexGeometry tendrils whose bezier control points sit 120
+ * degrees apart around the flight axis and rotate with the same 0.80
+ * spin phase the body sampling uses, so the three twist around the
+ * axis behind the head, and a shardBurst of three pale wind-glass
+ * shards rides at the core as the projectile's solid head (attack
+ * upgrade pass; the wake was a two-strand pair before it). The strands
+ * are drawn through the shader submit helper with the tendril canvas
+ * under the same yaw and pitch rotation the emission frame uses. This
+ * is a set of torn, pinched strands, not the deleted clean helix mesh. The
  * complex particle layer is WISP_CURL sprites in the wake. The material
  * emission from the no-shapes pass stays as filler: a dense emerald
  * vapor cluster along the flight path, a pale plasma core on the axis,
@@ -172,26 +175,29 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
             }
         }
 
-        // Pieces layer: the double tendril spiral wake in the renderer's
-        // local frame (x right, y up, z forward). Both strands run from
-        // the head at z 0.72 to the wake tail at z minus 2.05; their
-        // control points sit on opposite sides of the axis at the body
-        // sampling spin phase (age times 0.80), so the pair rotates
-        // around the axis as one twisting wake. Vertex count at full
-        // distance scale: 2 tendrils times 24 samples times 16 vertices
-        // is 768, inside the class M budget of 2500.
+        // Pieces layer: the triple tendril spiral wake in the renderer's
+        // local frame (x right, y up, z forward). All three strands run
+        // from the head at z 0.72 to the wake tail at z minus 2.05;
+        // their control points sit 120 degrees apart around the axis at
+        // the body sampling spin phase (age times 0.80), so the three
+        // rotate around the axis as one twisting wake. The old pair sat
+        // opposite each other; the third strand (attack upgrade pass)
+        // re-spaces the set evenly, which is what makes the wake read
+        // as a drill instead of a ribbon. Vertex count at full distance
+        // scale: 3 tendrils times 24 samples times 16 vertices is 1152,
+        // inside the class M budget of 2500.
         if (envelope > 0.01f && distanceScale > 0.01f) {
             double spin = state.ageInTicks * 0.80;
-            final float ctrlX = (float) Math.cos(spin) * 0.30f * ownerScale;
-            final float ctrlY = (float) Math.sin(spin) * 0.30f * ownerScale;
             final Vec3 head = new Vec3(0.0, 0.0, 0.72f * ownerScale);
             final Vec3 tail = new Vec3(0.0, 0.0, -2.05f * ownerScale);
-            final Vec3 controlA = new Vec3(ctrlX, ctrlY, -0.55f * ownerScale);
-            final Vec3 controlB = new Vec3(-ctrlX, -ctrlY, -0.55f * ownerScale);
+            final Vec3 controlA = spiralControl(spin, ownerScale);
+            final Vec3 controlB = spiralControl(spin + 2.0943952, ownerScale);
+            final Vec3 controlC = spiralControl(spin + 4.1887902, ownerScale);
             final long geoSeed = state.seed;
             final float geoEnv = envelope * distanceScale;
             final float geoDs = distanceScale;
             final float geoWidth = 0.26f * ownerScale;
+            final float coreScale = ownerScale;
             poseStack.pushPose();
             poseStack.mulPose(new Matrix4f()
                     .rotationY((float) Math.toRadians(-state.yRot))
@@ -203,10 +209,30 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                 ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0xD422L,
                         head, controlB, tail,
                         geoWidth, 0xD8FFF2, 0x26FFA6, 0.92f, geoEnv, geoDs);
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0xD433L,
+                        head, controlC, tail,
+                        geoWidth, 0xD8FFF2, 0x26FFA6, 0.92f, geoEnv, geoDs);
             });
+            // The solid core the wake wraps: three pale wind-glass
+            // shards in a tight forward burst at the head, drawn solid.
+            // The burst is seed-static in the flight frame, so the
+            // cluster rides as one rigid glass head instead of boiling;
+            // the wake supplies the motion. Vertex count: 3 shards at
+            // 288 vertices is 864, its own submit, inside budget.
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.shardBurst(pose, buffer, geoSeed ^ 0xD45EL,
+                            new Vec3(0.0, 0.0, 0.42f * coreScale), new Vec3(0.0, 0.0, 1.0),
+                            55.0f, 0.36f * coreScale, 3,
+                            0x9FFFE0, 0xFFFFFF, 0.95f, geoEnv, geoDs));
             poseStack.popPose();
         }
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /** One wake strand's bezier control point at the given spin phase. */
+    private static Vec3 spiralControl(double phase, float ownerScale) {
+        return new Vec3((float) Math.cos(phase) * 0.30f * ownerScale,
+                (float) Math.sin(phase) * 0.30f * ownerScale, -0.55f * ownerScale);
     }
 
     private static MaterialEmitters.Sample bodySample(WindProjectileRenderState state, RandomSource random, boolean core) {

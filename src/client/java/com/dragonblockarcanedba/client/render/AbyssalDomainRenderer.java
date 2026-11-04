@@ -115,14 +115,17 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
 
         // Pieces layer, class L at two builder types. The base web is a
         // crackFan of curse energy wandering across the ground inside the
-        // rim, hot at the heart and crimson at the tips.
+        // rim, hot at the heart and crimson at the tips. Attack upgrade:
+        // the fan runs three branches richer; crackFan derives its crack
+        // count from segments(9, detail, 6), so the boost rides the
+        // detail scale (plus 1/3 adds exactly three base cracks).
         final long pieceSeed = state.seed;
         final float pieceRadius = radius;
         final float pieceAlpha = alpha;
         final float pieceDs = ds;
         ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
             ComplexGeometry.crackFan(pose, buffer, pieceSeed ^ 0xC4AC1L, pieceRadius * 1.02f,
-                0xFFF2F7, 0xF20D33, 0.95f, pieceAlpha, pieceDs));
+                0xFFF2F7, 0xF20D33, 0.95f, pieceAlpha, pieceDs + 1.0f / 3.0f));
 
         // Rim tendrils: ten seeded strands stood on the boundary circle,
         // leaning inward as they climb, violet at the root and crimson at

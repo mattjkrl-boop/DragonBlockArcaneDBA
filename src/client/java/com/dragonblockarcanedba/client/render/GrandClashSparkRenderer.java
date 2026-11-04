@@ -21,13 +21,17 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Grand Clash Spark in Minecraft 26.2.
- * Complex effects redo: layered composition. A projectile deflection
- * reads as three short tendril lashes at the clash point (a seeded
- * tendrilFan through submitEnergy on the tendril canvas), plus a
- * one-shot SPARK_STREAK burst at the opening frames, with the existing
- * material emission kept as filler: dense white-gold valor plasma, steel
- * sparks thrown outward, pale vapor, and a little stone dust. The 24
- * tick life and the shared lifecycle envelope are unchanged.
+ * Attack upgrade pass: a projectile deflection reads as six short
+ * tendril lashes at the clash point (the complex redo's three-strand
+ * seeded tendrilFan, doubled, through submitEnergy on the tendril
+ * canvas) plus a burst of five solid valor shards (shardBurst through
+ * submitSolidLit: steel fragments of the clash, world lit) at the
+ * clash point, and a one-shot SPARK_STREAK burst at the opening
+ * frames, with the existing material emission kept as filler: dense
+ * white-gold valor plasma, steel sparks thrown outward, pale vapor,
+ * and a little stone dust. Piece budget at distance scale 1.0 is now
+ * class L (about 3750 vertices: fan 2300, shards 1440), up from class
+ * M. The 24 tick life and the shared lifecycle envelope are unchanged.
  */
 public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntity, GrandClashSparkRenderer.ClashRenderState> {
 
@@ -108,7 +112,7 @@ public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntit
             MaterialEmitters.sphereVolume(center, 0.62 * scale),
             54f, 76, state.age, envelope * 0.82f);
 
-        // Pieces layer: three short tendril lashes at the clash point. The
+        // Pieces layer: six short tendril lashes at the clash point. The
         // fan axis is seeded from the entity, tilted up so the lashes lift
         // off the clash instead of digging into the ground.
         float distScale = MaterialEmitters.distanceScale(center);
@@ -118,8 +122,16 @@ public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntit
         final float lashLength = 1.15f * scale;
         ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
             ComplexGeometry.tendrilFan(pose, buffer, state.seed ^ 0x1A5EL,
-                Vec3.ZERO, fanAxis, 68.0f, lashLength, 3, 0.24f,
+                Vec3.ZERO, fanAxis, 68.0f, lashLength, 6, 0.24f,
                 0xFFD833, 0xFFF3B0, 0.95f, fade, distScale));
+
+        // Solid layer: five valor shards bursting at the clash point
+        // along the same seeded fan axis, steel root to pale gold tip,
+        // drawn on the world-lit path (physical fragments, no glow).
+        ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) ->
+            ComplexGeometry.shardBurst(pose, buffer, state.seed ^ 0x5A17L,
+                Vec3.ZERO, fanAxis, 55.0f, 0.55f * scale, 5,
+                0x767F8C, 0xFFF3B0, 0.95f, fade, distScale));
 
         // Complex sprite layer: one guarded SPARK_STREAK burst in the
         // opening frames (class M burst budget is 30; this fires 24).

@@ -32,7 +32,10 @@ import java.util.Random;
  * dark solid shards, real FragmentEntity pieces the host rains server
  * side on its bolt beat in 3 clusters of 2, 2, 1 (ENTITY-STANDARD rain
  * mode); their positions are world truth, so this renderer draws none
- * of them. The
+ * of them. What the renderer does draw at the tear's heart is a refill,
+ * not rain: five curse glass shards hanging at the billboard center
+ * and pulsing on the same twenty tick shed beat, so the heart never
+ * reads empty between rain batches. The
  * complex particle layer is wisp curls drifting off the fractures. The
  * material emission stays as filler: seven main jagged paths and a web of
  * shorter ones, regenerated from the entity's synced seed in the camera
@@ -125,12 +128,37 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
                 PoseStack.Pose flat = pose.copy();
                 flat.rotate(Axis.XP.rotation((float) (-Math.PI / 2.0)));
+                // Attack upgrade: two extra branches per fan. crackFan
+                // derives its crack count from segments(9, detail, 6),
+                // so the count is raised through the detail scale each
+                // fan already takes (plus 2/9 adds exactly two base
+                // cracks at any range above the detail floor).
                 ComplexGeometry.crackFan(flat, buffer, crackSeed ^ 0xC4ACCL, 21.0f,
-                    0xFFF7F7, 0xF20D33, 0.95f, crackEnv, crackDs);
+                    0xFFF7F7, 0xF20D33, 0.95f, crackEnv, crackDs + 2f / 9f);
                 ComplexGeometry.crackFan(flat, buffer, crackSeed ^ 0xF04CL, 13.0f,
-                    0xE9D5FF, 0x8C1AF2, 0.92f, crackEnv, crackDs * 0.7f);
+                    0xE9D5FF, 0x8C1AF2, 0.92f, crackEnv, crackDs * 0.7f + 2f / 9f);
             });
             poseStack.popPose();
+        }
+
+        // Pieces layer, heart refill (attack upgrade): five curse glass
+        // shards hang at the tear's heart so the center never reads
+        // empty. Drawn in the plain entity pose with the axis straight
+        // down, the way the drawn clusters sat before the rain became
+        // real entities, and pulsed on the host's shed beat: the rain
+        // fires server side at tickCount % 20 == 10, and this burst's
+        // envelope swells on the same phase. Curse glass is an energy
+        // material, so the solid emissive path stays correct here.
+        {
+            float beatPhase = state.age % 20.0f;
+            float shedPulse = 0.65f + 0.35f * (float) Math.cos((beatPhase - 10.0f) * (Math.PI * 2.0 / 20.0));
+            final long heartSeed = seed;
+            final float heartEnv = alpha * shedPulse;
+            final float heartDs = ds;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.shardBurst(pose, buffer, heartSeed ^ 0x5A9DL, Vec3.ZERO,
+                    new Vec3(0, -1, 0), 45f, 1.0f, 5,
+                    0x2A0A4A, 0x8C1AF2, 0.95f, heartEnv, heartDs));
         }
 
         // Complex particle layer: wisp curls curling off the fractures.

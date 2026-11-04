@@ -25,10 +25,9 @@ import java.util.Random;
  * Entity Renderer for Call of the Tempest Channeling in Minecraft 26.2.
  *
  * Complex pass: the channel is a layered composition. The pieces
- * layer is three ComplexGeometry tendrils whose control points step
- * around the axis and inward, so each strand spirals from the tunnel
- * rim at the base to near the axis at the top, rotating with the
- * channel age. The complex particle layer is SPARK_STREAK sprites
+ * layer is a five strand ComplexGeometry tendrilFan rising through
+ * the tunnel, joined by a ring of six small storm-glass shards that
+ * orbit the channel at waist height. The complex particle layer is SPARK_STREAK sprites
  * rising through the channel volume. The material emission from the
  * no-shapes pass stays as filler: vapor and plasma rising through
  * the channel volume with tangential swirl velocities, mist drifting
@@ -295,13 +294,11 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
                 emission.arcWhite.tick(delta, arcEnvelope);
             }
 
-            // Pieces layer: three tendrils spiraling inward. Each
-            // strand starts at the tunnel rim, its control point steps
-            // about 60 degrees around the axis at half radius and half
-            // height, and it ends near the axis at the top, so the
-            // bezier itself is the helix. The whole triad rotates with
-            // the channel age, in the same direction as the swirl
-            // velocities the filler particles carry.
+            // Pieces layer: one five strand fan rises through the
+            // tunnel, and six physical storm-glass shards ride a waist
+            // height orbit in the same direction as the swirl. The
+            // shards are world lit because they read as solid glass,
+            // not as another glow layer.
             final float geoR = tunnelRadius;
             final float geoH = tunnelHeight;
             final float geoAge = age;
@@ -309,17 +306,24 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
             final float geoDs = MaterialEmitters.distanceScale(center);
             final float geoWidth = 0.26f + charge * 0.18f;
             final long geoSeed = state.seed;
+            final int geoLight = state.lightCoords;
             if (geoEnv > 0.01f && geoDs > 0.01f) {
-                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
-                    for (int i = 0; i < 3; i++) {
-                        double a0 = i * (Math.PI * 2.0 / 3.0) + geoAge * 0.06;
-                        double a1 = a0 + 1.05;
-                        double a2 = a0 + 2.10;
-                        Vec3 from = new Vec3(Math.cos(a0) * geoR * 1.12, 0.15, Math.sin(a0) * geoR * 1.12);
-                        Vec3 control = new Vec3(Math.cos(a1) * geoR * 0.55, geoH * 0.52, Math.sin(a1) * geoR * 0.55);
-                        Vec3 to = new Vec3(Math.cos(a2) * geoR * 0.16, geoH * 0.94, Math.sin(a2) * geoR * 0.16);
-                        ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0x7E00L + i * 0x101L),
-                                from, control, to, geoWidth, 0x4DF2FF, 0xFFFFFF, 0.90f, geoEnv, geoDs);
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                        ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0x7E00L,
+                                new Vec3(0.0, 0.15, 0.0), new Vec3(0.0, 1.0, 0.0),
+                                34.0f, geoH * 0.94f, 5, geoWidth,
+                                0x4DF2FF, 0xFFFFFF, 0.90f, geoEnv, geoDs));
+                ComplexGeometry.submitSolidLit(collector, poseStack, geoLight, (pose, buffer) -> {
+                    for (int i = 0; i < 6; i++) {
+                        double angle = i * (Math.PI * 2.0 / 6.0) + geoAge * 0.06;
+                        double cos = Math.cos(angle);
+                        double sin = Math.sin(angle);
+                        Vec3 origin = new Vec3(cos * geoR * 0.78, geoH * 0.48, sin * geoR * 0.78);
+                        Vec3 dir = new Vec3(-sin, 0.30, cos);
+                        float length = 0.52f + (i % 3) * 0.13f;
+                        ComplexGeometry.shard(pose, buffer, geoSeed ^ (0x51A0L + i * 131L),
+                                origin, dir, length, length * 0.32f,
+                                0x1D6F8E, 0xCFF7FF, 0.95f, geoEnv);
                     }
                 });
             }

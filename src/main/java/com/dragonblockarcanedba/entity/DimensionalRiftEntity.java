@@ -157,6 +157,26 @@ public class DimensionalRiftEntity extends Projectile {
                     0.10f, 0.30f, 0.5f, 70, 8);
             }
 
+            // Peak fragment beat (tick 20, expansion complete): the
+            // second authored beat the entity pass flagged, so the
+            // grown tear at full radius is not emptier than the young
+            // one. Same helper call pattern, palette, speeds, gravity,
+            // and lifetimes as the tick 2 burst; the count is 4 more
+            // fragments and the burst sits at the peak tear height for
+            // the full radius. Its seed adds a beat salt to the burst
+            // seed family so the silhouettes are fresh draws, not
+            // clones of the first beat's five.
+            if (this.tickCount == EXPAND_TICKS) {
+                double tearY = Math.min(8.0, 2.5 + currentRadius * 0.4) * 0.5;
+                long rendererSeed = (long) this.getId() * 2654435761L
+                    ^ (long) (this.getX() * 64.0) * 40503L
+                    ^ (long) (this.getZ() * 64.0) * 0x9E3779B9L;
+                FragmentEntity.burst(serverLevel, owner, center.add(0.0, tearY, 0.0),
+                    new Vec3(0.0, 1.0, 0.0), 100f, 0.80f, 4,
+                    rendererSeed ^ 0x5A17L ^ 0xBEA7L, 0x24053D, 0xB84DFF,
+                    0.10f, 0.30f, 0.5f, 70, 8);
+            }
+
             // Layered particles every tick: bright core, violet helical mid band,
             // void smoke wisps at the rim, all scaled by the shared envelope.
             LayeredParticles.emitVortex(serverLevel, center, currentRadius * 0.85f, 6.5f,

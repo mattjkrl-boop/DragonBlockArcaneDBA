@@ -44,6 +44,11 @@ import java.util.Map;
  * rim as the complex particle layer. The material emission stays as
  * filler.
  *
+ * Attack upgrade pass: a third rim tendril joins from the side rim.
+ * The optional second fragment ring was not added: the mouth already
+ * carries the five real FragmentEntity shards plus dense rim streams,
+ * so a drawn burst at the same radius would duplicate the real ring.
+ *
  * Entity objects pass: the shard ring is no longer drawn here. The
  * host spawns five FragmentEntity shards server side (entity-audit
  * section 4) that hang on a world ring at the mouth for the channel
@@ -321,10 +326,11 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         // Pieces layer, in the billboard plane: the pose is rotated by
         // the conjugate camera orientation, the same basis the emission
         // streams are built from, so local X and Y are the tear's right
-        // and up. Two inward tendrils (768 vertices), inside the class M
-        // budget of 2500, following the rim window of the implosion
-        // choreography. The shard ring that used to draw here is a set
-        // of FragmentEntity instances now (see the class doc).
+        // and up. Three inward tendrils after the attack upgrade (1152
+        // vertices), inside the class M budget of 2500, following the
+        // rim window of the implosion choreography. The shard ring that
+        // used to draw here is a set of FragmentEntity instances now
+        // (see the class doc).
         float tendrilPieceEnv = state.isImploding
             ? fade * (1.0f - clamp01((implodeT - 0.50f) / 0.36f)) : env;
         if (tendrilPieceEnv > 0.02f && ds > 0.05f) {
@@ -349,6 +355,12 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
                     ComplexGeometry.tendril(pose, buffer, pseed ^ 0xE33L,
                         new Vec3(-bellyL * 0.30, -halfHL * 0.98, 0),
                         new Vec3(-bellyL * 0.85, -halfHL * 0.45, 0),
+                        new Vec3(0, 0, 0), twidth, 0x9905F2, 0xD9B8FF, 0.90f, tEnv, geoDist);
+                    // Attack upgrade: a third strand enters from the
+                    // side rim at mouth height, on the same window.
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xE44L,
+                        new Vec3(-bellyL * 1.02, halfHL * 0.10, 0),
+                        new Vec3(-bellyL * 0.55, halfHL * 0.30, 0),
                         new Vec3(0, 0, 0), twidth, 0x9905F2, 0xD9B8FF, 0.90f, tEnv, geoDist);
                 });
             }

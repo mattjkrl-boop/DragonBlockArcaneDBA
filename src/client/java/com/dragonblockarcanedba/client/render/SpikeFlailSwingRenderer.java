@@ -24,7 +24,10 @@ import java.util.Map;
 
 /**
  * Chain and spiked ball at the end of the swing. The entity sits on the ball.
- * Complex pass: layered composition. The pieces layer is a tendril
+ * Complex pass: layered composition. Attack upgrade pass: a tendril
+ * pair now runs the chain line from hand to ball alongside the arc
+ * strands, and four iron shards shed off the ball at the swing's
+ * apex, drawn lit as physical iron. The pieces layer is a tendril
  * body through ComplexGeometry.submitEnergy with the tendril canvas,
  * chained along the swing arc exactly as sampled: one strand from
  * the first trail sample to the middle sample with the second
@@ -149,9 +152,13 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
      * sample 1, the second runs sample 2 to sample 4 controlled by
      * sample 3, and a thinner echo runs the whole arc controlled by
      * sample 2, so every strand is anchored on sampled points only
-     * and no new path is invented. Peak alphas are honest body
-     * alphas; the gradient runs warm dust at the tail to near white
-     * at the head, matching the existing plasma glint color.
+     * and no new path is invented. Attack upgrade pass: a tendril
+     * pair runs the chain line itself, hand point to ball, bowed a
+     * touch low at the middle the way a swung chain sags, and four
+     * iron shards shed off the ball at the swing's apex in their own
+     * lit submit. Peak alphas are honest body alphas; the gradient
+     * runs warm dust at the tail to near white at the head, matching
+     * the existing plasma glint color.
      */
     private void submitPieces(SwingState state, PoseStack poseStack, SubmitNodeCollector collector,
                               float envelope, float distScale) {
@@ -164,6 +171,8 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
         final Vec3 p2 = state.trail.get(2).subtract(origin);
         final Vec3 p3 = state.trail.get(3).subtract(origin);
         final Vec3 p4 = state.trail.get(4).subtract(origin);
+        final Vec3 handLocal = state.hand.subtract(origin);
+        final Vec3 chainMid = handLocal.add(p4).scale(0.5).add(0.0, -0.05, 0.0);
         final float gEnv = envelope;
         final float gDist = distScale;
         final long gSeed = state.seed;
@@ -174,7 +183,36 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
                 0.28f, 0xEDE8DA, 0xFFF6D8, 0.92f, gEnv, gDist);
             ComplexGeometry.tendril(pose, buffer, gSeed ^ 0x5C33L, p0, p2, p4,
                 0.15f, 0xEDE8DA, 0xFFF6D8, 0.88f, gEnv, gDist);
+            // Chain line pair: hand to ball along the real chain,
+            // one strand over the other, widths stepped down.
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0x5D44L, handLocal, chainMid, p4,
+                0.16f, THEME_DUST, 0xEDE8DA, 0.88f, gEnv, gDist);
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0x5E55L, handLocal, chainMid, p4,
+                0.10f, 0xEDE8DA, 0xFFF6D8, 0.85f, gEnv, gDist);
         });
+        // Physical layer: four iron shards shed off the ball at the
+        // swing's apex. The arc's height peaks at half progress
+        // (ballPos rides sin of the eased progress), so the burst
+        // weight is a sine over the swing's 11 ticks, peaked at the
+        // apex and zero at both ends; the cone axis is the ball's
+        // sampled travel direction across the last two samples.
+        // Iron is physical matter, so the burst draws through
+        // submitSolidLit with the state's light coords, never on
+        // the emissive path. Four shards at about 288 vertices each
+        // is roughly 1150 at full distance scale, in its own submit.
+        float apexW = (float) Math.sin(Math.PI
+            * Mth.clamp(state.age / (float) SpikeFlailSwingEntity.SWING_TICKS, 0.0f, 1.0f));
+        if (apexW > 0.05f) {
+            Vec3 travel = p4.subtract(p3);
+            final Vec3 axis = travel.lengthSqr() < 1.0e-6
+                ? new Vec3(0.0, 1.0, 0.0) : travel.normalize();
+            final float apexEnv = envelope * apexW;
+            final int apexLight = state.lightCoords;
+            ComplexGeometry.submitSolidLit(collector, poseStack, apexLight, (pose, buffer) ->
+                ComplexGeometry.shardBurst(pose, buffer, gSeed ^ 0xA9E1L,
+                    p4, axis, 58.0f, 0.55f, 4,
+                    0xFF1D2024, 0xFF7C848C, 0.95f, apexEnv, gDist));
+        }
     }
 
     private void pruneEmissions() {

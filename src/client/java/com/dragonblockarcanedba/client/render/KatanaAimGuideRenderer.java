@@ -151,6 +151,30 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
             ComplexGeometry.tendrilFan(pose, buffer, state.seed ^ 0xA17DL, localStart, forward,
                 7.0f, fanLength, 5, 0.09f, 0x00D9FF, 0xFFFFFF, 0.92f, fanEnvelope, dist));
 
+        // Attack upgrade: three small steel shards circle the guide
+        // origin in the plane across the aim, around the point the
+        // fan gathers from. Each shard keeps its own radius, speed,
+        // and size and flies tipped out of the plane, so they read
+        // as loose steel held in the stance, not a rigid ring. They
+        // sit at the origin only, so the guide path, its stations,
+        // and the terminal telegraph read are untouched. Drawn lit
+        // as physical metal.
+        final int orbitLight = state.lightCoords;
+        final float orbitAlpha = alpha;
+        ComplexGeometry.submitSolidLit(collector, poseStack, orbitLight, (pose, buffer) -> {
+            for (int i = 0; i < 3; i++) {
+                double a = age * (0.115 + i * 0.019) + i * 2.35;
+                float r = 0.30f + i * 0.045f;
+                Vec3 pos = localStart
+                    .add(right.scale(Math.cos(a) * r))
+                    .add(up.scale(Math.sin(a) * r));
+                Vec3 tangent = right.scale(-Math.sin(a)).add(up.scale(Math.cos(a)));
+                Vec3 dir = tangent.scale(0.85).add(forward.scale(0.28 * (i - 1)));
+                ComplexGeometry.shard(pose, buffer, state.seed ^ (0x0B17 + i * 0x9E37L),
+                    pos, dir, 0.26f + i * 0.04f, 0.10f, 0xFF8FB6C9, 0xFFFFFFFF, 0.90f, orbitAlpha);
+            }
+        });
+
         float delta = anchor.deltaSeconds(mc.isPaused());
         if (delta > 0f) {
             float envelope = alpha * dist;

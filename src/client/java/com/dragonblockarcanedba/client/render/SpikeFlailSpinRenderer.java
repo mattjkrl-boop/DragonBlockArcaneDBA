@@ -27,8 +27,13 @@ import java.util.Map;
 
 /**
  * Orbiting ball, then the outward crack when the channel lets go.
- * Complex pass: layered composition. The pieces layer is two tendril
- * arcs through ComplexGeometry.submitEnergy with the tendril canvas,
+ * Complex pass: layered composition. Attack upgrade pass: at the
+ * full-speed beat a clustered iron spike eruption bursts from the
+ * ground at the spin's radius, drawn lit as physical iron, and the
+ * orbit-phase sprite rates are trimmed by about a quarter to make
+ * room for its read; the tendril count stays two on purpose (spin
+ * strobing). The pieces layer is two tendril arcs through
+ * ComplexGeometry.submitEnergy with the tendril canvas,
  * following the sampled head path exactly: from the previous ball
  * sample to the current ball sample, with the control point on the
  * orbit arc midway between them at the synced radius, so the strands
@@ -142,10 +147,13 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
             float env = FxEnvelope.envelope(state.age, SpikeFlailItem.CHANNEL_TICKS) * fade * distScale;
             submitPieces(state, poseStack, collector,
                 FxEnvelope.envelope(state.age, SpikeFlailItem.CHANNEL_TICKS) * fade, distScale);
+            submitRing(state, poseStack, collector,
+                FxEnvelope.envelope(state.age, SpikeFlailItem.CHANNEL_TICKS) * fade, distScale);
             emission.tick(delta, env, 0.0f, 0.0f);
             return;
         }
         float orbitEnv = fade * 0.45f * distScale;
+        submitRing(state, poseStack, collector, fade, distScale);
         if (state.releaseAge < SpikeFlailSpinEntity.RELEASE_TICKS) {
             emission.crackBurstFired = false;
             float crackEnv = fade * (0.55f + 0.45f * state.charge) * distScale;
@@ -198,6 +206,55 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
                 0.32f, THEME_DUST, 0xFFF2CC, 0.92f, gEnv, gDist);
             ComplexGeometry.tendril(pose, buffer, gSeed ^ 0xA22CL, prevLocal, arcMid, ballLocal,
                 0.17f, 0xEDE8DA, 0xF5EFE0, 0.88f, gEnv, gDist);
+        });
+    }
+
+    /**
+     * Physical layer: at the spin's full-speed beat, iron spikes
+     * erupt from the ground at the spin's radius, the flail's name
+     * made literal. The rise rides the last eighth of the synced
+     * charge ramp, which is the final 4 ticks of the 32 tick channel:
+     * fast RISE, then HOLD while full speed lasts (charge pinned at
+     * 1), then retract over the first 4 release ticks as the spin
+     * lets go. A tapped channel that never reaches full speed never
+     * raises the spikes. The set is presentation on the spin's
+     * existing damaging life: spin radius, speed curve, parry, and
+     * damage are the entity's and are untouched. Iron is physical
+     * matter, so the set draws through submitSolidLit with the
+     * state's light coords, never on the emissive path. The eruption
+     * is composed as two overlapping calls, never one even ring:
+     * seven big spikes near full builder scale on the spin radius
+     * and a shorter cluster of three at 0.80 of it, different seed,
+     * so the grouping and heights land uneven like a real eruption.
+     * Ten spikes at 384 vertices each is 3840 at full distance
+     * scale, in its own submit beside the two tendrils.
+     */
+    private void submitRing(SpinState state, PoseStack poseStack, SubmitNodeCollector collector,
+                            float envelope, float distScale) {
+        float rise = FxEnvelope.smoothstep(Mth.clamp((state.charge - 0.875f) / 0.125f, 0.0f, 1.0f));
+        if (rise <= 0.01f || envelope <= 0.01f) {
+            return;
+        }
+        final float sink = state.releasing
+            ? FxEnvelope.smoothstep(Mth.clamp(state.releaseAge / 4.0f, 0.0f, 1.0f))
+            : 0.0f;
+        final float gRise = rise;
+        final float gEnv = envelope;
+        final float gDist = distScale;
+        final long gSeed = state.seed;
+        final float gRadius = state.radius;
+        final int gLight = state.lightCoords;
+        final double phase = (gSeed & 1023L) / 1023.0 * Math.PI * 2.0;
+        final Vec3 facing = new Vec3(Math.cos(phase), 0.0, Math.sin(phase));
+        ComplexGeometry.submitSolidLit(collector, poseStack, gLight, (pose, buffer) -> {
+            ComplexGeometry.spikeEruption(pose, buffer, gSeed ^ 0x9A11L,
+                Vec3.ZERO, facing, ComplexGeometry.SpikeLayout.RING, 7,
+                gRadius, 0.95f, gRise, sink,
+                0xFF17191D, 0xFF565E66, 1.0f, gEnv, gDist);
+            ComplexGeometry.spikeEruption(pose, buffer, gSeed ^ 0x9A12L,
+                Vec3.ZERO, facing, ComplexGeometry.SpikeLayout.RING, 3,
+                gRadius * 0.80f, 0.60f, gRise, sink,
+                0xFF17191D, 0xFF565E66, 1.0f, gEnv, gDist);
         });
     }
 
@@ -285,28 +342,35 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
             };
             MaterialEmitters.Source disc = random ->
                 MaterialEmitters.groundArea(frame.center, frame.radius * 0.95, frame.groundY + 0.12).sample(random);
+            // Attack upgrade pass: the six orbit-phase sprite layers
+            // below are trimmed by about a quarter in rate and cap
+            // (130 to 98, 58 to 44, 26 to 20, 48 to 36, 38 to 29,
+            // 15 to 11) to make room for the spike ring's read while
+            // the ring stands. The release-phase edge and settle
+            // layers further down are untouched: they play after the
+            // ring has retracted, so they never compete with it.
             this.orbitVapor = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(0xEDE8DA, 1.50f, seed ^ 0xA17, Vec3.ZERO, 0.035f),
-                ballPath, 130f, 190);
+                ballPath, 98f, 143);
             this.orbitSparks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.12f),
-                ballPath, 58f, 90);
+                ballPath, 44f, 68);
             // Complex particle layer: steel streak slivers along the
             // same sampled head path, inside the continuous cap.
             this.orbitStreaks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.12f),
-                ballPath, 26f, 34);
+                ballPath, 20f, 26);
             this.chainVapor = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(0xDAD4C6, 1.00f, seed ^ 0xC4A1, Vec3.ZERO, 0.025f),
-                chainPath, 48f, 80);
+                chainPath, 36f, 60);
             this.groundDust = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(THEME_DUST, 1.15f, seed ^ 0xD057, new Vec3(0.0, 0.015, 0.0), 0.050f),
-                groundBall, 38f, 65);
+                groundBall, 29f, 49);
             // Complex particle layer at the ground contact under the
             // ball: sparse streak slivers kicked off the surface.
             this.groundStreaks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.08f),
-                groundBall, 15f, 22);
+                groundBall, 11f, 17);
             this.edgeDust = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(THEME_DUST, 1.50f, seed ^ 0xE06E, Vec3.ZERO, 0.020f),
                 edge, 160f, 230);

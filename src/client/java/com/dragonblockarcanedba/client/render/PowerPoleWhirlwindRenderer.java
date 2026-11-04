@@ -22,8 +22,11 @@ import java.util.Map;
  * Entity Renderer for Power Pole Whirlwind in Minecraft 26.2.
  *
  * Complex pass: layered composition. The pieces layer is a
- * ComplexGeometry tendrilFan of five circling strands in the cone the
- * entity already defines: pale cyan at the root running to emerald at
+ * ComplexGeometry tendrilFan of circling strands in the cone the
+ * entity already defines: seven strands since the attack upgrade
+ * pass (five from the complex pass, plus two; the spin rate is
+ * untouched, so the strobing question stays a PC-test call), pale
+ * cyan at the root running to emerald at
  * the tips, matching the vapor theme, fanned at the cone angle along
  * the cone axis and rotated around that axis with age on a copy of
  * the submitted pose, so the strands circle with the spin the filler
@@ -152,14 +155,17 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         rig.frame.update(origin, forward, range, coneTan, swell, spin);
         rig.tick(delta, alphaMult * distScale);
 
-        // Pieces layer: five tendril strands fanned at the cone angle
-        // along the cone axis, length matched to the cone reach and
-        // scaled by the same swell the filler cone uses. Rotation is
-        // applied inside the piece on a copy of the submitted pose,
+        // Pieces layer: seven tendril strands fanned at the cone
+        // angle along the cone axis, length matched to the cone reach
+        // and scaled by the same swell the filler cone uses. Rotation
+        // is applied inside the piece on a copy of the submitted pose,
         // around the cone axis at the filler spin rate, so the strands
         // circle with the flow instead of hanging static in the cone.
-        // Five strands at full tendril sampling stay inside the
-        // class M vertex budget (about 1920 of 2500 at distScale 1).
+        // Seven strands at full tendril sampling are about 2688
+        // vertices at distScale 1, over the nominal class M figure of
+        // 2500 for this one submit and back inside it by distScale
+        // 0.93; the attack audit's strand count stands as specced,
+        // and the spin rate is deliberately untouched.
         final Vec3 gForward = forward;
         final float gLen = range * 0.92f * swell;
         final float gSpread = state.coneAngle;
@@ -175,7 +181,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
             local.mulPose(new org.joml.Matrix4f().rotate(gSpin,
                 (float) gForward.x, (float) gForward.y, (float) gForward.z));
             ComplexGeometry.tendrilFan(local.last(), buffer, gSeed ^ 0xF4A1L, Vec3.ZERO,
-                gForward, gSpread, gLen, 5, 0.34f,
+                gForward, gSpread, gLen, 7, 0.34f,
                 0xEFFFFF, 0x26FFA6, 0.92f, gEnv, gDist);
             local.popPose();
         });

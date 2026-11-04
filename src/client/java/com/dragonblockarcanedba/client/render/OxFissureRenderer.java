@@ -31,7 +31,13 @@ import java.util.Map;
  * dissolve shader, laid twice along the fissure line under the fissure
  * yaw so the glowing web runs the length of the trench as its core, and
  * fracturePlates through submitSolid as solid fractured ground at the
- * origin. The complex particle layer is SHARD_CHIP sprites sampled along
+ * origin. Attack upgrade: the fissure gains its flagship body, a rock
+ * wall built from two overlapping rockWall masses at uneven heights,
+ * lengths, and angles along the line, drawn lit through submitSolidLit
+ * so the ridge reads as a jagged rock massif heaving out of the trench,
+ * not a neat row of slabs. It rises over the opening ticks, holds 4
+ * ticks, then slams flat at tick 12 and leaves a full-length crackFan
+ * behind. The complex particle layer is SHARD_CHIP sprites sampled along
  * the crack line. The material filler stays as before: hot plasma glowing
  * in the crack, a white-hot core stream, ground dust, embers, and
  * occasional physical debris chunks of the actual ground block, all
@@ -89,6 +95,8 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
     private static final class Emission {
         final Frame frame = new Frame();
         MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        boolean wallDustFired = false;
+        boolean slamDustFired = false;
         float lastAge = -1f;
     }
 
@@ -184,6 +192,26 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+            // Wall accompaniment (attack upgrade): dust shed along the
+            // line while the rock wall heaves out, and a second dust
+            // burst the moment it slams flat at tick 12. One-shot bursts
+            // on the same crack line source the continuous layers use;
+            // the real thrown chunks are the entity's DebrisSpawner
+            // fields on the same two beats.
+            if (!emission.wallDustFired && state.ageInTicks >= 0.5f && state.ageInTicks <= 4.0f) {
+                emission.wallDustFired = true;
+                MaterialEmitters.burst(level,
+                        MaterialEmitters.Preset.dust(0xA0825F, 1.5f, (int) state.seed ^ 0xD058,
+                                new Vec3(0.0, 0.10, 0.0), 0.05f),
+                        crackLine(frame, 0.70f), 36);
+            }
+            if (!emission.slamDustFired && state.ageInTicks >= 12.0f && state.ageInTicks <= 16.0f) {
+                emission.slamDustFired = true;
+                MaterialEmitters.burst(level,
+                        MaterialEmitters.Preset.dust(0xA0825F, 1.6f, (int) state.seed ^ 0xD059,
+                                new Vec3(0.0, 0.08, 0.0), 0.06f),
+                        crackLine(frame, 0.90f), 30);
+            }
         }
 
         // Pieces layer, in the local ground frame rotated by the fissure
@@ -212,6 +240,58 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
                     ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4B0L,
                             1.35f, 0xFFD98A, 0xFF6A12, 0.95f, geoFade, geoDist));
             poseStack.popPose();
+
+            // The flagship wall (attack upgrade): the fissure's visual
+            // body. Two overlapping rockWall masses along the line, at
+            // uneven heights, lengths, arcs, and angles, so the ridge
+            // reads as a jagged rock massif heaving out of the ground,
+            // never a neat row of even slabs. Local +Z runs along the
+            // trench, so the wall facing points across it and each
+            // wall's line runs along the fissure path. Beats ride the
+            // fissure's own opening: the main mass rises over 7 ticks
+            // and the shoulder cluster over 8 (the builder's uniform
+            // drop makes taller slabs break the surface first, so each
+            // mass staggers slab by slab on its own), both HOLD to tick
+            // 12, then SLAM flat over 3 ticks. Physical rock, drawn
+            // lit: no glow on stone. The palette stays in the fissure
+            // plates' earth family but pulled grayer and darker than
+            // the plates themselves, because saturated warm browns
+            // read as toy rock at wall scale; real broken stone sits
+            // low-chroma with a dark buried base and a weathered top.
+            // The trench and its damage beat underneath are untouched
+            // and outlive the wall.
+            final float wallAge = state.ageInTicks;
+            final float wallRiseMain = FxEnvelope.smoothstep(Math.min(1.0f, wallAge / 7.0f));
+            final float wallRiseShoulder = FxEnvelope.smoothstep(Math.min(1.0f, wallAge / 8.0f));
+            final float wallSink = wallAge <= 12.0f ? 0.0f
+                    : FxEnvelope.smoothstep(Math.min(1.0f, (wallAge - 12.0f) / 3.0f));
+            final int wallLight = state.lightCoords;
+            poseStack.pushPose();
+            poseStack.translate(0.0, 0.0, -0.6);
+            ComplexGeometry.submitSolidLit(collector, poseStack, wallLight, (pose, buffer) ->
+                    ComplexGeometry.rockWall(pose, buffer, geoSeed ^ 0xA115L,
+                            Vec3.ZERO, new Vec3(1.0, 0.0, 0.0), 10.0f, 3.0f, 0.15f,
+                            wallRiseMain, wallSink,
+                            0x2B241E, 0x77644C, 0.95f, geoFade, geoDist));
+            poseStack.popPose();
+            poseStack.pushPose();
+            poseStack.translate(0.0, 0.0, 2.4);
+            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(5.0f)));
+            ComplexGeometry.submitSolidLit(collector, poseStack, wallLight, (pose, buffer) ->
+                    ComplexGeometry.rockWall(pose, buffer, geoSeed ^ 0xA116L,
+                            Vec3.ZERO, new Vec3(1.0, 0.0, 0.0), 6.0f, 2.2f, -0.12f,
+                            wallRiseShoulder, wallSink,
+                            0x262019, 0x685741, 0.95f, geoFade, geoDist));
+            poseStack.popPose();
+
+            // Slam web: when the wall slams flat at tick 12 it leaves a
+            // full-length crack fan along the line, which then lives
+            // under the fissure's normal fade like the trench's own web.
+            if (wallAge >= 12.0f) {
+                ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                        ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4B7L,
+                                5.2f, 0xFFD98A, 0xFF6A12, 0.95f, geoFade, geoDist));
+            }
             poseStack.popPose();
         }
 

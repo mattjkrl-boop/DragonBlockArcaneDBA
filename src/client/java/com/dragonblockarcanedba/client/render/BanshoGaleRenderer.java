@@ -19,8 +19,10 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Layered presentation for the Bansho Fan gale (class M). The pieces
- * layer is three ComplexGeometry tendrils laid along the fanPoint rib
- * curves (the center rib and the two ribs at side plus and minus 2.3),
+ * layer is five ComplexGeometry tendrils laid along the fanPoint rib
+ * curves (the center rib, the inner pair at side plus and minus 1.15,
+ * and the outer pair at side plus and minus 2.3; the inner pair is the
+ * attack upgrade pass filling the fan's body between center and edge),
  * so the fan has a torn strand body inside the spray, drawn through the
  * shader submit helper with the tendril canvas under the same yaw and
  * pitch rotation the emission frame uses. The complex particle layer is
@@ -161,17 +163,26 @@ public class BanshoGaleRenderer extends EntityRenderer<BanshoGaleEntity, BanshoG
             }
         }
 
-        // Pieces layer: three tendrils along the fanPoint rib curves in
+        // Pieces layer: five tendrils along the fanPoint rib curves in
         // the renderer's own local frame (x right, y up, z forward), the
         // same frame localPoint builds for the emission. The center rib
         // carries the body; the flanking ribs at side plus and minus 2.3
-        // give the fan its width. Vertex count at full distance scale:
-        // 3 tendrils times 24 samples times 16 vertices is 1152, inside
+        // give the fan its width; the inner pair at plus and minus 1.15
+        // (attack upgrade pass) fills the span between them so the fan
+        // reads as one torn sheet instead of three separate strands.
+        // Vertex count at full distance scale:
+        // 5 tendrils times 24 samples times 16 vertices is 1920, inside
         // the class M budget of 2500.
         if (envelope > 0.01f && distanceScale > 0.01f) {
             final Vec3 centerFrom = fanVec(state, 0.0f, 0.0f);
             final Vec3 centerControl = fanVec(state, 0.0f, 0.5f);
             final Vec3 centerTo = fanVec(state, 0.0f, 1.0f);
+            final Vec3 innerLeftFrom = fanVec(state, -1.15f, 0.0f);
+            final Vec3 innerLeftControl = fanVec(state, -1.15f, 0.5f);
+            final Vec3 innerLeftTo = fanVec(state, -1.15f, 1.0f);
+            final Vec3 innerRightFrom = fanVec(state, 1.15f, 0.0f);
+            final Vec3 innerRightControl = fanVec(state, 1.15f, 0.5f);
+            final Vec3 innerRightTo = fanVec(state, 1.15f, 1.0f);
             final Vec3 leftFrom = fanVec(state, -2.3f, 0.0f);
             final Vec3 leftControl = fanVec(state, -2.3f, 0.5f);
             final Vec3 leftTo = fanVec(state, -2.3f, 1.0f);
@@ -189,6 +200,12 @@ public class BanshoGaleRenderer extends EntityRenderer<BanshoGaleEntity, BanshoG
                 ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x6A11L,
                         centerFrom, centerControl, centerTo,
                         0.34f, 0xD8FFF2, 0x26FFA6, 0.95f, geoEnv, geoDs);
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x6A44L,
+                        innerLeftFrom, innerLeftControl, innerLeftTo,
+                        0.26f, 0x9FFFE0, 0x26FFA6, 0.92f, geoEnv, geoDs);
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x6A55L,
+                        innerRightFrom, innerRightControl, innerRightTo,
+                        0.26f, 0x9FFFE0, 0x26FFA6, 0.92f, geoEnv, geoDs);
                 ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x6A22L,
                         leftFrom, leftControl, leftTo,
                         0.20f, 0x26FFA6, 0x9FFFE0, 0.90f, geoEnv, geoDs);

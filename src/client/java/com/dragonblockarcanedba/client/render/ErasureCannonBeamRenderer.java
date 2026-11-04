@@ -27,8 +27,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * the synced beam path (a thick strand white-hot at the root grading
  * to the body cyan along its length, plus a thinner offset strand in
  * the cyan to deep blue body colors), a six strand tendrilFan of
- * impact lashes at the terminus, and a crackFan at the terminus when
- * the terminus rests on ground within a short probe below it. The
+ * impact lashes at the terminus, and two crackFans at the terminus
+ * when the terminus rests on ground within a short probe below it:
+ * the main web at full plume radius and a denser inner web at just
+ * over half radius (attack upgrade polish). The
  * complex particle layer is SPARK_STREAK sprites heavy at the
  * terminus. The no-shapes emission stays as filler only around those
  * pieces: dense ki plasma emitted along the real path, a bright core
@@ -174,9 +176,12 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         // Pieces layer, in entity local space (start and end relative
         // to the beam origin). Vertex budget at distScale 1.0: the main
         // core chain is at most four tendrils (1536), the secondary
-        // chain at most two (768), the terminus fan six (2304), and the
-        // crack fan at most about 900, for about 5508 of the 6000
-        // class L budget.
+        // chain at most two (768), the terminus fan six (2304), and
+        // each crack fan is its own submit at about 570 vertices by
+        // the emission loops (900 on the conservative count). The
+        // tendril submit is 4608 of the 6000 class L budget; with both
+        // crack webs the pieces total about 5750 counted, or about
+        // 6400 on the conservative crack count.
         final Vec3 startRel = start.subtract(state.origin);
         final Vec3 endRel = end.subtract(state.origin);
         final Vec3 fanDir = state.direction;
@@ -226,10 +231,15 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
                 0xFFFFFF, 0x00F2FF, 0.92f, geoEnv, distScale);
         });
 
-        // Crack fan at ground contact only: probe a short way below
-        // the terminus for the first non-air block and lay the fan on
-        // that surface. A beam ending in air or on a high wall draws
-        // no fan, so no crack web floats off the ground.
+        // Crack fans at ground contact only: probe a short way below
+        // the terminus for the first non-air block and lay the fans
+        // on that surface. A beam ending in air or on a high wall
+        // draws no fan, so no crack web floats off the ground. The
+        // impact carries two webs: the main fan at full plume radius
+        // and a second, denser inner fan at just over half radius on
+        // its own seed, so the impact point reads as branched and
+        // shattered instead of a single ring of cracks (attack
+        // upgrade polish: crackFan branches plus two, in effect).
         double groundTop = Double.NaN;
         for (double probe = 0.0; probe <= 1.25; probe += 0.25) {
             BlockPos pos = BlockPos.containing(end.x, end.y - probe, end.z);
@@ -245,6 +255,9 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
                 ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4ACL, crackRadius,
                     0xFFFFFF, 0x00EBFF, 0.90f, geoEnv, distScale));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4ADL, crackRadius * 0.55f,
+                    0xFFFFFF, 0x00EBFF, 0.75f, geoEnv, distScale));
             poseStack.popPose();
         }
 

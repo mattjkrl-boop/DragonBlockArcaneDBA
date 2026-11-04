@@ -26,10 +26,12 @@ import java.util.Map;
 /**
  * Entity Renderer for Ox King's Groundbreaker Charging in Minecraft 26.2.
  * Complex pass: a layered composition at class M. The pieces layer is a
- * tendrilFan through submitEnergy with the tendril canvas: three clusters
+ * tendrilFan through submitEnergy with the tendril canvas: four clusters
  * on the charge ring each fan two dust strands inward toward the brace
- * point, so the pull reads as torn filaments, not a glow. The complex
- * particle layer is SHARD_CHIP sprites on the same inward gathering path
+ * point, so the pull reads as torn filaments, not a glow (attack upgrade:
+ * a fourth cluster takes the fan from six strands to eight, and a chunky
+ * EMBER_FRAGMENT layer joins the soft embers above 25 percent charge).
+ * The complex particle layer is SHARD_CHIP sprites on the same inward gathering path
  * as the plasma, chips dragged in by the pressure. The material filler
  * stays as before: plasma motes drifting toward the brace point, ground
  * dust across the shatter radius, vapor, rising embers above 25 percent
@@ -91,6 +93,7 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
         MaterialEmitters.Emitter vapor;
         MaterialEmitters.Emitter dust;
         MaterialEmitters.Emitter ember;
+        MaterialEmitters.Emitter emberFragment;
         MaterialEmitters.Emitter chunks;
         MaterialEmitters.Emitter chips;
         float lastAge = -1f;
@@ -153,6 +156,17 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
         emission.ember = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.ember(new Vec3(0.0, 0.42, 0.0), 0.05f),
                 disc(frame, 0.70f, 0.05f, 0.05f), 55f, 90);
+        // Attack upgrade: a chunky EMBER_FRAGMENT layer riding the same
+        // rising path at the same rate as the soft ember layer, so the
+        // charge's ember presence doubles and half of it is solid
+        // fragments instead of soft sprites. (The audit names an
+        // EMBER_FRAGMENT layer to double; this renderer only had the
+        // soft EMBER layer, so the fragment layer is added at full
+        // parity. See the owner report.)
+        emission.emberFragment = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT,
+                        new Vec3(0.0, 0.42, 0.0), 0.05f),
+                disc(frame, 0.70f, 0.05f, 0.05f), 55f, 90);
         emission.chunks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, ground),
                         new Vec3(0.0, 0.24, 0.0), 0.08f),
@@ -202,13 +216,18 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
             // Rising heat tendrils only exist above 25 percent charge, as before.
             if (charge >= 0.25f) {
                 emission.ember.tick(delta, envelope);
+                emission.emberFragment.tick(delta, envelope);
             }
         }
 
-        // Pieces layer: inward tendril fan. Three clusters sit on the
+        // Pieces layer: inward tendril fan. Four clusters sit on the
         // charge ring and each fans two strands toward the brace point
-        // the filler emission already converges on. Six tendrils at the
-        // toolkit segment count stay inside the class M vertex budget.
+        // the filler emission already converges on. Eight tendrils at
+        // the toolkit segment count stay inside the class M vertex
+        // budget (attack upgrade: strands six to eight, delivered as a
+        // fourth cluster so every cluster keeps its two-strand fan;
+        // cluster heights compress from a 0.26 step to a 0.20 step to
+        // hold the same vertical band).
         float geoEnv = fadeIn * (0.25f + 0.75f * chargeEase);
         if (geoEnv > 0.02f) {
             final long geoSeed = state.seed;
@@ -221,10 +240,10 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
             ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
                 ComplexGeometry.Rng rng = new ComplexGeometry.Rng(geoSeed ^ 0x7C4A21L);
                 Vec3 core = new Vec3(0.0, coreY, 0.0);
-                for (int cluster = 0; cluster < 3; cluster++) {
-                    double ang = rot + cluster * (Math.PI * 2.0 / 3.0) + rng.nextFloat() * 0.6;
+                for (int cluster = 0; cluster < 4; cluster++) {
+                    double ang = rot + cluster * (Math.PI * 2.0 / 4.0) + rng.nextFloat() * 0.6;
                     double r = ringR * (0.88 + rng.nextFloat() * 0.22);
-                    Vec3 origin = new Vec3(Math.cos(ang) * r, 0.20 + cluster * 0.26, Math.sin(ang) * r);
+                    Vec3 origin = new Vec3(Math.cos(ang) * r, 0.20 + cluster * 0.20, Math.sin(ang) * r);
                     Vec3 dir = core.subtract(origin).normalize();
                     double len = origin.distanceTo(core) * 1.05;
                     ComplexGeometry.tendrilFan(pose, buffer, geoSeed + cluster * 104729L,

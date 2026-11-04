@@ -6,6 +6,7 @@ import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.GrandCrescentWaveEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -21,14 +22,34 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Grand Crescent Wave in Minecraft 26.2.
- * Complex effects redo: layered composition. The wave body is a thick
- * torn tendril bent along the crescent arc (submitEnergy on the tendril
- * canvas), with a thinner echo tendril trailing below it. SPARK_STREAK
- * sprites shed at the rim form the complex sprite layer. The existing
- * material emission stays as filler: valor plasma sampled across the
- * real travel volume, pale vapor trailing behind, steel sparks inside
- * the front, and a brighter plasma surge during the opening strike
- * window. Its life, hit fade, damage, and travel behavior are unchanged.
+ * Attack upgrade pass: the wave has a physical body now. A low arc of
+ * six steel-and-stone rockWall slabs (submitSolidLit, world lit) rides
+ * the leading edge as a pushing front, bowed on the same arc as the
+ * energy skin (negative rockWall arc: the builder's positive arc swings
+ * the slab ends toward facing, so the convex crescent bow, center
+ * ahead, is the negative value, with the wall origin pushed forward to
+ * the skin's bow apex). Two thin gold seams cross the slab faces as
+ * separate submitEnergy tendrils (the only energy on the front; the
+ * slab bodies stay lit). An escort of six valor shards (shardBurst,
+ * submitSolidLit) orbits the front, and a flameTongues row burns along
+ * the front's top edge. The two complex-redo tendrils stay as the
+ * wave's energy skin over the wall. SPARK_STREAK sprites shed at the
+ * rim and SHARD_CHIP and dust shed off the wall face form the sprite
+ * layers. The existing material emission stays as filler: valor plasma
+ * sampled across the real travel volume, pale vapor trailing behind,
+ * steel sparks inside the front, and a brighter plasma surge during
+ * the opening strike window. Piece budget at distance scale 1.0 is now
+ * class L (about 4100 vertices: skin tendrils 770, wall 432, seams
+ * 440, escort shards 1728, flame row 720), up from class M. Per
+ * Carter's steering the front favors fewer, bigger, uneven pieces:
+ * the wall runs at the builder's minimum slab count for the span (six
+ * big slabs with their seeded height, tilt, and lean variance), the
+ * escort is six large shards on clustered, unevenly spaced orbit
+ * anchors, the flame row's stations jitter in angle and height, and
+ * the upper gold seam is a short offset inset, not a second even
+ * band. The wall rises on the wave's existing open factor and sinks
+ * on the existing hit beat; its life, hit fade, damage, and travel
+ * behavior are unchanged.
  */
 public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveEntity, GrandCrescentWaveRenderer.GrandCrescentWaveRenderState> {
 
@@ -113,6 +134,7 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
             final Vec3 up = right.cross(forward).normalize();
 
             MaterialEmitters.Source frontSource = random -> sampleFront(random, center, right, up, forward, span, chord, 0.0);
+            MaterialEmitters.Source wallSource = random -> sampleFront(random, center, right, up, forward, span, chord, 0.35);
             MaterialEmitters.Source trailSource = random -> sampleFront(random, center, right, up, forward, span, chord, -1.05);
             String base = state.entityId + ":";
             int seed = (int) state.seed;
@@ -140,6 +162,17 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, forward.scale(0.05), 0.10f),
                 frontSource, 30f, 40, state.ageInTicks, fade * distScale * 0.90f);
 
+            // The pushing front sheds as it travels: shard chips and
+            // stone dust off the wall face (sampled at the wall's depth,
+            // ahead of the wave center).
+            emit(level, base + "wallchip",
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, forward.scale(-0.04), 0.12f),
+                wallSource, 85f, 120, state.ageInTicks, fade * distScale * 0.85f);
+            emit(level, base + "walldust",
+                MaterialEmitters.Preset.dust(0x8A7D68, 1.30f, seed ^ 0xD057,
+                    forward.scale(-0.025), 0.09f),
+                wallSource, 65f, 100, state.ageInTicks, fade * distScale * 0.80f);
+
             // Pieces layer: the crescent body itself. One thick tendril
             // whose spine runs tip to tip across the span, bowed forward
             // and up through its control point, plus a thinner echo
@@ -150,6 +183,12 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
             final float arcChord = chord;
             final float waveFade = fade;
             final float waveFpScale = fpScale;
+            // The pushing wall sinks on the existing hit beat, in step
+            // with the hit fade computed above.
+            final float wallSink = state.hitTick >= 0
+                ? smooth(Math.min(1.0f,
+                    (state.ageInTicks - state.hitTick) / (float) GrandCrescentWaveEntity.DISSIPATE_TICKS))
+                : 0.0f;
             ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
                 ComplexGeometry.tendril(pose, buffer, state.seed ^ 0xA2CL,
                     right.scale(-arcSpan * 0.52).add(up.scale(-arcChord * 0.28)),
@@ -162,9 +201,124 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
                     forward.scale(0.45).add(up.scale(arcChord * 0.05)),
                     right.scale(arcSpan * 0.44).add(up.scale(-arcChord * 0.52)).add(forward.scale(-0.42)),
                     0.30f * waveFpScale, 0xFFD833, 0xFFE9A8, 0.88f, waveFade, distScale));
+
+            // Pushing front: a low rockWall arc of steel-and-stone slabs
+            // riding the leading edge. The skin's spine bows 0.475 ahead
+            // of its chord (bezier control at forward 0.95), so the wall
+            // origin sits at that apex and the wall arc is negative
+            // (builder positive arc swings the ends toward facing; the
+            // crescent wants its center ahead). Length is the wave span
+            // (six slabs at full span), height is low against the chord.
+            // The wall rises on the wave's open factor and sinks on the
+            // hit beat; the slabs lean on their seeded builder lean.
+            // Physical bodies: submitSolidLit only.
+            final Vec3 wallOrigin = forward.scale(0.475).add(up.scale(-0.20f * arcChord));
+            ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) ->
+                ComplexGeometry.rockWall(pose, buffer, state.seed ^ 0x9A11L,
+                    wallOrigin, forward, arcSpan, 0.55f * arcChord, -0.8f,
+                    open, wallSink,
+                    0x3F3A33, 0x8B939C, 0.97f, waveFade, distScale));
+
+            // Gold insets: thin seams across the slab faces, the only
+            // energy on the front, drawn as separate submitEnergy
+            // tendrils floating just proud of the proudest slab faces
+            // (builder face offset plus bulge tops out at 0.21). One
+            // seam runs the arc at mid height; the second is a short,
+            // offset chunk higher up, so the insets read as set into
+            // the stone, not as even bands.
+            final float arcR = arcSpan / 0.8f;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                goldSeam(pose, buffer, state.seed ^ 0x5EAAL,
+                    right, up, forward, arcR, -0.34f, 0.34f, 0.05f, 0.24f, 0.06f, 0.90f, waveFade, distScale * 0.55f);
+                goldSeam(pose, buffer, state.seed ^ 0x5EABL,
+                    right, up, forward, arcR, -0.17f, 0.27f, 0.33f * waveFpScale, 0.24f, 0.045f, 0.70f, waveFade, distScale * 0.55f);
+            });
+
+            // Escort: six large valor shards orbiting the front on an
+            // ellipse in the plane of the wave, each leaning into the
+            // travel direction. The anchors are clustered, not evenly
+            // spaced (two close pairs and two singles), so the escort
+            // reads as a heaving cluster, not a parade ring. A single
+            // shardBurst is a cone from one origin and cannot orbit,
+            // so the escort is six single-shard shardBurst calls at
+            // orbiting anchors (same builder, same shard meshes,
+            // per-shard seeds keep each silhouette stable while its
+            // anchor travels).
+            final float orbitAng = state.ageInTicks * 0.21f;
+            final double[] orbitOffsets = {0.0, 0.75, 2.35, 3.05, 4.35, 5.45};
+            final Vec3 orbitCenter = forward.scale(0.35).add(up.scale(-0.02f * arcChord));
+            final float orbitRx = arcSpan * 0.34f;
+            final float orbitRy = arcChord * 0.50f;
+            final float escortEnv = waveFade * (0.35f + 0.65f * open);
+            if (escortEnv > 0.01f) {
+                ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords, (pose, buffer) -> {
+                    for (int i = 0; i < orbitOffsets.length; i++) {
+                        double a = orbitAng + orbitOffsets[i];
+                        Vec3 anchor = orbitCenter
+                            .add(right.scale(Math.cos(a) * orbitRx))
+                            .add(up.scale(Math.sin(a) * orbitRy));
+                        Vec3 tangent = right.scale(-Math.sin(a) * orbitRx)
+                            .add(up.scale(Math.cos(a) * orbitRy));
+                        Vec3 dirI = tangent.add(forward.scale(0.55 * Math.max(orbitRx, orbitRy))).normalize();
+                        ComplexGeometry.shardBurst(pose, buffer, state.seed ^ (0xE5C0L + i * 131L),
+                            anchor, dirI, 18.0f, 1.15f * waveFpScale, 1,
+                            0x767F8C, 0xFFD833, 0.95f, escortEnv, distScale);
+                    }
+                });
+            }
+
+            // Flame row along the front's top edge: five small tongue
+            // clusters stationed on the wall arc at its top lip,
+            // burning in the wave's valor gold. Station angles and
+            // heights jitter per station so the burning lip is jagged,
+            // not a uniform row.
+            final float flameSway = state.ageInTicks * 0.55f;
+            final float[] flameAngs = {-0.33f, -0.15f, 0.02f, 0.17f, 0.33f};
+            final float[] flameHeights = {0.66f, 0.46f, 0.74f, 0.52f, 0.60f};
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) -> {
+                for (int i = 0; i < flameAngs.length; i++) {
+                    Vec3 baseP = arcPoint(right, forward, arcR, flameAngs[i])
+                        .add(up.scale(0.30f * arcChord))
+                        .add(forward.scale(0.10f));
+                    ComplexGeometry.flameTongues(pose, buffer, state.seed ^ (0xF1A9L + i * 131L),
+                        baseP, 0.32f * waveFpScale, flameHeights[i] * waveFpScale, 3,
+                        0xFFF3B0, 0xFFD833, 0.90f, waveFade, flameSway + i * 1.93f, distScale);
+                }
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /**
+     * A point on the pushing wall's arc at the given arc angle: the
+     * wall circle has radius bigR (span over arc), its center slab sits
+     * at the skin's bow apex (forward 0.475), and the ends fall back by
+     * bigR times (1 minus cos), matching the rockWall placement math
+     * for the negative arc used in submit.
+     */
+    private static Vec3 arcPoint(Vec3 right, Vec3 forward, float bigR, float ang) {
+        return right.scale(bigR * Math.sin(ang))
+            .add(forward.scale(0.475f - bigR * (1.0 - Math.cos(ang))));
+    }
+
+    /**
+     * One thin gold seam tendril across the slab faces: a shallow arc
+     * following the wall circle between the given arc angles, at the
+     * given height above the wave center, floated fwdOff ahead of the
+     * slab center plane so it reads as an inset energy line on the
+     * stone. The control point sits at the span's midpoint angle.
+     */
+    private static int goldSeam(PoseStack.Pose pose, VertexConsumer buffer, long seed,
+                                Vec3 right, Vec3 up, Vec3 forward, float bigR,
+                                float angFrom, float angTo,
+                                float upOff, float fwdOff, float width,
+                                float alpha, float envelope, float distScale) {
+        Vec3 from = arcPoint(right, forward, bigR, angFrom).add(up.scale(upOff)).add(forward.scale(fwdOff));
+        Vec3 control = arcPoint(right, forward, bigR, (angFrom + angTo) * 0.5f).add(up.scale(upOff + 0.02f)).add(forward.scale(fwdOff));
+        Vec3 to = arcPoint(right, forward, bigR, angTo).add(up.scale(upOff)).add(forward.scale(fwdOff));
+        return ComplexGeometry.tendril(pose, buffer, seed, from, control, to, width,
+            0xFFD833, 0xFFF3B0, alpha, envelope, distScale);
     }
 
     private static MaterialEmitters.Sample sampleFront(RandomSource random, Vec3 center, Vec3 right,

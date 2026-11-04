@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.CurseGroundShatterEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -21,8 +22,12 @@ import java.util.Random;
 /**
  * Curse Ground Shatter as a layered composition. The pieces layer is a
  * crackFan of curse energy wandering across the ground plus a fan of
- * fracturePlates: real lifted slabs with thickness, tilted corners, and
- * seeded gaps, lit hot crimson at the center and dark at the rim. The
+ * fracturePlates pushed out toward the rim: real lifted slabs with
+ * thickness, tilted corners, and seeded gaps, lit hot crimson at the
+ * center and dark at the rim. Through the disc the plates vacate, a
+ * cluster of large obsidian spikes bursts up on the hit beat (fast
+ * four tick rise, no hold, crack-and-fade settle), drawn lit as
+ * physical stone. The
  * complex particle layer is shard chips thrown along the fissure paths.
  * The material emission stays as filler: seeded jagged paths across the
  * ground carry crimson and pale curse plasma, darkness smoke vents from
@@ -98,8 +103,40 @@ public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatte
         ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
             ComplexGeometry.crackFan(pose, buffer, pieceSeed ^ 0xC4AC2L, radius * 1.02f,
                 0xFFF2F7, 0xF20D33, 0.95f, pieceFade, pieceDs));
+
+        // Attack upgrade: a cluster of obsidian spikes bursts up
+        // through the disc on the hit beat. Few and big on purpose:
+        // eight spikes at 1.25 times the builder's size classes,
+        // scattered over a tight inner disc so they bunch and lean
+        // like a real eruption instead of ringing the shatter evenly.
+        // The palette is real black glass, not purple crystal: near
+        // black at the root, only a faint violet sheen toward the
+        // point, so the lit facets do the reading. Fast rise over
+        // four ticks, no hold, then a crack-and-fade settle: the
+        // spikes sink back over the next eight ticks while their
+        // envelope falls, gone by about tick thirteen while the rim
+        // plates and cracks carry the rest of the life. Obsidian is
+        // physical matter, so the spike bodies draw lit through
+        // submitSolidLit with the render state's own light, never on
+        // the emissive path.
+        final float spikeRise = FxEnvelope.smoothstep(Math.min(1.0f, age / 4.0f));
+        final float spikeSink = age <= 4.0f ? 0.0f
+            : FxEnvelope.smoothstep(Math.min(1.0f, (age - 4.0f) / 8.0f));
+        final float spikeSettle = 1.0f - FxEnvelope.smoothstep(
+            Math.min(1.0f, Math.max(0.0f, age - 4.0f) / 9.0f));
+        final float spikeEnv = pieceFade * spikeSettle;
+        final int spikeLight = state.lightCoords;
+        ComplexGeometry.submitSolidLit(collector, poseStack, spikeLight, (pose, buffer) ->
+            ComplexGeometry.spikeEruption(pose, buffer, pieceSeed ^ 0x5917EL, Vec3.ZERO,
+                new Vec3(1, 0, 0), ComplexGeometry.SpikeLayout.SCATTER, 8, radius * 0.80f,
+                1.25f, spikeRise, spikeSink,
+                0xFF070409, 0xFF241832, 0.95f, spikeEnv, pieceDs));
+
+        // The plates are pushed to the rim: the same fan drawn at 1.2
+        // times the radius, so the plate bodies sit in the outer band
+        // and the spikes own the disc they erupt through.
         ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
-            ComplexGeometry.fracturePlates(pose, buffer, pieceSeed ^ 0xF9A72L, radius, 0.38f,
+            ComplexGeometry.fracturePlates(pose, buffer, pieceSeed ^ 0xF9A72L, radius * 1.2f, 0.38f,
                 0xB3122E, 0x241419, 0.95f, pieceFade, pieceDs));
 
         // The fissures: seeded jagged ground paths carrying curse plasma,

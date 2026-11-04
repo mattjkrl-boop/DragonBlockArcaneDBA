@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.SpikePlacement;
 import com.dragonblockarcanedba.util.TimeTracker;
 import com.dragonblockarcanedba.util.VortexPhysics;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -211,6 +212,16 @@ public class TemporalRiftEntity extends Projectile {
                         tracker.dba$startReversing(REVERSAL_TICKS);
                     }
                 }
+
+                // Attack upgrade pass: the temporal glass spike ring the
+                // renderer raises at the rim collapses on this same beat.
+                // The drawn spikes sink away over the next 4 ticks while
+                // these real fragments take over the read: one burst per
+                // spike position over the renderer's two uneven rings,
+                // reusing the tear heart burst's palette, slowed gravity,
+                // life, and rest. Presentation only, no damage.
+                dropSpikeRing(serverLevel, owner, center, radius, 5, 0.82f, 1.0f, 0x7E51L);
+                dropSpikeRing(serverLevel, owner, center, radius, 3, 0.97f, 0.7f, 0x7E67L);
             }
 
             // Point 5: dissipation drizzle of motes falling as the field dies.
@@ -224,6 +235,37 @@ public class TemporalRiftEntity extends Projectile {
             if (this.lifetime <= 0) {
                 this.discard();
             }
+        }
+    }
+
+    /**
+     * Drops one ring of the renderer's temporal glass spikes as real
+     * FragmentEntity bursts, one burst per spike position: each fragment
+     * spawns at spike mid height, tips outward, and falls under the
+     * field's slowed gravity (0.3, the tear heart burst's rule), landing
+     * and resting like every other fragment in the pass. Positions are
+     * EXACT (attack upgrade merge): seedSalt is the renderer's own
+     * spikeEruption seed salt for this ring, and the angle and radius
+     * fraction of every spike come from the shared SpikePlacement
+     * helper the client builder also uses, so each fragment drops from
+     * the base of the spike the player was looking at. The one known
+     * remainder: a client at reduced distance detail draws the ring
+     * regrouped around fewer spikes, while the drop always uses the
+     * full count's positions.
+     */
+    private void dropSpikeRing(ServerLevel level, Entity owner, Vec3 center, float fieldRadius,
+                               int count, float radiusFrac, float unit, long seedSalt) {
+        double rim = fieldRadius * radiusFrac;
+        long ringSeed = this.getSeed() ^ seedSalt;
+        for (int i = 0; i < count; i++) {
+            float ang = SpikePlacement.ringAngle(ringSeed, i, count);
+            double rimHere = rim * SpikePlacement.ringRadiusFrac(ringSeed, i, count);
+            Vec3 radial = new Vec3(Math.cos(ang), 0.0, Math.sin(ang));
+            Vec3 pos = center.add(radial.scale(rimHere)).add(0.0, 0.85, 0.0);
+            Vec3 axis = radial.scale(0.55).add(0.0, -0.45, 0.0);
+            FragmentEntity.burst(level, owner, pos, axis, 38f, unit, 1,
+                (this.getSeed() ^ seedSalt) + i * 131L,
+                0x2F6DB3, 0xDDF7FF, 0.06f, 0.18f, 0.3f, 110, 10);
         }
     }
 }

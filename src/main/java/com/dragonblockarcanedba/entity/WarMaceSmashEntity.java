@@ -59,6 +59,18 @@ public class WarMaceSmashEntity extends Projectile {
     private boolean following = true;
     /** The ground burst, scar, and debris fire exactly once, at the impact moment. */
     private boolean impacted;
+    /**
+     * The rim wall's slam-end debris burst, armed by a grounded impact.
+     * The renderer raises a rock wall around the crater rim on this
+     * entity's own age and slams it down at age life * 0.55 + 3 ticks;
+     * when it lands it breaks into real chunks, which only the server
+     * can spawn. Presentation only: no damage, no crater change.
+     */
+    private boolean wallBurstPending;
+    private int wallBurstTick;
+    private double wallBurstX;
+    private double wallBurstY;
+    private double wallBurstZ;
 
     public WarMaceSmashEntity(EntityType<? extends Projectile> type, Level level) {
         super(type, level);
@@ -171,6 +183,17 @@ public class WarMaceSmashEntity extends Projectile {
             }
         }
 
+        // The rim wall's slam lands: a burst of 12 real ground chunks
+        // where the wall stood. Fires once, after the impact block so a
+        // final-tick impact still gets its burst on the same tick.
+        if (this.wallBurstPending && this.tickCount >= this.wallBurstTick) {
+            this.wallBurstPending = false;
+            Entity burstOwner = this.getOwner();
+            DebrisSpawner.spawnField(server, burstOwner instanceof LivingEntity living ? living : null,
+                new Vec3(this.wallBurstX, this.wallBurstY + 0.25, this.wallBurstZ),
+                12, heavy ? 4.2 : 3.4, 1.8, 22);
+        }
+
         float radius = this.radiusAt(this.tickCount);
         float previous = this.radiusAt(this.tickCount - 1);
         AABB box = new AABB(
@@ -246,6 +269,14 @@ public class WarMaceSmashEntity extends Projectile {
         if (!grounded) {
             return;
         }
+        // Arm the rim wall's slam-end burst on the renderer's wall
+        // beat: the wall holds through age life * 0.55 and slams over
+        // the next 3 ticks, so the chunks land at that age.
+        this.wallBurstPending = true;
+        this.wallBurstTick = (int) Math.ceil(this.life() * 0.55 + 3.0);
+        this.wallBurstX = x;
+        this.wallBurstY = y;
+        this.wallBurstZ = z;
         if (heavy) {
             DbaImpactFx.shake(server, x, y, z, 2.4f, 14, 3);
         }

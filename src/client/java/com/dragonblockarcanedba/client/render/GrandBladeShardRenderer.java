@@ -21,11 +21,14 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Grand Blade Shard in Minecraft 26.2.
- * Complex effects redo: layered composition. The shard body is an
+ * Attack upgrade pass (complex redo base kept): layered composition.
+ * The shard body is an
  * irregular ComplexGeometry shard mesh in a steel gradient (submitSolidLit:
  * the shard is physical steel, so the world lights it, not the effect),
- * with a torn tendril wake behind it in flight (submitEnergy, tendril
- * canvas). Around the pieces, the existing material emission stays as
+ * with two braided torn tendril wakes behind it in flight (submitEnergy,
+ * tendril canvas; the redo's single wake strand doubled, the second
+ * strand slimmer, counter-swayed, and paler). Around the pieces, the
+ * existing material emission stays as
  * filler: valor plasma, steel sparks, and stone dust along the flight
  * path, and ground dust, rising plasma, and vapor for the embedded
  * hazard. The complex sprite layer adds SPARK_STREAK and SHARD_CHIP shed
@@ -190,6 +193,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                     Vec3 side = dir.cross(new Vec3(0.0, 1.0, 0.0));
                     side = side.lengthSqr() < 1.0e-6 ? new Vec3(1.0, 0.0, 0.0) : side.normalize();
                     double sway = Math.sin(state.ageInTicks * 0.55f) * 0.16;
+                    final Vec3 braidSide = side;
                     Vec3 wakeFrom = dir.scale(-0.80);
                     Vec3 wakeControl = dir.scale(-1.55).add(side.scale(0.28 + sway));
                     Vec3 wakeTo = dir.scale(-2.35).add(side.scale(-0.18 + sway * 0.5));
@@ -201,6 +205,15 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                         ComplexGeometry.tendril(pose, buffer, state.seed ^ 0x7EAD1L,
                             wakeFrom, wakeControl, wakeTo, 0.34f,
                             0xFFD833, 0xFFF3B0, 0.90f, flightLife, distScale));
+                    // Second wake strand: slimmer and counter-swayed, so
+                    // the two strands braid around the flight line instead
+                    // of reading as one ribbon with an echo.
+                    ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                        ComplexGeometry.tendril(pose, buffer, state.seed ^ 0x7EAD2L,
+                            wakeFrom.add(braidSide.scale(0.16)),
+                            dir.scale(-1.50).add(braidSide.scale(-0.30 - sway)),
+                            dir.scale(-2.25).add(braidSide.scale(0.20 - sway * 0.5)), 0.19f,
+                            0xFFD833, 0xFFE9A8, 0.80f, flightLife, distScale * 0.7f));
                 }
             }
         }

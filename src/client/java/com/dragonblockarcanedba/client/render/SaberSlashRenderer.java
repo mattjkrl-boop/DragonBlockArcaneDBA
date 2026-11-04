@@ -31,6 +31,13 @@ import java.util.Map;
  * plasma, spatial glass dust, and darkness vapor emission stays as the
  * filler layer only. Pose timing, colors, scale, and the strike window
  * are unchanged.</p>
+ *
+ * <p>Attack upgrade pass: a second tendril pair crosses the first
+ * diagonally so the cut reads woven, and the slash gains a solid edge
+ * of thin pale steel blade slivers (authored shard calls through the
+ * world-lit solid path, physical steel) riding the arc plane inside
+ * the strike window. Terrain-free as always: no ground pieces, no
+ * debris.</p>
  */
 public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSlashRenderer.SaberSlashRenderState> {
 
@@ -140,12 +147,15 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
                 MaterialEmitters.point(center), Math.max(3, Math.round(11 * ds)));
         }
 
-        // Pieces layer: three torn tendril strands along the slash arc.
-        // Local space matches the emission sampling exactly: x spans the
+        // Pieces layer: torn tendril strands along the slash arc. Local
+        // space matches the emission sampling exactly: x spans the
         // slash, z bulges to chord at the middle, and the same synced
-        // rotation is applied to the pose. Vertices: three tendrils at
-        // at most 24 samples each stay near 1150, inside the class M
-        // budget of 2500.
+        // rotation is applied to the pose. The first three strands run
+        // the arc as before; the attack upgrade adds a second pair that
+        // starts high and ends low (and its mirror), crossing the first
+        // set at a seeded offset so the cut reads woven. Vertices: five
+        // tendrils at at most 24 samples each stay near 1920 in the
+        // energy submit, inside the class M budget of 2500 per submit.
         float pieceEnv = open * fade;
         if (pieceEnv > 0.02f && ds > 0.05f) {
             float span = emission.span;
@@ -173,7 +183,46 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
                         new Vec3(0, -0.07f * sc, chord * 1.90f),
                         new Vec3(span * 0.46f, -0.07f * sc, 0.05f * sc),
                         0.18f * sc, 0x4DD8FF, 0xBFEFFF, 0.90f, pieceEnv, ds);
+                    ComplexGeometry.tendril(pose, buffer, seed ^ 0x7E44L,
+                        new Vec3(-span * 0.47f, 0.11f * sc, 0.03f * sc),
+                        new Vec3(0, 0, chord * 1.66f),
+                        new Vec3(span * 0.47f, -0.11f * sc, 0.03f * sc),
+                        0.15f * sc, 0xBFEFFF, 0x4DD8FF, 0.90f, pieceEnv, ds);
+                    ComplexGeometry.tendril(pose, buffer, seed ^ 0x7E55L,
+                        new Vec3(-span * 0.47f, -0.11f * sc, 0.03f * sc),
+                        new Vec3(0, 0, chord * 1.74f),
+                        new Vec3(span * 0.47f, 0.11f * sc, 0.03f * sc),
+                        0.13f * sc, 0x4DD8FF, 0xFFFFFF, 0.90f, pieceEnv, ds);
                 });
+            // Solid edge: five thin pale steel blade slivers ride the
+            // arc inside the strike window, drawn lit because steel is
+            // physical matter. They are authored shard calls, not a
+            // shardBurst: the burst rolls girths at 0.30 to 0.44 of
+            // length in mixed chunk classes, which reads as pebbles,
+            // while a blade edge wants a 0.15 girth ratio and a
+            // direction tangent to the arc, longest at the arc middle
+            // where the cut is deepest. Five shards at 288 vertices is
+            // 1440 in their own submit, inside the class M budget.
+            float swing = strike(progress);
+            if (swing > 0.02f) {
+                float shardEnv = pieceEnv * swing;
+                ComplexGeometry.submitSolidLit(collector, poseStack, state.lightCoords,
+                    (pose, buffer) -> {
+                        ComplexGeometry.Rng rng = new ComplexGeometry.Rng(seed ^ 0xB1ADEL);
+                        for (int i = 0; i < 5; i++) {
+                            float u = -0.8f + i * 0.4f;
+                            Vec3 pos = new Vec3(u * span * 0.46f,
+                                rng.signed() * 0.05f * sc,
+                                chord * (1.0f - u * u) * 0.92f);
+                            Vec3 tangent = new Vec3(span * 0.46f, 0,
+                                -2.0 * u * chord * 0.92f).normalize();
+                            float len = (0.42f + 0.22f * (1.0f - Math.abs(u))) * sc;
+                            ComplexGeometry.shard(pose, buffer, seed + i * 0x9E37L,
+                                pos, tangent, len, len * 0.15f,
+                                0x8A93A6, 0xF2F7FF, 0.95f, shardEnv);
+                        }
+                    });
+            }
             poseStack.popPose();
         }
 
