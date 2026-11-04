@@ -62,6 +62,15 @@ public class DbaSounds {
     // souls -> SOUL_DRIFT; void ambience -> VOID_AMBIENT; block and parry ->
     // SHIELD_CLANK; weapon hits -> HIT_FLESH / HIT_METAL / THUNK; break -> ITEM_SHATTER;
     // fizzle and fail -> FIZZLE; holy booms -> BOOM_HOLY; beams -> BEAM_CHARGE / BEAM_FIRE.
+    // Scope 2 additions (audits/bespoke-scope2-audit.md): UI_BUTTON_CLICK -> UI_CLICK;
+    // ENDER_DRAGON_GROWL -> DRAGON_GROWL; ENDER_DRAGON_FLAP -> DRAGON_FLAP;
+    // UI_TOAST_CHALLENGE_COMPLETE -> WISH_GRANTED; mob voices: soldier PILLAGER_* ->
+    // SOLDIER_AMBIENT / SOLDIER_HURT / SOLDIER_DEATH; warrior VINDICATOR_* ->
+    // WARRIOR_AMBIENT / WARRIOR_HURT / WARRIOR_DEATH; robot IRON_GOLEM_* ->
+    // ROBOT_AMBIENT / ROBOT_HURT / ROBOT_DEATH; saibaman SLIME_* -> SAIBAMAN_AMBIENT /
+    // SAIBAMAN_HURT / SAIBAMAN_DEATH; NOTE_BLOCK_BASS and NOTE_BLOCK_BIT -> RADAR_BLIP;
+    // PLAYER_LEVELUP -> LEVEL_UP; ARMOR_EQUIP_IRON and ARMOR_EQUIP_LEATHER -> EQUIP;
+    // IRON_GOLEM_REPAIR -> REPAIR.
     public static final SoundEvent SWING_LIGHT = sfx("swing_light");
     public static final SoundEvent SWING_HEAVY = sfx("swing_heavy");
     public static final SoundEvent SWING_FAN = sfx("swing_fan");
@@ -107,6 +116,28 @@ public class DbaSounds {
     public static final SoundEvent FIZZLE = sfx("fizzle");
     public static final SoundEvent THUNK = sfx("thunk");
     public static final SoundEvent HEARTBEAT_DARK = sfx("heartbeat_dark");
+
+    // Scope 2 bank: UI, progression, dragons, the wish, and mob voices (D2).
+    public static final SoundEvent UI_CLICK = sfx("ui_click");
+    public static final SoundEvent RADAR_BLIP = sfx("radar_blip");
+    public static final SoundEvent LEVEL_UP = sfx("level_up");
+    public static final SoundEvent EQUIP = sfx("equip");
+    public static final SoundEvent REPAIR = sfx("repair");
+    public static final SoundEvent DRAGON_GROWL = sfx("dragon_growl");
+    public static final SoundEvent DRAGON_FLAP = sfx("dragon_flap");
+    public static final SoundEvent WISH_GRANTED = sfx("wish_granted");
+    public static final SoundEvent SOLDIER_AMBIENT = sfx("soldier_ambient");
+    public static final SoundEvent SOLDIER_HURT = sfx("soldier_hurt");
+    public static final SoundEvent SOLDIER_DEATH = sfx("soldier_death");
+    public static final SoundEvent WARRIOR_AMBIENT = sfx("warrior_ambient");
+    public static final SoundEvent WARRIOR_HURT = sfx("warrior_hurt");
+    public static final SoundEvent WARRIOR_DEATH = sfx("warrior_death");
+    public static final SoundEvent ROBOT_AMBIENT = sfx("robot_ambient");
+    public static final SoundEvent ROBOT_HURT = sfx("robot_hurt");
+    public static final SoundEvent ROBOT_DEATH = sfx("robot_death");
+    public static final SoundEvent SAIBAMAN_AMBIENT = sfx("saibaman_ambient");
+    public static final SoundEvent SAIBAMAN_HURT = sfx("saibaman_hurt");
+    public static final SoundEvent SAIBAMAN_DEATH = sfx("saibaman_death");
 
     private static SoundEvent sfx(String name) {
         return SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("dragonblockarcanedba", name));
@@ -175,5 +206,25 @@ public class DbaSounds {
         Registry.register(BuiltInRegistries.SOUND_EVENT, FIZZLE.location(), FIZZLE);
         Registry.register(BuiltInRegistries.SOUND_EVENT, THUNK.location(), THUNK);
         Registry.register(BuiltInRegistries.SOUND_EVENT, HEARTBEAT_DARK.location(), HEARTBEAT_DARK);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, UI_CLICK.location(), UI_CLICK);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, RADAR_BLIP.location(), RADAR_BLIP);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, LEVEL_UP.location(), LEVEL_UP);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, EQUIP.location(), EQUIP);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, REPAIR.location(), REPAIR);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, DRAGON_GROWL.location(), DRAGON_GROWL);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, DRAGON_FLAP.location(), DRAGON_FLAP);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, WISH_GRANTED.location(), WISH_GRANTED);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, SOLDIER_AMBIENT.location(), SOLDIER_AMBIENT);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, SOLDIER_HURT.location(), SOLDIER_HURT);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, SOLDIER_DEATH.location(), SOLDIER_DEATH);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, WARRIOR_AMBIENT.location(), WARRIOR_AMBIENT);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, WARRIOR_HURT.location(), WARRIOR_HURT);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, WARRIOR_DEATH.location(), WARRIOR_DEATH);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, ROBOT_AMBIENT.location(), ROBOT_AMBIENT);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, ROBOT_HURT.location(), ROBOT_HURT);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, ROBOT_DEATH.location(), ROBOT_DEATH);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, SAIBAMAN_AMBIENT.location(), SAIBAMAN_AMBIENT);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, SAIBAMAN_HURT.location(), SAIBAMAN_HURT);
+        Registry.register(BuiltInRegistries.SOUND_EVENT, SAIBAMAN_DEATH.location(), SAIBAMAN_DEATH);
     }
 }

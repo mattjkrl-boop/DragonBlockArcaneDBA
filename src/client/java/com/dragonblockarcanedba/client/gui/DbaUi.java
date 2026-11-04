@@ -222,7 +222,7 @@ public final class DbaUi {
         Minecraft client = Minecraft.getInstance();
         if (client != null && client.getSoundManager() != null) {
             client.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
-                    net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK, 1.0f));
+                    com.dragonblockarcanedba.sound.DbaSounds.UI_CLICK, 1.0f));
         }
     }
 

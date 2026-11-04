@@ -16,6 +16,17 @@ public abstract class DelayedDamageMixin {
     @Unique
     private float dba$accumulatedDamage = 0.0f;
 
+    // Scope 2 (D9): the source of the largest single buffered hit. The pop used to
+    // rebuild every delayed hit as a plain player attack, which silently stripped
+    // bespoke damage types (death messages, armor behavior, damage type tags) from
+    // every weapon ability that lands through this buffer. The dominant hit's own
+    // source now survives the delay; the rebuild below stays only as a fallback.
+    @Unique
+    private DamageSource dba$dominantSource = null;
+
+    @Unique
+    private float dba$dominantAmount = 0.0f;
+
     @Unique
     private int dba$damageDelayTicks = 0;
 
@@ -40,6 +51,10 @@ public abstract class DelayedDamageMixin {
                 dba$accumulatedDamage += amount;
                 dba$damageDelayTicks = 10; // 0.5 seconds of combo time
                 dba$lastPlayerUuid = player.getUUID();
+                if (amount > dba$dominantAmount) {
+                    dba$dominantAmount = amount;
+                    dba$dominantSource = source;
+                }
 
                 // Automatically apply invisible cinematic tracking effect to track all player weapon damage
                 self.addEffect(new net.minecraft.world.effect.MobEffectInstance(
@@ -162,7 +177,17 @@ public abstract class DelayedDamageMixin {
                     if (self.level() instanceof ServerLevel serverLevel) {
                         net.minecraft.world.entity.player.Player attacker = dba$lastPlayerUuid != null ? serverLevel.getPlayerByUUID(dba$lastPlayerUuid) : null;
                         DamageSource source;
-                        if (attacker != null && !attacker.isRemoved() && attacker.isAlive()) {
+                        net.minecraft.world.entity.Entity storedAttacker = dba$dominantSource != null ? dba$dominantSource.getEntity() : null;
+                        if (dba$dominantSource != null && storedAttacker != null && !storedAttacker.isRemoved()
+                                && (!(storedAttacker instanceof LivingEntity livingAttacker) || livingAttacker.isAlive())) {
+                            // The dominant buffered hit lands under its own source, so its
+                            // bespoke damage type survives. A despawned direct entity on the
+                            // stored source is fine: vanilla sources tolerate dead projectiles.
+                            source = dba$dominantSource;
+                            if (storedAttacker instanceof LivingEntity livingStored) {
+                                self.setLastHurtByMob(livingStored);
+                            }
+                        } else if (attacker != null && !attacker.isRemoved() && attacker.isAlive()) {
                             source = serverLevel.damageSources().playerAttack(attacker);
                             self.setLastHurtByMob(attacker);
                         } else {
@@ -179,6 +204,8 @@ public abstract class DelayedDamageMixin {
                 // Reset
                 dba$accumulatedDamage = 0.0f;
                 dba$lastPlayerUuid = null;
+                dba$dominantSource = null;
+                dba$dominantAmount = 0.0f;
             }
         }
     }

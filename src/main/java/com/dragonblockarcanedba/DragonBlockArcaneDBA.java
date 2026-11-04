@@ -221,7 +221,7 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                     if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
                         serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal("§b✦ Tempest lock: " + lockTarget.getName().getString() + " ✦"), true);
                         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                            net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 1.6f);
+                            com.dragonblockarcanedba.sound.DbaSounds.CHARGE_RISE, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 1.6f);
                     }
                 }
             }

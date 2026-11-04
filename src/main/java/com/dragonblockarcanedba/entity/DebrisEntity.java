@@ -115,7 +115,7 @@ public class DebrisEntity extends Projectile {
                 this.entityData.set(PHASE, PHASE_LANDED);
                 this.entityData.set(FADE_AT, this.tickCount);
                 if (this.level() instanceof ServerLevel server) {
-                    server.sendParticles(net.minecraft.core.particles.ParticleTypes.POOF,
+                    server.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.DUST_PUFF,
                         next.x, next.y + 0.2, next.z, 3, 0.2, 0.08, 0.2, 0.02);
                 }
             }

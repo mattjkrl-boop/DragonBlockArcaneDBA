@@ -236,6 +236,63 @@ SOUNDS["thunk"] = mix(tone(180, 0.18, "sin", -0.45) * np.exp(-tt(0.18) * 16), lp
 _hb = mix(tone(55, 0.16, "sin", -0.2) * np.exp(-tt(0.16) * 13), pad(tone(50, 0.2, "sin", -0.2) * np.exp(-tt(0.2) * 11) * 0.85, 0.28))
 SOUNDS["heartbeat_dark"] = pad(_hb, 0.0, 0.95)
 
+# --- scope 2 additions (appended after the first bank so the deterministic
+# RNG stream for every earlier sound is unchanged) ---
+
+
+def _voice(f0, f1, d, grit=0.22, vib=7.0):
+    """Stylized creature voice: pitch-gliding saw through a soft lowpass with
+    tremolo and a breath of noise. The mob voice sets are built from it."""
+    x = sweep(f0, f1, d, "saw")
+    trem = 0.72 + 0.28 * np.sin(2 * np.pi * vib * tt(d))
+    return mix(lp(x, 4) * trem * 0.85, lp(noise(d), 26) * grit) * fade(int(SR * d), 0.03, 0.14)
+
+
+# UI and progression
+SOUNDS["ui_click"] = mix(lp(noise(0.035), 1) * np.exp(-tt(0.035) * 55) * 0.7,
+                         tone(1900, 0.05) * np.exp(-tt(0.05) * 55) * 0.30)
+SOUNDS["radar_blip"] = mix(tone(1568, 0.16) * np.exp(-tt(0.16) * 11) * 0.5,
+                            tone(3136, 0.16) * np.exp(-tt(0.16) * 15) * 0.14)
+SOUNDS["level_up"] = mix(*[pad(pluck([f], 1.1, [4.5], 0.42), 0.09 * i)
+                           for i, f in enumerate([880.0, 1108.7, 1318.5, 1760.0])],
+                         pad(hp(noise(0.5), 2) * np.exp(-tt(0.5) * 7) * 0.10, 0.3))
+SOUNDS["equip"] = mix(lp(noise(0.22), 7) * np.sin(np.pi * tt(0.22) / 0.22) * 0.55,
+                      pad(pluck([2350], 0.12, [20], 0.30), 0.10),
+                      pad(tone(210, 0.09, "sin", -0.3) * np.exp(-tt(0.09) * 16) * 0.5, 0.12))
+SOUNDS["repair"] = mix(*[pad(lp(noise(0.03), 2) * np.exp(-tt(0.03) * 40) * 0.6, 0.09 * i) for i in range(4)],
+                       sweep(280, 660, 0.38) * 0.10 * fade(int(SR * 0.38), 0.05, 0.1),
+                       pad(pluck([1500, 2100], 0.16, [18, 22], 0.30), 0.40))
+
+# Dragons and the wish
+SOUNDS["dragon_growl"] = mix(sweep(82, 52, 2.4, "saw") * (0.70 + 0.30 * np.sin(2 * np.pi * 8 * tt(2.4))) * 0.5,
+                             lp(noise(2.4), 70) * 0.32, tone(39, 2.4) * 0.42) * fade(int(SR * 2.4), 0.15, 0.5)
+SOUNDS["dragon_flap"] = mix(whoosh(0.55, 10, 30), pad(whoosh(0.55, 10, 30) * 0.85, 0.55),
+                            pad(whoosh(0.55, 10, 30) * 0.68, 1.10))
+SOUNDS["wish_granted"] = mix(*[pad(pluck([f], 1.7, [2.6], 0.40), 0.13 * i)
+                               for i, f in enumerate([523.25, 659.25, 783.99, 1046.5])],
+                             pad(hp(noise(1.0), 2) * np.exp(-tt(1.0) * 3.5) * 0.10, 0.45),
+                             boom(1.5, 58, 0.14) * 0.55)
+
+# Mob voices (D2): ambient, hurt, death per species
+SOUNDS["soldier_ambient"] = mix(_voice(300, 215, 0.16), pad(_voice(275, 195, 0.15), 0.23))
+SOUNDS["soldier_hurt"] = _voice(430, 235, 0.22, grit=0.3)
+SOUNDS["soldier_death"] = mix(_voice(390, 65, 0.95, vib=5.0), lp(noise(0.95), 55) * np.exp(-tt(0.95) * 3) * 0.3)
+SOUNDS["warrior_ambient"] = mix(_voice(135, 105, 0.38, vib=5.0), tone(68, 0.38) * 0.25 * fade(int(SR * 0.38), 0.05, 0.12))
+SOUNDS["warrior_hurt"] = _voice(185, 115, 0.28, grit=0.28)
+SOUNDS["warrior_death"] = _voice(205, 52, 1.15, vib=4.5)
+SOUNDS["robot_ambient"] = mix(tone(1180, 0.06, "square") * np.exp(-tt(0.06) * 22) * 0.22,
+                              pad(tone(880, 0.06, "square") * np.exp(-tt(0.06) * 22) * 0.22, 0.11),
+                              lp(noise(0.2), 3) * 0.05)
+SOUNDS["robot_hurt"] = mix(pluck([1240, 1870, 2600], 0.2, [16, 19, 24], 0.4),
+                           sweep(920, 300, 0.2, "square") * 0.16 * np.exp(-tt(0.2) * 6))
+SOUNDS["robot_death"] = mix(sweep(720, 48, 0.95, "square") * 0.26 * fade(int(SR * 0.95), 0.01, 0.25),
+                            lp(noise(0.7), 20) * np.exp(-tt(0.7) * 4) * 0.25,
+                            pad(pluck([980, 1470], 0.25, [14, 18], 0.35), 0.72))
+SOUNDS["saibaman_ambient"] = mix(*[pad(sweep(1550, 2150, 0.055, "saw") * np.exp(-tt(0.055) * 6) * (0.20 - i * 0.02), 0.075 * i) for i in range(5)])
+SOUNDS["saibaman_hurt"] = mix(sweep(1520, 780, 0.3, "saw") * 0.30, hp(noise(0.3), 2) * np.exp(-tt(0.3) * 10) * 0.25)
+SOUNDS["saibaman_death"] = mix(sweep(1750, 280, 0.7, "saw") * 0.34,
+                               pad(lp(noise(0.09), 2) * np.exp(-tt(0.09) * 24) * 0.7, 0.58))
+
 
 def write_ogg(name, samples):
     x = np.clip(samples, -1, 1)

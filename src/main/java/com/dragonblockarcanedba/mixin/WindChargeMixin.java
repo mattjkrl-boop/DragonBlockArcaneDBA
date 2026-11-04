@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.BanshoShockwaveEntity;
 import com.dragonblockarcanedba.util.BanshoWindChargeMarker;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
@@ -47,7 +48,7 @@ public class WindChargeMixin implements BanshoWindChargeMarker {
                 if (self.getOwner() instanceof Player owner && self.level() instanceof ServerLevel serverLevel) {
                     PlayerStatsAccessor accessor = (PlayerStatsAccessor) owner;
                     float impactDamage = 300.0f + (float) accessor.dba$getSpirit();
-                    living.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(owner), impactDamage);
+                    living.hurtServer(serverLevel, DbaDamage.tempest(self, owner), impactDamage);
 
                     // Physical 3D wind shockwave on impact
                     BanshoShockwaveEntity impactWave = new BanshoShockwaveEntity(

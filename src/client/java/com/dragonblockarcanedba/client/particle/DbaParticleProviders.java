@@ -21,6 +21,9 @@ public final class DbaParticleProviders {
         reg(DbaParticles.CRIT_SPARK, DbaGlowParticle.CRIT_SPARK);
         reg(DbaParticles.FLAME, DbaGlowParticle.FLAME_TONGUE);
         reg(DbaParticles.BLAST, DbaGlowParticle.BLAST);
+        reg(DbaParticles.CLOUD_PUFF, DbaGlowParticle.CLOUD_PUFF);
+        reg(DbaParticles.DAMAGE_SPARK, DbaGlowParticle.DAMAGE_SPARK);
+        reg(DbaParticles.HAPPY_SPARKLE, DbaGlowParticle.HAPPY_SPARKLE);
         // Theme dust: tinted per particle by its options.
         ParticleProviderRegistry.getInstance().register(DbaParticles.THEME_DUST, sprites ->
             (options, level, x, y, z, dx, dy, dz, random) -> new DbaDustParticle(level, x, y, z, dx, dy, dz, sprites, options));

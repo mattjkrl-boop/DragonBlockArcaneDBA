@@ -10,7 +10,11 @@
   "coordinate_scale": 1.0,
   "ambient_light": 0.15,
   "logical_height": 384,
-  "effects": "minecraft:overworld",
+  "attributes": {
+    "minecraft:visual/sky_color": "#aebfec",
+    "minecraft:visual/fog_color": "#d8def0",
+    "minecraft:visual/cloud_color": "#e6ffffff"
+  },
   "infiniburn": "#minecraft:infiniburn_overworld",
   "min_y": -64,
   "height": 384,

@@ -96,7 +96,7 @@ public abstract class LivingEntityMixin implements com.dragonblockarcanedba.util
                 if (level.getRandom().nextFloat() < 0.50f) {
                     // Dodged! Show white particle burst to indicate the dodge
                     level.sendParticles(
-                        new net.minecraft.core.particles.DustParticleOptions(0xFFFFFF, 1.5F),
+                        new com.dragonblockarcanedba.particle.DbaDustOptions(0xFFFFFF, 1.5F),
                         player.getX(), player.getY() + player.getBbHeight() * 0.5, player.getZ(),
                         10, 0.3, 0.5, 0.3, 0.1
                     );

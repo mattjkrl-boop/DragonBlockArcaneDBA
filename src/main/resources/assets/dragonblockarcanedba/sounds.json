@@ -95,6 +95,21 @@
       "dragonblockarcanedba:dark_pulse"
     ]
   },
+  "dragon_flap": {
+    "sounds": [
+      "dragonblockarcanedba:dragon_flap"
+    ]
+  },
+  "dragon_growl": {
+    "sounds": [
+      "dragonblockarcanedba:dragon_growl"
+    ]
+  },
+  "equip": {
+    "sounds": [
+      "dragonblockarcanedba:equip"
+    ]
+  },
   "extinguish": {
     "sounds": [
       "dragonblockarcanedba:extinguish"
@@ -172,6 +187,11 @@
       "dragonblockarcanedba:lava_bubble"
     ]
   },
+  "level_up": {
+    "sounds": [
+      "dragonblockarcanedba:level_up"
+    ]
+  },
   "lightning_zap": {
     "sounds": [
       "dragonblockarcanedba:lightning_zap"
@@ -188,6 +208,11 @@
       "dragonblockarcanedba:namekian_hurt"
     ]
   },
+  "radar_blip": {
+    "sounds": [
+      "dragonblockarcanedba:radar_blip"
+    ]
+  },
   "release_blast": {
     "sounds": [
       "dragonblockarcanedba:release_blast"
@@ -196,6 +221,11 @@
   "release_dark": {
     "sounds": [
       "dragonblockarcanedba:release_dark"
+    ]
+  },
+  "repair": {
+    "sounds": [
+      "dragonblockarcanedba:repair"
     ]
   },
   "rift_ambient": {
@@ -208,9 +238,39 @@
       "dragonblockarcanedba:rift_open"
     ]
   },
+  "robot_ambient": {
+    "sounds": [
+      "dragonblockarcanedba:robot_ambient"
+    ]
+  },
+  "robot_death": {
+    "sounds": [
+      "dragonblockarcanedba:robot_death"
+    ]
+  },
+  "robot_hurt": {
+    "sounds": [
+      "dragonblockarcanedba:robot_hurt"
+    ]
+  },
   "saber_hum": {
     "sounds": [
       "dragonblockarcanedba:saber_hum"
+    ]
+  },
+  "saibaman_ambient": {
+    "sounds": [
+      "dragonblockarcanedba:saibaman_ambient"
+    ]
+  },
+  "saibaman_death": {
+    "sounds": [
+      "dragonblockarcanedba:saibaman_death"
+    ]
+  },
+  "saibaman_hurt": {
+    "sounds": [
+      "dragonblockarcanedba:saibaman_hurt"
     ]
   },
   "saiyan_hurt": {
@@ -232,6 +292,21 @@
   "slash_whoosh": {
     "sounds": [
       "dragonblockarcanedba:slash_whoosh"
+    ]
+  },
+  "soldier_ambient": {
+    "sounds": [
+      "dragonblockarcanedba:soldier_ambient"
+    ]
+  },
+  "soldier_death": {
+    "sounds": [
+      "dragonblockarcanedba:soldier_death"
+    ]
+  },
+  "soldier_hurt": {
+    "sounds": [
+      "dragonblockarcanedba:soldier_hurt"
     ]
   },
   "soul_drift": {
@@ -301,14 +376,39 @@
       "dragonblockarcanedba:trident_throw"
     ]
   },
+  "ui_click": {
+    "sounds": [
+      "dragonblockarcanedba:ui_click"
+    ]
+  },
   "void_ambient": {
     "sounds": [
       "dragonblockarcanedba:void_ambient"
     ]
   },
+  "warrior_ambient": {
+    "sounds": [
+      "dragonblockarcanedba:warrior_ambient"
+    ]
+  },
+  "warrior_death": {
+    "sounds": [
+      "dragonblockarcanedba:warrior_death"
+    ]
+  },
+  "warrior_hurt": {
+    "sounds": [
+      "dragonblockarcanedba:warrior_hurt"
+    ]
+  },
   "wind_gust": {
     "sounds": [
       "dragonblockarcanedba:wind_gust"
+    ]
+  },
+  "wish_granted": {
+    "sounds": [
+      "dragonblockarcanedba:wish_granted"
     ]
   },
   "zap_dark": {

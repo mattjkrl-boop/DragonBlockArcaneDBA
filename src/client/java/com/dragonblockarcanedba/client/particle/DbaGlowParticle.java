@@ -29,6 +29,10 @@ public class DbaGlowParticle extends SingleQuadParticle {
     public static final Style CRIT_SPARK = new Style(1f, 0.98f, 0.85f, 1f, 0.75f, 0.3f, 8, 14, 0.16f, -0.4f, 0.25f, 0.9f, true);
     public static final Style FLAME_TONGUE = new Style(1f, 0.85f, 0.45f, 0.95f, 0.3f, 0.05f, 10, 20, 0.2f, -0.2f, -0.06f, 0.92f, true);
     public static final Style BLAST = new Style(1f, 0.95f, 0.85f, 0.68f, 0.58f, 0.5f, 12, 20, 0.55f, 2.2f, 0f, 0.9f, false);
+    // Scope 2 styles: sky clouds drift long and huge; the two tail glyphs are small and quick.
+    public static final Style CLOUD_PUFF = new Style(1f, 1f, 1f, 0.9f, 0.93f, 0.98f, 90, 160, 2.4f, 0.25f, 0f, 0.99f, false);
+    public static final Style DAMAGE_SPARK = new Style(1f, 0.3f, 0.12f, 0.75f, 0.08f, 0.02f, 10, 18, 0.15f, -0.35f, 0.2f, 0.9f, true);
+    public static final Style HAPPY_SPARKLE = new Style(0.6f, 1f, 0.5f, 0.9f, 1f, 0.6f, 18, 30, 0.13f, 0.05f, -0.03f, 0.95f, true);
 
     private final SpriteSet sprites;
     private final Style style;

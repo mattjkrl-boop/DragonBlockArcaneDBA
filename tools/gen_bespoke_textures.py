@@ -137,6 +137,34 @@ def theme_dust(frame, rng):
     return to_image(body)
 
 
+def cloud_puff(frame, rng):
+    _, _, r, _ = coords()
+    n = fbm(rng)
+    # bigger and softer than dust_puff: a sky cloud body with shallow erosion
+    edge = 1.02 - frame * 0.05
+    body = np.clip((edge - r) * 1.5, 0, 1) * (0.55 + 0.60 * n)
+    holes = np.clip((n - 0.70) * 1.6, 0, 0.35) * np.clip((edge - r) * 2.0, 0, 1)
+    return to_image((body - holes) * 0.85)
+
+
+def damage_spark(frame, rng):
+    _, _, r, ang = coords()
+    # jagged six-point star, sharper and more broken than crit_spark
+    spike = 0.55 + 0.45 * np.abs(np.sin(ang * 3 + frame * 0.35))
+    star = np.clip(1.0 - r / np.maximum(spike, 0.08) * 1.05, 0, 1) ** 1.4
+    core = np.clip(1.1 - r * 2.4, 0, 1)
+    return to_image(np.clip(star + core * 0.9, 0, 1))
+
+
+def happy_sparkle(frame, rng):
+    _, _, r, ang = coords()
+    # rounded four-point sparkle with a soft halo, wider arms than crit_spark
+    star = np.clip(1.0 - np.abs(np.sin(ang * 2)) * 0.8 - r * (0.75 + frame * 0.06), 0, 1)
+    core = np.clip(1.25 - r * 2.0, 0, 1)
+    glow = np.clip(1.0 - r * 1.1, 0, 1) ** 2 * 0.35
+    return to_image(np.clip(star * 0.8 + core + glow, 0, 1))
+
+
 MAKERS = {
     "dust_puff": dust_puff,
     "crit_spark": crit_spark,
@@ -146,6 +174,9 @@ MAKERS = {
     "wisp": wisp,
     "rain": rain,
     "theme_dust": theme_dust,
+    "cloud_puff": cloud_puff,
+    "damage_spark": damage_spark,
+    "happy_sparkle": happy_sparkle,
 }
 
 

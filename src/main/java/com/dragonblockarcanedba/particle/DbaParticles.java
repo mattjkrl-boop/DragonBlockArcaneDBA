@@ -29,6 +29,12 @@ public final class DbaParticles {
     public static final SimpleParticleType FLAME = FabricParticleTypes.simple(true);
     public static final SimpleParticleType BLAST = FabricParticleTypes.simple(true);
 
+    // Scope 2 types: big soft sky clouds for the Otherworld cloud systems (D5),
+    // and the tail feedback glyphs (D10): a jagged damage pip and a heal sparkle.
+    public static final SimpleParticleType CLOUD_PUFF = FabricParticleTypes.simple(true);
+    public static final SimpleParticleType DAMAGE_SPARK = FabricParticleTypes.simple(true);
+    public static final SimpleParticleType HAPPY_SPARKLE = FabricParticleTypes.simple(true);
+
     /** Colored soft dust, tinted per particle. Replaces DustParticleOptions in weapon scope. */
     public static final ParticleType<DbaDustOptions> THEME_DUST = FabricParticleTypes.complex(
             DbaDustOptions.CODEC, DbaDustOptions.STREAM_CODEC);
@@ -50,6 +56,9 @@ public final class DbaParticles {
         reg("crit_spark", CRIT_SPARK);
         reg("flame", FLAME);
         reg("blast", BLAST);
+        reg("cloud_puff", CLOUD_PUFF);
+        reg("damage_spark", DAMAGE_SPARK);
+        reg("happy_sparkle", HAPPY_SPARKLE);
         reg("theme_dust", THEME_DUST);
         reg("block_chunks", BLOCK_CHUNKS);
     }

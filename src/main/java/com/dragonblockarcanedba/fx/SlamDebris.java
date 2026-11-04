@@ -4,7 +4,6 @@ import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.state.BlockState;
@@ -39,13 +38,13 @@ public final class SlamDebris {
             BlockPos solid = surfaceBlock(level, (int) Math.floor(x), centerY, (int) Math.floor(z));
             if (solid == null) continue;
             BlockState state = level.getBlockState(solid);
-            level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, state),
+            level.sendParticles(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, state),
                 x, solid.getY() + 1.1, z,
                 2, 0.28, 0.38, 0.28, 0.12);
         }
 
         // Dust cloud over the whole impact area.
-        level.sendParticles(ParticleTypes.POOF, center.x, center.y + 0.25, center.z,
+        level.sendParticles(DbaParticles.DUST_PUFF, center.x, center.y + 0.25, center.z,
             Math.max(4, count / 3), radius * 0.45, 0.15, radius * 0.45, 0.05);
 
         // One accent per slam family: magma embers for the Ox patterns, bright
