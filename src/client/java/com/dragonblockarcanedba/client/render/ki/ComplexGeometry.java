@@ -30,9 +30,12 @@ import java.util.List;
  *   times envelope, boosted and clamped, so a body sits intact through
  *   build and hold and dissolves only in the decay tail. Owners pass
  *   honest peak alphas (0.85 to 1.0 for bodies, lower for wisps).
- * - Solid pieces (shard, shardBurst, fracturePlates) go through
- *   submitSolid onto the plain ki type. Their read is faceted vertex
- *   shading over a root to tip gradient; alpha is literal opacity.
+ * - Solid pieces (shard, shardBurst, fracturePlates, and the ground
+ *   architecture builders rockWall and spikeEruption) go through
+ *   submitSolid onto the plain ki type, or submitSolidLit when the
+ *   piece is physical matter in the world. Their read is faceted
+ *   vertex shading over a root to tip gradient; alpha is literal
+ *   opacity.
  *
  * Nothing here draws a plain primitive: no smooth boxes, cylinders,
  * discs, domes, spheres, helixes, or clean ribbons. The per builder
@@ -916,6 +919,404 @@ public final class ComplexGeometry {
                 prevR = r;
                 prevT = tt;
             }
+        }
+        return verts;
+    }
+
+    // ---------------------------------------------------------------- animation easing
+
+    /** Rise ease: fast emergence, soft arrival. Applied to riseFactor inside the ground builders. */
+    private static float easeOutCubic(float t) {
+        float x = clamp01(t);
+        float u = 1f - x;
+        return 1f - u * u * u;
+    }
+
+    /** Sink ease: slow start, accelerating drop. Applied to sinkFactor inside the ground builders. */
+    private static float easeInQuad(float t) {
+        float x = clamp01(t);
+        return x * x;
+    }
+
+    // ---------------------------------------------------------------- rock wall
+
+    private static Vec3 wallCorner(Vec3 pc, Vec3 tc, Vec3 nc, float dx, float y, float dz) {
+        return new Vec3(pc.x + tc.x * dx + nc.x * dz, pc.y + y, pc.z + tc.z * dx + nc.z * dz);
+    }
+
+    /**
+     * A wall of interlocking irregular rock slabs erupting along a line or
+     * shallow arc: fracturePlates technology grown vertical. The wall runs
+     * along the direction perpendicular to facing (facing cross up), centered
+     * on origin at ground level, length blocks long and height blocks tall.
+     * Slab count derives from length (about one slab per 1.15 blocks,
+     * clamped to the specced 6 to 14), and each slab is a closed irregular
+     * plate 0.7 to 1.6 blocks wide (boundary jitter plus per-slab insets)
+     * with seeded tilt, lean, face offset, and height variance from 0.70 to
+     * 1.16 of height. Cracks between slabs are real gaps and offset faces,
+     * not texture: adjacent slabs share a jittered boundary line but draw
+     * inset from it, at different depths and leans. arc is the wall's total
+     * bend in radians (0 for a straight wall, positive bows the center
+     * toward facing, shallow values like 0.2 to 0.6 read as a curved front).
+     *
+     * Animation contract: riseFactor and sinkFactor are plain 0 to 1
+     * progress values from the host's envelope; the builder eases them
+     * (ease-out on the rise, ease-in on the sink) and translates the whole
+     * wall down by the combined drop, so at riseFactor 0 every slab is
+     * fully buried and the call emits nothing, at riseFactor 1 and
+     * sinkFactor 0 the wall stands at full height (HOLD), and sinkFactor
+     * running 0 to 1 slams or settles it back underground (SLAM). Owners
+     * animate beats by moving the two factors; no new geometry code.
+     *
+     * The builder draws slab bodies only. Draw through submitSolidLit with
+     * a ground-sampled physical palette (rootArgb at the buried base,
+     * tipArgb at the top); hot seams between slabs are a separate thin
+     * submitEnergy call the owner layers on (a scaled spikeEruption or a
+     * crackFan in magma colors), never part of the slab bodies.
+     *
+     * Measured cost: exactly 72 vertices per slab (front and back faces of
+     * 4 double-sided triangles each, plus top and two side double-sided
+     * quads), so a call emits 432 vertices at 6 slabs and at most 1008 at
+     * the 14 slab cap, before distance scaling reduces the slab count.
+     */
+    public static int rockWall(PoseStack.Pose pose, VertexConsumer buffer, long seed,
+                               Vec3 origin, Vec3 facing, float length, float height, float arc,
+                               float riseFactor, float sinkFactor,
+                               int rootArgb, int tipArgb,
+                               float alpha, float envelope, float distScale) {
+        if (envelope <= 0.01f || alpha <= 0.01f || length <= 0f || height <= 0f) return 0;
+        Matrix4f mat = pose.pose();
+        Rng rng = new Rng(seed);
+        float a = alpha * envelope;
+        Vec3 f = new Vec3(facing.x, 0, facing.z);
+        f = f.lengthSqr() < 1e-8 ? new Vec3(0, 0, -1) : f.normalize();
+        Vec3 right = new Vec3(-f.z, 0, f.x);
+        // Emergence: one uniform drop for the whole wall, so taller slabs
+        // break the surface first and the rise reads staggered for free.
+        float drop = clamp01((1f - easeOutCubic(riseFactor)) + easeInQuad(sinkFactor));
+        if (drop >= 0.999f) return 0;
+        float yOff = -drop * (height * 1.16f + 0.55f);
+        int base = Math.max(6, Math.min(14, Math.round(length / 1.15f)));
+        int slabs = Math.min(14, FxEnvelope.segments(base, distScale, Math.min(6, base)));
+        // Shared jittered boundary lines: adjacent slabs interlock along the
+        // same boundary but draw inset from it, leaving a real crack gap.
+        float[] bounds = new float[slabs + 1];
+        bounds[0] = -length * 0.5f;
+        bounds[slabs] = length * 0.5f;
+        for (int i = 1; i < slabs; i++) {
+            bounds[i] = -length * 0.5f + length * i / slabs + rng.signed() * (length / slabs) * 0.28f;
+        }
+        boolean curved = Math.abs(arc) > 1e-4f;
+        float bigR = curved ? length / arc : 0f;
+        Vec3 up = new Vec3(0, 1, 0);
+        int verts = 0;
+        int face = 0;
+        for (int i = 0; i < slabs; i++) {
+            float sC = (bounds[i] + bounds[i + 1]) * 0.5f;
+            Vec3 pc, tc, nc;
+            if (curved) {
+                float ang = sC / bigR;
+                double cos = Math.cos(ang), sin = Math.sin(ang);
+                pc = origin.add(right.scale(bigR * sin)).add(f.scale(bigR * (1.0 - cos)));
+                tc = right.scale(cos).add(f.scale(sin)).normalize();
+                nc = f.scale(cos).subtract(right.scale(sin)).normalize();
+            } else {
+                pc = origin.add(right.scale(sC));
+                tc = right;
+                nc = f;
+            }
+            pc = pc.add(0, yOff, 0);
+            float inset = rng.range(0.02f, 0.07f);
+            float halfW = (bounds[i + 1] - bounds[i]) * 0.5f - inset;
+            float th = rng.range(0.30f, 0.52f);
+            float faceOff = rng.range(-0.05f, 0.09f);
+            float topH = height * rng.range(0.70f, 1.16f);
+            float tiltDy = height * rng.range(-0.10f, 0.10f);
+            float lean = height * rng.range(-0.06f, 0.10f);
+            float bulge = rng.range(0.03f, 0.12f);
+            float baseY = -0.45f;
+            float topL = topH + tiltDy, topR = topH - tiltDy;
+            Vec3 fbl = wallCorner(pc, tc, nc, -halfW, baseY, faceOff);
+            Vec3 fbr = wallCorner(pc, tc, nc, halfW, baseY, faceOff);
+            Vec3 ftl = wallCorner(pc, tc, nc, -halfW, topL, faceOff + lean);
+            Vec3 ftr = wallCorner(pc, tc, nc, halfW, topR, faceOff + lean);
+            Vec3 fc = fbl.add(fbr).add(ftl).add(ftr).scale(0.25).add(nc.scale(bulge));
+            Vec3 bbl = wallCorner(pc, tc, nc, -halfW, baseY, faceOff - th);
+            Vec3 bbr = wallCorner(pc, tc, nc, halfW, baseY, faceOff - th);
+            Vec3 btl = wallCorner(pc, tc, nc, -halfW, topL, faceOff + lean - th);
+            Vec3 btr = wallCorner(pc, tc, nc, halfW, topR, faceOff + lean - th);
+            Vec3 bc = bbl.add(bbr).add(btl).add(btr).scale(0.25);
+            // Front face: four triangles around the bulged center.
+            float[] frontT = {0.30f, 0.62f, 0.92f, 0.62f};
+            Vec3[][] front = {{fbl, fbr, fc}, {fbr, ftr, fc}, {ftr, ftl, fc}, {ftl, fbl, fc}};
+            for (int k = 0; k < 4; k++) {
+                float[] rgb = shade(gradient(rootArgb, tipArgb, frontT[k]),
+                        (0.68f + 0.5f * hash1(seed, face++ * 131 + 7)));
+                verts += tri(buffer, mat, pose, front[k][0], front[k][1], front[k][2], rgb, a, nc);
+            }
+            // Back face: same split, reversed winding, darker steps.
+            Vec3[][] back = {{bbr, bbl, bc}, {btr, bbr, bc}, {btl, btr, bc}, {bbl, btl, bc}};
+            for (int k = 0; k < 4; k++) {
+                float[] rgb = shade(gradient(rootArgb, tipArgb, frontT[k]),
+                        (0.68f + 0.5f * hash1(seed, face++ * 131 + 7)) * 0.72f);
+                verts += tri(buffer, mat, pose, back[k][0], back[k][1], back[k][2], rgb, a, nc.scale(-1.0));
+            }
+            // Top and side faces: quads with per-corner gradient colors.
+            float[] cBase = gradient(rootArgb, tipArgb, 0.06f);
+            float[] cTop = gradient(rootArgb, tipArgb, 0.97f);
+            float bTop = 0.68f + 0.5f * hash1(seed, face++ * 131 + 7);
+            verts += quad(buffer, mat, pose, ftl, ftr, btr, btl,
+                    shade(cTop, bTop), a, shade(cTop, bTop), a,
+                    shade(cTop, bTop * 0.9f), a, shade(cTop, bTop * 0.9f), a, up);
+            float bSide = (0.68f + 0.5f * hash1(seed, face++ * 131 + 7)) * 0.85f;
+            verts += quad(buffer, mat, pose, bbl, fbl, ftl, btl,
+                    shade(cBase, bSide), a, shade(cBase, bSide), a,
+                    shade(cTop, bSide), a, shade(cTop, bSide), a, tc.scale(-1.0));
+            verts += quad(buffer, mat, pose, fbr, bbr, btr, ftr,
+                    shade(cBase, bSide), a, shade(cBase, bSide), a,
+                    shade(cTop, bSide), a, shade(cTop, bSide), a, tc);
+        }
+        return verts;
+    }
+
+    // ---------------------------------------------------------------- spike eruption
+
+    /** Placement layout for spikeEruption. */
+    public enum SpikeLayout {
+        /** Spikes in a row along facing, spread over twice radius. */
+        LINE,
+        /** Spikes on a circle of the given radius, leaning outward. */
+        RING,
+        /** Spikes scattered through a disc of the given radius. */
+        SCATTER,
+        /** Spikes in a wedge around facing, erupting forward at a hit point. */
+        FAN,
+        /** Spikes radiating out of the space around a body at center height. */
+        BODY
+    }
+
+    private static final float[] SPIKE_RING_T = {0.05f, 0.30f, 0.55f, 0.78f};
+    private static final float[] SPIKE_RING_R = {0.66f, 1.0f, 0.74f, 0.40f};
+    private static final int[] SPIKE_RING_N = {5, 6, 5, 4};
+
+    private static Vec3 spikeSpine(Vec3 origin, Vec3 dir, Vec3 dir2, Vec3 bendPt, float bendT,
+                                   float length, float t) {
+        if (t <= bendT) return origin.add(dir.scale(t * length));
+        return bendPt.add(dir2.scale((t - bendT) * length));
+    }
+
+    /** One point on a spike ring, interpolated between the ring's displaced control vertices. */
+    private static Vec3 spikeRingPoint(long seed, int ring, Vec3 center, Vec3 u, Vec3 v,
+                                       float girth, float theta01) {
+        int n = SPIKE_RING_N[ring];
+        float f = theta01 * n;
+        int i0 = Math.min(n - 1, (int) Math.floor(f));
+        int i1 = (i0 + 1) % n;
+        float frac = f - i0;
+        float smooth = frac * frac * (3f - 2f * frac);
+        Vec3 p0 = spikeControl(seed, ring, i0, center, u, v, girth);
+        Vec3 p1 = spikeControl(seed, ring, i1, center, u, v, girth);
+        return p0.lerp(p1, smooth);
+    }
+
+    private static Vec3 spikeControl(long seed, int ring, int j, Vec3 center, Vec3 u, Vec3 v, float girth) {
+        int n = SPIKE_RING_N[ring];
+        long salt = seed ^ (ring * 0x51ED27L);
+        float ang = (float) (Math.PI * 2.0 * j / n) + (hash1(salt, 31) - 0.5f) * 0.9f
+                + (hash1(salt, j * 3 + 1) - 0.5f) * 0.35f;
+        float radial = girth * SPIKE_RING_R[ring] * (0.72f + 0.55f * noise1(salt, j * 1.7f));
+        Vec3 radialVec = u.scale(Math.cos(ang)).add(v.scale(Math.sin(ang)));
+        return center.add(radialVec.scale(radial));
+    }
+
+    /**
+     * One realistic spike: a bent, irregular closed spindle built on the
+     * shard's ring technology at ground scale. Four displaced rings ride a
+     * two-segment spine that kinks at a seeded mid-bend (0.42 to 0.60 of
+     * the length, bent 0.10 to 0.32 radians), so the silhouette leans and
+     * twists like grown rock or crystal instead of standing as a cone.
+     * Every face carries its own facet brightness step over the root to
+     * tip gradient. Exactly 384 vertices (64 double-sided triangles: 8
+     * root fan, 48 band, 8 tip fan).
+     */
+    private static int spike(PoseStack.Pose pose, VertexConsumer buffer, long seed,
+                             Vec3 origin, Vec3 dir, float length, float girth,
+                             int rootArgb, int tipArgb, float alpha, float envelope) {
+        if (envelope <= 0.01f || alpha <= 0.01f || length <= 0f || girth <= 0f) return 0;
+        Matrix4f mat = pose.pose();
+        Vec3 axis = dir.lengthSqr() < 1e-8 ? new Vec3(0, 1, 0) : dir.normalize();
+        float bendT = 0.42f + 0.18f * hash1(seed, 501);
+        float bendAng = 0.10f + 0.22f * hash1(seed, 502);
+        Rng bendRng = new Rng(seed ^ 0x5EEDL);
+        Vec3 dir2 = rotate(axis, randomPerp(axis, bendRng), bendAng).normalize();
+        Vec3 bendPt = origin.add(axis.scale(bendT * length));
+        Vec3 u0 = perpOf(axis);
+        Vec3 v0 = axis.cross(u0).normalize();
+        float a = alpha * envelope;
+        Vec3 root = origin.subtract(axis.scale(length * 0.10));
+        Vec3 tip = spikeSpine(origin, axis, dir2, bendPt, bendT, length, 1.0f)
+                .add(dir2.scale(length * (0.05f + 0.10f * hash1(seed, 77))));
+        int verts = 0;
+        int face = 0;
+        int steps = 8;
+        // Ring frames: the base frame parallel-transported past the bend.
+        Vec3[] centers = new Vec3[SPIKE_RING_T.length];
+        Vec3[] us = new Vec3[SPIKE_RING_T.length];
+        Vec3[] vs = new Vec3[SPIKE_RING_T.length];
+        for (int ring = 0; ring < SPIKE_RING_T.length; ring++) {
+            float t = SPIKE_RING_T[ring];
+            centers[ring] = spikeSpine(origin, axis, dir2, bendPt, bendT, length, t);
+            Vec3 tg = t < bendT ? axis : dir2;
+            Vec3 u = u0.subtract(tg.scale(u0.dot(tg)));
+            u = u.lengthSqr() < 1e-6 ? perpOf(tg) : u.normalize();
+            us[ring] = u;
+            vs[ring] = tg.cross(u).normalize();
+        }
+        // Root fan.
+        for (int k = 0; k < steps; k++) {
+            Vec3 p0 = spikeRingPoint(seed, 0, centers[0], us[0], vs[0], girth, k / (float) steps);
+            Vec3 p1 = spikeRingPoint(seed, 0, centers[0], us[0], vs[0], girth, (k + 1) / (float) steps);
+            float[] rgb = shade(gradient(rootArgb, tipArgb, 0.05f), 0.68f + 0.5f * hash1(seed, face++ * 131 + 7));
+            verts += tri(buffer, mat, pose, root, p1, p0, rgb, a, axis.scale(-1.0));
+        }
+        // Bands between rings.
+        for (int ring = 0; ring + 1 < SPIKE_RING_T.length; ring++) {
+            float tMid = (SPIKE_RING_T[ring] + SPIKE_RING_T[ring + 1]) * 0.5f;
+            for (int k = 0; k < steps; k++) {
+                float f0 = k / (float) steps, f1 = (k + 1) / (float) steps;
+                Vec3 a0 = spikeRingPoint(seed, ring, centers[ring], us[ring], vs[ring], girth, f0);
+                Vec3 a1 = spikeRingPoint(seed, ring, centers[ring], us[ring], vs[ring], girth, f1);
+                Vec3 b0 = spikeRingPoint(seed, ring + 1, centers[ring + 1], us[ring + 1], vs[ring + 1], girth, f0);
+                Vec3 b1 = spikeRingPoint(seed, ring + 1, centers[ring + 1], us[ring + 1], vs[ring + 1], girth, f1);
+                Vec3 n = a0.subtract(centers[ring]).normalize();
+                float[] rgb = shade(gradient(rootArgb, tipArgb, tMid), 0.68f + 0.5f * hash1(seed, face++ * 131 + 7));
+                verts += tri(buffer, mat, pose, a0, b0, a1, rgb, a, n);
+                float[] rgb2 = shade(gradient(rootArgb, tipArgb, tMid), 0.68f + 0.5f * hash1(seed, face++ * 131 + 7));
+                verts += tri(buffer, mat, pose, a1, b0, b1, rgb2, a, n);
+            }
+        }
+        // Tip fan.
+        int last = SPIKE_RING_T.length - 1;
+        for (int k = 0; k < steps; k++) {
+            Vec3 p0 = spikeRingPoint(seed, last, centers[last], us[last], vs[last], girth, k / (float) steps);
+            Vec3 p1 = spikeRingPoint(seed, last, centers[last], us[last], vs[last], girth, (k + 1) / (float) steps);
+            float[] rgb = shade(gradient(rootArgb, tipArgb, 0.95f), 0.68f + 0.5f * hash1(seed, face++ * 131 + 7));
+            verts += tri(buffer, mat, pose, tip, p0, p1, rgb, a, dir2);
+        }
+        return verts;
+    }
+
+    /**
+     * An eruption of realistic spikes: bent, faceted closed spindles (the
+     * shard technology at 3 to 6 times the size) placed by layout around
+     * center. Lengths roll in three classes (about 55 percent at 1.2 to
+     * 1.9 blocks, 30 percent at 1.9 to 2.6, 15 percent at 2.6 to 3.2),
+     * all scaled by sizeScale, with girth at 0.15 to 0.23 of length.
+     * Layouts: LINE marches along facing over twice radius; RING stands
+     * on a circle of radius, leaning outward; SCATTER fills a disc of
+     * radius; FAN bursts forward in a wedge around facing at a hit
+     * point; BODY radiates out of the space around a body, with center
+     * at body height and radius the offset from the body's axis.
+     *
+     * Animation contract: riseFactor and sinkFactor are plain 0 to 1
+     * progress values from the host's envelope, eased inside (ease-out
+     * on the rise, ease-in on the sink). Ground layouts emerge vertically:
+     * each spike starts sunk its full length below its base point and
+     * slides up, with a seeded per-spike stagger of up to 0.35 of the
+     * rise so a ring or line erupts in sequence, not in lockstep. BODY
+     * spikes emerge along their own axis, out of the body space, and
+     * retract back along it. riseFactor 1 with sinkFactor 0 is HOLD;
+     * sinkFactor running 0 to 1 retracts or buries the set again.
+     * Emergence travel is 1.22 times the spike length plus 0.15, which
+     * covers the root and tip overshoot, so at full drop every spike
+     * is completely below its base point and emits nothing.
+     *
+     * The builder draws spike bodies only. Draw physical palettes
+     * (stone, obsidian, iron, crystal, glass) through submitSolidLit
+     * with rootArgb at the buried base and tipArgb at the point; a hot
+     * or magical core is a separate thinner submitEnergy call the owner
+     * layers on, never the spike bodies.
+     *
+     * Measured cost: 384 vertices per spike, count clamped to at most
+     * 14 per call, so one call emits at most 5376 vertices at distance
+     * scale 1.0 (a typical 5 to 12 spike eruption is 1920 to 4608),
+     * before distance scaling reduces the count.
+     */
+    public static int spikeEruption(PoseStack.Pose pose, VertexConsumer buffer, long seed,
+                                    Vec3 center, Vec3 facing, SpikeLayout layout, int count, float radius,
+                                    float sizeScale, float riseFactor, float sinkFactor,
+                                    int rootArgb, int tipArgb,
+                                    float alpha, float envelope, float distScale) {
+        if (envelope <= 0.01f || alpha <= 0.01f || count <= 0 || sizeScale <= 0f) return 0;
+        Rng rng = new Rng(seed);
+        Vec3 f = new Vec3(facing.x, 0, facing.z);
+        f = f.lengthSqr() < 1e-8 ? new Vec3(0, 0, -1) : f.normalize();
+        Vec3 right = new Vec3(-f.z, 0, f.x);
+        Vec3 up = new Vec3(0, 1, 0);
+        float rad = Math.max(0f, radius);
+        int want = Math.min(14, count);
+        int n = Math.min(14, FxEnvelope.segments(want, distScale, Math.min(3, want)));
+        int verts = 0;
+        for (int i = 0; i < n; i++) {
+            Vec3 pos, dir, emergence;
+            switch (layout) {
+                case LINE -> {
+                    float along = n == 1 ? 0f : (i / (float) (n - 1) - 0.5f) * 2f * rad;
+                    pos = center.add(f.scale(along)).add(right.scale(rng.signed() * 0.25f));
+                    dir = coneDir(up, rng.range(0.0f, 0.22f), rng);
+                    emergence = up;
+                }
+                case RING -> {
+                    float ang = (float) (Math.PI * 2.0 * i / n) + rng.signed() * 0.15f;
+                    Vec3 radial = new Vec3(Math.cos(ang), 0, Math.sin(ang));
+                    pos = center.add(radial.scale(rad));
+                    float tilt = rng.range(0.15f, 0.42f);
+                    dir = up.scale(Math.cos(tilt)).add(radial.scale(Math.sin(tilt))).normalize();
+                    emergence = up;
+                }
+                case SCATTER -> {
+                    float ang = rng.nextFloat() * (float) Math.PI * 2f;
+                    float rr = rad * (float) Math.sqrt(rng.nextFloat());
+                    pos = center.add(Math.cos(ang) * rr, 0, Math.sin(ang) * rr);
+                    dir = coneDir(up, rng.range(0.0f, 0.50f), rng);
+                    emergence = up;
+                }
+                case FAN -> {
+                    float spreadAng = n == 1 ? 0f : (i / (float) (n - 1) * 2f - 1f) * 0.96f;
+                    Vec3 out = rotate(f, up, spreadAng);
+                    float dist = rad * rng.range(0.35f, 1.0f);
+                    pos = center.add(out.scale(dist));
+                    dir = up.scale(0.55).add(out.scale(rng.range(0.7f, 1.0f))).normalize();
+                    emergence = up;
+                }
+                case BODY -> {
+                    float phase = (float) Math.atan2(f.z, f.x);
+                    float ang = phase + (float) (Math.PI * 2.0 * i / n);
+                    Vec3 radial = new Vec3(Math.cos(ang), 0, Math.sin(ang));
+                    pos = center.add(radial.scale(rad));
+                    dir = radial.add(up.scale(rng.range(0.25f, 0.65f))).normalize();
+                    emergence = dir;
+                }
+                default -> {
+                    pos = center;
+                    dir = up;
+                    emergence = up;
+                }
+            }
+            float roll = rng.nextFloat();
+            float len = (roll < 0.55f ? rng.range(1.2f, 1.9f)
+                    : roll < 0.85f ? rng.range(1.9f, 2.6f)
+                    : rng.range(2.6f, 3.2f)) * sizeScale;
+            float girth = len * rng.range(0.15f, 0.23f);
+            // Per-spike stagger: each spike's rise runs on its own offset
+            // window, so sets erupt in sequence. Sink is shared and fast.
+            float stag = hash1(seed, 700 + i) * 0.35f;
+            float riseI = clamp01(riseFactor * 1.35f - stag);
+            float dropFrac = (1f - easeOutCubic(riseI)) + easeInQuad(sinkFactor);
+            if (dropFrac >= 0.99f) continue;
+            Vec3 spikeOrigin = pos.add(emergence.scale(-dropFrac * (len * 1.22f + 0.15f)));
+            verts += spike(pose, buffer, seed + i * 0x9E37L, spikeOrigin, dir, len, girth,
+                    rootArgb, tipArgb, alpha, envelope);
         }
         return verts;
     }
