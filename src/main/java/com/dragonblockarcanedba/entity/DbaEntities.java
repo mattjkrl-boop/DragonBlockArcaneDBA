@@ -934,6 +934,26 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("lava_eruption")))
     );
 
+    public static final EntityType<DebrisEntity> DEBRIS = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("debris"),
+            EntityType.Builder.<DebrisEntity>of(DebrisEntity::new, MobCategory.MISC)
+                    .sized(0.6f, 0.6f)
+                    .clientTrackingRange(10)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("debris")))
+    );
+
+    public static final EntityType<BoltEntity> BOLT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("bolt"),
+            EntityType.Builder.<BoltEntity>of(BoltEntity::new, MobCategory.MISC)
+                    .sized(0.4f, 0.4f)
+                    .clientTrackingRange(12)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("bolt")))
+    );
+
     public static void register() {
         DragonBlockArcaneDBA.LOGGER.info("Registering Entities for " + DragonBlockArcaneDBA.MOD_ID);
         net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(OTHERWORLD_GUIDE, OtherworldGuideEntity.createMobAttributes());

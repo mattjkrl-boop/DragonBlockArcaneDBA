@@ -32,6 +32,7 @@ public class DbaNetwork {
         PayloadTypeRegistry.clientboundPlay().register(WishMenuOpenPayload.TYPE, WishMenuOpenPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(WishRitualStartPayload.TYPE, WishRitualStartPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ScreenShakePayload.TYPE, ScreenShakePayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(AtmospherePayload.TYPE, AtmospherePayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(DeathTumblePayload.TYPE, DeathTumblePayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(BossStaggerPayload.TYPE, BossStaggerPayload.CODEC);
         // Make Wish (C2S)

@@ -41,7 +41,8 @@ public final class DbaPostFx {
         boolean stopped = false, eclipse = false;
         if (mc.player != null) {
             stopped = DbaEffects.TEMPORAL_STASIS_HOLDER != null && mc.player.hasEffect(DbaEffects.TEMPORAL_STASIS_HOLDER);
-            eclipse = DbaEffects.STORM_OF_DARKNESS_HOLDER != null && mc.player.hasEffect(DbaEffects.STORM_OF_DARKNESS_HOLDER);
+            eclipse = (DbaEffects.STORM_OF_DARKNESS_HOLDER != null && mc.player.hasEffect(DbaEffects.STORM_OF_DARKNESS_HOLDER))
+                || com.dragonblockarcanedba.client.fx.AtmosphereClient.gloomActive();
         }
         if (stopped && !wasStopped) {
             mc.getSoundManager().play(SimpleSoundInstance.forUI(DbaSounds.TIME_STOP, 1.0f, 0.8f));

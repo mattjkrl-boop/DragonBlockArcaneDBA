@@ -95,6 +95,14 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             ctx -> com.dragonblockarcanedba.client.render.geo.DbaDragonRenderers.create(ctx, "shenron")
         );
         net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DEBRIS,
+            com.dragonblockarcanedba.client.render.DebrisRenderer::new
+        );
+        net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
+            com.dragonblockarcanedba.entity.DbaEntities.BOLT,
+            com.dragonblockarcanedba.client.render.BoltRenderer::new
+        );
+        net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
             com.dragonblockarcanedba.entity.DbaEntities.PORUNGA,
             ctx -> com.dragonblockarcanedba.client.render.geo.DbaDragonRenderers.create(ctx, "porunga")
         );
@@ -472,7 +480,12 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
                 com.dragonblockarcanedba.client.fx.ScreenShakeHandler.trigger(payload.intensity(), payload.durationTicks(), payload.hitstopTicks());
                 com.dragonblockarcanedba.client.fx.DbaPostFx.onShake(payload.intensity());
             });
+        ClientPlayNetworking.registerGlobalReceiver(com.dragonblockarcanedba.network.AtmospherePayload.TYPE, (payload, context) ->
+            {
+                com.dragonblockarcanedba.client.fx.AtmosphereClient.accept(payload);
+            });
         ClientTickEvents.END_CLIENT_TICK.register(client -> com.dragonblockarcanedba.client.fx.ScreenShakeHandler.tick());
+        ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.AtmosphereClient::tick);
         ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.DbaPostFx::tick);
         ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.ChargeFx::tick);
         com.dragonblockarcanedba.client.fx.MovementInput.dashKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
