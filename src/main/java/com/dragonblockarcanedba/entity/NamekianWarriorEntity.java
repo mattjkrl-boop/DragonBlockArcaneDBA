@@ -1,8 +1,8 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -38,21 +38,21 @@ public class NamekianWarriorEntity extends DbaHostileEntity {
 
     @Override
     protected void playAttackSound() {
-        this.playSound(SoundEvents.PLAYER_ATTACK_WEAK, 1.0f, 0.6f);
+        this.playSound(DbaSounds.SWING_LIGHT, 1.0f, 0.6f);
     }
 
     @Override
     protected SoundEvent getAmbientSound() {
-        return SoundEvents.VINDICATOR_AMBIENT;
+        return DbaSounds.WARRIOR_AMBIENT;
     }
 
     @Override
     protected SoundEvent getHurtSound(DamageSource source) {
-        return SoundEvents.VINDICATOR_HURT;
+        return DbaSounds.WARRIOR_HURT;
     }
 
     @Override
     protected SoundEvent getDeathSound() {
-        return SoundEvents.VINDICATOR_HURT;
+        return DbaSounds.WARRIOR_DEATH;
     }
 }

@@ -6,7 +6,6 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.resources.Identifier;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.ki.KiTechnique;
@@ -115,7 +114,7 @@ public class DbaNetwork {
                             accessor.dba$setStatPoints(ap - cost);
                             accessor.dba$syncStats();
                             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                                SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 0.8f, 1.3f);
+                                com.dragonblockarcanedba.sound.DbaSounds.CRYSTAL_CHIME, SoundSource.PLAYERS, 0.8f, 1.3f);
                         }
                     }
                 } else if ("transform".equals(action)) {
@@ -123,9 +122,9 @@ public class DbaNetwork {
                     if ("none".equals(formStr)) {
                         accessor.dba$setActiveFormId(null);
                         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                            SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 1.2f, 1.2f);
+                            com.dragonblockarcanedba.sound.DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 1.2f, 1.2f);
                         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                            SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 1.0f, 0.8f);
+                            com.dragonblockarcanedba.sound.DbaSounds.EXTINGUISH, SoundSource.PLAYERS, 1.0f, 0.8f);
                     } else {
                         Identifier formId = Identifier.parse(formStr);
                         Form form = DbaRegistries.getForm(formId);
@@ -151,13 +150,13 @@ public class DbaNetwork {
                             if (meetsRequirements) {
                                 accessor.dba$setActiveFormId(formId);
                                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                                    SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.8f, 1.0f);
+                                    com.dragonblockarcanedba.sound.DbaSounds.TRANSFORM_GENERIC, SoundSource.PLAYERS, 1.8f, 1.0f);
                                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                                     com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 1.8f, 1.0f);
                                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                                    SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 1.2f);
+                                    com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 1.5f, 1.2f);
                                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.0f, 1.5f);
+                                    com.dragonblockarcanedba.sound.DbaSounds.THUNDER_CRACK, SoundSource.WEATHER, 1.0f, 1.5f);
                                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                                     com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 1.0f, 1.5f);
                             }
@@ -168,9 +167,9 @@ public class DbaNetwork {
                 } else if ("untransform".equals(action)) {
                     accessor.dba$setActiveFormId(null);
                     player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 1.2f, 1.2f);
+                        com.dragonblockarcanedba.sound.DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 1.2f, 1.2f);
                     player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 1.0f, 0.8f);
+                        com.dragonblockarcanedba.sound.DbaSounds.EXTINGUISH, SoundSource.PLAYERS, 1.0f, 0.8f);
                     accessor.dba$syncStats();
                     broadcastTransformState(player);
 
@@ -223,7 +222,7 @@ public class DbaNetwork {
                         accessor.dba$syncStats();
                         com.dragonblockarcanedba.compat.BpmCompatServer.switchPlayerModel(player, "custom:" + Identifier.parse(raceStr).getPath());
                         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                            SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.0f);
+                            com.dragonblockarcanedba.sound.DbaSounds.LEVEL_UP, SoundSource.PLAYERS, 1.0f, 1.0f);
                     }
                 } else if ("revive".equals(action)) {
                     player.resetFallDistance();
@@ -259,7 +258,7 @@ public class DbaNetwork {
                             default -> "performs " + newEmote + "!";
                         };
                         if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-                            serverLevel.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT, player.getX(), player.getY() + 1.0, player.getZ(), 5, 0.3, 0.5, 0.3, 0.1);
+                            serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.CRIT_SPARK, player.getX(), player.getY() + 1.0, player.getZ(), 5, 0.3, 0.5, 0.3, 0.1);
                         }
                         player.sendOverlayMessage(net.minecraft.network.chat.Component.literal("§6* You " + msg.replace("is ", "are ").replace("charges their", "charge your").replace("sits", "sit").replace("unleashes", "unleash").replace("throws", "throw").replace("takes", "take").replace("readies their", "ready your") + " *"));
                     }
@@ -302,7 +301,7 @@ public class DbaNetwork {
                         accessor.dba$setTechniqueLevel(techniqueId, 1);
                         accessor.dba$syncStats();
                         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                            SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
+                            com.dragonblockarcanedba.sound.DbaSounds.LEVEL_UP, SoundSource.PLAYERS, 1.0f, 1.2f);
                         player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§aUnlocked §b" + tech.name() + " §a(Level 1)!"), true);
                     }
                 }
@@ -325,7 +324,7 @@ public class DbaNetwork {
                         accessor.dba$setTechniqueLevel(techniqueId, targetLvl);
                         accessor.dba$syncStats();
                         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                            SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0f, 1.2f);
+                            com.dragonblockarcanedba.sound.DbaSounds.LEVEL_UP, SoundSource.PLAYERS, 1.0f, 1.2f);
                         com.dragonblockarcanedba.registry.Technique t = com.dragonblockarcanedba.registry.TechniqueRegistry.getTechnique(Identifier.tryParse(techniqueId));
                         String disp = (t != null) ? t.name() : techniqueId;
                         player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§aUpgraded §b" + disp + " §ato Level " + targetLvl + "!"), true);
@@ -350,7 +349,7 @@ public class DbaNetwork {
                     }
                     accessor.dba$syncStats();
                     player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.ARMOR_EQUIP_GENERIC.value(), SoundSource.PLAYERS, 1.0f, 1.0f);
+                        com.dragonblockarcanedba.sound.DbaSounds.EQUIP, SoundSource.PLAYERS, 1.0f, 1.0f);
                 }
             });
         });
@@ -389,7 +388,7 @@ public class DbaNetwork {
                     accessor.dba$setKiTechniqueSlot(slot, kiTech);
                     accessor.dba$syncStats();
                     player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 1.0f, 1.4f);
+                        com.dragonblockarcanedba.sound.DbaSounds.CAST_MAGIC, SoundSource.PLAYERS, 1.0f, 1.4f);
                     player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                         "§aSaved §b" + kiTech.displayName() + "§a to slot " + (slot + 1) + " §7(Cost: " + apCost + " AP)"
                     ), true);
@@ -621,13 +620,13 @@ public class DbaNetwork {
                 accessor.dba$setTechniqueActive("sickle_of_sorrow", true);
                 accessor.dba$syncStats();
                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.WITHER_SPAWN, SoundSource.PLAYERS, 0.7f, 1.8f);
+                    com.dragonblockarcanedba.sound.DbaSounds.CAST_DARK, SoundSource.PLAYERS, 0.7f, 1.8f);
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§5✦ Summoned Sickle of Sorrow! §7(-" + summonPct + "% Ki)"), true);
             } else {
                 accessor.dba$setTechniqueActive("sickle_of_sorrow", false);
                 accessor.dba$syncStats();
                 player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 0.7f, 1.5f);
+                    com.dragonblockarcanedba.sound.DbaSounds.RELEASE_DARK, SoundSource.PLAYERS, 0.7f, 1.5f);
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7Dismissed Sickle of Sorrow."), true);
             }
         } else if ("ki_sense".equals(tech)) {
@@ -635,7 +634,7 @@ public class DbaNetwork {
             accessor.dba$setTechniqueActive("ki_sense", !isActive);
             accessor.dba$syncStats();
             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.8f, !isActive ? 1.4f : 0.8f);
+                com.dragonblockarcanedba.sound.DbaSounds.UI_CLICK, SoundSource.PLAYERS, 0.8f, !isActive ? 1.4f : 0.8f);
             player.sendSystemMessage(net.minecraft.network.chat.Component.literal(!isActive ? "§a✦ Ki Sense Activated" : "§7Ki Sense Deactivated"), true);
         } else if (com.dragonblockarcanedba.skill.SkillDefinitions.isPassive(tech)) {
             com.dragonblockarcanedba.registry.Technique known = com.dragonblockarcanedba.registry.TechniqueRegistry.getTechnique(Identifier.tryParse(tech));
@@ -646,7 +645,7 @@ public class DbaNetwork {
             accessor.dba$setTechniqueActive(tech, !isActive);
             accessor.dba$syncStats();
             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.8f, !isActive ? 1.2f : 0.8f);
+                com.dragonblockarcanedba.sound.DbaSounds.UI_CLICK, SoundSource.PLAYERS, 0.8f, !isActive ? 1.2f : 0.8f);
         }
     }
 

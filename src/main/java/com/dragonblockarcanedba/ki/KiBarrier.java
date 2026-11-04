@@ -11,7 +11,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
@@ -99,13 +98,13 @@ public final class KiBarrier {
         accessor.dba$syncStats();
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.9f, 1.7f);
+                com.dragonblockarcanedba.sound.DbaSounds.CHARGE_RISE, SoundSource.PLAYERS, 0.9f, 1.7f);
         player.sendSystemMessage(Component.translatable("message.dragonblockarcanedba.ki_barrier_up", Integer.toString(percent)), true);
 
         float density = DbaEffectsConfig.effectDensity();
         if (density > 0f) {
             int count = Math.max(4, Math.round(10f * density));
-            level.sendParticles(new net.minecraft.core.particles.DustParticleOptions(color & 0xFFFFFF, 1.3f),
+            level.sendParticles(new com.dragonblockarcanedba.particle.DbaDustOptions(color & 0xFFFFFF, 1.3f),
                     player.getX(), player.getY() + player.getBbHeight() * 0.5, player.getZ(),
                     count, 0.55, 0.75, 0.55, 0.01);
         }
@@ -158,13 +157,13 @@ public final class KiBarrier {
             accessor.dba$pauseKiRecovery(20);
             if (shell.claimAbsorbSound(level.getGameTime())) {
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 0.45f, 1.8f);
+                        com.dragonblockarcanedba.sound.DbaSounds.SHIELD_CLANK, SoundSource.PLAYERS, 0.45f, 1.8f);
             }
             float density = DbaEffectsConfig.effectDensity();
             if (density > 0f) {
                 int count = Math.max(1, Math.round(4f * density));
                 int dust = shell.getColor() & 0xFFFFFF;
-                level.sendParticles(new net.minecraft.core.particles.DustParticleOptions(dust, 1.1f),
+                level.sendParticles(new com.dragonblockarcanedba.particle.DbaDustOptions(dust, 1.1f),
                         player.getX(), player.getY() + player.getBbHeight() * 0.5, player.getZ(),
                         count, 0.45, 0.6, 0.45, 0.02);
             }
@@ -239,7 +238,7 @@ public final class KiBarrier {
             return;
         }
         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 0.7f, 1.2f);
+                com.dragonblockarcanedba.sound.DbaSounds.FIZZLE, SoundSource.PLAYERS, 0.7f, 1.2f);
         player.sendSystemMessage(Component.translatable("message.dragonblockarcanedba.ki_barrier_down"), true);
     }
 

@@ -1,9 +1,9 @@
 package com.dragonblockarcanedba.block;
 
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.InsideBlockEffectApplier;
@@ -113,7 +113,7 @@ public class YellowCloudBlock extends HalfTransparentBlock {
             double pz = pos.getZ() + random.nextDouble();
             double speedFactor = Math.max(0.4, Math.min(1.5, 1.45 - (pos.getY() - 90) * 0.007));
             level.addParticle(
-                ParticleTypes.CLOUD,
+                DbaParticles.CLOUD_PUFF,
                 px, py, pz,
                 0.025 * speedFactor + random.nextDouble() * 0.015, 0.005, 0.0
             );

@@ -9,7 +9,7 @@ import net.minecraft.nbt.CompoundTag;
  * - type         : what kind of attack (BLAST, BEAM, DISK, etc.)
  * - usedPercent  : 1–100, how much of current Ki to spend on this attack
  * - color        : ARGB int for particle color (e.g. 0xFF00AAFF = blue)
- * - isBarrage    : BLAST only — fires many small balls instead of one large
+ * - isBarrage    : BLAST only - fires many small balls instead of one large
  * - isEmpty      : true if this slot has no technique configured
  *
  * Damage formula:

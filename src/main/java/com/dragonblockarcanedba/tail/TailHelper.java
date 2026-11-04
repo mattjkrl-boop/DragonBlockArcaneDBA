@@ -3,12 +3,10 @@ package com.dragonblockarcanedba.tail;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.network.DbaNetwork;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 
@@ -116,13 +114,13 @@ public class TailHelper {
         double z = player.getZ();
 
         // Visceral particle burst at lower back (spine / tail origin)
-        level.sendParticles(ParticleTypes.CRIT, x, y, z, 25, 0.25, 0.3, 0.25, 0.2);
-        level.sendParticles(ParticleTypes.DAMAGE_INDICATOR, x, y, z, 10, 0.2, 0.2, 0.2, 0.1);
-        level.sendParticles(ParticleTypes.SMOKE, x, y, z, 8, 0.15, 0.15, 0.15, 0.05);
+        level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.CRIT_SPARK, x, y, z, 25, 0.25, 0.3, 0.25, 0.2);
+        level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.DAMAGE_SPARK, x, y, z, 10, 0.2, 0.2, 0.2, 0.1);
+        level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.DUST_PUFF, x, y, z, 8, 0.15, 0.15, 0.15, 0.05);
 
         // Visceral audio: snap / break sound + crit slice impact
-        level.playSound(null, x, y, z, SoundEvents.ITEM_BREAK, SoundSource.PLAYERS, 1.3F, 0.75F);
-        level.playSound(null, x, y, z, SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.1F, 0.65F);
+        level.playSound(null, x, y, z, com.dragonblockarcanedba.sound.DbaSounds.ITEM_SHATTER, SoundSource.PLAYERS, 1.3F, 0.75F);
+        level.playSound(null, x, y, z, com.dragonblockarcanedba.sound.DbaSounds.CRIT_HIT, SoundSource.PLAYERS, 1.1F, 0.65F);
         level.playSound(null, x, y, z, com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.1F, 0.65F);
 
         // Notify the player
@@ -160,8 +158,8 @@ public class TailHelper {
         double y = player.getY() + 0.6;
         double z = player.getZ();
 
-        level.sendParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 15, 0.3, 0.3, 0.3, 0.1);
-        level.playSound(null, x, y, z, SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 1.0F, 1.2F);
+        level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.HAPPY_SPARKLE, x, y, z, 15, 0.3, 0.3, 0.3, 0.1);
+        level.playSound(null, x, y, z, com.dragonblockarcanedba.sound.DbaSounds.CRYSTAL_CHIME, SoundSource.PLAYERS, 1.0F, 1.2F);
 
         player.sendSystemMessage(Component.literal("§a§l[!] Your tail has regrown!").withStyle(ChatFormatting.GREEN));
         return true;

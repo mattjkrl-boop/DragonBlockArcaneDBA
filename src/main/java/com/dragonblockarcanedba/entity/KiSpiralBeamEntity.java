@@ -18,6 +18,8 @@ public class KiSpiralBeamEntity extends Projectile {
             SynchedEntityData.defineId(KiSpiralBeamEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> SCALE =
             SynchedEntityData.defineId(KiSpiralBeamEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> SEED =
+            SynchedEntityData.defineId(KiSpiralBeamEntity.class, EntityDataSerializers.INT);
 
     public KiSpiralBeamEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -28,6 +30,7 @@ public class KiSpiralBeamEntity extends Projectile {
         this.entityData.set(OWNER_ID, owner.getId());
         this.entityData.set(LENGTH, length);
         this.entityData.set(COLOR, color);
+        this.entityData.set(SEED, level.getRandom().nextInt());
         Vec3 start = owner.getEyePosition();
         this.setPos(start.x, start.y, start.z);
         this.setYRot(owner.getYRot());
@@ -40,8 +43,10 @@ public class KiSpiralBeamEntity extends Projectile {
         builder.define(LENGTH, 50.0f);
         builder.define(OWNER_ID, -1);
         builder.define(SCALE, 1.0f);
+        builder.define(SEED, 0);
     }
 
+    public int getSeed() { return this.entityData.get(SEED); }
     public int getColor() { return this.entityData.get(COLOR); }
     public float getLength() { return this.entityData.get(LENGTH); }
     public int getOwnerId() { return this.entityData.get(OWNER_ID); }

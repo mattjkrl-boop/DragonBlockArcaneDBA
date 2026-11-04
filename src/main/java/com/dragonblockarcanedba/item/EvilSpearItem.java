@@ -90,6 +90,9 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
             WeaponDrainHelper.drainKiDiscrete(player, 45.0, 8);
             // Melee did not even mark: the spear could not set up its own Hell Hunt chain.
             target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER, 120, 0, false, true), player);
+            // The dread rides the mark at the same duration: darkness and
+            // the watching eyes for exactly as long as the mark lasts.
+            target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.EVIL_DREAD_HOLDER, 120, 0, false, true), player);
         }
     }
 
@@ -347,6 +350,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
                 for (LivingEntity victim : landed) {
                     victim.hurtServer(level, DbaDamage.hellfire(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (lungeDamage)));
                     victim.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER, 120, 0, false, true), player);
+                    victim.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.EVIL_DREAD_HOLDER, 120, 0, false, true), player);
                 }
                 if (!landed.isEmpty()) {
                     HellHuntImpactEntity impact = new HellHuntImpactEntity(

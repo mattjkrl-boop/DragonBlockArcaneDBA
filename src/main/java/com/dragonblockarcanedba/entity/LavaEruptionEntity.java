@@ -4,10 +4,12 @@ import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -42,8 +44,15 @@ public class LavaEruptionEntity extends Projectile {
         Blocks.BASALT.defaultBlockState(),
         Blocks.BLACKSTONE.defaultBlockState());
     private final Set<Integer> hitIds = new HashSet<>();
-    /** An eruption may leave a few lava sources along the lip. The rest is fire. */
-    private int lavaLeft = 8;
+    /**
+     * Redesign budgets: at most 8 crust pools along the lip per eruption
+     * (idea 3), and at most 4 geysers per eruption (idea 2), two under
+     * hit targets and two at the lip. The legacy fire ring stays, but it
+     * no longer places real lava sources: the pools are the lava now.
+     */
+    private int poolsLeft = 8;
+    private int geysers;
+    private boolean lipGeysersDone;
 
     public LavaEruptionEntity(EntityType<? extends Projectile> type, Level level) {
         super(type, level);
@@ -125,6 +134,17 @@ public class LavaEruptionEntity extends Projectile {
             living.setRemainingFireTicks(Math.max(living.getRemainingFireTicks(), 80));
             living.setDeltaMovement(living.getDeltaMovement().add(lookX * 0.60, 0.40, lookZ * 0.60));
             com.dragonblockarcanedba.util.DbaCompat.markHurt(living);
+            if (this.geysers < 2) {
+                // A heavy hit blasts a geyser out of the ground under the
+                // target (idea 2), at a third of the eruption's weight.
+                BlockPos surface = LavaField.findSurface(server,
+                    Mth.floor(living.getX()), Mth.floor(living.getZ()), Mth.floor(living.getY()));
+                if (surface != null) {
+                    LavaGeyserEntity.erupt(server, owner instanceof LivingEntity o ? o : null,
+                        surface, damage * 0.36f);
+                    this.geysers++;
+                }
+            }
         }
         if (this.tickCount == 1) {
             // Cast beat (shared standard points 2 and 3): dust bursts at the
@@ -140,6 +160,31 @@ public class LavaEruptionEntity extends Projectile {
         // breathing with the wave's own envelope.
         LayeredParticles.emitVortex(server, this.position().add(0, 0.2, 0), Math.max(1.2f, reach * 0.8f), 1.8f,
             this.tickCount, this.life(), 0xFF5A00, DbaParticles.FLAME);
-        this.lavaLeft -= LavaSwordGround.scorchArc(server, this.getX(), this.getY(), this.getZ(), this.getYRot(), previous, reach, this.lavaLeft, CONE_MIN_DOT);
+        if (!this.lipGeysersDone && this.tickCount >= 6) {
+            // Halfway out, the lip itself blows: two geysers at the wave's
+            // front corners, whether or not anything was hit.
+            this.lipGeysersDone = true;
+            double perpX = -lookZ;
+            double perpZ = lookX;
+            for (int side = -1; side <= 1 && this.geysers < 4; side += 2) {
+                double px = this.getX() + lookX * reach * 0.75 + perpX * side * reach * 0.35;
+                double pz = this.getZ() + lookZ * reach * 0.75 + perpZ * side * reach * 0.35;
+                BlockPos surface = LavaField.findSurface(server,
+                    Mth.floor(px), Mth.floor(pz), Mth.floor(this.getY()) + 1);
+                if (surface != null) {
+                    LavaGeyserEntity.erupt(server, owner instanceof LivingEntity o ? o : null,
+                        surface, damage * 0.36f);
+                    this.geysers++;
+                }
+            }
+        }
+        // The ground the wave crosses: the legacy fire ring first (budget
+        // 0, fire cells only), then the redesign's crust pools along the
+        // same moving lip, from the eruption's pool budget.
+        LavaSwordGround.scorchArc(server, this.getX(), this.getY(), this.getZ(), this.getYRot(), previous, reach, 0, CONE_MIN_DOT);
+        if (this.poolsLeft > 0) {
+            this.poolsLeft -= LavaField.crustArc(server, this.getX(), this.getY(), this.getZ(), this.getYRot(),
+                previous, reach, this.poolsLeft, CONE_MIN_DOT, owner, damage * 0.12f);
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.item.DbaItems;
 import com.dragonblockarcanedba.movement.MovementPhysics;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import com.dragonblockarcanedba.util.DbaLivingEntityInput;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -60,7 +61,7 @@ public class FlyingNimbusEntity extends Mob {
         if (!this.level().isClientSide()) {
             player.startRiding(this);
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                net.minecraft.sounds.SoundEvents.WOOL_PLACE, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
+                DbaSounds.WIND_GUST, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
             return InteractionResult.SUCCESS;
         }
         return InteractionResult.PASS;
@@ -71,9 +72,9 @@ public class FlyingNimbusEntity extends Mob {
         if (!this.isRemoved() && !this.droppedItem) {
             this.droppedItem = true;
             level.playSound(null, this.getX(), this.getY(), this.getZ(),
-                net.minecraft.sounds.SoundEvents.WOOL_BREAK, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.2f);
+                DbaSounds.WIND_GUST, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.2f);
             level.playSound(null, this.getX(), this.getY(), this.getZ(),
-                net.minecraft.sounds.SoundEvents.ITEM_PICKUP, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.2f);
+                DbaSounds.CRYSTAL_CHIME, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.2f);
             this.discard();
             if (source.getEntity() instanceof Player player && !player.getAbilities().instabuild) {
                 this.spawnAtLocation(level, DbaItems.FLYING_NIMBUS);

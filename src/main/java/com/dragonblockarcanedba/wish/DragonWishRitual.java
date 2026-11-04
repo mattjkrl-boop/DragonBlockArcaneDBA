@@ -3,6 +3,7 @@ package com.dragonblockarcanedba.wish;
 import com.dragonblockarcanedba.entity.DbaEntities;
 import com.dragonblockarcanedba.network.WishMenuOpenPayload;
 import com.dragonblockarcanedba.network.WishRitualStartPayload;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.BlockPos;
@@ -10,7 +11,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntitySpawnReason;
@@ -109,7 +109,7 @@ public final class DragonWishRitual {
                 }
             }
             serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.BEACON_ACTIVATE, SoundSource.HOSTILE, 1.6f, 0.55f);
+                    DbaSounds.CHARGE_RISE, SoundSource.HOSTILE, 1.6f, 0.55f);
         } finally {
             starting = false;
         }
@@ -188,7 +188,7 @@ public final class DragonWishRitual {
                 ritual.stormed = true;
                 ritual.level.getServer().setWeatherParameters(0, 12000, true, true);
                 ritual.level.playSound(null, ritual.center.x, ritual.center.y, ritual.center.z,
-                        SoundEvents.PORTAL_TRAVEL, SoundSource.HOSTILE, 1.2f, 0.55f);
+                        DbaSounds.TELEPORT_WHOOSH, SoundSource.HOSTILE, 1.2f, 0.55f);
             }
             if (!ritual.appeared && age >= DRAGON_AT) {
                 ritual.appeared = true;
@@ -234,7 +234,7 @@ public final class DragonWishRitual {
         }
         float pitch = ritual.namek ? 0.5f : 0.8f;
         level.playSound(null, pos.getX(), pos.getY(), pos.getZ(),
-                SoundEvents.ENDER_DRAGON_GROWL, SoundSource.HOSTILE, 2.5f, pitch);
+                DbaSounds.DRAGON_GROWL, SoundSource.HOSTILE, 2.5f, pitch);
         String line = ritual.namek
                 ? "\u00a76Porunga: \u00a7eI am the Dragon of Dreams. Speak your 3 wishes!"
                 : "\u00a76Shenron: \u00a7eI am the Eternal Dragon Shenron. Speak your wish!";

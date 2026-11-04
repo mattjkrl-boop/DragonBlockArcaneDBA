@@ -1,7 +1,7 @@
 package com.dragonblockarcanedba.ki;
 
 /**
- * The type of Ki Technique — determines how the attack fires.
+ * The type of Ki Technique - determines how the attack fires.
  */
 public enum KiTechniqueType {
     /** Spherical projectile. Can be toggled to BARRAGE mode (many small balls). */
@@ -12,7 +12,7 @@ public enum KiTechniqueType {
     DISK,
     /** Sustained constant beam channel. */
     BEAM,
-    /** Twin rapid-fire eye lasers — spam-castable. */
+    /** Twin rapid-fire eye lasers - spam-castable. */
     LASER,
     /** AoE last-resort explosion. Costs 100% Ki, damages self. */
     EXPLOSION,

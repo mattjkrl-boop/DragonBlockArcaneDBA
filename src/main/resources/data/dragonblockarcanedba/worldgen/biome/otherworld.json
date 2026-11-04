@@ -3,7 +3,7 @@
   "temperature": 0.5,
   "downfall": 0.0,
   "attributes": {
-    "minecraft:visual/cloud_color": "#E6FFE070",
+    "minecraft:visual/cloud_color": "#e6f2a7c3",
     "minecraft:visual/cloud_height": 210.0
   },
   "effects": {

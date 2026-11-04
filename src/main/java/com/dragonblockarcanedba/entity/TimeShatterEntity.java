@@ -15,9 +15,10 @@ import net.minecraft.world.phys.Vec3;
  */
 public class TimeShatterEntity extends Projectile {
     private static final EntityDataAccessor<Float> SCALE = SynchedEntityData.defineId(TimeShatterEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(TimeShatterEntity.class, EntityDataSerializers.INT);
 
-    private int maxLifetime = 18;
-    private int lifetime = 18;
+    private int maxLifetime = 36;
+    private int lifetime = 36;
 
     public TimeShatterEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -30,11 +31,13 @@ public class TimeShatterEntity extends Projectile {
         this.setPos(pos.x, pos.y, pos.z);
         this.noPhysics = true;
         this.setScale(scale);
+        this.entityData.set(SEED, level.getRandom().nextInt());
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(SCALE, 1.2f);
+        builder.define(SEED, 0);
     }
 
     public float getShatterScale() {
@@ -43,6 +46,10 @@ public class TimeShatterEntity extends Projectile {
 
     public void setScale(float scale) {
         this.entityData.set(SCALE, scale);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int getMaxLifetime() {
@@ -59,5 +66,17 @@ public class TimeShatterEntity extends Projectile {
                 this.discard();
             }
         }
+    }
+
+    @Override
+    protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
+        super.addAdditionalSaveData(output);
+        output.putInt("Seed", getSeed());
+    }
+
+    @Override
+    protected void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput input) {
+        super.readAdditionalSaveData(input);
+        this.entityData.set(SEED, input.getIntOr("Seed", 0));
     }
 }

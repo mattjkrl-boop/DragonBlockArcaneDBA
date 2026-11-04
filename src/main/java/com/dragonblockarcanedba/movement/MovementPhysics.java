@@ -4,10 +4,10 @@ import com.dragonblockarcanedba.network.C2SMovementPayload;
 import com.dragonblockarcanedba.network.ScreenShakePayload;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.phys.Vec3;
 
@@ -195,8 +195,8 @@ public final class MovementPhysics {
         ServerLevel level = (ServerLevel) player.level();
         double x = player.getX(), y = player.getY(), z = player.getZ();
         int dust = s.fastFalling ? 26 : 14;
-        level.sendParticles(ParticleTypes.POOF, x, y + 0.15, z, dust, 0.55, 0.12, 0.55, 0.06);
-        level.playSound(null, x, y, z, SoundEvents.PLAYER_BIG_FALL, SoundSource.PLAYERS, 0.7f, 0.9f);
+        level.sendParticles(DbaParticles.DUST_PUFF, x, y + 0.15, z, dust, 0.55, 0.12, 0.55, 0.06);
+        level.playSound(null, x, y, z, DbaSounds.SLAM_THUD, SoundSource.PLAYERS, 0.7f, 0.9f);
         float intensity = (float) Math.min(1.6, 0.45 + (impact - IMPACT_MIN_SPEED) * 0.55) * (s.fastFalling ? 1.35f : 1.0f);
         ServerPlayNetworking.send(player, new ScreenShakePayload(intensity, 7, 0));
     }

@@ -209,7 +209,7 @@ public final class LavaSwordGround {
             }
             BlockPos groundPos = new BlockPos(x, cursor.getY() - 1, z);
             BlockState ground = level.getBlockState(groundPos);
-            if (!ground.blocksMotion() || !ground.isFaceSturdy(level, groundPos, Direction.UP)) {
+            if (!ground.isFaceSturdy(level, groundPos, Direction.UP)) {
                 continue;
             }
             BlockPos surface = new BlockPos(x, cursor.getY(), z);
@@ -404,6 +404,11 @@ public final class LavaSwordGround {
      * never reverts a cell away from. The placed cell itself is always air, so
      * this list guards the ground under the burn and the lava cells' neighbors.
      */
+    /** The sword's own protected-ground list, exposed for LavaField's placement checks. */
+    public static boolean isProtectedGround(BlockState state) {
+        return protectedSolid(state);
+    }
+
     private static boolean protectedSolid(BlockState state) {
         return state.is(Blocks.BEDROCK)
             || state.is(Blocks.SPAWNER)

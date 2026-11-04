@@ -11,7 +11,10 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 
 /**
- * A ki explosion is one shell and a white core. It eases open, then fades out before the entity ends.
+ * A ki explosion is a displaced dome shell around a white core, with a plume
+ * rising through the middle and a broken vortex ring racing along the
+ * ground. It eases open, then fades out before the entity ends. The domes
+ * are seeded per blast, so no two explosions bulge the same way.
  */
 public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExplosionRenderer.ExplosionRenderState> {
 
@@ -30,6 +33,7 @@ public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExp
         state.color = entity.getColor();
         state.radius = entity.getRadius();
         state.ageInTicks = entity.tickCount + partialTicks;
+        state.seed = entity.getSeed();
     }
 
     @Override
@@ -49,22 +53,29 @@ public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExp
         }
 
         float radius = ease * state.radius;
-        float shellA = 0.55f * fade;
-        float coreA = 0.9f * fade;
-        float ringA = 0.7f * fade * (1f - open);
         float ring = radius * (0.85f + open * 0.35f);
+        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        long seed = state.seed;
+        float fadeEnv = fade;
 
         poseStack.pushPose();
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawSphere(pose, buffer, radius, 8, 12, r, g, b, shellA);
-            KiRenderHelper.drawSphere(pose, buffer, radius * 0.38f, 6, 8, 1f, 1f, 1f, coreA);
+            BespokeGeometry.displacedDome(pose, buffer, seed, radius, r, g, b, 0.55f, fadeEnv, distScale);
+            PoseStack.Pose shellFlip = pose.copy();
+            shellFlip.rotate(Axis.XP.rotationDegrees(180f));
+            BespokeGeometry.displacedDome(shellFlip, buffer, seed ^ 0x77AAL, radius, r, g, b, 0.55f, fadeEnv, distScale);
+            BespokeGeometry.displacedDome(pose, buffer, seed ^ 0x2B3CL, radius * 0.38f, 1f, 1f, 1f, 0.9f, fadeEnv, distScale);
+            PoseStack.Pose coreFlip = pose.copy();
+            coreFlip.rotate(Axis.XP.rotationDegrees(180f));
+            BespokeGeometry.displacedDome(coreFlip, buffer, seed ^ 0x4D5EL, radius * 0.38f, 1f, 1f, 1f, 0.9f, fadeEnv, distScale);
+            BespokeGeometry.plume(pose, buffer, seed ^ 0x1234L, radius * 0.5f, radius * 0.9f, r, g, b, 0.35f, fadeEnv, distScale);
         });
         poseStack.popPose();
 
         poseStack.pushPose();
-        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(90f)));
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
-            KiRenderHelper.drawDisc(pose, buffer, ring * 0.92f, ring, 24, r, g, b, ringA);
+            BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x99L, ring, -0.04f, 0.04f, 0f,
+                r, g, b, 0.7f * fadeEnv * (1f - open), distScale);
         });
         poseStack.popPose();
 
@@ -75,5 +86,6 @@ public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExp
         public int color = 0xFFFFFF;
         public float radius = 1.0f;
         public float ageInTicks = 0;
+        public int seed = 0;
     }
 }

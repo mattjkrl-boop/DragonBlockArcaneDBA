@@ -14,6 +14,7 @@ public class KiBeamEntity extends Projectile {
     private static final EntityDataAccessor<Float> LENGTH = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> OWNER_ID = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> SCALE = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(KiBeamEntity.class, EntityDataSerializers.INT);
 
     public KiBeamEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -24,6 +25,7 @@ public class KiBeamEntity extends Projectile {
         this.entityData.set(OWNER_ID, owner.getId());
         this.entityData.set(LENGTH, length);
         this.entityData.set(COLOR, color);
+        this.entityData.set(SEED, level.getRandom().nextInt());
         
         // Initial position setup
         Vec3 start = owner.getEyePosition();
@@ -38,8 +40,10 @@ public class KiBeamEntity extends Projectile {
         builder.define(LENGTH, 50.0f);
         builder.define(OWNER_ID, -1);
         builder.define(SCALE, 1.0f);
+        builder.define(SEED, 0);
     }
 
+    public int getSeed() { return this.entityData.get(SEED); }
     public int getColor() { return this.entityData.get(COLOR); }
     public float getLength() { return this.entityData.get(LENGTH); }
     public int getOwnerId() { return this.entityData.get(OWNER_ID); }

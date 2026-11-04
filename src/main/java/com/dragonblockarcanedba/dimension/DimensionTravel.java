@@ -84,9 +84,9 @@ public class DimensionTravel {
 
         // Launch sounds at origin
         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-            net.minecraft.sounds.SoundEvents.FIREWORK_ROCKET_LAUNCH, net.minecraft.sounds.SoundSource.PLAYERS, 2.0f, 0.6f);
+            com.dragonblockarcanedba.sound.DbaSounds.SPACE_POD_LAUNCH, net.minecraft.sounds.SoundSource.PLAYERS, 2.0f, 0.6f);
         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-            net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(), net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 0.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 0.8f);
 
         double targetX;
         double targetY;
@@ -163,9 +163,9 @@ public class DimensionTravel {
 
         // Arrival sounds at destination
         targetLevel.playSound(null, targetX, targetY, targetZ,
-            net.minecraft.sounds.SoundEvents.PORTAL_TRAVEL, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.2f);
+            com.dragonblockarcanedba.sound.DbaSounds.RIFT_OPEN, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.2f);
         targetLevel.playSound(null, targetX, targetY, targetZ,
-            net.minecraft.sounds.SoundEvents.BEACON_ACTIVATE, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.4f);
+            com.dragonblockarcanedba.sound.DbaSounds.CHARGE_RISE, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.4f);
         targetLevel.playSound(null, targetX, targetY, targetZ,
             com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.4f);
 

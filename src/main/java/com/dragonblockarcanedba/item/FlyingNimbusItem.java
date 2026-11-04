@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.entity.DbaEntities;
 import com.dragonblockarcanedba.entity.FlyingNimbusEntity;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -35,9 +36,9 @@ public class FlyingNimbusItem extends Item {
                 }
 
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.WOOL_PLACE, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
+                    DbaSounds.WIND_GUST, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.ELYTRA_FLYING, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.5f);
+                    DbaSounds.FLIGHT_WIND, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.5f);
                 return InteractionResult.SUCCESS;
             }
         }
@@ -62,9 +63,9 @@ public class FlyingNimbusItem extends Item {
                 }
 
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.WOOL_PLACE, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
+                    DbaSounds.WIND_GUST, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.ELYTRA_FLYING, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.5f);
+                    DbaSounds.FLIGHT_WIND, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.5f);
                 return InteractionResult.SUCCESS;
             }
         }

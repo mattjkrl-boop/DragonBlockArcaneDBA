@@ -20,6 +20,7 @@ public class KiBarrierEntity extends Projectile {
     private static final EntityDataAccessor<Integer> COLOR = SynchedEntityData.defineId(KiBarrierEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> USED_PERCENT = SynchedEntityData.defineId(KiBarrierEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> OWNER_ID = SynchedEntityData.defineId(KiBarrierEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(KiBarrierEntity.class, EntityDataSerializers.INT);
 
     /** Ki this cast is allowed to spend, snapshotted when the barrier is raised. */
     private double budgetTotal;
@@ -40,6 +41,7 @@ public class KiBarrierEntity extends Projectile {
         this.entityData.set(OWNER_ID, owner.getId());
         this.entityData.set(COLOR, color);
         this.entityData.set(USED_PERCENT, usedPercent);
+        this.entityData.set(SEED, level.getRandom().nextInt());
         this.setPos(owner.getX(), owner.getY(), owner.getZ());
     }
 
@@ -48,6 +50,11 @@ public class KiBarrierEntity extends Projectile {
         builder.define(COLOR, 0xFF55DDFF);
         builder.define(USED_PERCENT, 50);
         builder.define(OWNER_ID, -1);
+        builder.define(SEED, 0);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public int getColor() {

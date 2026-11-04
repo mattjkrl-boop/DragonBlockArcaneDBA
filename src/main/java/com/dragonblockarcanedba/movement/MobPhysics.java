@@ -7,10 +7,10 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -193,8 +193,8 @@ public final class MobPhysics {
             float dmg = (float) Math.min(6.0, -t.lastVy * 2.2);
             e.hurt(e.level().damageSources().generic(), dmg);
             if (e.level() instanceof ServerLevel level) {
-                level.sendParticles(ParticleTypes.POOF, e.getX(), e.getY() + 0.15, e.getZ(), 12, 0.4, 0.1, 0.4, 0.05);
-                level.playSound(null, e.getX(), e.getY(), e.getZ(), SoundEvents.PLAYER_SMALL_FALL, SoundSource.HOSTILE, 0.6f, 1.0f);
+                level.sendParticles(DbaParticles.DUST_PUFF, e.getX(), e.getY() + 0.15, e.getZ(), 12, 0.4, 0.1, 0.4, 0.05);
+                level.playSound(null, e.getX(), e.getY(), e.getZ(), DbaSounds.THUNK, SoundSource.HOSTILE, 0.6f, 1.0f);
             }
         }
         // Wall splat, once per launch.
@@ -205,7 +205,7 @@ public final class MobPhysics {
                 e.hurt(e.level().damageSources().generic(), (float) Math.min(8.0, hs * 7.0));
                 e.addEffect(new MobEffectInstance(MobEffects.SLOWNESS, 24, 2));
                 if (e.level() instanceof ServerLevel level) {
-                    level.playSound(null, e.getX(), e.getY(), e.getZ(), SoundEvents.SHIELD_BLOCK, SoundSource.HOSTILE, 0.7f, 0.8f);
+                    level.playSound(null, e.getX(), e.getY(), e.getZ(), DbaSounds.SHIELD_CLANK, SoundSource.HOSTILE, 0.7f, 0.8f);
                 }
             }
         }

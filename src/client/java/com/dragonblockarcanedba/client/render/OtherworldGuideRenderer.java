@@ -9,7 +9,7 @@ import net.minecraft.client.renderer.entity.state.VillagerRenderState;
 import net.minecraft.resources.Identifier;
 
 public class OtherworldGuideRenderer extends MobRenderer<OtherworldGuideEntity, VillagerRenderState, VillagerModel> {
-    private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("minecraft", "textures/entity/villager/villager.png");
+    private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/otherworld_guide.png");
 
     public OtherworldGuideRenderer(EntityRendererProvider.Context context) {
         super(context, new VillagerModel(context.bakeLayer(ModelLayers.VILLAGER)), 0.5f);

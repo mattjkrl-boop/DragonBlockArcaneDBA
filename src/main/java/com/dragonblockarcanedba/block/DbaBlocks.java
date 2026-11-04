@@ -220,6 +220,38 @@ public class DbaBlocks {
             .requiresCorrectToolForDrops()
     );
 
+    // --- Lava Sword redesign: temporary ground material, never obtained ---
+    // Both blocks exist only while LavaField (entity package) holds a
+    // crash-persisted entry for their cell, and are registered without
+    // BlockItems on purpose: they are ability constructs, not items.
+    public static final ResourceKey<Block> MAGMA_CRUST_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("magma_crust")
+    );
+    public static final Block MAGMA_CRUST = new MagmaCrustBlock(
+        BlockBehaviour.Properties.of()
+            .setId(MAGMA_CRUST_KEY)
+            .mapColor(MapColor.COLOR_ORANGE)
+            .strength(0.4f)
+            .sound(SoundType.BASALT)
+            .lightLevel(state -> switch (state.getValue(MagmaCrustBlock.STAGE)) {
+                case 0 -> 15;
+                case 1 -> 9;
+                default -> 2;
+            })
+    );
+
+    public static final ResourceKey<Block> MINI_VOLCANO_KEY = ResourceKey.create(
+        Registries.BLOCK, DragonBlockArcaneDBA.id("mini_volcano")
+    );
+    public static final Block MINI_VOLCANO = new MiniVolcanoBlock(
+        BlockBehaviour.Properties.of()
+            .setId(MINI_VOLCANO_KEY)
+            .mapColor(MapColor.COLOR_BROWN)
+            .strength(-1.0f, 3600000.0f) // Unbreakable while it stands; the field removes it on schedule
+            .sound(SoundType.BASALT)
+            .lightLevel(state -> 13)
+    );
+
     // --- Block Items ---
     public static BlockItem YELLOW_CLOUD_BLOCK_ITEM;
     public static BlockItem NAMEK_GRASS_ITEM;
@@ -267,5 +299,7 @@ public class DbaBlocks {
         Registry.register(BuiltInRegistries.BLOCK, EARTH_DRAGON_BALL_KEY, EARTH_DRAGON_BALL);
         Registry.register(BuiltInRegistries.BLOCK, NAMEKIAN_DRAGON_BALL_KEY, NAMEKIAN_DRAGON_BALL);
         Registry.register(BuiltInRegistries.BLOCK, GRAVITY_TRAINING_BLOCK_KEY, GRAVITY_TRAINING_BLOCK);
+        Registry.register(BuiltInRegistries.BLOCK, MAGMA_CRUST_KEY, MAGMA_CRUST);
+        Registry.register(BuiltInRegistries.BLOCK, MINI_VOLCANO_KEY, MINI_VOLCANO);
     }
 }

@@ -1,9 +1,10 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.ParticleTypes;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
@@ -48,28 +49,28 @@ public class FriezaSoldierEntity extends DbaHostileEntity {
         }
         this.shotCooldown = 40;
         this.swing(InteractionHand.MAIN_HAND);
-        target.hurtServer(server, server.damageSources().mobAttack(this), 5.0f);
-        server.playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.BLAZE_SHOOT, SoundSource.HOSTILE, 0.7f, 1.5f);
-        server.sendParticles(ParticleTypes.CRIT, target.getX(), target.getEyeY(), target.getZ(), 8, 0.2, 0.25, 0.2, 0.02);
+        target.hurtServer(server, DbaDamage.ki(this, this), 5.0f);
+        server.playSound(null, this.getX(), this.getY(), this.getZ(), DbaSounds.FIRE_SHOT, SoundSource.HOSTILE, 0.7f, 1.5f);
+        server.sendParticles(DbaParticles.CRIT_SPARK, target.getX(), target.getEyeY(), target.getZ(), 8, 0.2, 0.25, 0.2, 0.02);
     }
 
     @Override
     protected void playAttackSound() {
-        this.playSound(SoundEvents.PLAYER_ATTACK_WEAK, 0.8f, 0.7f);
+        this.playSound(DbaSounds.SWING_LIGHT, 0.8f, 0.7f);
     }
 
     @Override
     protected SoundEvent getAmbientSound() {
-        return SoundEvents.PILLAGER_AMBIENT;
+        return DbaSounds.SOLDIER_AMBIENT;
     }
 
     @Override
     protected SoundEvent getHurtSound(DamageSource source) {
-        return SoundEvents.PILLAGER_HURT;
+        return DbaSounds.SOLDIER_HURT;
     }
 
     @Override
     protected SoundEvent getDeathSound() {
-        return SoundEvents.PILLAGER_HURT;
+        return DbaSounds.SOLDIER_DEATH;
     }
 }

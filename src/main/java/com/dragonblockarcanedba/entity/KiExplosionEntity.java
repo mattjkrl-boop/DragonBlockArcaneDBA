@@ -10,16 +10,21 @@ import net.minecraft.world.entity.projectile.Projectile;
 public class KiExplosionEntity extends Projectile {
     private static final EntityDataAccessor<Integer> COLOR = SynchedEntityData.defineId(KiExplosionEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(KiExplosionEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(KiExplosionEntity.class, EntityDataSerializers.INT);
 
     public KiExplosionEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
+        this.entityData.set(SEED, level.getRandom().nextInt());
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(COLOR, 0xFFFFFF);
         builder.define(RADIUS, 1.0f);
+        builder.define(SEED, 0);
     }
+
+    public int getSeed() { return this.entityData.get(SEED); }
 
     public void setColor(int color) { this.entityData.set(COLOR, color); }
     public int getColor() { return this.entityData.get(COLOR); }

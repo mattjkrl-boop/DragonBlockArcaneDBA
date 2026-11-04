@@ -2,7 +2,7 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
-import net.minecraft.sounds.SoundEvents;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -36,9 +36,9 @@ public class RecoveryCapsuleItem extends Item {
                 stack.shrink(1);
             }
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.PLAYER_BURP, SoundSource.PLAYERS, 0.7f, 1.4f);
+                    DbaSounds.THUNK, SoundSource.PLAYERS, 0.7f, 1.4f);
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.BOTTLE_EMPTY, SoundSource.PLAYERS, 0.6f, 1.2f);
+                    DbaSounds.FIZZLE, SoundSource.PLAYERS, 0.6f, 1.2f);
         }
         return InteractionResult.SUCCESS;
     }

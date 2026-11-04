@@ -518,6 +518,16 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("hell_hunt_impact")))
     );
 
+    public static final EntityType<DreadGazeEntity> DREAD_GAZE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("dread_gaze"),
+            EntityType.Builder.<DreadGazeEntity>of(DreadGazeEntity::new, MobCategory.MISC)
+                    .sized(0.5f, 0.5f)
+                    .clientTrackingRange(32)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("dread_gaze")))
+    );
+
     public static final EntityType<BanshoCycloneEntity> BANSHO_CYCLONE = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("bansho_cyclone"),
@@ -932,6 +942,36 @@ public class DbaEntities {
                     .clientTrackingRange(48)
                     .updateInterval(1)
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("lava_eruption")))
+    );
+
+    public static final EntityType<LavaGeyserEntity> LAVA_GEYSER = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("lava_geyser"),
+            EntityType.Builder.<LavaGeyserEntity>of(LavaGeyserEntity::new, MobCategory.MISC)
+                    .sized(0.8f, 0.8f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("lava_geyser")))
+    );
+
+    public static final EntityType<LavaBlobEntity> LAVA_BLOB = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("lava_blob"),
+            EntityType.Builder.<LavaBlobEntity>of(LavaBlobEntity::new, MobCategory.MISC)
+                    .sized(0.5f, 0.5f)
+                    .clientTrackingRange(48)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("lava_blob")))
+    );
+
+    public static final EntityType<LavaMeteorEntity> LAVA_METEOR = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("lava_meteor"),
+            EntityType.Builder.<LavaMeteorEntity>of(LavaMeteorEntity::new, MobCategory.MISC)
+                    .sized(1.2f, 1.2f)
+                    .clientTrackingRange(64)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("lava_meteor")))
     );
 
     public static final EntityType<DebrisEntity> DEBRIS = Registry.register(

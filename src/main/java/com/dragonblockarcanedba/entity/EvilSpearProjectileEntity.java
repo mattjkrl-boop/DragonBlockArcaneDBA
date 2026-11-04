@@ -163,6 +163,12 @@ public class EvilSpearProjectileEntity extends Projectile {
                         com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER, 160, 0, false, true
                     ), owner);
 
+                    // The dread rides the mark at the same duration:
+                    // darkness and the watching eyes while the mark lasts.
+                    target.addEffect(new MobEffectInstance(
+                        com.dragonblockarcanedba.effect.DbaEffects.EVIL_DREAD_HOLDER, 160, 0, false, true
+                    ), owner);
+
                     // MC 26.2 Physics: Spear impalement pin friction & drag
                     com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
                         target,

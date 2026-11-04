@@ -4,7 +4,6 @@ import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -99,7 +98,7 @@ public class KiTechniqueHandler {
                 case EXPLOSION, BARRIER -> {}
             }
 
-            player.sendSystemMessage(Component.literal("§b" + tech.type.displayName() + " §7— §a" + (int) damage + " dmg §7(used " + (int) usedKi + " Ki)"), true);
+            player.sendSystemMessage(Component.literal("§b" + tech.type.displayName() + " §7- §a" + (int) damage + " dmg §7(used " + (int) usedKi + " Ki)"), true);
         }
 
         accessor.dba$syncStats();
@@ -128,11 +127,11 @@ public class KiTechniqueHandler {
         level.addFreshEntity(blast);
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.2f, 1.6f);
+            com.dragonblockarcanedba.sound.DbaSounds.FIRE_SHOT, SoundSource.PLAYERS, 1.2f, 1.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.BLASTER_SHOT, SoundSource.PLAYERS, 1.2f, 1.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.6f, 1.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 0.6f, 1.8f);
     }
 
     // =========== BARRAGE: 8 smaller blasts with spread ===========
@@ -157,13 +156,13 @@ public class KiTechniqueHandler {
             level.addFreshEntity(blast);
 
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 0.7f, 1.6f + (float) (level.getRandom().nextFloat() * 0.4));
+                com.dragonblockarcanedba.sound.DbaSounds.FIRE_SHOT, SoundSource.PLAYERS, 0.7f, 1.6f + (float) (level.getRandom().nextFloat() * 0.4));
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.BLASTER_SHOT, SoundSource.PLAYERS, 0.7f, 1.6f + (float) (level.getRandom().nextFloat() * 0.4));
         }
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.FIREWORK_ROCKET_BLAST, SoundSource.PLAYERS, 1.2f, 1.7f);
+            com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 1.2f, 1.7f);
     }
 
     // =========== BEAM: continuous line of damage along look direction ===========
@@ -181,7 +180,7 @@ public class KiTechniqueHandler {
             if (!hit.isEmpty()) {
                 hitLength = i;
                 for (LivingEntity target : hit) {
-                    target.hurtServer(level, player.damageSources().indirectMagic(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) damage)));
+                    target.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.ki(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) damage)));
                 }
                 break;
             }
@@ -198,15 +197,15 @@ public class KiTechniqueHandler {
         }
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.8f, 1.4f);
+            com.dragonblockarcanedba.sound.DbaSounds.KAMEHAMEHA_CHARGE, SoundSource.PLAYERS, 1.8f, 1.4f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.ABILITY_CHARGE, SoundSource.PLAYERS, 1.8f, 1.4f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 1.5f, 1.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.BOOM_SONIC, SoundSource.PLAYERS, 1.5f, 1.8f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.5f, 1.8f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 0.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.KAMEHAMEHA_FIRE, SoundSource.PLAYERS, 1.2f, 0.8f);
     }
 
     // =========== DISK: horizontal disk that travels forward ===========
@@ -226,9 +225,9 @@ public class KiTechniqueHandler {
         level.addFreshEntity(disk);
 
         level.playSound(null, player.getX(), player.getY() + player.getBbHeight(), player.getZ(),
-            SoundEvents.TRIDENT_THROW.value(), SoundSource.PLAYERS, 1.5f, 1.6f);
+            com.dragonblockarcanedba.sound.DbaSounds.TRIDENT_THROW, SoundSource.PLAYERS, 1.5f, 1.6f);
         level.playSound(null, player.getX(), player.getY() + player.getBbHeight(), player.getZ(),
-            SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.2f, 1.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.FLIGHT_WIND, SoundSource.PLAYERS, 1.2f, 1.8f);
     }
 
     // =========== LASER: twin rapid eye beams ===========
@@ -253,7 +252,7 @@ public class KiTechniqueHandler {
                 if (!hit.isEmpty()) {
                     hitLength = i;
                     for (LivingEntity target : hit) {
-                        target.hurtServer(level, player.damageSources().indirectMagic(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) perBeam)));
+                        target.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.ki(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) perBeam)));
                     }
                     break;
                 }
@@ -267,9 +266,9 @@ public class KiTechniqueHandler {
         }
 
         level.playSound(null, player.getX(), player.getEyeY(), player.getZ(),
-            SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 1.4f, 2.0f);
+            com.dragonblockarcanedba.sound.DbaSounds.ZAP_DARK, SoundSource.PLAYERS, 1.4f, 2.0f);
         level.playSound(null, player.getX(), player.getEyeY(), player.getZ(),
-            SoundEvents.GUARDIAN_ATTACK, SoundSource.PLAYERS, 1.2f, 1.8f);
+            com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.PLAYERS, 1.2f, 1.8f);
     }
 
     // =========== EXPLOSION: AoE last resort ===========
@@ -300,13 +299,13 @@ public class KiTechniqueHandler {
                 if (dist <= radius) {
                     double falloff = 1.0 - (dist / radius);
                     double entityDmg = totalDamage * falloff;
-                    target.hurtServer(level, player.damageSources().indirectMagic(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) entityDmg)));
+                    target.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.ki(player, player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) entityDmg)));
                 }
             }
         }
 
         // Self damage
-        player.hurtServer(level, player.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) selfDamage)));
+        player.hurtServer(level, com.dragonblockarcanedba.util.DbaDamage.ki(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) ((float) selfDamage)));
 
         // Spawn visual explosion entity
         com.dragonblockarcanedba.entity.KiExplosionEntity explosion = new com.dragonblockarcanedba.entity.KiExplosionEntity(com.dragonblockarcanedba.entity.DbaEntities.KI_EXPLOSION, level);
@@ -316,16 +315,16 @@ public class KiTechniqueHandler {
         level.addFreshEntity(explosion);
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 3.0f, 0.6f);
+            com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, SoundSource.PLAYERS, 3.0f, 0.6f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.5f);
+            com.dragonblockarcanedba.sound.DbaSounds.BOOM_SONIC, SoundSource.PLAYERS, 2.5f, 0.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.5f);
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 2.0f, 0.6f);
+            com.dragonblockarcanedba.sound.DbaSounds.RELEASE_BLAST, SoundSource.PLAYERS, 2.0f, 0.6f);
 
         player.sendSystemMessage(
-            Component.literal("§4§lKI EXPLOSION! §7— §c" + (int) totalDamage + " dmg §7(radius " + (int) radius + ") §4Self: " + (int) selfDamage),
+            Component.literal("§4§lKI EXPLOSION! §7- §c" + (int) totalDamage + " dmg §7(radius " + (int) radius + ") §4Self: " + (int) selfDamage),
             true
         );
     }

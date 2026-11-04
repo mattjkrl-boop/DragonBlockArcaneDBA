@@ -1,8 +1,11 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import com.dragonblockarcanedba.util.DbaDamage;
+import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -12,6 +15,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.entity.EntityTypeTest;
 import net.minecraft.world.phys.AABB;
 
@@ -58,13 +62,13 @@ public class SaibamanEntity extends DbaHostileEntity {
         }
         AABB area = this.getBoundingBox().inflate(2.5);
         List<LivingEntity> nearby = server.getEntities(EntityTypeTest.forClass(LivingEntity.class), area, this::canBurstHit);
-        DamageSource source = server.damageSources().mobAttack(this);
+        DamageSource source = DbaDamage.ki(this, this);
         for (int i = 0; i < nearby.size(); i++) {
             LivingEntity hit = nearby.get(i);
             hit.hurtServer(server, source, 8.0f);
         }
-        server.playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.HOSTILE, 1.0f, 1.2f);
-        server.sendParticles(net.minecraft.core.particles.ParticleTypes.ITEM_SLIME, this.getX(), this.getY() + 0.6, this.getZ(), 18, 0.4, 0.4, 0.4, 0.04);
+        server.playSound(null, this.getX(), this.getY(), this.getZ(), DbaSounds.BOOM_BIG, SoundSource.HOSTILE, 1.0f, 1.2f);
+        server.sendParticles(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, Blocks.SLIME_BLOCK.defaultBlockState()), this.getX(), this.getY() + 0.6, this.getZ(), 18, 0.4, 0.4, 0.4, 0.04);
         this.discard();
     }
 
@@ -74,21 +78,21 @@ public class SaibamanEntity extends DbaHostileEntity {
 
     @Override
     protected void playAttackSound() {
-        this.playSound(SoundEvents.SLIME_ATTACK, 1.0f, 0.8f);
+        this.playSound(DbaSounds.HIT_FLESH, 1.0f, 0.8f);
     }
 
     @Override
     protected SoundEvent getAmbientSound() {
-        return SoundEvents.SLIME_SQUISH_SMALL;
+        return DbaSounds.SAIBAMAN_AMBIENT;
     }
 
     @Override
     protected SoundEvent getHurtSound(DamageSource source) {
-        return SoundEvents.SLIME_HURT;
+        return DbaSounds.SAIBAMAN_HURT;
     }
 
     @Override
     protected SoundEvent getDeathSound() {
-        return SoundEvents.SLIME_HURT;
+        return DbaSounds.SAIBAMAN_DEATH;
     }
 }

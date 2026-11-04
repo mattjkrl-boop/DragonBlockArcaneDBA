@@ -1,9 +1,9 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.block.DbaBlocks;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -37,7 +37,7 @@ public class DragonRadarItem extends Item {
             if (!ping.found) {
                 player.sendOverlayMessage(Component.translatable("item.dragonblockarcanedba.dragon_radar.none"));
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.NOTE_BLOCK_BASS.value(), SoundSource.PLAYERS, 0.6f, 0.6f);
+                        DbaSounds.RADAR_BLIP, SoundSource.PLAYERS, 0.6f, 0.6f);
             } else {
                 double dx = ping.x - player.getX();
                 double dz = ping.z - player.getZ();
@@ -46,7 +46,7 @@ public class DragonRadarItem extends Item {
                 player.sendOverlayMessage(Component.translatable("item.dragonblockarcanedba.dragon_radar.found", direction, blocks));
                 float pitch = blocks < 8 ? 1.6f : blocks < 16 ? 1.2f : 0.8f;
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.NOTE_BLOCK_BIT.value(), SoundSource.PLAYERS, 0.8f, pitch);
+                        DbaSounds.RADAR_BLIP, SoundSource.PLAYERS, 0.8f, pitch);
             }
             player.getCooldowns().addCooldown(stack, 30);
         }

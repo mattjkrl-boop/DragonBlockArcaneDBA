@@ -2,7 +2,7 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.entity.DbaEntities;
 import com.dragonblockarcanedba.entity.PatrolRobotEntity;
-import net.minecraft.sounds.SoundEvents;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -38,7 +38,7 @@ public class PatrolRobotItem extends Item {
             stack.shrink(1);
         }
         level.playSound(null, robot.getX(), robot.getY(), robot.getZ(),
-                SoundEvents.IRON_GOLEM_REPAIR, SoundSource.NEUTRAL, 0.8f, 1.3f);
+                DbaSounds.REPAIR, SoundSource.NEUTRAL, 0.8f, 1.3f);
         return InteractionResult.SUCCESS;
     }
 }

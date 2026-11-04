@@ -16,9 +16,11 @@ public class KiBlastEntity extends ThrowableProjectile {
     private static final EntityDataAccessor<Integer> COLOR = SynchedEntityData.defineId(KiBlastEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(KiBlastEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> SCALE = SynchedEntityData.defineId(KiBlastEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(KiBlastEntity.class, EntityDataSerializers.INT);
 
     public KiBlastEntity(EntityType<? extends ThrowableProjectile> entityType, Level level) {
         super(entityType, level);
+        this.entityData.set(SEED, level.getRandom().nextInt());
     }
 
     @Override
@@ -26,6 +28,11 @@ public class KiBlastEntity extends ThrowableProjectile {
         builder.define(COLOR, 0xFFFFFF);
         builder.define(DAMAGE, 10.0f);
         builder.define(SCALE, 1.0f);
+        builder.define(SEED, 0);
+    }
+
+    public int getSeed() {
+        return this.entityData.get(SEED);
     }
 
     public void setColor(int color) {
@@ -98,8 +105,8 @@ public class KiBlastEntity extends ThrowableProjectile {
         super.onHitEntity(result);
         if (!this.level().isClientSide()) {
             if (result.getEntity() instanceof LivingEntity target) {
-                target.hurtServer((net.minecraft.server.level.ServerLevel) this.level(), 
-                        this.damageSources().indirectMagic(this, this.getOwner()), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (getDamage())));
+                target.hurtServer((net.minecraft.server.level.ServerLevel) this.level(),
+                        com.dragonblockarcanedba.util.DbaDamage.ki(this, this.getOwner()), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (getDamage())));
             }
             explode();
         }
@@ -116,9 +123,9 @@ public class KiBlastEntity extends ThrowableProjectile {
     private void explode() {
         if (!this.level().isClientSide()) {
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(), net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.4f);
+                com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.4f);
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                net.minecraft.sounds.SoundEvents.LIGHTNING_BOLT_IMPACT, net.minecraft.sounds.SoundSource.PLAYERS, 0.5f, 1.6f);
+                com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, net.minecraft.sounds.SoundSource.PLAYERS, 0.5f, 1.6f);
             // Impact burst (redesign T5): the hit used to be sound only.
             if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
                 float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();

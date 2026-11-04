@@ -1,8 +1,9 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
+import com.dragonblockarcanedba.sound.DbaSounds;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.equipment.ArmorMaterial;
@@ -36,7 +37,7 @@ public class DbaArmorMaterials {
                     ArmorType.BODY, 6
             ),
             9, // enchantability
-            SoundEvents.ARMOR_EQUIP_IRON,
+            BuiltInRegistries.SOUND_EVENT.wrapAsHolder(DbaSounds.EQUIP),
             0.0F, // toughness
             0.0F, // knockback resistance
             REPAIRS_BATTLE_ARMOR,
@@ -53,7 +54,7 @@ public class DbaArmorMaterials {
                     ArmorType.BODY, 5
             ),
             12, // enchantability
-            SoundEvents.ARMOR_EQUIP_LEATHER,
+            BuiltInRegistries.SOUND_EVENT.wrapAsHolder(DbaSounds.EQUIP),
             0.0F, // toughness
             0.0F, // knockback resistance
             REPAIRS_PICCOLO_OUTFIT,

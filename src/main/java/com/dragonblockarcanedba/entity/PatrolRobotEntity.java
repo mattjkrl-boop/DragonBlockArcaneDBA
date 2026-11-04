@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.item.DbaItems;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import com.geckolib.animatable.GeoEntity;
 import com.geckolib.animatable.instance.AnimatableInstanceCache;
 import com.geckolib.animatable.manager.AnimatableManager;
@@ -13,7 +14,6 @@ import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
@@ -144,7 +144,7 @@ public class PatrolRobotEntity extends net.minecraft.world.entity.PathfinderMob 
         this.returnsItem = false;
         this.discard();
         this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                SoundEvents.IRON_GOLEM_REPAIR, net.minecraft.sounds.SoundSource.NEUTRAL, 0.7f, 1.4f);
+                DbaSounds.REPAIR, net.minecraft.sounds.SoundSource.NEUTRAL, 0.7f, 1.4f);
         return InteractionResult.SUCCESS;
     }
 
@@ -164,12 +164,12 @@ public class PatrolRobotEntity extends net.minecraft.world.entity.PathfinderMob 
 
     @Override
     protected SoundEvent getHurtSound(DamageSource source) {
-        return SoundEvents.IRON_GOLEM_HURT;
+        return DbaSounds.ROBOT_HURT;
     }
 
     @Override
     protected SoundEvent getDeathSound() {
-        return SoundEvents.IRON_GOLEM_DEATH;
+        return DbaSounds.ROBOT_DEATH;
     }
 
     @Override

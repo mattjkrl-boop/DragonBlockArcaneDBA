@@ -4,10 +4,12 @@ import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DbaDamage;
 import com.dragonblockarcanedba.util.DebrisSpawner;
 import com.dragonblockarcanedba.util.LayeredParticles;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -21,6 +23,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -39,8 +42,16 @@ public class LavaCleaveEntity extends Projectile {
         Blocks.BASALT.defaultBlockState(),
         Blocks.BLACKSTONE.defaultBlockState());
     private final Set<Integer> hitIds = new HashSet<>();
-    /** A cleave may leave a few lava sources. The rest of the path is fire. */
-    private int lavaLeft = 4;
+    /**
+     * The magma wave (redesign idea 4): crust cells laid under the flight
+     * path, deduped across ticks, with a hard budget per cleave. The
+     * centerline is kept so the flight's end can carve the channel
+     * (idea 1) back along it and downhill from it.
+     */
+    private final Set<Long> wavePlaced = new HashSet<>();
+    private final List<BlockPos> groundPath = new ArrayList<>();
+    private int waveBudget = 44;
+    private boolean channeled;
 
     public LavaCleaveEntity(EntityType<? extends Projectile> type, Level level) {
         super(type, level);
@@ -81,11 +92,25 @@ public class LavaCleaveEntity extends Projectile {
         return false;
     }
 
+    /** Carve the channel back along the flown path, once, however the flight ends. */
+    private void finishChannel(ServerLevel server, Entity owner, float damage) {
+        if (this.channeled) {
+            return;
+        }
+        this.channeled = true;
+        if (!this.groundPath.isEmpty()) {
+            LavaField.carveChannel(server, this.groundPath, owner, damage * 0.15f);
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();
         Vec3 motion = this.getDeltaMovement();
         if (this.tickCount > LIFE_TICKS) {
+            if (!this.level().isClientSide() && this.level() instanceof ServerLevel server) {
+                this.finishChannel(server, this.getOwner(), this.entityData.get(DAMAGE));
+            }
             this.discard();
             return;
         }
@@ -119,16 +144,31 @@ public class LavaCleaveEntity extends Projectile {
                 LayeredParticles.emitRain(server, start, 1.2f, 1.2f,
                     this.tickCount, LIFE_TICKS, DbaParticles.FLAME);
             }
-            this.lavaLeft -= LavaSwordGround.scorchSegment(server, start, end, 1.35, this.lavaLeft);
+            // The magma wave rolls along under the crescent: raised crust
+            // cells three wide across the flight line, WAVE profile, so
+            // they sink and cool fast behind the crest. The segment's
+            // surface midpoint joins the centerline the channel carves.
+            this.waveBudget -= LavaField.waveStep(server, start, end, owner,
+                damage * 0.15f, this.wavePlaced, this.waveBudget);
+            Vec3 mid = start.add(end).scale(0.5);
+            BlockPos midSurface = LavaField.findSurface(server,
+                Mth.floor(mid.x), Mth.floor(mid.z), Mth.floor(mid.y));
+            if (midSurface != null && (this.groundPath.isEmpty()
+                    || !this.groundPath.get(this.groundPath.size() - 1).equals(midSurface))) {
+                this.groundPath.add(midSurface);
+            }
             if (blocked) {
-                // The pile belongs on top of the block the cleave landed on.
-                // The path scorch only covers the flight segment, whose last
-                // midpoint sits inside the hit block, so land it explicitly.
-                this.lavaLeft -= LavaSwordGround.scorchLanding(server, block.getBlockPos(), this.lavaLeft);
                 Vec3 impact = Vec3.atCenterOf(block.getBlockPos());
                 LayeredParticles.emitGroundBurst(server, impact, 1.4f, 0xFF5A00);
                 DebrisSpawner.spawnField(server, owner instanceof LivingEntity living ? living : null,
                     impact, 12, 1.6, 1.6, 12, DEBRIS_PALETTE);
+                this.finishChannel(server, owner, damage);
+                // The landing blasts a mini geyser out of the ground the
+                // crescent died on (idea 2, at cleave weight).
+                BlockPos landing = LavaField.findSurface(server,
+                    block.getBlockPos().getX(), block.getBlockPos().getZ(), block.getBlockPos().getY() + 1);
+                LavaGeyserEntity.erupt(server, owner instanceof LivingEntity living ? living : null,
+                    landing, damage * 0.45f);
                 this.discard();
                 return;
             }

@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
+import com.dragonblockarcanedba.sound.DbaSounds;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -38,11 +39,11 @@ public class SenzuBeanItem extends Item {
 
                 // Sound feedback
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.PLAYER_BURP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.2f);
+                    DbaSounds.THUNK, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.2f);
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.5f);
+                    DbaSounds.LEVEL_UP, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.5f);
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    net.minecraft.sounds.SoundEvents.BEACON_POWER_SELECT, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.6f);
+                    DbaSounds.CHARGE_FULL, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 1.6f);
             }
             return InteractionResult.SUCCESS;
         }

@@ -275,6 +275,18 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.LavaEruptionRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.LAVA_GEYSER,
+            com.dragonblockarcanedba.client.render.LavaGeyserRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.LAVA_BLOB,
+            com.dragonblockarcanedba.client.render.LavaBlobRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.LAVA_METEOR,
+            com.dragonblockarcanedba.client.render.LavaMeteorRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.BANSHO_GALE,
             com.dragonblockarcanedba.client.render.BanshoGaleRenderer::new
         );
@@ -325,6 +337,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.HELL_HUNT_IMPACT,
             com.dragonblockarcanedba.client.render.HellHuntImpactRenderer::new
+        );
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.DREAD_GAZE,
+            com.dragonblockarcanedba.client.render.DreadGazeRenderer::new
         );
         net.minecraft.client.renderer.entity.EntityRenderers.register(
             com.dragonblockarcanedba.entity.DbaEntities.BANSHO_CYCLONE,

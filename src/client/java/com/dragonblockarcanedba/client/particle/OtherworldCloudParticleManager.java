@@ -1,9 +1,9 @@
 package com.dragonblockarcanedba.client.particle;
 
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.core.particles.ParticleTypes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -165,7 +165,7 @@ public class OtherworldCloudParticleManager {
                 double vz = (RNG.nextDouble() - 0.5) * 0.02;
 
                 level.addParticle(
-                    ParticleTypes.CLOUD,
+                    DbaParticles.CLOUD_PUFF,
                     spawnX, spawnY, spawnZ,
                     vx, vy, vz
                 );
@@ -186,7 +186,7 @@ public class OtherworldCloudParticleManager {
             double vz = (RNG.nextDouble() - 0.5) * 0.015;
 
             level.addParticle(
-                ParticleTypes.CLOUD,
+                DbaParticles.CLOUD_PUFF,
                 px + offsetX, spawnY, pz + offsetZ,
                 vx, vy, vz
             );

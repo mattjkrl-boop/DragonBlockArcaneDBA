@@ -11,15 +11,17 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.core.particles.DustParticleOptions;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
 
 public class KiDiskEntity extends ThrowableProjectile {
     private static final EntityDataAccessor<Integer> COLOR = SynchedEntityData.defineId(KiDiskEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(KiDiskEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> SCALE = SynchedEntityData.defineId(KiDiskEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> SEED = SynchedEntityData.defineId(KiDiskEntity.class, EntityDataSerializers.INT);
 
     public KiDiskEntity(EntityType<? extends ThrowableProjectile> entityType, Level level) {
         super(entityType, level);
+        this.entityData.set(SEED, level.getRandom().nextInt());
     }
 
     @Override
@@ -27,7 +29,10 @@ public class KiDiskEntity extends ThrowableProjectile {
         builder.define(COLOR, 0xFFFFFF);
         builder.define(DAMAGE, 10.0f);
         builder.define(SCALE, 1.0f);
+        builder.define(SEED, 0);
     }
+
+    public int getSeed() { return this.entityData.get(SEED); }
 
     public void setColor(int color) { this.entityData.set(COLOR, color); }
     public int getColor() { return this.entityData.get(COLOR); }
@@ -69,7 +74,7 @@ public class KiDiskEntity extends ThrowableProjectile {
     public void tick() {
         super.tick();
         if (this.level().isClientSide() && this.tickCount > 1 && this.tickCount % 4 == 0) {
-            this.level().addParticle(new DustParticleOptions(getColor(), 0.7f),
+            this.level().addParticle(new DbaDustOptions(getColor(), 0.7f),
                     this.getX(), this.getY(), this.getZ(),
                     0, 0, 0);
         }
@@ -83,14 +88,14 @@ public class KiDiskEntity extends ThrowableProjectile {
         super.onHitEntity(result);
         if (!this.level().isClientSide()) {
             if (result.getEntity() instanceof LivingEntity target) {
-                target.hurtServer((net.minecraft.server.level.ServerLevel) this.level(), 
-                        this.damageSources().indirectMagic(this, this.getOwner()), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (getDamage())));
+                target.hurtServer((net.minecraft.server.level.ServerLevel) this.level(),
+                        com.dragonblockarcanedba.util.DbaDamage.ki(this, this.getOwner()), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (getDamage())));
                 this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                    net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.5f);
+                    com.dragonblockarcanedba.sound.DbaSounds.SWING_LIGHT, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.5f);
                 this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, net.minecraft.sounds.SoundSource.PLAYERS, 1.5f, 1.5f);
                 this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                    net.minecraft.sounds.SoundEvents.ANVIL_LAND, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.8f);
+                    com.dragonblockarcanedba.sound.DbaSounds.SLAM_THUD, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.8f);
             }
         }
         // Destructo Disk DOES NOT discard on hit entity! It keeps going!
@@ -101,13 +106,13 @@ public class KiDiskEntity extends ThrowableProjectile {
         super.onHitBlock(result);
         if (!this.level().isClientSide()) {
             if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-                serverLevel.sendParticles(new DustParticleOptions(getColor(), 2.0f), 
+                serverLevel.sendParticles(new DbaDustOptions(getColor(), 2.0f),
                     this.getX(), this.getY(), this.getZ(), 10, 0.5, 0.5, 0.5, 0.1);
             }
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(), net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.6f);
+                com.dragonblockarcanedba.sound.DbaSounds.BOOM_BIG, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 1.6f);
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                net.minecraft.sounds.SoundEvents.ITEM_BREAK.value(), net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.2f);
+                com.dragonblockarcanedba.sound.DbaSounds.ITEM_SHATTER, net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.2f);
             this.discard();
         }
     }
