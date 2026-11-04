@@ -99,6 +99,10 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.client.render.DebrisRenderer::new
         );
         net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
+            com.dragonblockarcanedba.entity.DbaEntities.FRAGMENT,
+            com.dragonblockarcanedba.client.render.FragmentRenderer::new
+        );
+        net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
             com.dragonblockarcanedba.entity.DbaEntities.BOLT,
             com.dragonblockarcanedba.client.render.BoltRenderer::new
         );

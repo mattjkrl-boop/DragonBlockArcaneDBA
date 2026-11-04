@@ -984,6 +984,16 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("debris")))
     );
 
+    public static final EntityType<FragmentEntity> FRAGMENT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("fragment"),
+            EntityType.Builder.<FragmentEntity>of(FragmentEntity::new, MobCategory.MISC)
+                    .sized(0.5f, 0.5f)
+                    .clientTrackingRange(10)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("fragment")))
+    );
+
     public static final EntityType<BoltEntity> BOLT = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("bolt"),
