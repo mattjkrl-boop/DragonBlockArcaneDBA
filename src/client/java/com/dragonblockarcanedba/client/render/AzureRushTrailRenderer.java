@@ -177,7 +177,9 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
     public void submit(TrailRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         Integer drawer = WRITER.get(state.casterKey);
         ArrayDeque<Nose> wake = WAKES.get(state.casterKey);
-        float life = 1.0F - Mth.clamp((state.age - 1.0F) / 10.0F, 0.0F, 1.0F);
+        // Fade reaches zero exactly as the 12 tick trail entity dies; over 10
+        // ticks the last visible frame ended a tick early and read as a cut.
+        float life = 1.0F - Mth.clamp((state.age - 1.0F) / 11.0F, 0.0F, 1.0F);
         if (drawer == null || drawer != state.entityId || wake == null || wake.isEmpty() || life < 0.03F) {
             super.submit(state, poseStack, collector, cameraState);
             return;
@@ -185,6 +187,15 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
 
         Nose[] noses = wake.toArray(new Nose[0]);
         Nose newest = noses[noses.length - 1];
+        // A caster who stopped rushing leaves no new trail entities to prune
+        // against, so a stale wake drops its map entries here instead of
+        // holding one entry per caster for the life of the client.
+        if (state.spin - newest.gameTime > 24.0F) {
+            WAKES.remove(state.casterKey);
+            WRITER.remove(state.casterKey);
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
         final float scale = Math.max(0.35F, newest.scale);
         final boolean doubleRush = newest.doubleRush;
         final boolean firstPerson = newest.firstPerson;

@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SpiritCleaveEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -24,6 +26,7 @@ public class SpiritCleaveRenderer extends EntityRenderer<SpiritCleaveEntity, Spi
         public float yRot;
         public float xRot;
         public float age;
+        public float life = SpiritCleaveEntity.FLIGHT_TICKS + SpiritCleaveEntity.FADE_TICKS;
     }
 
     public boolean shouldRender(SpiritCleaveEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -45,14 +48,20 @@ public class SpiritCleaveRenderer extends EntityRenderer<SpiritCleaveEntity, Spi
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTick;
+        state.life = entity.getLifeTicks();
     }
 
     @Override
     public void submit(CleaveState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float open = ease(Math.min(1.0f, state.age / 3.0f));
-        float fade = ease(Math.max(0.0f, 1.0f - state.age / 8.0f));
+        // One envelope for the whole life (spectacle standard point 5): the
+        // same FxEnvelope the server emits particles with, driven by the
+        // synced life, so the blade builds, peaks, and dissipates with its
+        // trail instead of fading on a private 8 tick clock.
+        float fade = FxEnvelope.envelope(state.age, state.life, 0.08f, 0.30f);
         float length = 2.25f * (0.30f + 0.70f * open);
         float tipFlash = ease(Math.max(0.0f, 1.0f - Math.max(0.0f, state.age - 4.0f) / 4.0f));
+        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
         RenderType type = KiRenderHelper.kiRenderType();
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
@@ -62,12 +71,26 @@ public class SpiritCleaveRenderer extends EntityRenderer<SpiritCleaveEntity, Spi
             float a = 0.95f * fade;
             drawSword(buffer, matrix, pose, 0.22f, length, 0.05f, 0.16f, 1.0f, 0.95f, 0.72f, a);
             drawSword(buffer, matrix, pose, 0.015f, length + 0.16f, 0.012f, 0.10f, 1.0f, 1.0f, 1.0f, a);
+            // Layered trail with depth (point 1): a wide faint gold wake
+            // behind a cyan mid wake behind the bright core wake, so the
+            // blade drags three fading layers instead of one flat ribbon.
+            drawSwordWake(buffer, matrix, pose, 0.34f, 1.50f, 1.0f, 0.80f, 0.30f, a * 0.30f);
+            drawSwordWake(buffer, matrix, pose, 0.24f, 1.00f, 0.0f, 0.90f, 1.0f, a * 0.50f);
             drawSwordWake(buffer, matrix, pose, 0.16f, 0.55f, 1.0f, 0.92f, 0.55f, a);
             drawGuardHorns(buffer, matrix, pose, a);
             if (tipFlash > 0.02f) {
                 drawTipBurst(buffer, matrix, pose, length, tipFlash, a);
             }
         });
+        // Glow halo pass: a fat, faint copy of the blade so the cut reads
+        // as light at range. Alpha steps down with camera distance.
+        if (fade > 0.02f) {
+            float haloAlpha = 0.16f * fade * (0.35f + 0.65f * distScale);
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
+                drawSword(buffer, matrix, pose, 0.36f, length, 0.12f, 0.16f, 0.55f, 0.95f, 1.0f, haloAlpha);
+            });
+        }
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -95,7 +118,7 @@ public class SpiritCleaveRenderer extends EntityRenderer<SpiritCleaveEntity, Spi
     /** Tapered sword with a ridge and a slight bow, so the blade is not one flat triangle. */
     private static void drawSword(com.mojang.blaze3d.vertex.VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
                                   float halfWidth, float length, float thick, float bow, float r, float g, float b, float a) {
-        int segs = 7;
+        int segs = 9;
         for (int i = 0; i < segs; i++) {
             float t1 = i / (float) segs;
             float t2 = (i + 1) / (float) segs;
@@ -122,7 +145,7 @@ public class SpiritCleaveRenderer extends EntityRenderer<SpiritCleaveEntity, Spi
 
     private static void drawSwordWake(com.mojang.blaze3d.vertex.VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
                                       float halfWidth, float back, float r, float g, float b, float a) {
-        int segs = 4;
+        int segs = 6;
         for (int i = 0; i < segs; i++) {
             float t1 = i / (float) segs;
             float t2 = (i + 1) / (float) segs;

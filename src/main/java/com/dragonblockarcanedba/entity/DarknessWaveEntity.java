@@ -1,14 +1,11 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -22,8 +19,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Darkness Wave Entity — Fired by Darkness Sword (Abyssal Slash).
- * Piercing crescent darkness wave traveling up to 32 blocks, passing through terrain and mobs.
+ * Darkness Wave Entity: Fired by Darkness Sword (Abyssal Slash).
+ * Piercing crescent darkness wave passing through terrain and mobs.
+ * Life is 60 ticks, so at full charge speed (2.6 per tick) it reaches about
+ * 156 blocks; the renderer fades over the last 15 ticks to match.
  */
 public class DarknessWaveEntity extends Projectile {
     private float damage = 400.0f;
@@ -145,21 +144,31 @@ public class DarknessWaveEntity extends Projectile {
                     net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.6f);
             }
 
-            // Theme particles (T5): the wave sheds void smoke as it travels,
-            // so its path reads between the crescent and the trailing shards.
+            // Layered trail (point 1): a bright ki mote core, a violet dust
+            // mid layer, and wispy void smoke at the rim, shed as it travels.
             if (this.tickCount % 2 == 0) {
                 float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
                 if (density > 0f) {
                     serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                        this.getX(), this.getY() + 0.5, this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        0.35, 0.35, 0.35, 0.02);
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.util.LayeredParticles.dust(0xA605F2, 1.3f),
+                        this.getX(), this.getY() + 0.5, this.getZ(),
+                        Math.max(1, Math.round(2f * density)),
+                        0.8, 0.5, 0.8, 0.02);
+                    serverLevel.sendParticles(
                         com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
                         this.getX(), this.getY() + 0.5, this.getZ(),
-                        Math.max(1, Math.round(3f * density)),
+                        Math.max(1, Math.round(2f * density)),
                         1.2, 0.7, 1.2, 0.02);
                 }
             }
 
-            // Wave passes through terrain, expires after 32 blocks / 40 ticks
-            if (this.tickCount > 40) {
+            // Wave passes through terrain, expires after 60 ticks
+            if (this.tickCount > 60) {
                 this.discard();
             }
         }

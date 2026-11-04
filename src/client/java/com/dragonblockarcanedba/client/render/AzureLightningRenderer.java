@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.AzureLightningEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -9,16 +11,22 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.resources.Identifier;
 import org.joml.Matrix4f;
 
-import java.util.Random;
-
+/**
+ * Telegraph renderer for AzureLightningEntity.
+ *
+ * Spectacle pass: the bolt itself is drawn by the shared BoltEntity now, so
+ * this renderer draws the warning and the aftermath. During the telegraph
+ * window it draws an anchor glow and a hard ring at exactly the strike
+ * radius (the warning's size equals the hit's size), a converging inner
+ * ring that closes as the strike nears, and a thin charge column. After the
+ * strike tick it draws an 8 tick afterglow ring that fades out. The old
+ * textured 44 block bolt mesh is retired; the BoltEntity's branched seeded
+ * bolt replaces it.
+ */
 public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity, AzureLightningRenderer.AzureLightningRenderState> {
-    private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/azure_lightning.png");
-    private static final Identifier RARE_TEXTURE = Identifier.fromNamespaceAndPath("dragonblockarcanedba", "textures/entity/azure_lightning_rare.png");
 
     public AzureLightningRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -28,6 +36,9 @@ public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity,
         public boolean isRare;
         public float age;
         public long seed;
+        public int telegraphTicks = 12;
+        public float radius = 3.5f;
+        public double wx, wy, wz;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -51,147 +62,94 @@ public class AzureLightningRenderer extends EntityRenderer<AzureLightningEntity,
         state.isRare = entity.isRare();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.telegraphTicks = entity.getTelegraphTicks();
+        state.radius = entity.getRadius();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
     }
 
     @Override
     public void submit(AzureLightningRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         super.submit(state, poseStack, collector, cameraState);
 
-        float flashTime = state.age;
-        if (flashTime > 12.0f) return;
+        float age = state.age;
+        float strikeAt = Math.max(1.0f, state.telegraphTicks);
+        float radius = state.radius;
+        if (age >= strikeAt + AzureLightningEntity.AFTERGLOW_TICKS) return;
 
-        // The bolt eases out over its 12 ticks. A short flicker keeps the crackle
-        // without popping off at full brightness.
-        float life = Math.min(1.0f, flashTime / 12.0f);
-        float flashAlpha = 1.0f - life * life * (3.0f - 2.0f * life);
-        if (flashTime > 3.0f && ((int) (flashTime * 4)) % 2 == 0) {
-            flashAlpha *= 0.65f;
-        }
+        float ds = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
+        int ringSegments = FxEnvelope.segments(32, ds, 12);
 
-        final float finalAlpha = flashAlpha;
-        Identifier tex = state.isRare ? RARE_TEXTURE : TEXTURE;
-        RenderType texturedType = RenderTypes.entityTranslucentEmissive(tex);
+        // Theme colors: azure for a normal strike, pale gold for a rare one.
+        float cr = state.isRare ? 1.0f : 0.15f;
+        float cg = state.isRare ? 0.85f : 0.85f;
+        float cb = state.isRare ? 0.45f : 1.0f;
+
         RenderType glowType = KiRenderHelper.kiRenderType();
 
-        // Pass 1: Textured 3D Volumetric Electric Azure Lightning
-        collector.submitCustomGeometry(poseStack, texturedType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-            Random rng = new Random(state.seed);
+        if (age < strikeAt) {
+            // Telegraph phase: t runs 0 to 1 across the warning window.
+            float t = FxEnvelope.smoothstep(age / strikeAt);
+            // The warning pulses faster as the strike closes in.
+            float blink = (Math.sin(age * (0.6 + t * 1.6)) > 0.0) ? 1.0f : 0.72f;
+            float warnAlpha = (0.35f + 0.55f * t) * blink;
 
-            float r = 1.0f, g = 1.0f, b = 1.0f;
+            collector.submitCustomGeometry(poseStack, glowType, (pose, buffer) -> {
+                Matrix4f matrix = pose.pose();
 
-            // 1. Procedural Jagged Main Trunk
-            int trunkSegments = 22;
-            float totalHeight = 44.0f;
-            float[] nodeX = new float[trunkSegments + 1];
-            float[] nodeY = new float[trunkSegments + 1];
-            float[] nodeZ = new float[trunkSegments + 1];
+                // Anchor glow filling the warned circle.
+                LayeredRender.drawAnchorGlow(pose, buffer, radius, 0.06f,
+                    cr, cg, cb, (0.16f + 0.30f * t) * blink, ds);
 
-            nodeX[0] = 0; nodeY[0] = 0; nodeZ[0] = 0;
+                // Hard warning ring at exactly the damage radius.
+                drawGroundRing(matrix, buffer, 0, 0.07f, 0, radius, radius * 0.92f, ringSegments,
+                    cr, cg, cb, warnAlpha);
 
-            for (int i = 1; i <= trunkSegments; i++) {
-                float progress = i / (float) trunkSegments;
-                nodeY[i] = progress * totalHeight;
+                // Converging inner ring: closes to the center as t reaches 1.
+                float convR = radius * (1.0f - t) + 0.35f;
+                drawGroundRing(matrix, buffer, 0, 0.08f, 0, convR, Math.max(0.0f, convR - 0.3f), ringSegments,
+                    0.95f, 1.0f, 1.0f, 0.55f * t * blink);
 
-                float variance = (float) Math.sin(progress * Math.PI) * 2.4f + (progress * 0.9f);
-                nodeX[i] = nodeX[i - 1] + (rng.nextFloat() - 0.5f) * variance;
-                nodeZ[i] = nodeZ[i - 1] + (rng.nextFloat() - 0.5f) * variance;
-            }
+                // Thin charge column rising from the strike point.
+                float beamAlpha = (0.10f + 0.28f * t) * blink;
+                drawChargeBeam(matrix, buffer, 0.22f, 30.0f, cr, cg, cb, beamAlpha);
+            });
+        } else {
+            // Afterglow phase: the struck circle cools and fades over 8 ticks.
+            float k = (age - strikeAt) / (float) AzureLightningEntity.AFTERGLOW_TICKS;
+            float fade = 1.0f - FxEnvelope.smoothstep(k);
 
-            // Draw Main Trunk
-            for (int i = 0; i < trunkSegments; i++) {
-                float x1 = nodeX[i], y1 = nodeY[i], z1 = nodeZ[i];
-                float x2 = nodeX[i + 1], y2 = nodeY[i + 1], z2 = nodeZ[i + 1];
-                float v1 = i / (float) trunkSegments;
-                float v2 = (i + 1) / (float) trunkSegments;
-
-                renderBoltSegmentTextured(matrix, buffer, x1, y1, z1, x2, y2, z2, 0.95f, r, g, b, finalAlpha, v1, v2);
-            }
-
-            // 2. Procedural Branching Dragon Lightning Forks
-            int forkCount = 5 + rng.nextInt(4);
-            for (int f = 0; f < forkCount; f++) {
-                int startNode = 3 + rng.nextInt(trunkSegments - 5);
-                float curX = nodeX[startNode];
-                float curY = nodeY[startNode];
-                float curZ = nodeZ[startNode];
-
-                float forkDirX = (rng.nextFloat() - 0.5f) * 2.2f;
-                float forkDirZ = (rng.nextFloat() - 0.5f) * 2.2f;
-                int forkLen = 3 + rng.nextInt(5);
-
-                for (int s = 0; s < forkLen; s++) {
-                    float nxtX = curX + forkDirX + (rng.nextFloat() - 0.5f) * 1.4f;
-                    float nxtY = curY - (1.6f + rng.nextFloat() * 1.8f);
-                    float nxtZ = curZ + forkDirZ + (rng.nextFloat() - 0.5f) * 1.4f;
-
-                    float width = 0.60f * (1.0f - (s / (float) forkLen));
-                    float v1 = s / (float) forkLen;
-                    float v2 = (s + 1) / (float) forkLen;
-                    renderBoltSegmentTextured(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, width, r, g, b, finalAlpha * 0.85f, v1, v2);
-
-                    curX = nxtX; curY = nxtY; curZ = nxtZ;
-                }
-            }
-        });
-
-        // Pass 2: White Core & Ground Shockwave Ring
-        collector.submitCustomGeometry(poseStack, glowType, (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            float outerR = state.isRare ? 0.2f : 0.0f;
-            float outerG = state.isRare ? 1.0f : 0.88f;
-            float outerB = 1.0f;
-
-            // Ground ring eases out from the strike and dies with the bolt.
-            float groundLife = Math.min(1.0f, flashTime / 10.0f);
-            float groundEase = 1.0f - (1.0f - groundLife) * (1.0f - groundLife) * (1.0f - groundLife);
-            float groundRingRadius = 4.2f * groundEase;
-            float ringAlpha = finalAlpha * (1.0f - groundLife * groundLife * (3.0f - 2.0f * groundLife));
-            if (ringAlpha > 0.01f) {
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, groundRingRadius, groundRingRadius * 0.78f, 28, outerR, outerG, outerB, ringAlpha * 0.8f);
-                drawGroundRing(matrix, buffer, 0, 0.06f, 0, groundRingRadius * 0.55f, 0.0f, 20, 0.9f, 1.0f, 1.0f, ringAlpha * 0.95f);
-            }
-        });
+            collector.submitCustomGeometry(poseStack, glowType, (pose, buffer) -> {
+                LayeredRender.drawAnchorGlow(pose, buffer, radius, 0.06f,
+                    cr, cg, cb, 0.30f * fade, ds);
+                drawGroundRing(pose.pose(), buffer, 0, 0.07f, 0, radius, radius * 0.8f, ringSegments,
+                    cr, cg, cb, 0.55f * fade);
+            });
+        }
     }
 
-    private static void renderBoltSegmentTextured(Matrix4f matrix, VertexConsumer consumer,
-                                                  float x1, float y1, float z1,
-                                                  float x2, float y2, float z2,
-                                                  float radius,
-                                                  float r, float g, float b, float a,
-                                                  float v1, float v2) {
-        float dx = x2 - x1;
-        float dy = y2 - y1;
-        float dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.001f) return;
+    /** Two crossed thin quads forming a vertical charge column at the origin. */
+    private static void drawChargeBeam(Matrix4f matrix, VertexConsumer consumer, float halfWidth, float height,
+                                       float r, float g, float b, float a) {
+        // Facing Z quad (width along X), alpha fading with height via two rows.
+        quad(matrix, consumer, -halfWidth, 0, 0, halfWidth, 0, 0, halfWidth, height, 0, -halfWidth, height, 0, r, g, b, a, a * 0.15f);
+        // Facing X quad (width along Z).
+        quad(matrix, consumer, 0, 0, -halfWidth, 0, 0, halfWidth, 0, height, halfWidth, 0, height, -halfWidth, r, g, b, a, a * 0.15f);
+    }
 
-        float nx = -dz / len * radius;
-        float nz = dx / len * radius;
-        float ny = radius;
-
-        // Quad 1: X/Z plane (Front + Back)
-        consumer.addVertex(matrix, x1 - nx, y1, z1 - nz).setColor(r, g, b, a).setUv(0, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1 + nx, y1, z1 + nz).setColor(r, g, b, a).setUv(1, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, y2, z2 + nz).setColor(r, g, b, a).setUv(1, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, y2, z2 - nz).setColor(r, g, b, a).setUv(0, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        consumer.addVertex(matrix, x2 - nx, y2, z2 - nz).setColor(r, g, b, a).setUv(0, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2 + nx, y2, z2 + nz).setColor(r, g, b, a).setUv(1, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1 + nx, y1, z1 + nz).setColor(r, g, b, a).setUv(1, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1 - nx, y1, z1 - nz).setColor(r, g, b, a).setUv(0, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-        // Quad 2: Orthogonal Y plane (Front + Back)
-        consumer.addVertex(matrix, x1, y1 - ny, z1).setColor(r, g, b, a).setUv(0, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, x1, y1 + ny, z1).setColor(r, g, b, a).setUv(1, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, x2, y2 + ny, z2).setColor(r, g, b, a).setUv(1, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, x2, y2 - ny, z2).setColor(r, g, b, a).setUv(0, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-
-        consumer.addVertex(matrix, x2, y2 - ny, z2).setColor(r, g, b, a).setUv(0, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, x2, y2 + ny, z2).setColor(r, g, b, a).setUv(1, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, x1, y1 + ny, z1).setColor(r, g, b, a).setUv(1, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, x1, y1 - ny, z1).setColor(r, g, b, a).setUv(0, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
+    private static void quad(Matrix4f matrix, VertexConsumer consumer,
+                             float x1, float y1, float z1, float x2, float y2, float z2,
+                             float x3, float y3, float z3, float x4, float y4, float z4,
+                             float r, float g, float b, float aBase, float aTop) {
+        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, aTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, aTop).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, aTop).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, aTop).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 
     private static void drawGroundRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float r, float g, float b, float a) {

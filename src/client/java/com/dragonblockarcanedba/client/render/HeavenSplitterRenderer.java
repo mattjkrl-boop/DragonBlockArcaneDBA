@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.HeavenSplitterEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -19,11 +21,13 @@ import java.util.Random;
 /**
  * Entity Renderer for Heaven Splitter in Minecraft 26.2.
  * Renders a towering, physical 3D dimensional slash model across the entire dash path:
- * - Towering vertical spatial dimensional reality cut wall (6-8 blocks tall along raycast path)
- * - Inner blinding white-hot razor cutting core spine
- * - Cyan & silver plasma mantle with twin vacuum shock ribbons
- * - Transversal reality fracture ribs and vertical spatial fissures
- * - Concentric sonic shock rings at endpoints and midpoint.
+ * - The reality cut wall in three layers: a wide cyan outer mantle, the main
+ *   wall, and a blinding white inner core wall, all on the shared FxEnvelope
+ * - Angled cross cleaves alternating along the wall
+ * - Transversal reality fracture ribs, placed from the entity seed
+ * - Sonic shock rings at the start, midpoint, and end, peaking at the tick
+ *   the cut lands (25 percent of life)
+ * - An additive ground anchor glow under the midpoint of the path
  */
 public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity, HeavenSplitterRenderer.HeavenSplitterRenderState> {
 
@@ -38,6 +42,7 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         public float age = 0;
         public int maxLifetime = 20;
         public long seed = 0;
+        public double wx = 0, wy = 0, wz = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -64,17 +69,25 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         state.age = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
     }
 
     @Override
     public void submit(HeavenSplitterRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        // Shared lifecycle: build over the first 20 percent, dissipate over
+        // the last 35. The wall finishes rising at 25 percent of life, the
+        // exact tick the entity lands its damage.
+        float fade = FxEnvelope.envelope(state.age, state.maxLifetime, 0.20f, 0.35f);
+        if (fade <= 0.0f) return;
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
-        if (progress >= 1.0f) return;
-
-        float rise = smooth(Math.min(1.0f, progress / 0.42f));
-        float fade = 1.0f - smooth(progress);
+        float rise = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.25f));
         float impact = strike(progress);
         float scale = state.scale * (0.92f + 0.14f * rise);
+        float dist = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
+        int wallSegments = FxEnvelope.segments(28, dist, 14);
+        int ringSegments = FxEnvelope.segments(28, dist, 12);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         Vec3 dir = state.direction.normalize();
@@ -93,9 +106,9 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            drawArcingSlashWall(matrix, buffer, len, slashHeight * 0.92f, wallHalf * 2.6f, 0.0f, 0.75f, 1.0f, 0.22f * fade, false);
-            drawArcingSlashWall(matrix, buffer, len, slashHeight, wallHalf, 0.0f, 0.85f, 1.0f, 0.82f * fade, true);
-            drawArcingSlashWall(matrix, buffer, len, slashHeight * 0.58f, wallHalf * 0.28f, 1.0f, 1.0f, 1.0f, fade, false);
+            drawArcingSlashWall(matrix, buffer, len, slashHeight * 0.92f, wallHalf * 2.6f, 0.0f, 0.75f, 1.0f, 0.22f * fade, false, wallSegments);
+            drawArcingSlashWall(matrix, buffer, len, slashHeight, wallHalf, 0.0f, 0.85f, 1.0f, 0.82f * fade, true, wallSegments);
+            drawArcingSlashWall(matrix, buffer, len, slashHeight * 0.58f, wallHalf * 0.28f, 1.0f, 1.0f, 1.0f, fade, false, wallSegments);
 
             int arcs = Math.max(4, (int) (len / 3.5f));
             for (int s = 0; s <= arcs; s++) {
@@ -105,31 +118,46 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
                 drawAngledCrossCleave(matrix, buffer, z, arcSpan, angle, 0.0f, 0.90f, 1.0f, fade * 0.72f);
             }
 
+            // Fracture ribs across the wall, placed from the entity seed so
+            // every cast cracks differently but deterministically.
+            Random rng = new Random(state.seed);
+            int ribs = Math.max(3, (int) (len / 5.0f));
+            for (int s = 1; s <= ribs; s++) {
+                float z = len * (s / (float) (ribs + 1)) + (rng.nextFloat() - 0.5f) * 1.2f;
+                float w = (1.1f + rng.nextFloat() * 0.7f) * scale;
+                float h = slashHeight * (0.35f + rng.nextFloat() * 0.3f);
+                drawTransversalFractureRib(matrix, buffer, z, w, h, 0.65f, 0.92f, 1.0f, fade * 0.5f);
+            }
+
             if (impact > 0.02f) {
                 float ringR = 1.7f * scale * (0.55f + 0.45f * impact);
-                drawShockRingZ(matrix, buffer, 0, ringR, ringR * 0.70f, 28, 0.0f, 0.0f, 0.85f, 1.0f, impact * 0.75f);
-                drawShockRingZ(matrix, buffer, len * 0.5f, ringR * 1.15f, ringR * 0.82f, 28, 0.0f, 1.0f, 1.0f, 1.0f, impact * 0.9f);
-                drawShockRingZ(matrix, buffer, len, ringR * 1.25f, ringR * 0.88f, 28, 0.0f, 0.0f, 0.95f, 1.0f, impact);
+                drawShockRingZ(matrix, buffer, 0, ringR, ringR * 0.70f, ringSegments, 0.0f, 0.0f, 0.85f, 1.0f, impact * 0.75f);
+                drawShockRingZ(matrix, buffer, len * 0.5f, ringR * 1.15f, ringR * 0.82f, ringSegments, 0.0f, 1.0f, 1.0f, 1.0f, impact * 0.9f);
+                drawShockRingZ(matrix, buffer, len, ringR * 1.25f, ringR * 0.88f, ringSegments, 0.0f, 0.0f, 0.95f, 1.0f, impact);
             }
         });
+
+        // Ground anchor glow under the midpoint, so the wall sits in the
+        // world instead of floating over it (standard points 1 and 3).
+        poseStack.pushPose();
+        poseStack.translate(0, 0.03f, len * 0.5f);
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            LayeredRender.drawAnchorGlow(pose, buffer, 2.0f * scale, 0.0f, 0.0f, 0.85f, 1.0f, fade * 0.45f, dist);
+        });
+        poseStack.popPose();
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static float smooth(float t) {
-        float x = Math.max(0.0f, Math.min(1.0f, t));
-        return x * x * (3.0f - 2.0f * x);
-    }
-
+    /** Sine flash peaking at 25 percent of life, when the cut lands, gone by half. */
     private static float strike(float progress) {
-        if (progress >= 0.38f) return 0.0f;
-        return (float) Math.sin((progress / 0.38f) * Math.PI);
+        if (progress >= 0.5f) return 0.0f;
+        return (float) Math.sin((progress / 0.5f) * Math.PI);
     }
 
     /** Tall cut whose crest rises and falls, with a thin white lip along that arch. */
-    private static void drawArcingSlashWall(Matrix4f matrix, VertexConsumer consumer, float len, float height, float half, float r, float g, float b, float alpha, boolean crest) {
-        int segments = 28;
+    private static void drawArcingSlashWall(Matrix4f matrix, VertexConsumer consumer, float len, float height, float half, float r, float g, float b, float alpha, boolean crest, int segments) {
         for (int i = 0; i < segments; i++) {
             float u1 = i / (float) segments;
             float u2 = (i + 1) / (float) segments;
@@ -200,54 +228,6 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         }
     }
 
-    private static void drawVerticalBladeWall(Matrix4f matrix, VertexConsumer consumer, float zStart, float zEnd, float height, float thickness, float r, float g, float b, float a) {
-        float hTop = height;
-        float hBottom = -0.5f;
-
-        // Left Face
-        consumer.addVertex(matrix, -thickness, hBottom, zStart).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, -thickness, hTop, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, -thickness, hTop, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, -thickness, hBottom, zEnd).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-
-        // Right Face
-        consumer.addVertex(matrix, thickness, hBottom, zEnd).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, thickness, hTop, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, thickness, hTop, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, thickness, hBottom, zStart).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-    }
-
-    private static void drawVolumetricBeamZ(Matrix4f matrix, VertexConsumer consumer, float zStart, float zEnd, float radius, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            double a1 = (i / (double) segments) * Math.PI * 2.0;
-            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-
-            float x1 = (float) Math.cos(a1) * radius;
-            float y1 = (float) Math.sin(a1) * radius;
-            float x2 = (float) Math.cos(a2) * radius;
-            float y2 = (float) Math.sin(a2) * radius;
-
-            consumer.addVertex(matrix, x1, y1, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, y2, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, y2, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, y1, zEnd).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        }
-    }
-
-    private static void drawHorizontalShockPlanes(Matrix4f matrix, VertexConsumer consumer, float zStart, float zEnd, float span, float r, float g, float b, float a) {
-        // Horizontal Quad
-        consumer.addVertex(matrix, -span, 0, zStart).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span, 0, zStart).setColor(r, g, b, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span, 0, zEnd).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span, 0, zEnd).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Center band
-        consumer.addVertex(matrix, -span * 0.3f, 0, zStart).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span * 0.3f, 0, zStart).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span * 0.3f, 0, zEnd).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span * 0.3f, 0, zEnd).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-    }
-
     private static void drawTransversalFractureRib(Matrix4f matrix, VertexConsumer consumer, float z, float width, float height, float r, float g, float b, float a) {
         consumer.addVertex(matrix, -width, 0, z).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
         consumer.addVertex(matrix, 0, height, z).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
@@ -278,18 +258,4 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         }
     }
 
-    private static void drawDiamondSpark(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float size, float r, float g, float b, float a) {
-        float h = size * 1.5f;
-        float w = size * 0.5f;
-
-        consumer.addVertex(matrix, cx - w, cy, cz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx, cy + h, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx + w, cy, cz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        consumer.addVertex(matrix, cx, cy, cz - w).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, cx, cy + h, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, cx, cy, cz + w).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-    }
 }

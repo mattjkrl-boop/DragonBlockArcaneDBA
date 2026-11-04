@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.OxShockwaveEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -82,12 +84,30 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
         float crest = rise * (1.0f - exitT * 0.62f);
         float alpha = endFade;
 
+        // Distance scaling (point 1): far waves step their geometry down,
+        // near waves stay rich. Alpha follows the square root of the scale.
+        float distScale = FxEnvelope.distScale(Math.sqrt(state.distanceToCameraSq));
+        float distAlpha = (float) Math.sqrt(distScale);
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
 
+            // Layered depth behind the crest (point 1): the crags used to sit
+            // on one bare ring. Now a ground anchor glow roots the wave, a
+            // mid dust wall rolls behind the crest, and a wispy outer band
+            // trails it, the three layers turning at different speeds.
+            LayeredRender.drawAnchorGlow(pose, buffer, Math.max(1.0f, radius), 0.06f,
+                1.0f, 0.55f, 0.10f, LayeredRender.ALPHA_MID * alpha * distAlpha, distScale);
+            drawDustBand(matrix, buffer, radius * 0.94f, cragMaxHeight * 0.55f * crest,
+                FxEnvelope.segments(40, distScale, 14), 1.0f, 0.45f, 0.08f,
+                LayeredRender.ALPHA_MID * alpha * distAlpha, age * 6.0f);
+            drawDustBand(matrix, buffer, radius * 1.07f, cragMaxHeight * 0.34f * crest,
+                FxEnvelope.segments(32, distScale, 12), 1.0f, 0.38f, 0.05f,
+                LayeredRender.ALPHA_OUTER * alpha * distAlpha, -age * 3.5f);
+
             // 1. Towering 3D Erupted Earth Crags & Basalt Monoliths around the expanding perimeter
-            int cragCount = subWave ? 24 : (28 + (int) (charge * 8)); // 28 to 36 crags
+            int cragCount = FxEnvelope.segments(subWave ? 24 : (28 + (int) (charge * 8)), distScale, 12); // 28 to 36 crags near
             for (int c = 0; c < cragCount; c++) {
                 double baseAngle = (c / (double) cragCount) * Math.PI * 2.0;
                 double angleOffset = (rng.nextDouble() - 0.5) * 0.15;
@@ -142,7 +162,7 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
 
             // Broken molten teeth along the leading edge. Narrow and uneven,
             // so the crest stays jagged earth instead of a flat wall.
-            int teeth = 26;
+            int teeth = FxEnvelope.segments(26, distScale, 10);
             for (int i = 0; i < teeth; i++) {
                 double a = (i / (double) teeth) * Math.PI * 2.0 + rng.nextDouble() * 0.08;
                 float jag = 0.28f + rng.nextFloat() * 1.25f;
@@ -164,7 +184,7 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
                 );
             }
 
-            int shardCount = 14;
+            int shardCount = FxEnvelope.segments(14, distScale, 6);
             for (int s = 0; s < shardCount; s++) {
                 double sAngle = (s / (double) shardCount) * Math.PI * 2.0 + rng.nextDouble() * 0.3;
                 float sDist = radius * (0.86f + rng.nextFloat() * 0.22f);
@@ -187,6 +207,33 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
         });
 
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /**
+     * A vertical dust wall strip: full alpha at the ground line, fading to
+     * nothing at the top, slowly rotating so the wall reads as rolling dust
+     * rather than a fixed curtain. Drawn from both sides.
+     */
+    private static void drawDustBand(Matrix4f matrix, VertexConsumer consumer, float radius, float height,
+                                     int segments, float r, float g, float b, float alpha, float rotDeg) {
+        if (alpha <= 0.01f || height <= 0.05f || radius <= 0.2f) return;
+        double rot = Math.toRadians(rotDeg);
+        for (int i = 0; i < segments; i++) {
+            double a1 = rot + (i / (double) segments) * Math.PI * 2.0;
+            double a2 = rot + ((i + 1) / (double) segments) * Math.PI * 2.0;
+            float x1 = (float) Math.cos(a1) * radius;
+            float z1 = (float) Math.sin(a1) * radius;
+            float x2 = (float) Math.cos(a2) * radius;
+            float z2 = (float) Math.sin(a2) * radius;
+            consumer.addVertex(matrix, x1, 0.05f, z1).setColor(r, g, b, alpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, 0.05f, z2).setColor(r, g, b, alpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x2, 0.05f + height, z2).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, 0.05f + height, z1).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, x1, 0.05f + height, z1).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x2, 0.05f + height, z2).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x2, 0.05f, z2).setColor(r, g, b, alpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, x1, 0.05f, z1).setColor(r, g, b, alpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        }
     }
 
     private static void drawFacetedCrag(Matrix4f matrix, VertexConsumer consumer,

@@ -1,19 +1,20 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
-import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.entity.BoltEntity;
 import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
 import com.dragonblockarcanedba.entity.SaberDodgeSparkEntity;
 import com.dragonblockarcanedba.entity.SaberDimensionalLineSlashEntity;
 import com.dragonblockarcanedba.entity.SaberSlashEntity;
 import com.dragonblockarcanedba.entity.SaberVoidTearEntity;
 import com.dragonblockarcanedba.movement.MovementPhysics;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DebrisSpawner;
+import com.dragonblockarcanedba.util.LayeredParticles;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -46,7 +47,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Saber — High-Speed Phasing & Blitz Chain Weapon.
+ * Saber: High-Speed Phasing & Blitz Chain Weapon.
  * 
  * Drain: Left click Stamina 100% per minute, Right click Ki 75% per minute.
  */
@@ -59,6 +60,9 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
     // --- State Tracking Classes ---
 
+    /** Saber theme color for the shared layered particle blocks: electric cyan. */
+    public static final int SABER_CYAN = 0xFF4DD8FF;
+
     public static class BlitzSequence {
         public final List<UUID> chainedEntityUuids = new ArrayList<>();
         public final Map<UUID, Vec3> chainedLastPositions = new LinkedHashMap<>();
@@ -66,7 +70,8 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
         public UUID nextTargetUuid = null;
         public int totalHits = 0;
         public int nextStrongSlashThreshold = 6;
-        public long lastAttackGameTime = 0;
+        public ServerLevel level = null;
+        public int travelTicks = 6;
         public long releaseGameTime = 0;
         public boolean inContinuationWindow = false;
         public Vec3 startPlayerPos = null;
@@ -90,11 +95,25 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
         public double maxT;
         public float damage;
         public int ticks = 0;
-        public final int maxTicks = 12; // 0.5s float duration
+        public final int maxTicks = 18; // 0.9s float duration: the snap is the finisher telegraph
+    }
+
+    /**
+     * One delayed slice of a split damage event. Big saber hits no longer land
+     * in a single tick while their visual decorates: the first slice lands on
+     * the hit tick and the rest land inside the visual's active window.
+     */
+    public static class PendingHit {
+        public ServerPlayer player;
+        public ServerLevel level;
+        public LivingEntity target;
+        public float damage;
+        public long dueGameTime;
     }
 
     public static final Map<UUID, BlitzSequence> ACTIVE_BLITZ_MAP = new ConcurrentHashMap<>();
     public static final List<BlitzFinisherAnim> ACTIVE_FINISHERS = new ArrayList<>();
+    public static final List<PendingHit> PENDING_HITS = new ArrayList<>();
     public static final Map<UUID, Long> SPEED_BUFF_EXPIRE_MAP = new ConcurrentHashMap<>();
     public static final Map<UUID, Integer> FLASH_STEP_CHARGES = new ConcurrentHashMap<>();
     public static final Map<UUID, Long> LAST_RECHARGE_TIME = new ConcurrentHashMap<>();
@@ -155,14 +174,11 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
             // Movement Curse and Cinematic Tracking that only the finisher used to remove.
             BlitzSequence dropped = ACTIVE_BLITZ_MAP.remove(player.getUUID());
             if (dropped != null) {
-                for (UUID chainedUuid : dropped.chainedEntityUuids) {
-                    var chainedEntity = level.getEntity(chainedUuid);
-                    if (chainedEntity instanceof LivingEntity chainedLiving) {
-                        chainedLiving.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
-                        chainedLiving.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER);
-                    }
-                }
+                releaseChainedTargets(level, dropped);
                 clearEscalatingSpeedBuff(player);
+                if (!player.isSpectator()) {
+                    player.noPhysics = false;
+                }
             }
             player.sendSystemMessage(Component.literal("§c✦ Immobilized! Blitz Ended. ✦"), true);
             return;
@@ -172,6 +188,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
         long now = level.getGameTime();
 
         BlitzSequence seq = ACTIVE_BLITZ_MAP.computeIfAbsent(playerUuid, k -> new BlitzSequence());
+        seq.level = level;
 
         if (seq.waitingForRelease) {
             return; // Must release click before chaining to next!
@@ -216,6 +233,10 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                 seq.startPitch = player.getXRot();
                 seq.hasArrived = false;
                 seq.launchTicks = 0;
+                // Travel time scales with hop distance: a 2 block hop stays a
+                // snap, a 64 block hop becomes a real flight instead of a cut.
+                double hopDist = player.position().distanceTo(currentTarget.position());
+                seq.travelTicks = Math.max(6, Math.min(16, 6 + (int) (hopDist * 0.12)));
                 
                 // Pre-calculate next target for camera pan
                 LivingEntity nextTarget = findNextTarget(player, level, currentTarget, seq.chainedEntityUuids);
@@ -247,7 +268,9 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                 }
                 com.dragonblockarcanedba.attribute.PlayerStatsAccessor lungeStats =
                     (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
-                float lungeDamage = 280.0f + (float) (lungeStats.dba$getStrength() * 1.8);
+                // The no lock fallback is deliberately weaker than a chained blitz
+                // hit (280 + Strength x 1.8): a plain fencing thrust, not a chain hit.
+                float lungeDamage = 200.0f + (float) (lungeStats.dba$getStrength() * 1.4);
                 Vec3 eye = player.getEyePosition();
                 Vec3 look = player.getLookAngle();
                 AABB reach = player.getBoundingBox().expandTowards(look.scale(5.5)).inflate(0.9);
@@ -271,9 +294,12 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     struck.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(lungeDamage));
                 }
                 SaberSlashEntity lunge = new SaberSlashEntity(
-                    level, player, eye.add(look.scale(0.6)), player.getYRot(), player.getXRot(), 0.0f, 1.15f, false, 8
+                    level, player, eye.add(look.scale(0.6)), player.getYRot(), player.getXRot(), 0.0f, 1.15f, false, 12
                 );
-                lunge.setDeltaMovement(look.scale(1.35));
+                // 0.46 blocks per tick over the 12 tick life travels 5.5 blocks,
+                // exactly the damage reach: the mesh no longer flies through
+                // entities it cannot hurt.
+                lunge.setDeltaMovement(look.scale(0.46));
                 level.addFreshEntity(lunge);
                 level.playSound(null, player.getX(), player.getY(), player.getZ(),
                     com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 0.9f, 1.6f);
@@ -301,7 +327,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
             if (!seq.hasArrived) {
                 seq.launchTicks++;
-                float progress = (float) seq.launchTicks / 6.0f; // 6 ticks = exact 0.3s travel time
+                float progress = (float) seq.launchTicks / (float) seq.travelTicks;
                 progress = net.minecraft.util.Mth.clamp(progress, 0.0f, 1.0f);
 
                 if (progress >= 1.0f) {
@@ -316,10 +342,16 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     // Crowd Control: Apply Movement Curse amplifier 9 (full root + darkness) forever until snap!
                     currentTarget.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 999999, 9, false, true, false));
                     currentTarget.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 999999, 0, false, false, false), player);
-                    
-                    // Damage & Slash Impact (This is caught and delayed by DelayedDamageMixin because of the Movement Curse!)
+
+                    // Dust bursts at the target's feet where the blitz lands.
+                    LayeredParticles.emitGroundBurst(level, currentTarget.position(), 1.6f, SABER_CYAN);
+
+                    // Damage lands inside the slash visual's active window, not in
+                    // one tick: 60 percent on the arrival tick, 40 percent 5 ticks
+                    // later while the 16 tick crescent is at peak.
                     float baseDamage = 280.0f + (float) (accessor.dba$getStrength() * 1.8);
-                    currentTarget.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (baseDamage)));
+                    currentTarget.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(baseDamage * 0.6f));
+                    queuePendingHit(player, level, currentTarget, baseDamage * 0.4f, 5);
                     
                     level.playSound(null, currentTarget.getX(), currentTarget.getY(), currentTarget.getZ(),
                         SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.0f, 1.5f);
@@ -338,14 +370,14 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     Vec3 slashPos = currentTarget.position().add(0, currentTarget.getBbHeight() * 0.55, 0);
 
                     SaberSlashEntity slash1 = new SaberSlashEntity(
-                        level, player, slashPos, hitYaw, hitPitch, tilt1, isStrong ? 1.4f : 1.0f, isStrong, 10
+                        level, player, slashPos, hitYaw, hitPitch, tilt1, isStrong ? 1.4f : 1.0f, isStrong, 16
                     );
                     level.addFreshEntity(slash1);
 
                     if (isStrong || level.getRandom().nextBoolean()) {
                         float tilt2 = -tilt1;
                         SaberSlashEntity slash2 = new SaberSlashEntity(
-                            level, player, slashPos, hitYaw, hitPitch, tilt2, isStrong ? 1.3f : 0.85f, false, 8
+                            level, player, slashPos, hitYaw, hitPitch, tilt2, isStrong ? 1.3f : 0.85f, false, 14
                         );
                         level.addFreshEntity(slash2);
                     }
@@ -376,9 +408,15 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                     if (!player.isSpectator()) {
                         player.noPhysics = true;
                     }
-                    
+
                     // Forcefully teleport the player along the exact mathematical curve
                     MovementPhysics.teleport(player, new Vec3(currentX, currentY, currentZ));
+
+                    // Layered wake along the flight path: because the player moves
+                    // every tick, the per tick vortex emission paints a trail
+                    // instead of the hop reading as a teleport cut.
+                    LayeredParticles.emitVortex(level, player.position().add(0, 0.2, 0), 1.1f, 1.8f,
+                        seq.launchTicks, seq.travelTicks, SABER_CYAN, DbaParticles.WIND);
 
                     // Camera Auto-Pan logic
                     if (seq.nextTargetUuid != null) {
@@ -469,17 +507,11 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
         if (candidates.isEmpty()) return null;
 
-        // Sort candidates:
-        // Priority 1: Unchained targets first
-        // Priority 2: Alignment with player's camera look vector (dot product)
-        // Priority 3: Distance
+        // Sort candidates (already chained targets were filtered out above, so
+        // every survivor is unchained and no chained priority branch is needed):
+        // Priority 1: Alignment with player's camera look vector (dot product)
+        // Priority 2: Distance
         candidates.sort((a, b) -> {
-            boolean aChained = alreadyChained.contains(a.getUUID());
-            boolean bChained = alreadyChained.contains(b.getUUID());
-            if (aChained != bChained) {
-                return aChained ? 1 : -1; // unchained first
-            }
-
             Vec3 toA = a.getBoundingBox().getCenter().subtract(eyePos).normalize();
             Vec3 toB = b.getBoundingBox().getCenter().subtract(eyePos).normalize();
             double dotA = look.dot(toA);
@@ -528,6 +560,54 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
             speedAttr.removeModifier(SABER_ATTACK_SPEED_ID);
         }
         SPEED_BUFF_EXPIRE_MAP.remove(player.getUUID());
+    }
+
+    /** Queue one delayed slice of a split damage event, due in delayTicks. */
+    private static void queuePendingHit(ServerPlayer player, ServerLevel level, LivingEntity target, float damage, int delayTicks) {
+        if (target == null || damage <= 0f) {
+            return;
+        }
+        PendingHit hit = new PendingHit();
+        hit.player = player;
+        hit.level = level;
+        hit.target = target;
+        hit.damage = damage;
+        hit.dueGameTime = level.getGameTime() + delayTicks;
+        PENDING_HITS.add(hit);
+    }
+
+    /**
+     * Strip the blitz crowd control from every chained target. The single
+     * cleanup path for a blitz that ends without a finisher: immobilized
+     * cleanup and disconnect both route through here.
+     */
+    private static void releaseChainedTargets(ServerLevel level, BlitzSequence seq) {
+        if (level == null || seq == null) {
+            return;
+        }
+        for (UUID chainedUuid : seq.chainedEntityUuids) {
+            var chainedEntity = level.getEntity(chainedUuid);
+            if (chainedEntity instanceof LivingEntity chainedLiving) {
+                chainedLiving.removeEffect(DbaEffects.MOVEMENT_CURSE_HOLDER);
+                chainedLiving.removeEffect(DbaEffects.CINEMATIC_TRACKING_HOLDER);
+            }
+        }
+    }
+
+    /**
+     * The finisher's own restore path: unfreeze every snapped target and strip
+     * its crowd control. The tick loop's disconnect safety and the disconnect
+     * handler both call this, so no target is ever left frozen with noPhysics
+     * set and no code path restoring it.
+     */
+    private static void restoreFinisherTargets(BlitzFinisherAnim anim) {
+        for (LivingEntity e : anim.targets) {
+            if (e != null && e.isAlive()) {
+                e.noPhysics = false;
+                e.removeEffect(DbaEffects.MOVEMENT_CURSE_HOLDER);
+                e.removeEffect(DbaEffects.CINEMATIC_TRACKING_HOLDER);
+            }
+        }
     }
 
     // --- FINISHER: Best-Fit 3D Line Snap ---
@@ -606,7 +686,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
             anim.level = level;
             anim.centroid = centroid;
             anim.direction = direction;
-            anim.damage = 850.0f + (float) (accessor.dba$getStrength() * 4.0);
+            anim.damage = 1000.0f + (float) (accessor.dba$getStrength() * 4.5);
 
             double minT = Double.MAX_VALUE;
             double maxT = -Double.MAX_VALUE;
@@ -634,12 +714,9 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
             ACTIVE_FINISHERS.add(anim);
 
             // Apply 5-second weapon cooldown (100 ticks) ONLY if we actually hit something!
+            // The cooldown keys by item, so the stack handed in must be a saber
+            // stack: callers that end a blitz by swapping weapons pass one.
             player.getCooldowns().addCooldown(stack, 100);
-        }
-
-        // Restore global tick rate (legacy safety)
-        if (level.getServer() != null) {
-            level.getServer().tickRateManager().setTickRate(20.0f);
         }
     }
 
@@ -692,14 +769,16 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
             return;
         }
 
-        // Drain Ki: 75% per minute (smooth per charge cooldown cycle = 40 ticks = 2.5% Max Ki)
-        if (!WeaponDrainHelper.drainKiDiscrete(player, 75.0, 40)) {
-            player.sendSystemMessage(Component.literal("§c✦ Not Enough Ki for Flash Step! ✦"), true);
+        // The immobilized check runs BEFORE any Ki is drained: a blocked step
+        // never charges. Ki is only spent when the step actually fires.
+        if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
+            player.sendSystemMessage(Component.literal("§cImmobilized! Cannot flash step."), true);
             return;
         }
 
-        if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
-            player.sendSystemMessage(Component.literal("§cImmobilized! Cannot flash step."), true);
+        // Drain Ki: 75% per minute (smooth per charge cooldown cycle = 40 ticks = 2.5% Max Ki)
+        if (!WeaponDrainHelper.drainKiDiscrete(player, 75.0, 40)) {
+            player.sendSystemMessage(Component.literal("§c✦ Not Enough Ki for Flash Step! ✦"), true);
             return;
         }
 
@@ -750,9 +829,10 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
         // Spawn physical 3D void tear & sonic shock rings at origin
         SaberVoidTearEntity originTear = new SaberVoidTearEntity(
-            level, player, startPos.add(0, 1.0, 0), player.getYRot(), player.getXRot(), 1.0f, false, 12
+            level, player, startPos.add(0, 1.0, 0), player.getYRot(), player.getXRot(), 1.0f, false, 20
         );
         level.addFreshEntity(originTear);
+        LayeredParticles.emitGroundBurst(level, startPos, 1.2f, SABER_CYAN);
 
         // Perform instant teleport
         MovementPhysics.teleport(player, destination);
@@ -763,11 +843,14 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
         // Spawn physical 3D void tear & sonic shock rings at destination
         SaberVoidTearEntity destTear = new SaberVoidTearEntity(
-            level, player, destination.add(0, 1.0, 0), player.getYRot(), player.getXRot(), 1.15f, true, 12
+            level, player, destination.add(0, 1.0, 0), player.getYRot(), player.getXRot(), 1.15f, true, 20
         );
         level.addFreshEntity(destTear);
+        LayeredParticles.emitGroundBurst(level, destination, 1.2f, SABER_CYAN);
 
         // Destination sound
+        level.playSound(null, destination.x, destination.y, destination.z,
+            com.dragonblockarcanedba.sound.DbaSounds.SABER_HUM, SoundSource.PLAYERS, 0.7f, 1.3f);
         level.playSound(null, destination.x, destination.y, destination.z,
             SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.2f, 1.4f);
         level.playSound(null, destination.x, destination.y, destination.z,
@@ -779,12 +862,16 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
         AABB pathBox = new AABB(startPos, destination).inflate(1.2);
         List<LivingEntity> crossedEnemies = level.getEntitiesOfClass(LivingEntity.class, pathBox, e -> e.isAlive() && e != player);
 
-        float pathDamage = 400.0f + (float) (accessor.dba$getStrength() * 2.0);
+        // A movement side effect now hits softer than a chained blitz hit, and
+        // it lands inside the 20 tick tear window: 60 percent on the step tick,
+        // 40 percent 5 ticks later as the tears dissipate.
+        float pathDamage = 320.0f + (float) (accessor.dba$getStrength() * 1.6);
         for (LivingEntity enemy : crossedEnemies) {
-            enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (pathDamage)));
+            enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(pathDamage * 0.6f));
+            queuePendingHit(player, level, enemy, pathDamage * 0.4f, 5);
             Vec3 enemySlashPos = enemy.position().add(0, enemy.getBbHeight() * 0.55, 0);
             SaberSlashEntity pathSlash = new SaberSlashEntity(
-                level, player, enemySlashPos, player.getYRot(), player.getXRot(), 25.0f, 1.1f, false, 8
+                level, player, enemySlashPos, player.getYRot(), player.getXRot(), 25.0f, 1.1f, false, 14
             );
             level.addFreshEntity(pathSlash);
         }
@@ -826,7 +913,9 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
     public static boolean isPerfectDodgeActive(Player player) {
         Long expire = PERFECT_DODGE_EXPIRE_TIME.get(player.getUUID());
-        return expire != null && player.level().getGameTime() <= expire;
+        // Strict comparison: the window is set to now + 15, so <= would read
+        // active for 16 distinct game time values instead of 15.
+        return expire != null && player.level().getGameTime() < expire;
     }
 
     public static void triggerPerfectDodge(ServerPlayer player) {
@@ -843,7 +932,7 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
 
         Vec3 sparkPos = player.position().add(0, player.getBbHeight() * 0.55, 0);
         SaberDodgeSparkEntity dodgeSpark = new SaberDodgeSparkEntity(
-            level, player, sparkPos, 1.25f, 14
+            level, player, sparkPos, 1.25f, 20
         );
         level.addFreshEntity(dodgeSpark);
 
@@ -853,20 +942,30 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
     // --- Server Tick Loop for Managing Blitz Sequences & Charge Recharging ---
 
     public static void tickServer(MinecraftServer server) {
+        // Process due slices of split damage events first: each lands inside
+        // its visual's active window, after the hit tick that opened it.
+        Iterator<PendingHit> hitIt = PENDING_HITS.iterator();
+        while (hitIt.hasNext()) {
+            PendingHit hit = hitIt.next();
+            if (hit.level.getGameTime() >= hit.dueGameTime) {
+                if (hit.target != null && hit.target.isAlive() && !hit.target.isRemoved()) {
+                    DamageSource src = (hit.player != null && !hit.player.isRemoved() && hit.player.isAlive())
+                        ? hit.level.damageSources().playerAttack(hit.player)
+                        : hit.level.damageSources().generic();
+                    hit.target.hurtServer(hit.level, src, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(hit.damage));
+                }
+                hitIt.remove();
+            }
+        }
+
         // Process Active Finishers (Floating to best fit line)
         Iterator<BlitzFinisherAnim> it = ACTIVE_FINISHERS.iterator();
         while (it.hasNext()) {
             BlitzFinisherAnim anim = it.next();
-            
+
             // Disconnect safety: if player disconnected during finisher, restore entities and remove anim
             if (anim.player == null || anim.player.isRemoved() || !anim.player.isAlive()) {
-                for (LivingEntity e : anim.targets) {
-                    if (e != null && e.isAlive()) {
-                        e.noPhysics = false;
-                        e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
-                        e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER);
-                    }
-                }
+                restoreFinisherTargets(anim);
                 it.remove();
                 continue;
             }
@@ -898,42 +997,60 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                 // Spawn physical 3D dimensional line cut entity along calculated best-fit line!
                 double lineLength = Math.max(8.0, (anim.maxT - anim.minT) + 4.0);
                 SaberDimensionalLineSlashEntity lineSlash = new SaberDimensionalLineSlashEntity(
-                    level, anim.player, anim.centroid, anim.direction, (float) lineLength, 1.2f, 22
+                    level, anim.player, anim.centroid, anim.direction, (float) lineLength, 1.2f, 34
                 );
                 level.addFreshEntity(lineSlash);
+
+                // World interaction at the payoff: a branched bolt where the
+                // thunder sounds already promised one, a helical debris field
+                // of the ground the line is standing on, and base dust.
+                Vec3 feet = new Vec3(anim.centroid.x, Math.floor(anim.centroid.y), anim.centroid.z);
+                level.addFreshEntity(new BoltEntity(level, feet, level.getRandom().nextInt(), 0xFFBFEFFF, 14.0f, 8));
+                int debrisCount = Math.max(8, Math.round(28f * com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity()));
+                DebrisSpawner.spawnField(level, anim.player, feet, debrisCount,
+                    Math.min(6.0, lineLength * 0.5), 3.5, 26);
+                LayeredParticles.emitGroundBurst(level, feet, 2.2f, SABER_CYAN);
 
                 for (LivingEntity e : anim.targets) {
                     if (e == null || !e.isAlive() || e.isRemoved()) continue;
                     e.noPhysics = false;
-                    
+
                     // Spawn physical 3D micro cross-burst slash on each snapped mob
                     Vec3 mobSlashPos = e.position().add(0, e.getBbHeight() * 0.5, 0);
                     SaberSlashEntity mobSlash1 = new SaberSlashEntity(
-                        level, anim.player, mobSlashPos, 0, 0, 45.0f, 1.3f, true, 12
+                        level, anim.player, mobSlashPos, 0, 0, 45.0f, 1.3f, true, 18
                     );
                     level.addFreshEntity(mobSlash1);
-                    
+
                     SaberSlashEntity mobSlash2 = new SaberSlashEntity(
-                        level, anim.player, mobSlashPos, 0, 0, -45.0f, 1.1f, false, 10
+                        level, anim.player, mobSlashPos, 0, 0, -45.0f, 1.1f, false, 16
                     );
                     level.addFreshEntity(mobSlash2);
-                    
+
                     // Remove the crowd control effect to initiate the Cinematic Damage pop (0.5s delay)
                     e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER);
                     e.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER);
-                    
-                    // Burst Finishing Damage (Neck-Snap Finisher)
+
+                    // Finisher damage spreads across the beam's 34 tick active
+                    // window: 50 percent as the beam ignites (the 18 tick snap
+                    // was the telegraph), 30 percent at beam tick 8, 20 percent
+                    // at beam tick 16.
                     DamageSource dmgSource = (!anim.player.isRemoved() && anim.player.isAlive())
                         ? level.damageSources().playerAttack(anim.player)
                         : level.damageSources().generic();
-                    e.hurtServer(level, dmgSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (anim.damage)));
+                    e.hurtServer(level, dmgSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(anim.damage * 0.5f));
+                    queuePendingHit(anim.player, level, e, anim.damage * 0.3f, 8);
+                    queuePendingHit(anim.player, level, e, anim.damage * 0.2f, 16);
 
-                    // MC 26.2 Physics: Best-fit line snap shockwave bounce
+                    // MC 26.2 Physics: Best-fit line snap shockwave bounce. The
+                    // request now matches the helper's clamp exactly: the timed
+                    // modifier caps bounciness at 0.30, so 0.30 is what is asked
+                    // for and 0.30 is what the target gets, for 20 ticks.
                     com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
                         e,
                         com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
                         com.dragonblockarcanedba.DragonBlockArcaneDBA.id("saber_finisher_bounce"),
-                        0.80,
+                        0.30,
                         net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
                     );
                 }
@@ -986,8 +1103,15 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
                 BlitzSequence seq = ACTIVE_BLITZ_MAP.get(playerUuid);
                 if (seq != null) {
                     if (!(player.getMainHandItem().getItem() instanceof SaberItem)) {
-                        ItemStack mainStack = player.getMainHandItem();
-                        executeBestFitLineFinisher(player, level, seq, mainStack);
+                        // Ending a blitz by swapping weapons: the finisher
+                        // cooldown belongs on the saber, not on the swapped to
+                        // item. Hand the finisher a saber stack (the offhand if
+                        // the saber is there, otherwise a bare saber stack; the
+                        // cooldown keys by item, not by stack instance).
+                        ItemStack saberStack = player.getOffhandItem().getItem() instanceof SaberItem
+                            ? player.getOffhandItem()
+                            : new ItemStack(com.dragonblockarcanedba.item.DbaItems.SABER);
+                        executeBestFitLineFinisher(player, level, seq, saberStack);
                         ACTIVE_BLITZ_MAP.remove(playerUuid);
                         if (!player.isSpectator() && player.noPhysics) {
                             player.noPhysics = false;
@@ -1013,11 +1137,28 @@ public class SaberItem extends Item implements com.dragonblockarcanedba.item.geo
     }
 
     public static void onPlayerDisconnect(UUID playerUuid) {
-        ACTIVE_BLITZ_MAP.remove(playerUuid);
+        // A disconnect mid blitz frees the chained targets through the same
+        // cleanup path as an immobilized end, instead of leaving the near
+        // permanent Movement Curse and Cinematic Tracking on them forever.
+        BlitzSequence dropped = ACTIVE_BLITZ_MAP.remove(playerUuid);
+        if (dropped != null) {
+            releaseChainedTargets(dropped.level, dropped);
+        }
         SPEED_BUFF_EXPIRE_MAP.remove(playerUuid);
         FLASH_STEP_CHARGES.remove(playerUuid);
         LAST_RECHARGE_TIME.remove(playerUuid);
         PERFECT_DODGE_EXPIRE_TIME.remove(playerUuid);
-        ACTIVE_FINISHERS.removeIf(anim -> anim.player != null && anim.player.getUUID().equals(playerUuid));
+        PENDING_HITS.removeIf(hit -> hit.player != null && hit.player.getUUID().equals(playerUuid));
+        // A disconnect mid finisher restores the snapped targets through the
+        // finisher's own restore path (unfreeze, strip crowd control) before
+        // the animation is dropped, so nothing is left frozen with noPhysics.
+        Iterator<BlitzFinisherAnim> finIt = ACTIVE_FINISHERS.iterator();
+        while (finIt.hasNext()) {
+            BlitzFinisherAnim anim = finIt.next();
+            if (anim.player != null && anim.player.getUUID().equals(playerUuid)) {
+                restoreFinisherTargets(anim);
+                finIt.remove();
+            }
+        }
     }
 }

@@ -54,7 +54,7 @@ public class CurseLightningRenderer extends EntityRenderer<CurseLightningEntity,
     public void extractRenderState(CurseLightningEntity entity, CurseLightningRenderState state, float partialTicks) {
         super.extractRenderState(entity, state, partialTicks);
         state.isRare = entity.isRare();
-        state.age = (20 - entity.life) + partialTicks;
+        state.age = (CurseLightningEntity.LIFE_TICKS - entity.life) + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
     }
 
@@ -63,7 +63,9 @@ public class CurseLightningRenderer extends EntityRenderer<CurseLightningEntity,
         super.submit(state, poseStack, collector, cameraState);
 
         float flashTime = state.age;
-        if (flashTime > 12.0f) return;
+        // The entity lives exactly CurseLightningEntity.LIFE_TICKS and the
+        // fade below reaches zero at tick 9.5, so picture and lifetime agree.
+        if (flashTime > CurseLightningEntity.LIFE_TICKS) return;
 
         float strike = ease(Math.min(1.0f, flashTime / 2.5f));
         float fadeT = flashTime <= 2.5f ? 1.0f : Math.max(0.0f, 1.0f - (flashTime - 2.5f) / 7.0f);
@@ -189,57 +191,6 @@ public class CurseLightningRenderer extends EntityRenderer<CurseLightningEntity,
         consumer.addVertex(matrix, x1, y1 + w1, z1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
         consumer.addVertex(matrix, x2, y2 + w2, z2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
         consumer.addVertex(matrix, x2, y2 - w2, z2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-    }
-
-    private static void renderBoltSegmentTextured(Matrix4f matrix, VertexConsumer consumer,
-                                                  float x1, float y1, float z1,
-                                                  float x2, float y2, float z2,
-                                                  float radius,
-                                                  float r, float g, float b, float a,
-                                                  float v1, float v2) {
-        float dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.001f) return;
-
-        float nx = -dz / len * radius;
-        float nz = dx / len * radius;
-        float ny = radius;
-
-        // Quad 1: X/Z plane (Front + Back)
-        consumer.addVertex(matrix, x1 - nx, y1, z1 - nz).setColor(r, g, b, a).setUv(0, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1 + nx, y1, z1 + nz).setColor(r, g, b, a).setUv(1, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, y2, z2 + nz).setColor(r, g, b, a).setUv(1, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, y2, z2 - nz).setColor(r, g, b, a).setUv(0, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        consumer.addVertex(matrix, x2 - nx, y2, z2 - nz).setColor(r, g, b, a).setUv(0, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x2 + nx, y2, z2 + nz).setColor(r, g, b, a).setUv(1, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1 + nx, y1, z1 + nz).setColor(r, g, b, a).setUv(1, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-        consumer.addVertex(matrix, x1 - nx, y1, z1 - nz).setColor(r, g, b, a).setUv(0, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-        // Quad 2: Orthogonal Y plane (Front + Back)
-        consumer.addVertex(matrix, x1, y1 - ny, z1).setColor(r, g, b, a).setUv(0, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, x1, y1 + ny, z1).setColor(r, g, b, a).setUv(1, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, x2, y2 + ny, z2).setColor(r, g, b, a).setUv(1, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, x2, y2 - ny, z2).setColor(r, g, b, a).setUv(0, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-
-        consumer.addVertex(matrix, x2, y2 - ny, z2).setColor(r, g, b, a).setUv(0, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, x2, y2 + ny, z2).setColor(r, g, b, a).setUv(1, v2).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, x1, y1 + ny, z1).setColor(r, g, b, a).setUv(1, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, x1, y1 - ny, z1).setColor(r, g, b, a).setUv(0, v1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-    }
-
-    private static void renderBeam(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float radius, float r, float g, float b, float a) {
-        float dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.001f) return;
-
-        float nx = -dz / len * radius;
-        float nz = dx / len * radius;
-
-        consumer.addVertex(matrix, x1 - nx, y1, z1 - nz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1 + nx, y1, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, y2, z2 + nz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, y2, z2 - nz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
     private static void drawGroundRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float rOuter, float rInner, int segments, float r, float g, float b, float a) {

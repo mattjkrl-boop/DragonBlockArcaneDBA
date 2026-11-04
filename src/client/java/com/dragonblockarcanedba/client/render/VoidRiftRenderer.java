@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.VoidRiftEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -16,7 +18,11 @@ import org.joml.Matrix4f;
  * Hollow's Edge void rift. One dimensional tear facing the viewer: a recessed
  * black throat, bowed violet lips, a white rim with a short wake, and crystal
  * shards along the wound. The implosion closes that mouth on the entity's
- * existing 10-tick collapse instead of popping a disc.
+ * staged 30 tick collapse instead of popping a disc. Spectacle pass: the tear
+ * now fades in on the shared envelope instead of popping in at full alpha,
+ * sits in a halo disc of void light, and carries three rotating accretion
+ * bands (the layered band language of LayeredRender, drawn in the tear
+ * plane), with segment counts and alpha stepped down by camera distance.
  */
 public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRenderer.RiftRenderState> {
 
@@ -33,6 +39,7 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         public boolean isImploding = false;
         public float age = 0;
         public int implodeStartTick = -1;
+        public double ex, ey, ez;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -57,6 +64,9 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         state.isImploding = entity.isImploding();
         state.implodeStartTick = entity.getImplodeStartTick();
         state.age = entity.tickCount + partialTicks;
+        state.ex = entity.getX();
+        state.ey = entity.getY();
+        state.ez = entity.getZ();
     }
 
     @Override
@@ -66,10 +76,22 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         boolean imploding = state.isImploding;
         float age = state.age;
         // Collapse is measured from the synced trigger tick. The entity discards
-        // itself after 10 ticks, so the draw has to finish inside that window.
+        // itself after the staged collapse window, so the draw has to finish
+        // inside it. The window length comes from the entity so both sides agree.
+        float implodeWindow = VoidRiftEntity.IMPLOSION_TICKS;
         float implodeAge = (imploding && state.implodeStartTick >= 0)
-            ? Math.min(10.0f, Math.max(0.0f, age - state.implodeStartTick)) : 0.0f;
-        float implodeT = implodeAge / 10.0f;
+            ? Math.min(implodeWindow, Math.max(0.0f, age - state.implodeStartTick)) : 0.0f;
+        float implodeT = implodeAge / implodeWindow;
+
+        // Lifecycle envelope (point 5): the tear fades in over its first 20
+        // ticks instead of popping in at full alpha. During the collapse the
+        // staged fades inside drawTear take over, so the envelope reads 1.
+        float env = imploding ? 1.0f : ease(Math.min(1.0f, age / 20.0f));
+        // Distance scaling (point 1): far rifts draw fewer segments and
+        // slightly softer alpha instead of costing full geometry.
+        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
+        env *= (float) Math.sqrt(Math.max(0.05f, ds));
+        int segments = FxEnvelope.segments(SEGMENTS, ds, 10);
 
         poseStack.pushPose();
         // The rift entity has no synced look direction. Camera.rotation() is copied
@@ -82,7 +104,7 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         }
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-            drawTear(pose.pose(), buffer, radius, age, imploding, implodeT));
+            drawTear(pose.pose(), buffer, radius, age, imploding, implodeT, env, ds, segments));
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
@@ -93,7 +115,7 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         return c * c * (3.0f - 2.0f * c);
     }
 
-    private static void drawTear(Matrix4f matrix, VertexConsumer buffer, float radius, float age, boolean imploding, float implodeT) {
+    private static void drawTear(Matrix4f matrix, VertexConsumer buffer, float radius, float age, boolean imploding, float implodeT, float env, float distScale, int segments) {
         float eased = imploding ? ease(implodeT) : 0.0f;
         float open = 1.0f - eased;
         float pulse = 0.94f + 0.06f * (float) Math.sin(age * (imploding ? 0.9f : 0.28f));
@@ -106,18 +128,35 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         float twistEnv = imploding ? (float) Math.sin(implodeT * Math.PI) : 1.0f;
         float twist = (float) Math.toRadians(imploding ? 42.0 * twistEnv : 5.0 * Math.sin(age * 0.13));
 
-        float bodyA = imploding ? (1.0f - ease((implodeT - 0.30f) / 0.48f)) : 1.0f;
-        float rimA = imploding ? (1.0f - ease((implodeT - 0.50f) / 0.36f)) : 1.0f;
-        float seamA = imploding
+        float bodyA = (imploding ? (1.0f - ease((implodeT - 0.30f) / 0.48f)) : 1.0f) * env;
+        float rimA = (imploding ? (1.0f - ease((implodeT - 0.50f) / 0.36f)) : 1.0f) * env;
+        float seamA = (imploding
             ? (0.55f + 0.45f * eased) * (1.0f - ease((implodeT - 0.74f) / 0.26f))
-            : (0.58f + 0.12f * (float) Math.sin(age * 0.28f));
-        float shardA = imploding ? (1.0f - ease(implodeT / 0.70f)) : 0.94f;
+            : (0.58f + 0.12f * (float) Math.sin(age * 0.28f))) * env;
+        float shardA = (imploding ? (1.0f - ease(implodeT / 0.70f)) : 0.94f) * env;
+
+        // Layered depth behind and around the tear (point 1): a halo disc of
+        // void light behind the throat, and three accretion bands circling
+        // the wound at different radii, speeds, and directions. Both die
+        // with the collapse so nothing outlives the mouth.
+        float fade = imploding ? (1.0f - implodeT) : env;
+        if (fade > 0.02f) {
+            drawHalo(matrix, buffer, radius * 1.55f, -depthBase * 1.4f,
+                0.45f, 0.08f, 0.85f, 0.30f * fade);
+            float bandScale = imploding ? (1.0f - 0.55f * eased) : 1.0f;
+            drawRingBand(matrix, buffer, radius * 1.06f * bandScale, radius * 0.055f, -depthBase * 0.5f,
+                age * 0.055f, 4.4f, 0.80f, 0.45f, 1.0f, LayeredRender.ALPHA_MID * fade, distScale);
+            drawRingBand(matrix, buffer, radius * 1.24f * bandScale, radius * 0.075f, -depthBase * 0.7f,
+                -age * 0.038f + 2.1f, 3.6f, 0.55f, 0.10f, 0.92f, LayeredRender.ALPHA_OUTER * 1.5f * fade, distScale);
+            drawRingBand(matrix, buffer, radius * 0.90f * bandScale, radius * 0.04f, -depthBase * 0.3f,
+                age * 0.09f + 4.0f, 5.1f, 0.92f, 0.70f, 1.0f, LayeredRender.ALPHA_CORE * 0.45f * fade, distScale);
+        }
 
         Cut low = new Cut();
         Cut high = new Cut();
         fillCut(low, 0.0f, radius, age, open, halfH, belly, bowAmp, depthBase, twist);
-        for (int i = 0; i < SEGMENTS; i++) {
-            float t1 = (i + 1) / (float) SEGMENTS;
+        for (int i = 0; i < segments; i++) {
+            float t1 = (i + 1) / (float) segments;
             fillCut(high, t1, radius, age, open, halfH, belly, bowAmp, depthBase, twist);
             if (low.width > 0.02f || high.width > 0.02f) {
                 drawMouth(matrix, buffer, low, high, bodyA, rimA);
@@ -146,6 +185,62 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
                 fillCut(shardCut, t, radius, age, open, halfH, belly, bowAmp, depthBase, twist);
                 drawShard(matrix, buffer, shardCut, left, radius, age, i, eased, shardA);
             }
+        }
+    }
+
+    /** Soft disc of void light behind the throat, alpha dying to the rim. Both windings. */
+    private static void drawHalo(Matrix4f matrix, VertexConsumer buffer, float haloR, float z,
+                                 float r, float g, float b, float alpha) {
+        if (alpha <= 0.01f || haloR <= 0.05f) return;
+        int segs = 20;
+        for (int i = 0; i < segs; i++) {
+            double a0 = (i / (double) segs) * Math.PI * 2.0;
+            double a1 = ((i + 1) / (double) segs) * Math.PI * 2.0;
+            float x0 = (float) Math.cos(a0) * haloR, y0 = (float) Math.sin(a0) * haloR;
+            float x1 = (float) Math.cos(a1) * haloR, y1 = (float) Math.sin(a1) * haloR;
+            vert(buffer, matrix, 0, 0, z, 0.5f, 0.5f, r, g, b, alpha);
+            vert(buffer, matrix, x0, y0, z, 0, 0, r, g, b, 0.0f);
+            vert(buffer, matrix, x1, y1, z, 1, 0, r, g, b, 0.0f);
+            vert(buffer, matrix, 0, 0, z, 0.5f, 0.5f, r, g, b, alpha);
+            vert(buffer, matrix, x1, y1, z, 1, 0, r, g, b, 0.0f);
+            vert(buffer, matrix, x0, y0, z, 0, 0, r, g, b, 0.0f);
+        }
+    }
+
+    /**
+     * One accretion arc: a flat band segment circling the tear in its own
+     * plane, ends tapered so the arc dissolves instead of cutting off.
+     * Drawn both windings, like the rest of the tear.
+     */
+    private static void drawRingBand(Matrix4f matrix, VertexConsumer buffer,
+                                     float ringR, float width, float z,
+                                     float startAngle, float arc,
+                                     float r, float g, float b, float alpha, float distScale) {
+        if (alpha <= 0.01f || ringR <= 0.05f) return;
+        int segs = FxEnvelope.segments(22, distScale, 8);
+        float rIn = ringR - width * 0.5f;
+        float rOut = ringR + width * 0.5f;
+        for (int i = 0; i < segs; i++) {
+            float t0 = i / (float) segs;
+            float t1 = (i + 1) / (float) segs;
+            float a0 = startAngle + t0 * arc;
+            float a1 = startAngle + t1 * arc;
+            float taper0 = Math.min(1.0f, Math.min(t0, 1.0f - t0) * 6.0f);
+            float taper1 = Math.min(1.0f, Math.min(t1, 1.0f - t1) * 6.0f);
+            float al0 = alpha * taper0;
+            float al1 = alpha * taper1;
+            float ix0 = (float) Math.cos(a0) * rIn, iy0 = (float) Math.sin(a0) * rIn;
+            float ox0 = (float) Math.cos(a0) * rOut, oy0 = (float) Math.sin(a0) * rOut;
+            float ix1 = (float) Math.cos(a1) * rIn, iy1 = (float) Math.sin(a1) * rIn;
+            float ox1 = (float) Math.cos(a1) * rOut, oy1 = (float) Math.sin(a1) * rOut;
+            vert(buffer, matrix, ix0, iy0, z, 0, 0, r, g, b, al0);
+            vert(buffer, matrix, ox0, oy0, z, 0, 0, r, g, b, al0);
+            vert(buffer, matrix, ox1, oy1, z, 0, 0, r, g, b, al1);
+            vert(buffer, matrix, ix1, iy1, z, 0, 0, r, g, b, al1);
+            vert(buffer, matrix, ix1, iy1, z, 0, 0, r, g, b, al1);
+            vert(buffer, matrix, ox1, oy1, z, 0, 0, r, g, b, al1);
+            vert(buffer, matrix, ox0, oy0, z, 0, 0, r, g, b, al0);
+            vert(buffer, matrix, ix0, iy0, z, 0, 0, r, g, b, al0);
         }
     }
 

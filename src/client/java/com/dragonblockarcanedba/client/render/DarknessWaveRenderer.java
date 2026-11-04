@@ -28,6 +28,7 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         public float yRot = 0;
         public float xRot = 0;
         public float age = 0;
+        public double px = 0, py = 0, pz = 0;
         public boolean isSecondary = false;
         public boolean isFirstPersonOwner = false;
     }
@@ -53,6 +54,9 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
+        state.px = entity.getX();
+        state.py = entity.getY();
+        state.pz = entity.getZ();
         state.isSecondary = entity.isSecondary();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
@@ -75,14 +79,17 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
         float height = (state.isSecondary ? 1.4f : 2.0f) * fpScale;
         float age = state.age;
 
-        // The wave seethes while it flies, opens over the first ticks, and the fangs pull back as it dies.
+        // The wave seethes while it flies, opens over the first ticks, and
+        // the fangs pull back as it dies. The fade window matches the
+        // entity's 60 tick life: full strength to tick 45, gone at 60.
         float pulse = 0.90f + 0.10f * (float) Math.sin(age * 0.6f);
         float open = ease(Math.min(1.0f, age / 5.0f));
-        float fadeRaw = age <= 30.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - 30.0f) / 10.0f);
+        float fadeRaw = age <= 45.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - 45.0f) / 15.0f);
         float fade = ease(fadeRaw) * open;
         float drawnHeight = height * (0.55f + 0.45f * open);
         float fangReach = chord * (0.40f + 0.60f * open) * (0.22f + 0.78f * fadeRaw);
-        int segments = 28;
+        int segments = com.dragonblockarcanedba.util.FxEnvelope.segments(28,
+            com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.px, state.py, state.pz), 14);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

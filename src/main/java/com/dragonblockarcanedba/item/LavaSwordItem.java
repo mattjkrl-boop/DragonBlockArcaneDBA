@@ -3,7 +3,9 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.entity.LavaCleaveEntity;
 import com.dragonblockarcanedba.entity.LavaEruptionEntity;
+import com.dragonblockarcanedba.entity.LavaSwordGround;
 import com.dragonblockarcanedba.util.WeaponDrainHelper;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -35,6 +37,13 @@ public class LavaSwordItem extends Item implements com.dragonblockarcanedba.item
     private static final Map<UUID, Long> LAST_CLEAVE_TICK = new ConcurrentHashMap<>();
     private static final Map<UUID, Long> LAST_ERUPT_TICK = new ConcurrentHashMap<>();
 
+    static {
+        // Item registration loads this class at startup, so this is where the
+        // ground burn's restore ticker hooks in: crash recovery then runs from
+        // the first server tick instead of waiting for the first swing.
+        LavaSwordGround.register();
+    }
+
     public LavaSwordItem(Properties properties) {
         super(properties.attributes(createModifiers()));
     }
@@ -56,7 +65,15 @@ public class LavaSwordItem extends Item implements com.dragonblockarcanedba.item
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        // The cleave and the eruption already pay. Melee attribute damage is the close hit.
+        // The blade is living lava, so a plain hit burns too: the same 60
+        // ticks the cleave applies, plus a spit of flame off the target. The
+        // abilities still pay their own way on top of the melee hit.
+        target.setRemainingFireTicks(Math.max(target.getRemainingFireTicks(), 60));
+        if (target.level() instanceof ServerLevel server) {
+            server.sendParticles(ParticleTypes.FLAME,
+                target.getX(), target.getY() + target.getBbHeight() * 0.6, target.getZ(),
+                6, 0.25, 0.3, 0.25, 0.02);
+        }
     }
 
     public static void performCleave(ServerPlayer player, ItemStack stack) {

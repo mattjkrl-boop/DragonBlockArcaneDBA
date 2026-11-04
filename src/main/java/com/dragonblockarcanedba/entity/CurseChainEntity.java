@@ -20,7 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Curse Chain Entity — Physical spectral chain projected by Curse Blade.
+ * Curse Chain Entity: Physical spectral chain projected by Curse Blade.
  * 
  * - Homes in on target enemies.
  * - Attackable and destructible by victim or allies before or after attaching (~60 HP).
@@ -33,6 +33,10 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
     private static final EntityDataAccessor<Integer> TARGET_ID = SynchedEntityData.defineId(CurseChainEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> IS_ATTACHED = SynchedEntityData.defineId(CurseChainEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> ORBIT_INDEX = SynchedEntityData.defineId(CurseChainEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> ATTACH_REMAINING = SynchedEntityData.defineId(CurseChainEntity.class, EntityDataSerializers.INT);
+
+    /** How long an attached chain binds its target, in ticks. */
+    public static final int ATTACH_LIFE_TICKS = 100;
 
     private float health = 60.0f;
     private LivingEntity target = null;
@@ -64,6 +68,35 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
         builder.define(TARGET_ID, -1);
         builder.define(IS_ATTACHED, false);
         builder.define(ORBIT_INDEX, 0);
+        builder.define(ATTACH_REMAINING, -1);
+    }
+
+    /** Ticks of bind left, or -1 while the chain is still flying. Synced so
+     *  the renderer can fade the chain out instead of popping at discard. */
+    public int getAttachRemaining() {
+        return this.entityData.get(ATTACH_REMAINING);
+    }
+
+    /** (Re)applies the chain's friction and air drag weight for a curse
+     *  amplifier. DbaPhysicsAttributes.applyModifier is a 20 tick timed
+     *  modifier, so this must be refreshed while the chain holds or the
+     *  grounding silently stops 20 ticks into a 100 tick bind. */
+    private void applyChainWeight(LivingEntity target, int amp) {
+        double chainWeight = 1.0 + (amp * 0.8);
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            target,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("curse_chain_friction"),
+            chainWeight,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+        );
+        com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+            target,
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+            com.dragonblockarcanedba.DragonBlockArcaneDBA.id("curse_chain_drag"),
+            chainWeight,
+            net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+        );
     }
 
     public boolean isAttached() {
@@ -196,7 +229,8 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
             if (dir.lengthSqr() < 1.8) {
                 // Attach to target!
                 this.entityData.set(IS_ATTACHED, true);
-                this.attachTimer = 100; // 5 seconds duration
+                this.attachTimer = ATTACH_LIFE_TICKS; // 5 seconds duration
+                this.entityData.set(ATTACH_REMAINING, ATTACH_LIFE_TICKS);
 
                 // Apply / increment Movement Curse
                 MobEffectInstance existingEffect = target.getEffect(DbaEffects.MOVEMENT_CURSE_HOLDER);
@@ -204,28 +238,24 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
                 target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 100, newAmp, false, true), owner);
 
                 // MC 26.2 Physics: Heavy spectral iron chains ground the target and increase drag
-                double chainWeight = 1.0 + (newAmp * 0.8);
-                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                    target,
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
-                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("curse_chain_friction"),
-                    chainWeight,
-                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
-                );
-                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                    target,
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
-                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("curse_chain_drag"),
-                    chainWeight,
-                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
-                );
+                applyChainWeight(target, newAmp);
 
-                // Small magic hit damage
-                target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, (LivingEntity) owner), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (35.0f)));
+                // Small magic hit damage. Was 35, which read as nothing next
+                // to the blade's 750 melee and the tempest's strikes; 75 makes
+                // the attach itself felt without making chains the damage.
+                target.hurtServer(serverLevel, serverLevel.damageSources().mobProjectile(this, (LivingEntity) owner), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (75.0f)));
+
+                // Attach burst: sparks off the collar as the chain bites in.
+                float pdensity = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (pdensity > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                        Math.max(2, Math.round(8f * pdensity)), 0.5, 0.6, 0.5, 0.06);
+                }
 
                 // Lifesteal & Blood Shield (Soul Rend Refinement)
                 if (owner instanceof Player player) {
-                    float healAmount = 2.0f + (newAmp * 1.5f);
+                    float healAmount = 4.0f + (newAmp * 2.5f);
                     if (player.getHealth() < player.getMaxHealth()) {
                         player.heal(healAmount);
                     } else {
@@ -257,9 +287,38 @@ public class CurseChainEntity extends Projectile implements ITrackedSwarmEntity 
         } else {
             // Attached state: orbit/wrap tightly around target's torso/limbs
             this.attachTimer--;
+            this.entityData.set(ATTACH_REMAINING, Math.max(0, this.attachTimer));
             if (this.attachTimer <= 0 || !target.hasEffect(DbaEffects.MOVEMENT_CURSE_HOLDER)) {
                 this.discard();
                 return;
+            }
+
+            MobEffectInstance curseNow = target.getEffect(DbaEffects.MOVEMENT_CURSE_HOLDER);
+
+            // The friction and drag weight is a 20 tick timed modifier; refresh
+            // it while the bind lasts so the grounding the chain shows is the
+            // grounding the target actually feels for the full 100 ticks.
+            if (curseNow != null && this.attachTimer % 10 == 0) {
+                applyChainWeight(target, curseNow.getAmplifier());
+            }
+
+            // Reel-in (Tweak C, sustained): at 5+ stacks the chain keeps
+            // dragging the victim toward the owner for the whole bind, not
+            // only on the attach tick. Capped, so it reads as a drag, and
+            // scaled by the shared weight classes so bosses barely move.
+            if (curseNow != null && curseNow.getAmplifier() >= 4) {
+                Vec3 toOwner = new Vec3(owner.getX() - target.getX(), 0, owner.getZ() - target.getZ());
+                double dist = toOwner.length();
+                if (dist > 1.5) {
+                    Vec3 dirToOwner = toOwner.scale(1.0 / dist);
+                    Vec3 vel = target.getDeltaMovement();
+                    double toward = vel.x * dirToOwner.x + vel.z * dirToOwner.z;
+                    double step = 0.05 * com.dragonblockarcanedba.util.VortexPhysics.weightScale(target);
+                    if (toward < 0.30) {
+                        target.setDeltaMovement(vel.add(dirToOwner.x * step, 0, dirToOwner.z * step));
+                        com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
+                    }
+                }
             }
 
             // Constrict tightly around target body

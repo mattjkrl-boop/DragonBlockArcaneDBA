@@ -32,10 +32,10 @@ import net.minecraft.world.phys.Vec3;
  * Right-click: "Dimensional Rift" — 15-block radius 3D Gravitational Vortex Domain.
  *   - Spawns persistent 3D Dimensional Rift entity (replaces particle spam).
  *   - Concentric 3D ground accretion rings, towering vertical spatial tears, 18 orbital void shards, and singularity core.
- *   - Distance-based Melting tiers up to Level 10 at point-blank.
- *   - Instant burst of 500 + (Spirit × 2) magic damage to all targets caught.
- *   - Heavy gravity well pulling enemies toward the singularity.
- *   - 3-second cooldown.
+ *   - Distance-based Melting tiers up to Melting IV at point-blank, 10 seconds.
+ *   - Burst of 500 + (Strength × 3) damage at the expansion peak (tick 20) to all targets caught.
+ *   - Heavy gravity well pulling enemies toward the singularity, then an implosion fling at collapse.
+ *   - 6-second cooldown (single vanilla item cooldown, see performTechniqueDimensionalRift).
  * 
  * Unbreakable legendary weapon. No durability.
  */
@@ -138,7 +138,10 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
         float healAmount = totalDamage * 0.03f;
         serverPlayer.heal(healAmount);
 
-        // Spawn 3D Physical Sorrow Slash Impact Geometry directly on target
+        // Spawn 3D Physical Sorrow Slash Impact Geometry directly on target.
+        // Damage 0.0f is deliberate: the impact burst is a pure visual. The melee
+        // hit above already applied all damage and effects, and SorrowSlashEntity's
+        // impact burst mode never runs hit logic at all (see its tick()).
         Vec3 targetCenter = target.position().add(0, target.getBbHeight() * 0.5, 0);
         SorrowSlashEntity impactSlash = new SorrowSlashEntity(
             serverLevel,
@@ -146,7 +149,7 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
             targetCenter,
             serverPlayer.getYRot(),
             serverPlayer.getXRot(),
-            0.0f, // Damage already applied above in melee hit
+            0.0f, // Pure visual: melee damage already applied above
             nextTilt(serverPlayer),
             true  // isImpactBurst
         );
@@ -194,30 +197,39 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
     }
 
     // --- Right Click: Dimensional Rift 15-Block 3D Domain ---
+
+    /**
+     * Rift cooldown in ticks: 120 (6 seconds), longer than the rift's 60 tick
+     * life so two rifts can never stack. The vanilla item cooldown on the held
+     * stack is the ONE source of truth: use() and the technique callbacks in
+     * DragonBlockArcaneDBA both funnel through performTechniqueDimensionalRift,
+     * which checks and sets it here. (The old static UUID map that ran beside
+     * the item cooldown could desync from it and is gone.)
+     */
+    public static final int RIFT_COOLDOWN_TICKS = 120;
+
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
-        ItemStack stack = player.getItemInHand(hand);
-        if (player.getCooldowns().isOnCooldown(stack)) {
-            return InteractionResult.FAIL;
-        }
-        if (performTechniqueDimensionalRift(player)) {
-            player.getCooldowns().addCooldown(stack, 60);
-            return InteractionResult.SUCCESS;
-        }
-        return InteractionResult.FAIL;
+        return performTechniqueDimensionalRift(player) ? InteractionResult.SUCCESS : InteractionResult.FAIL;
     }
 
-    private static final java.util.Map<java.util.UUID, Long> RIFT_COOLDOWNS = new java.util.concurrent.ConcurrentHashMap<>();
+    /**
+     * The stack whose cooldown group gates the rift: the held Sickle of Sorrow
+     * (main hand first) when one is in hand. The technique callbacks in
+     * DragonBlockArcaneDBA can fire while the sickle technique is active but a
+     * different item is held; cooldowns are tracked per item group, not per
+     * stack instance, so a bare stack of the registered item addresses the
+     * same single cooldown for that path.
+     */
+    private static ItemStack cooldownStack(Player player) {
+        if (player.getMainHandItem().getItem() instanceof SickleOfSorrowItem) return player.getMainHandItem();
+        if (player.getOffhandItem().getItem() instanceof SickleOfSorrowItem) return player.getOffhandItem();
+        return new ItemStack(DbaItems.SICKLE_OF_SORROW);
+    }
 
     public static boolean performTechniqueDimensionalRift(Player player) {
-        // This cooldown map is NOT redundant with the item cooldown in use(): the
-        // technique-active right-click callbacks in DragonBlockArcaneDBA call this
-        // method directly and never pass through use(). It does get cleaned now:
-        // entries older than the cooldown are pruned on every call.
-        long gameTime = player.level().getGameTime();
-        RIFT_COOLDOWNS.entrySet().removeIf(e -> gameTime - e.getValue() >= 60);
-        long lastUse = RIFT_COOLDOWNS.getOrDefault(player.getUUID(), 0L);
-        if (gameTime - lastUse < 60) {
+        ItemStack stack = cooldownStack(player);
+        if (player.getCooldowns().isOnCooldown(stack)) {
             return false;
         }
 
@@ -225,14 +237,18 @@ public class SickleOfSorrowItem extends Item implements com.dragonblockarcanedba
         int level = accessor.dba$getTechniqueLevel("sickle_of_sorrow");
         double baseDrain = com.dragonblockarcanedba.attribute.PlayerStats.getSickleBaseActionDrain(level);
 
+        // Ki is charged only when the move actually fires: a failed drain
+        // returns before the cooldown is set, so nothing is locked out.
         if (!WeaponDrainHelper.drainKiDiscrete(player, baseDrain, 60)) {
             return false;
         }
-        RIFT_COOLDOWNS.put(player.getUUID(), gameTime);
+        player.getCooldowns().addCooldown(stack, RIFT_COOLDOWN_TICKS);
 
         if (!player.level().isClientSide()) {
             ServerLevel serverLevel = (ServerLevel) player.level();
-            float burstDamage = 500.0f + (float) (accessor.dba$getSpirit() * 2.0);
+            // Strength scaling, same as this weapon's melee and air swing, so
+            // building for the weapon's own stat feeds its right click too.
+            float burstDamage = 500.0f + (float) (accessor.dba$getStrength() * 3.0);
 
             DimensionalRiftEntity rift = new DimensionalRiftEntity(
                 serverLevel,

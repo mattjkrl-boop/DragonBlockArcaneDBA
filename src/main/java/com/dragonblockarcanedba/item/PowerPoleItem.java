@@ -73,8 +73,14 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
 
     // Per-target whirlwind hit gate: the spin is called every 2 ticks while held, and
     // used to re-damage everything in the cone on every call. A target now takes a
-    // spin hit at most once per 10 ticks.
-    private static final java.util.Map<Integer, Long> SPIN_HIT_TIMES = new java.util.concurrent.ConcurrentHashMap<>();
+    // spin hit at most once per 10 ticks. The key packs the SPINNING PLAYER's id
+    // with the target's id: keyed by target alone, two players spinning near the
+    // same mob shared one gate and one player's spin suppressed the other's hit.
+    private static final java.util.Map<Long, Long> SPIN_HIT_TIMES = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static long spinGateKey(Player player, LivingEntity target) {
+        return (((long) player.getId()) << 32) | (target.getId() & 0xFFFFFFFFL);
+    }
 
     public static void performWindSpin(Player player, ItemStack stack) {
         if (!player.level().isClientSide()) {
@@ -84,20 +90,49 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
             }
 
             ServerLevel serverLevel = (ServerLevel) player.level();
-            
+
             double maxRange = 25.0; // 25 blocks max range
             Vec3 eyePos = player.getEyePosition();
             Vec3 lookDir = player.getLookAngle();
-            
+
+            // ONE sustained whirlwind for the whole spin: spawn it on the first
+            // call, refresh it on every later call. It builds over its first 10
+            // ticks, sustains while refreshed, and dissipates over 24 ticks once
+            // calls stop. Damage and deflection only run inside its active
+            // window, so the funnel visibly builds before it can hurt anything.
+            PowerPoleWhirlwindEntity whirlwind = PowerPoleWhirlwindEntity.findActive(player);
+            if (whirlwind != null && whirlwind.getDecayStart() >= 0) {
+                // Re-pressing mid-dissipation starts a fresh funnel instead of
+                // refreshing one that is already blowing out.
+                whirlwind.discard();
+                whirlwind = null;
+            }
+            if (whirlwind == null) {
+                whirlwind = new PowerPoleWhirlwindEntity(
+                    serverLevel, player, eyePos, player.getYRot(), player.getXRot(), (float) maxRange, 35.0f
+                );
+                serverLevel.addFreshEntity(whirlwind);
+
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.3f);
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.0f, 1.1f);
+            } else {
+                whirlwind.refreshSpin();
+            }
+            boolean activeWindow = whirlwind.isInActiveWindow();
+
             // Inflate AABB to cover the max range
             AABB aoe = player.getBoundingBox().inflate(maxRange);
-            List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e != player && e.isAlive());
-            
+            List<LivingEntity> targets = activeWindow
+                ? serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e != player && e.isAlive())
+                : List.of();
+
             for (LivingEntity t : targets) {
                 Vec3 targetPos = t.position().add(0, t.getBbHeight() / 2, 0);
                 Vec3 toTarget = targetPos.subtract(eyePos);
                 double distance = toTarget.length();
-                
+
                 Vec3 toTargetDir = toTarget.normalize();
                 double dotProduct = Math.max(-1.0, Math.min(1.0, lookDir.dot(toTargetDir)));
                 double angleToTarget = Math.toDegrees(Math.acos(dotProduct));
@@ -107,11 +142,12 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
 
                 if (inCone || inClosePerimeter) {
                     long now = serverLevel.getGameTime();
-                    Long lastHit = SPIN_HIT_TIMES.get(t.getId());
+                    long gateKey = spinGateKey(player, t);
+                    Long lastHit = SPIN_HIT_TIMES.get(gateKey);
                     if (lastHit != null && now - lastHit < 10) {
                         continue;
                     }
-                    SPIN_HIT_TIMES.put(t.getId(), now);
+                    SPIN_HIT_TIMES.put(gateKey, now);
                     if (SPIN_HIT_TIMES.size() > 512) {
                         SPIN_HIT_TIMES.entrySet().removeIf(e -> now - e.getValue() >= 10);
                     }
@@ -134,10 +170,13 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                 }
             }
 
-            // Deflect incoming projectiles & Ki Blasts
-            List<net.minecraft.world.entity.projectile.Projectile> projectiles = serverLevel.getEntitiesOfClass(
-                net.minecraft.world.entity.projectile.Projectile.class, aoe, p -> p.isAlive() && p.getOwner() != player
-            );
+            // Deflect incoming projectiles & Ki Blasts, inside the same active
+            // window as the damage: a funnel still building does not bat
+            // projectiles back yet.
+            List<net.minecraft.world.entity.projectile.Projectile> projectiles = activeWindow
+                ? serverLevel.getEntitiesOfClass(
+                    net.minecraft.world.entity.projectile.Projectile.class, aoe, p -> p.isAlive() && p.getOwner() != player)
+                : List.of();
             for (net.minecraft.world.entity.projectile.Projectile p : projectiles) {
                 Vec3 pPos = p.position();
                 Vec3 toProj = pPos.subtract(eyePos);
@@ -147,23 +186,6 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                     p.setDeltaMovement(toProj.normalize().scale(2.2));
                     com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
                 }
-            }
-
-            // Visual entity, particles, and sounds run on a 6-tick cadence instead of
-            // spawning a fresh whirlwind entity on every 2-tick call.
-            if (player.tickCount % 6 == 0) {
-                PowerPoleWhirlwindEntity whirlwind = new PowerPoleWhirlwindEntity(
-                    serverLevel, player, eyePos, player.getYRot(), player.getXRot(), (float) maxRange, 35.0f
-                );
-                serverLevel.addFreshEntity(whirlwind);
-
-                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
-                    eyePos.x, eyePos.y, eyePos.z, 14, 2.2, 1.2, 2.2, 0.08);
-
-                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.3f);
-                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 1.0f, 1.1f);
             }
         }
     }
@@ -188,13 +210,24 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
             
             AABB hitBox = player.getBoundingBox().expandTowards(look.scale(reach)).inflate(1.0D);
             EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(player, eyePos, endPos, hitBox, e -> !e.isSpectator() && e.isPickable(), reach * reach);
-            
+
+            // Blocks clip over the FULL reach and the nearer of block or entity
+            // wins: the pole used to check blocks only inside the player's short
+            // POV reach, so past a few blocks it visually passed through walls
+            // its own length said it should have stopped at.
+            net.minecraft.world.phys.BlockHitResult blockHit = serverLevel.clip(new ClipContext(
+                eyePos, endPos, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
+            boolean blockHitSomething = blockHit.getType() != HitResult.Type.MISS;
+            double blockDist = blockHitSomething ? eyePos.distanceTo(blockHit.getLocation()) : Double.MAX_VALUE;
+            double entityDist = entityHit != null ? eyePos.distanceTo(entityHit.getLocation()) : Double.MAX_VALUE;
+
             Vec3 hitVec = endPos;
             boolean hitSomething = false;
-            if (entityHit != null && entityHit.getEntity() instanceof LivingEntity living) {
+            net.minecraft.world.phys.BlockHitResult landedBlock = null;
+            if (entityHit != null && entityHit.getEntity() instanceof LivingEntity living && entityDist <= blockDist) {
                 hitVec = entityHit.getLocation();
                 hitSomething = true;
-                
+
                 // Damage
                 living.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (750.0f)));
                 
@@ -217,14 +250,12 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                     int stunDuration = 100 + serverLevel.getRandom().nextInt(41); // 5-7 seconds
                     living.addEffect(new MobEffectInstance(DbaEffects.POLE_STUN_HOLDER, stunDuration, 1, false, false));
                 }
-            } else {
-                HitResult blockHit = getPlayerPOVHitResult(level, player, ClipContext.Fluid.NONE);
-                if (blockHit.getType() != HitResult.Type.MISS) {
-                    hitVec = blockHit.getLocation();
-                    hitSomething = true;
-                }
+            } else if (blockHitSomething) {
+                hitVec = blockHit.getLocation();
+                hitSomething = true;
+                landedBlock = blockHit;
             }
-            
+
             double dist = eyePos.distanceTo(hitVec);
 
             // Spawn Physical 3D Stretching Power Pole Model
@@ -240,6 +271,31 @@ public class PowerPoleItem extends Item implements com.dragonblockarcanedba.item
                     serverLevel, player, hitVec, player.getYRot(), player.getXRot(), 2.4f
                 );
                 serverLevel.addFreshEntity(impact);
+
+                // World interaction at the strike point (SPECTACLE-STANDARD
+                // points 2 and 3): a dust burst where the pole lands, real
+                // debris pieces torn from the ground at the hit that orbit,
+                // fall, and rain back down, and torn turf when the pole comes
+                // down on grass from above (temporary, restored by GroundScar).
+                com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(
+                    serverLevel, hitVec, 1.6f, 0xF2C14E);
+                com.dragonblockarcanedba.util.DebrisSpawner.spawnField(
+                    serverLevel, player, hitVec, 24, 2.2, 2.5, 18);
+                if (landedBlock != null
+                    && landedBlock.getDirection() == net.minecraft.core.Direction.UP) {
+                    net.minecraft.core.BlockPos groundPos = landedBlock.getBlockPos();
+                    var rand = serverLevel.getRandom();
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            net.minecraft.core.BlockPos cell = groundPos.offset(dx, 0, dz);
+                            if (serverLevel.getBlockState(cell).is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK)
+                                && rand.nextFloat() < 0.7f) {
+                                com.dragonblockarcanedba.util.GroundScar.scar(serverLevel, cell,
+                                    net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(), 120);
+                            }
+                        }
+                    }
+                }
 
                 serverLevel.playSound(null, hitVec.x, hitVec.y, hitVec.z,
                     SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.2f, 1.6f);

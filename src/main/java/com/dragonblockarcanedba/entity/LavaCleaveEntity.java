@@ -1,5 +1,8 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.util.DebrisSpawner;
+import com.dragonblockarcanedba.util.LayeredParticles;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -10,6 +13,8 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -22,9 +27,17 @@ import java.util.Set;
 /** A lava crescent that travels, drips, and leaves a short trail behind it. */
 public class LavaCleaveEntity extends Projectile {
     private static final EntityDataAccessor<Float> DAMAGE = SynchedEntityData.defineId(LavaCleaveEntity.class, EntityDataSerializers.FLOAT);
+    /** Flight time in ticks. At 1.35 blocks per tick that is about 16 blocks of reach. */
+    private static final int LIFE_TICKS = 12;
+    /** Ember and rock palette thrown where the crescent lands. */
+    private static final List<BlockState> DEBRIS_PALETTE = List.of(
+        Blocks.NETHERRACK.defaultBlockState(),
+        Blocks.MAGMA_BLOCK.defaultBlockState(),
+        Blocks.BASALT.defaultBlockState(),
+        Blocks.BLACKSTONE.defaultBlockState());
     private final Set<Integer> hitIds = new HashSet<>();
     /** A cleave may leave a few lava sources. The rest of the path is fire. */
-    private int lavaLeft = 3;
+    private int lavaLeft = 4;
 
     public LavaCleaveEntity(EntityType<? extends Projectile> type, Level level) {
         super(type, level);
@@ -50,6 +63,10 @@ public class LavaCleaveEntity extends Projectile {
         builder.define(DAMAGE, 740.0f);
     }
 
+    public int life() {
+        return LIFE_TICKS;
+    }
+
     @Override
     public boolean isPickable() {
         return false;
@@ -59,7 +76,7 @@ public class LavaCleaveEntity extends Projectile {
     public void tick() {
         super.tick();
         Vec3 motion = this.getDeltaMovement();
-        if (this.tickCount > 10) {
+        if (this.tickCount > LIFE_TICKS) {
             this.discard();
             return;
         }
@@ -81,6 +98,20 @@ public class LavaCleaveEntity extends Projectile {
                     : server.damageSources().magic();
                 living.hurtServer(server, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(damage));
                 living.setRemainingFireTicks(Math.max(living.getRemainingFireTicks(), 60));
+                // A shove along the flight line, about 0.35 horizontal: the
+                // crescent carries weight now instead of passing through.
+                living.setDeltaMovement(living.getDeltaMovement().add(motion.x * 0.26, 0.18, motion.z * 0.26));
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(living);
+            }
+            // Layered embers around the crescent (shared standard point 1):
+            // bright motes at the core, orange dust mid, flame wisps outside,
+            // all breathing with the flight envelope.
+            LayeredParticles.emitVortex(server, start, 1.05f, 1.3f,
+                this.tickCount, LIFE_TICKS, 0xFF5A00, ParticleTypes.FLAME);
+            if (this.tickCount >= LIFE_TICKS - 2) {
+                // The crescent rains embers as it dies instead of vanishing.
+                LayeredParticles.emitRain(server, start, 1.2f, 1.2f,
+                    this.tickCount, LIFE_TICKS, ParticleTypes.FLAME);
             }
             this.lavaLeft -= LavaSwordGround.scorchSegment(server, start, end, 1.35, this.lavaLeft);
             if (blocked) {
@@ -88,6 +119,10 @@ public class LavaCleaveEntity extends Projectile {
                 // The path scorch only covers the flight segment, whose last
                 // midpoint sits inside the hit block, so land it explicitly.
                 this.lavaLeft -= LavaSwordGround.scorchLanding(server, block.getBlockPos(), this.lavaLeft);
+                Vec3 impact = Vec3.atCenterOf(block.getBlockPos());
+                LayeredParticles.emitGroundBurst(server, impact, 1.4f, 0xFF5A00);
+                DebrisSpawner.spawnField(server, owner instanceof LivingEntity living ? living : null,
+                    impact, 12, 1.6, 1.6, 12, DEBRIS_PALETTE);
                 this.discard();
                 return;
             }

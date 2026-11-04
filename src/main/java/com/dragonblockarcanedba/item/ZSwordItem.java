@@ -1,6 +1,5 @@
 package com.dragonblockarcanedba.item;
 
-import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.ZChargeEntity;
@@ -38,29 +37,38 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Z-Sword — Divine Heavy Weapon.
  * 
- * Drain: Left click Ki 75% + Stamina 50% per minute, Right click Stamina 75% per minute.
- * 
+ * Drain: Left click Ki 75% + Stamina 50% per minute (1.25% Ki and 0.83% stamina
+ * per second), Right click Stamina 75% per minute (1.25% per second).
+ *
  * LEFT: Z Shockwave (Charge-to-Fire)
- * - Hold left click to channel power (up to 15s / 300 ticks).
- * - Drains ~5% Ki/sec, slows movement.
+ * - Hold left click to channel power (up to 15s / 300 ticks, then it fires on its own).
+ * - Drains Ki and stamina as above, slows movement.
  * - Spawns 3D ZChargeEntity (golden geometric vortex, counter-rotating energy rings & sacred crystal prisms).
  * - Release sends gigantic 3D volumetric horizontal golden energy wave (ZShockwaveEntity).
  * - Recoil knocks player backward based on charge.
  * - Tweak A: Spawns trailing slower sub-waves at max charge.
  * - Tweak B: Ignores terrain and passes through blocks at max charge.
  * - Tweak C: Roots enemies 2 blocks into the ground, dealing head crush damage.
- * 
+ *
  * RIGHT: Katchin Weight (Divine Heavy Stance & Gravity Slam)
  * - Hold right click: Knockback immunity, near-total movement restriction, heavy damage reduction.
+ * - The stance is a real gravity well: nearby mobs are dragged toward the holder while it lasts.
+ * - Hold caps at 10s (200 ticks); the slam then fires on its own.
  * - Spawns 3D ZStanceAuraEntity (gravity suction field, Katchin weight monoliths & contracting event horizon rings).
- * - Release unleashes massive physical 3D ZGravitySlamEntity (6 to 18 blocks wide ground shatter, canyon fissures & erupted monoliths).
- * - Tweak A: Completely roots enemies for 2s, then violently launches them up and outward.
+ * - Release unleashes massive physical 3D ZGravitySlamEntity (6 to 18 block RADIUS ground shatter,
+ *   12 to 36 blocks across, canyon fissures & erupted monoliths). The slam entity itself deals the
+ *   damage at the visual peak tick, with distance falloff, real ground scarring and a debris field.
+ * - Tweak A: Roots enemies for the launch delay (40 ticks plus 40 per full power), then launches them.
  */
 public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_CHARGE_TICKS = 300; // 15 seconds
+    public static final int MAX_STANCE_TICKS = 200; // 10 seconds to full slam power
 
     private static final Map<UUID, ZChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
     private static final Map<UUID, ZStanceAuraEntity> ACTIVE_STANCE_MAP = new ConcurrentHashMap<>();
+    // Players whose held charge already auto-fired at max during the current hold,
+    // so the rest of the hold and its release packet do not fire a second wave.
+    private static final java.util.Set<UUID> MAX_CHARGE_FIRED = ConcurrentHashMap.newKeySet();
 
     public ZSwordItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -97,8 +105,20 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        // The katchin wave and the gravity slam already pay. A vanilla connect used to
-        // spend ki and stamina again and show nothing of its own.
+        // The katchin wave and the gravity slam already pay, so a vanilla connect
+        // spends no Ki and no stamina. Spectacle pass: the connect itself now reads
+        // on screen, a small ground debris burst and gold sparks at the target,
+        // particles only, no extra damage.
+        if (attacker.level() instanceof ServerLevel serverLevel) {
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (density > 0f) {
+                com.dragonblockarcanedba.fx.SlamDebris.burst(serverLevel, target.position(), 1.2,
+                    com.dragonblockarcanedba.fx.SlamDebris.Profile.Z_GRAVITY);
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                    Math.max(2, Math.round(8f * density)), 0.5, 0.6, 0.5, 0.10);
+            }
+        }
     }
 
     // --- LEFT CLICK: Z Shockwave Charging & Firing ---
@@ -106,6 +126,16 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
     public static void onLeftClickChargeTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
+
+        // Hard stop at maximum charge: the wave fires itself at 300 ticks instead
+        // of draining forever at full ratio, and the rest of this hold stays quiet.
+        if (chargeTicks >= MAX_LEFT_CHARGE_TICKS) {
+            if (MAX_CHARGE_FIRED.add(player.getUUID())) {
+                fireShockwave(player, stack, chargeTicks);
+            }
+            return;
+        }
+        MAX_CHARGE_FIRED.remove(player.getUUID());
 
         // Drain Ki: 75% per min + Stamina: 50% per min (smooth)
         if (!WeaponDrainHelper.drainBothPerTick(player, 75.0, 50.0)) {
@@ -139,19 +169,32 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
     }
 
     public static void onLeftClickRelease(ServerPlayer player, ItemStack stack, int chargeTicks) {
+        // A release packet that arrives after the max charge auto-fire, still at
+        // max ticks, is the tail of the same hold: the wave already went out.
+        if (chargeTicks >= MAX_LEFT_CHARGE_TICKS && MAX_CHARGE_FIRED.remove(player.getUUID())) {
+            return;
+        }
+        MAX_CHARGE_FIRED.remove(player.getUUID());
+        fireShockwave(player, stack, chargeTicks);
+    }
+
+    private static void fireShockwave(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Discard 3D charge entity
+        // Fade the 3D charge entity out over a few ticks instead of discarding it
+        // at full brightness in one tick.
         ZChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
         if (chargeEntity != null && !chargeEntity.isRemoved()) {
-            chargeEntity.discard();
+            chargeEntity.beginFade();
         }
 
         float chargeRatio = Math.max(0.1f, Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS));
 
-        // Stat-scaled damage: 300 base scaling up to 1200 + (Strength * 3.5)
-        float baseDmg = 300.0f + (chargeRatio * 900.0f);
+        // Stat-scaled damage: 150 base scaling up to 1200 + (Strength * 3.5).
+        // A bare tap used to pay 330 base; it now pays 255, and a full charge is
+        // worth about 4.7x a tap on the base number (standard: charge must pay).
+        float baseDmg = 150.0f + (chargeRatio * 1050.0f);
         float strengthBonus = (float) (accessor.dba$getStrength() * 3.5 * chargeRatio);
         float totalDamage = baseDmg + strengthBonus;
 
@@ -174,8 +217,10 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.2f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
-        // Cooldown based on power
-        int cooldown = 20 + (int) (chargeRatio * 40);
+        // Cooldown based on power. A full charge wave lives 80 ticks in flight,
+        // so the cooldown now runs 44 ticks at a tap to 120 at full charge: a
+        // max wave cannot be re-fired before the first one has finished.
+        int cooldown = 40 + (int) (chargeRatio * 80);
         player.getCooldowns().addCooldown(stack, cooldown);
     }
 
@@ -213,6 +258,14 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float stanceRatio = Math.min(1.0f, heldTicks / 200.0f); // 10s max power
 
+            // Hard stop at full power: the slam fires itself at 200 ticks instead
+            // of draining stamina forever at a clamped ratio. stopUsingItem routes
+            // through releaseUsing with heldTicks at the cap.
+            if (heldTicks >= MAX_STANCE_TICKS) {
+                player.stopUsingItem();
+                return;
+            }
+
             // 1. Knockback immunity & movement lock
             MovementPhysics.rootInPlace(player);
 
@@ -242,22 +295,30 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - timeLeft;
 
-            // Discard 3D stance entity
+            // Fade the 3D stance entity out over a few ticks instead of discarding
+            // it at full brightness in one tick.
             ZStanceAuraEntity stanceEntity = ACTIVE_STANCE_MAP.remove(player.getUUID());
             if (stanceEntity != null && !stanceEntity.isRemoved()) {
-                stanceEntity.discard();
+                stanceEntity.beginFade();
             }
 
             if (heldTicks >= 10) {
                 float powerRatio = Math.min(1.0f, heldTicks / 200.0f);
-                double aoeRadius = 6.0 + (powerRatio * 12.0); // 6 to 18 blocks
+                double aoeRadius = 6.0 + (powerRatio * 12.0); // 6 to 18 block radius, 12 to 36 across
 
                 PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
                 float baseSlamDamage = 400.0f + (powerRatio * 800.0f);
                 float strengthBonus = (float) (accessor.dba$getStrength() * 3.0 * powerRatio);
                 float totalSlamDamage = baseSlamDamage + strengthBonus;
 
-                // Circular shockwave AOE
+                // Launch delay scales with power now: 40 ticks at a tap hold up to
+                // 80 at full power, so a 10 second charge buys a 4 second pin
+                // window instead of the same flat 2 seconds a half second hold got.
+                int launchDelay = 40 + (int) (powerRatio * 40);
+
+                // Root and shatter land on release, but the slam DAMAGE no longer
+                // lands here. ZGravitySlamEntity deals it at its visual peak tick
+                // with distance falloff, so the hit and the picture agree.
                 AABB aoe = player.getBoundingBox().inflate(aoeRadius, 4.0, aoeRadius);
                 List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e.isAlive() && e != player);
 
@@ -266,27 +327,26 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
                 for (LivingEntity target : targets) {
                     double dist = player.distanceTo(target);
                     if (dist <= aoeRadius) {
-                        // Slam damage
-                        target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalSlamDamage)));
+                        // Shatter now ends near the launch instead of outliving it
+                        // by 100 ticks: 60 ticks flat.
+                        target.addEffect(new MobEffectInstance(DbaEffects.EARTH_SHATTER_HOLDER, 60, 0, false, true), player);
 
-                        // Heavily slowed & shattered by shockwave
-                        target.addEffect(new MobEffectInstance(DbaEffects.EARTH_SHATTER_HOLDER, 140, 0, false, true), player);
-
-                        // Tweak A: Completely roots enemies in the ground for 2s (40 ticks), then launches them up and out
-                        target.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 50, 0, false, false, false), player);
-                        target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 40, 9, false, true), player);
+                        // Tweak A: rooted for the whole launch delay, then launched.
+                        target.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, launchDelay, 0, false, false, false), player);
+                        target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, launchDelay, 9, false, true), player);
                         launchTargets.add(target);
                     }
                 }
 
                 if (!launchTargets.isEmpty()) {
-                    com.dragonblockarcanedba.entity.DelayedLaunchEntity delayEntity = new com.dragonblockarcanedba.entity.DelayedLaunchEntity(serverLevel, player.position(), powerRatio, launchTargets);
+                    com.dragonblockarcanedba.entity.DelayedLaunchEntity delayEntity = new com.dragonblockarcanedba.entity.DelayedLaunchEntity(
+                        serverLevel, player, player.position(), powerRatio, launchTargets, (float) aoeRadius, launchDelay);
                     serverLevel.addFreshEntity(delayEntity);
                 }
 
                 // Spawn physical 3D ZGravitySlamEntity (radiating canyon trenches, erupted Katchin monoliths & expanding shockwave dome)
                 ZGravitySlamEntity slam = new ZGravitySlamEntity(
-                    serverLevel, player, player.position(), (float) aoeRadius, powerRatio
+                    serverLevel, player, player.position(), (float) aoeRadius, powerRatio, totalSlamDamage, launchDelay
                 );
                 serverLevel.addFreshEntity(slam);
 
@@ -297,8 +357,9 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.5f, 0.5f);
 
-                // Cooldown
-                player.getCooldowns().addCooldown(stack, 60 + (int) (powerRatio * 80));
+                // Cooldown: at least the slam visual life (80 to 120 ticks), so a
+                // second slam can never stack on a still burning first one.
+                player.getCooldowns().addCooldown(stack, 100 + (int) (powerRatio * 100));
             } else {
                 // Releasing too early used to waste the stance drain with no feedback at all.
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -311,6 +372,7 @@ public class ZSwordItem extends Item implements com.dragonblockarcanedba.item.ge
 
     /** Discards any charge or stance entities still tracked for a player who logged out. */
     public static void onPlayerDisconnect(UUID playerUuid) {
+        MAX_CHARGE_FIRED.remove(playerUuid);
         net.minecraft.world.entity.Entity e0 = ACTIVE_CHARGE_MAP.remove(playerUuid);
         if (e0 != null && e0.isAlive()) e0.discard();
         net.minecraft.world.entity.Entity e1 = ACTIVE_STANCE_MAP.remove(playerUuid);

@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.BanshoCycloneEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -14,8 +16,14 @@ import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Bansho Fan Cyclone in Minecraft 26.2.
- * Renders physical 3D emerald/jade multi-layered vortex funnels, counter-rotating suction whirlpools,
- * ascending triple-helical jade wind ribbons, 8 high-speed orbiting razor wind blades, and a radiant spindle core.
+ * The funnel wall is the shared layered vortex (LayeredRender.drawVortexBands):
+ * a bright core band, an emerald mid band, and a wispy outer band whose edge
+ * sits exactly on the cyclone's 4 block effect radius, so what you see is
+ * what hurts you. The bands are drawn double sided by the shared helper, and
+ * this renderer's own quads are double sided too, so the funnel reads from
+ * inside the storm. Around the bands: the suction ring and eye at the foot,
+ * the triple helical jade ribbons, 8 orbiting razor blades, and the crown
+ * outflow ring, all breathing on the same FxEnvelope as the entity.
  */
 public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, BanshoCycloneRenderer.CycloneRenderState> {
 
@@ -26,6 +34,8 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
     public static class CycloneRenderState extends EntityRenderState {
         public float scale = 1.0f;
         public float age = 0;
+        public int lifetime = BanshoCycloneEntity.LIFE_TICKS;
+        public double ex, ey, ez;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -48,6 +58,10 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         super.extractRenderState(entity, state, partialTicks);
         state.scale = entity.getScale();
         state.age = entity.tickCount + partialTicks;
+        state.lifetime = entity.getLifetime();
+        state.ex = entity.getX();
+        state.ey = entity.getY();
+        state.ez = entity.getZ();
     }
 
     @Override
@@ -55,83 +69,49 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         float scale = state.scale;
-        float baseRadius = scale * 3.5f;
-        float totalHeight = scale * 6.5f;
+        float effectRadius = scale * 4.0f;
+        float fullHeight = scale * 6.5f;
         float age = state.age;
+        float life = Math.max(1, state.lifetime);
 
-        float inT = Math.min(1.0f, age / 4.0f);
-        float inEase = 1.0f - (1.0f - inT) * (1.0f - inT) * (1.0f - inT);
-        float outT = age <= 17.0f ? 0.0f : Math.min(1.0f, (age - 17.0f) / 8.0f);
-        float alphaMult = inEase * (1.0f - outT * outT * (3.0f - 2.0f * outT));
+        // One envelope for everything, the same fractions the entity uses for
+        // its damage window and forces, so visual and numbers agree.
+        float envelope = FxEnvelope.envelope(age, life, BanshoCycloneEntity.BUILD_FRAC, BanshoCycloneEntity.DECAY_FRAC);
+        if (envelope <= 0.01f) {
+            super.submit(state, poseStack, collector, cameraState);
+            return;
+        }
+        float growth = FxEnvelope.smoothstep(age / (life * BanshoCycloneEntity.BUILD_FRAC));
+        float radiusNow = effectRadius * (0.45f + 0.55f * growth);
+        float heightNow = fullHeight * (0.35f + 0.65f * growth);
+        float distScale = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
 
-        final float finalAlphaMult = alphaMult;
+        final float finalAlphaMult = envelope;
 
         poseStack.pushPose();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // One suction ring at the foot, and a pale eye that is the core of that ring.
-            int groundSegments = 36;
-            float gRadius = baseRadius * 0.95f;
+            // Ground anchor glow: the storm is planted on the world, not pasted on it.
+            LayeredRender.drawAnchorGlow(pose, buffer, radiusNow * 1.05f, 0.06f,
+                0.15f, 1.0f, 0.65f, 0.30f * finalAlphaMult, distScale);
+
+            // The funnel itself: three counter-rotating layered bands. The mid
+            // band radius is chosen so the wispy outer band (1.45x) lands
+            // exactly on the effect radius: the visible wall IS the hit wall.
+            LayeredRender.drawVortexBands(pose, buffer, radiusNow / 1.45f, heightNow, age,
+                0.15f, 1.0f, 0.65f, finalAlphaMult, distScale);
+
+            // Suction ring at the foot, and a pale eye that is the core of that ring.
+            int groundSegments = FxEnvelope.segments(36, distScale, 12);
+            float gRadius = radiusNow * 0.95f;
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, gRadius, gRadius * 0.78f, groundSegments, age * 28.0f,
                 0.0f, 0.72f, 0.38f, 0.70f * finalAlphaMult);
             drawRotatingRing(matrix, buffer, 0, 0.08f, 0, gRadius * 0.22f, 0.04f, 20, -age * 18.0f,
                 0.85f, 1.0f, 0.92f, 0.80f * finalAlphaMult);
 
-            // 2. High-Speed 3D Inverted Tornado Funnel (10-tiered twisting cone)
-            int coreLevels = 10;
-            int coreSegments = 28;
-            float coreRot = age * 30.0f * (float) (Math.PI / 180.0);
-
-            for (int lvl = 0; lvl < coreLevels; lvl++) {
-                float p1 = lvl / (float) coreLevels;
-                float p2 = (lvl + 1) / (float) coreLevels;
-
-                float y1 = p1 * totalHeight;
-                float y2 = p2 * totalHeight;
-
-                // Secondary motion (T4): the funnel wall breathes as it climbs.
-                float breathe1 = 1.0f + 0.03f * (float) Math.sin(age * 0.9f + p1 * 5.0f);
-                float breathe2 = 1.0f + 0.03f * (float) Math.sin(age * 0.9f + p2 * 5.0f);
-                float r1 = (baseRadius * 0.38f) * (0.28f + 0.72f * p1) * breathe1;
-                float r2 = (baseRadius * 0.38f) * (0.28f + 0.72f * p2) * breathe2;
-
-                float alpha = (0.65f * (1.0f - p1 * 0.25f)) * finalAlphaMult;
-
-                // 3-stop gradient (T2): deep emerald at the base, full emerald
-                // mid-funnel, pale jade at the crown.
-                float crF, cgF, cbF;
-                if (p1 < 0.5f) {
-                    float k = p1 / 0.5f;
-                    crF = 0.0f + (0.15f - 0.0f) * k; cgF = 0.82f + (1.0f - 0.82f) * k; cbF = 0.42f + (0.65f - 0.42f) * k;
-                } else {
-                    float k = (p1 - 0.5f) / 0.5f;
-                    crF = 0.15f + (0.55f - 0.15f) * k; cgF = 1.0f; cbF = 0.65f + (0.85f - 0.65f) * k;
-                }
-
-                for (int i = 0; i < coreSegments; i++) {
-                    double a1 = ((i / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.4);
-                    double a2 = (((i + 1) / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.4);
-                    double a3 = (((i + 1) / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p2 * 1.4);
-                    double a4 = ((i / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p2 * 1.4);
-
-                    float x1 = (float) Math.cos(a1) * r1;
-                    float z1 = (float) Math.sin(a1) * r1;
-                    float x2 = (float) Math.cos(a2) * r1;
-                    float z2 = (float) Math.sin(a2) * r1;
-
-                    float x3 = (float) Math.cos(a3) * r2;
-                    float z3 = (float) Math.sin(a3) * r2;
-                    float x4 = (float) Math.cos(a4) * r2;
-                    float z4 = (float) Math.sin(a4) * r2;
-
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4,
-                        crF, cgF, cbF, alpha);
-                }
-            }
-
-            // 3. Ascending Triple-Helical Jade Wind Ribbons
+            // Ascending Triple-Helical Jade Wind Ribbons, riding the funnel wall.
             int strands = 3;
             int ribbonSteps = 22;
             for (int s = 0; s < strands; s++) {
@@ -141,11 +121,11 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
                     float t1 = step / (float) ribbonSteps;
                     float t2 = (step + 1) / (float) ribbonSteps;
 
-                    float y1 = t1 * totalHeight;
-                    float y2 = t2 * totalHeight;
+                    float y1 = t1 * heightNow;
+                    float y2 = t2 * heightNow;
 
-                    float r1 = baseRadius * (0.35f + 0.65f * t1 * t1);
-                    float r2 = baseRadius * (0.35f + 0.65f * t2 * t2);
+                    float r1 = radiusNow * (0.35f + 0.65f * t1 * t1);
+                    float r2 = radiusNow * (0.35f + 0.65f * t2 * t2);
 
                     double ang1 = strandOffset + (age * 22.0f * (Math.PI / 180.0)) + (t1 * Math.PI * 3.8);
                     double ang2 = strandOffset + (age * 22.0f * (Math.PI / 180.0)) + (t2 * Math.PI * 3.8);
@@ -175,12 +155,12 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
                 }
             }
 
-            // 4. Physical Orbiting Razor Wind Scythes / Kinetic Gale Blades (8 blades)
+            // Physical Orbiting Razor Wind Scythes / Kinetic Gale Blades (8 blades)
             int bladeCount = 8;
             for (int i = 0; i < bladeCount; i++) {
                 float bladeProgress = (i / (float) bladeCount);
-                float bladeY = bladeProgress * totalHeight * 0.85f + 0.4f;
-                float bladeRadius = baseRadius * (0.45f + 0.55f * (bladeY / totalHeight));
+                float bladeY = bladeProgress * heightNow * 0.85f + 0.4f;
+                float bladeRadius = radiusNow * (0.45f + 0.55f * (bladeY / Math.max(0.001f, heightNow)));
 
                 double bladeAngle = (bladeProgress * Math.PI * 2.0) + (age * (32.0f + i * 3.0f) * (Math.PI / 180.0));
 
@@ -209,50 +189,9 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
                 );
             }
 
-            // 5. Luminous Tempest Spindle Core (Vertical Glowing Spine)
-            int spineLevels = 6;
-            for (int s = 0; s < spineLevels; s++) {
-                float y1 = (s / (float) spineLevels) * totalHeight;
-                float y2 = ((s + 1) / (float) spineLevels) * totalHeight;
-                float climb = s / (float) spineLevels;
-                float climb2 = (s + 1) / (float) spineLevels;
-                float rSpine = 0.20f * scale * (1.0f - climb * 0.62f);
-                float rSpine2 = 0.20f * scale * (1.0f - climb2 * 0.62f);
-                float rotSpine = age * 50.0f * (float) (Math.PI / 180.0) + s * 0.5f;
-
-                for (int i = 0; i < 8; i++) {
-                    double a1 = (i / 8.0) * Math.PI * 2.0 + rotSpine;
-                    double a2 = ((i + 1) / 8.0) * Math.PI * 2.0 + rotSpine;
-
-                    float x1 = (float) Math.cos(a1) * rSpine;
-                    float z1 = (float) Math.sin(a1) * rSpine;
-                    float x2 = (float) Math.cos(a2) * rSpine;
-                    float z2 = (float) Math.sin(a2) * rSpine;
-                    float x3 = (float) Math.cos(a2) * rSpine2;
-                    float z3 = (float) Math.sin(a2) * rSpine2;
-                    float x4 = (float) Math.cos(a1) * rSpine2;
-                    float z4 = (float) Math.sin(a1) * rSpine2;
-
-                    drawQuad(matrix, buffer,
-                        x1, y1, z1,
-                        x2, y1, z2,
-                        x3, y2, z3,
-                        x4, y2, z4,
-                        0.55f, 1.0f, 0.78f, 0.55f * finalAlphaMult
-                    );
-                    drawQuad(matrix, buffer,
-                        x1 * 0.38f, y1, z1 * 0.38f,
-                        x2 * 0.38f, y1, z2 * 0.38f,
-                        x3 * 0.38f, y2, z3 * 0.38f,
-                        x4 * 0.38f, y2, z4 * 0.38f,
-                        0.95f, 1.0f, 0.98f, 0.90f * finalAlphaMult
-                    );
-                }
-            }
-
-            // 6. Upper Crown Outflow Rim (Flared top storm rim)
-            float crownY = totalHeight;
-            float crownR = baseRadius * 1.12f;
+            // Upper Crown Outflow Rim (Flared top storm rim)
+            float crownY = heightNow;
+            float crownR = radiusNow * 1.12f;
             drawRotatingRing(matrix, buffer, 0, crownY, 0, crownR, crownR * 0.72f, 30, -age * 26.0f,
                 0.05f, 0.95f, 0.65f, 0.50f * finalAlphaMult);
         });
@@ -346,6 +285,8 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         }
     }
 
+    // Double sided: the funnel must read from inside the storm and from below,
+    // so every quad is emitted in both windings.
     private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,
                                 float x1, float y1, float z1,
                                 float x2, float y2, float z2,
@@ -356,16 +297,9 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
         consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-    }
-
-    private static void drawTriangle(Matrix4f matrix, VertexConsumer consumer,
-                                    float x1, float y1, float z1,
-                                    float x2, float y2, float z2,
-                                    float x3, float y3, float z3,
-                                    float r, float g, float b, float a) {
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+        consumer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+        consumer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
     }
 }

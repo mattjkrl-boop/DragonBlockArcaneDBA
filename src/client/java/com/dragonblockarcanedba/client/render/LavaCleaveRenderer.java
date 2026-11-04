@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.LavaCleaveEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -24,6 +26,10 @@ public class LavaCleaveRenderer extends EntityRenderer<LavaCleaveEntity, LavaCle
         public float age;
         public float yRot;
         public float xRot;
+        public float life;
+        public double posX;
+        public double posY;
+        public double posZ;
     }
 
     public boolean shouldRender(LavaCleaveEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -45,21 +51,35 @@ public class LavaCleaveRenderer extends EntityRenderer<LavaCleaveEntity, LavaCle
         state.age = entity.tickCount + partialTick;
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
+        state.life = entity.life();
+        state.posX = entity.getX();
+        state.posY = entity.getY();
+        state.posZ = entity.getZ();
     }
 
     @Override
     public void submit(CleaveState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        // The shared envelope drives the alpha (standard point 5): the
+        // crescent builds as it opens and burns down over its last ticks
+        // instead of starting at full alpha. Distance steps segments down.
+        float scale = LayeredRender.distScale(cameraState, state.posX, state.posY, state.posZ);
+        float env = FxEnvelope.envelope(state.age, state.life);
         float open = ease(Math.min(1.0f, state.age / 2.5f));
-        float fade = ease(Math.max(0.0f, 1.0f - state.age / 10.0f));
-        float trail = ease(Math.max(0.0f, 1.0f - state.age / 7.0f));
+        float fade = env;
+        float trail = ease(Math.max(0.0f, 1.0f - state.age / (state.life * 0.7f))) * env;
+        int segs = FxEnvelope.segments(12, scale, 8);
         RenderType type = KiRenderHelper.kiRenderType();
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
         collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            drawCrescent(buffer, matrix, pose, 1.35f * (0.4f + 0.6f * open), 0.22f, fade, false);
-            drawCrescent(buffer, matrix, pose, 1.05f * trail, 0.12f, trail * 0.45f, true);
+            // Three layers (standard point 1): the main mid crescent, a
+            // smaller bright core crescent nested inside it, and the wispy
+            // trailing crescent behind.
+            drawCrescent(buffer, matrix, pose, 1.35f * (0.4f + 0.6f * open), 0.22f, fade, false, segs);
+            drawCrescent(buffer, matrix, pose, 0.78f * (0.4f + 0.6f * open), 0.12f, fade * 0.95f, false, segs);
+            drawCrescent(buffer, matrix, pose, 1.05f * trail, 0.12f, trail * 0.45f, true, segs);
             drawDrips(buffer, matrix, pose, state.age, fade);
         });
         poseStack.popPose();
@@ -72,8 +92,7 @@ public class LavaCleaveRenderer extends EntityRenderer<LavaCleaveEntity, LavaCle
     }
 
     private static void drawCrescent(VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
-                                     float radius, float depth, float fade, boolean trail) {
-        int segs = 12;
+                                     float radius, float depth, float fade, boolean trail, int segs) {
         float z = trail ? -0.55f : 0.15f;
         for (int i = 0; i < segs; i++) {
             float t0 = i / (float) segs;

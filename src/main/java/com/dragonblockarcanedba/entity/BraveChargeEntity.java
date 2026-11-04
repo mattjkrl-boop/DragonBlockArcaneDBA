@@ -13,13 +13,22 @@ import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 
 /**
- * Brave Charge Entity — Physical 3D heroic focus runes, converging valor shards, and heroic core matrix during Brave Sword Right-Click charging.
+ * Brave Charge Entity - tracks the caster and the live charge ratio while the
+ * Brave Sword right click is held. All of the visuals (heroic focus runes,
+ * converging valor shards, heroic core matrix) live in BraveChargeRenderer;
+ * this class owns position, charge state, and the end of the lifecycle: when
+ * charging stops for any reason the entity enters a 10 tick fade out driven
+ * by the synced FADE factor instead of vanishing at full alpha.
  */
 public class BraveChargeEntity extends Projectile {
     private static final EntityDataAccessor<Float> CHARGE_RATIO = SynchedEntityData.defineId(BraveChargeEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(BraveChargeEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> FADE = SynchedEntityData.defineId(BraveChargeEntity.class, EntityDataSerializers.FLOAT);
+
+    public static final int FADE_TICKS = 10;
 
     private int idleTicksWithoutUpdate = 0;
+    private int fadeTicksRemaining = -1;
 
     public BraveChargeEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -40,6 +49,7 @@ public class BraveChargeEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(CHARGE_RATIO, 0.0f);
         builder.define(CASTER_ID, -1);
+        builder.define(FADE, 1.0f);
     }
 
     public float getChargeRatio() {
@@ -55,11 +65,36 @@ public class BraveChargeEntity extends Projectile {
         return this.entityData.get(CASTER_ID);
     }
 
+    /** 1.0 while charging, falling to 0 across the fade out. Read by the renderer. */
+    public float getFadeFactor() {
+        return this.entityData.get(FADE);
+    }
+
+    public boolean isFading() {
+        return this.fadeTicksRemaining >= 0;
+    }
+
+    /** Begin the fade out. The construct stays where it is and dissolves. */
+    public void startFade() {
+        if (this.fadeTicksRemaining < 0) {
+            this.fadeTicksRemaining = FADE_TICKS;
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();
 
         if (this.level() instanceof ServerLevel serverLevel) {
+            if (isFading()) {
+                this.fadeTicksRemaining--;
+                this.entityData.set(FADE, Math.max(0.0f, this.fadeTicksRemaining / (float) FADE_TICKS));
+                if (this.fadeTicksRemaining <= 0) {
+                    this.discard();
+                }
+                return;
+            }
+
             Entity caster = this.getOwner();
             if (caster == null && getCasterId() != -1) {
                 caster = serverLevel.getEntity(getCasterId());
@@ -72,7 +107,7 @@ public class BraveChargeEntity extends Projectile {
                     boolean isHolding = player.getMainHandItem().getItem() instanceof BraveSwordItem ||
                                         player.getOffhandItem().getItem() instanceof BraveSwordItem;
                     if (!isHolding) {
-                        this.discard();
+                        startFade();
                         return;
                     }
                 }
@@ -84,7 +119,7 @@ public class BraveChargeEntity extends Projectile {
             this.idleTicksWithoutUpdate++;
             // If no charge update received for 6 ticks (0.3s), caster stopped charging
             if (this.idleTicksWithoutUpdate > 6) {
-                this.discard();
+                startFade();
             }
         }
     }

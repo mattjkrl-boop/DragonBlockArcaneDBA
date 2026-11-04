@@ -69,6 +69,10 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
         float fade = 1.0f - smooth(progress);
         float grow = smooth(Math.min(1.0f, progress / 0.48f));
         float impact = strike(progress);
+        // Late decay factor: monoliths sink and trenches shorten as they fade
+        // instead of standing at full height while only their alpha drops.
+        float decay = smooth(Math.max(0.0f, (progress - 0.60f) / 0.40f));
+        float dist = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         float rCol = 1.0f;
@@ -82,16 +86,24 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
             float shockR = radius * grow;
             float domeH = (2.2f + power * 2.6f) * (0.35f + 0.65f * fade);
             if (fade > 0.04f) {
-                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR, domeH, 40, rCol, gCol, bCol, fade * 0.5f);
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.88f, 40, rCol, gCol, bCol, fade * 0.72f);
-                drawGroundRing(matrix, buffer, 0, 0.07f, 0, shockR * 0.36f, shockR * 0.22f, 28, 1.0f, 0.96f, 0.72f, fade * (0.55f + 0.45f * impact));
+                drawShockwaveDome(matrix, buffer, 0, 0.05f, 0, shockR, domeH,
+                    com.dragonblockarcanedba.util.FxEnvelope.segments(40, dist, 16), rCol, gCol, bCol, fade * 0.5f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.88f,
+                    com.dragonblockarcanedba.util.FxEnvelope.segments(40, dist, 16), rCol, gCol, bCol, fade * 0.72f);
+                drawGroundRing(matrix, buffer, 0, 0.07f, 0, shockR * 0.36f, shockR * 0.22f,
+                    com.dragonblockarcanedba.util.FxEnvelope.segments(28, dist, 12), 1.0f, 0.96f, 0.72f, fade * (0.55f + 0.45f * impact));
             }
+
+            // Trench endpoints feed the geyser pass below.
+            float[] geyserX = new float[5];
+            float[] geyserZ = new float[5];
+            int geyserCount = 0;
 
             // 2. Radiating 3D Tectonic Gravity Canyon Fractures / Branching Rupture Trenches
             int trenchCount = 14 + (int) (power * 6); // 14 to 20 trenches
             for (int t = 0; t < trenchCount; t++) {
                 double tAngle = (t / (double) trenchCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.25);
-                float trenchLen = radius * grow * (0.75f + rng.nextFloat() * 0.40f);
+                float trenchLen = radius * grow * (1.0f - decay * 0.45f) * (0.75f + rng.nextFloat() * 0.40f);
 
                 float curX = 0, curZ = 0;
                 int steps = 6;
@@ -107,6 +119,11 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
 
                     curX = nxtX; curZ = nxtZ;
                 }
+                if (t % 4 == 0 && geyserCount < geyserX.length) {
+                    geyserX[geyserCount] = curX;
+                    geyserZ[geyserCount] = curZ;
+                    geyserCount++;
+                }
             }
 
             // 3. Colossal Erupted 3D Katchin Monolith Slabs & Shattered Earth Crags
@@ -119,7 +136,8 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
                 float rz = (float) Math.sin(rockAngle) * rockDist;
 
                 float maxH = (1.8f + power * 2.2f) + rng.nextFloat() * (2.0f + power * 1.5f);
-                float slabHeight = maxH * grow;
+                // Monoliths sink back into the ground through the decay window.
+                float slabHeight = maxH * grow * (1.0f - decay * 0.60f);
                 float slabWidth = 0.22f + rng.nextFloat() * 0.16f;
 
                 // Outward leaning angle
@@ -140,7 +158,29 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
                 );
             }
 
+            // 4. Vertical erupting singularity geysers at trench endpoints.
+            // drawVerticalGeyser existed for this and was never called, while
+            // the class header promised geysers. They erupt on the strike
+            // envelope (peak near the damage tick) and are gone by mid life.
+            if (impact > 0.03f) {
+                float geyserH = (2.5f + power * 3.0f) * impact;
+                float geyserW = 0.30f + power * 0.25f;
+                for (int g = 0; g < geyserCount; g++) {
+                    drawVerticalGeyser(matrix, buffer, geyserX[g], geyserZ[g], geyserH, geyserW, impact * fade);
+                }
+            }
+
         });
+
+        // Anchor glow pass: a soft gold disc under the slam so the footprint
+        // reads as grounded light, fading with the envelope.
+        if (fade > 0.04f) {
+            float glowR = radius * grow;
+            collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+                com.dragonblockarcanedba.client.render.ki.LayeredRender.drawAnchorGlow(pose, buffer,
+                    glowR, 0.03f, rCol, gCol, bCol, fade * 0.30f, dist);
+            });
+        }
     }
 
     private static float smooth(float t) {

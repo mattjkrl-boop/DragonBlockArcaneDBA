@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.BraveCrossSlashEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -29,7 +31,7 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         public float yRot = 0;
         public float xRot = 0;
         public float age = 0;
-        public int maxLifetime = 18;
+        public int maxLifetime = 40;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -59,13 +61,19 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
 
     @Override
     public void submit(CrossSlashRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
+        float life = (float) state.maxLifetime;
+        float progress = Math.min(1.0f, state.age / life);
         if (progress >= 1.0f) return;
 
-        float drawOut = smooth(Math.min(1.0f, progress / 0.46f));
-        float fade = 1.0f - smooth(progress);
+        // Shared lifecycle over the entity's real 40 tick life: blades draw
+        // out across the build fifth, hold through the damage pulses, then
+        // dissipate across the last 30 percent.
+        float drawOut = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.2f));
+        float fade = FxEnvelope.envelope(state.age, life, 0.2f, 0.3f);
         float impact = strike(progress);
         float scale = state.scale;
+        int segments = FxEnvelope.segments(28,
+            LayeredRender.distScale(cameraState, state.x, state.y, state.z), 12);
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
@@ -76,8 +84,8 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             float span = 4.6f * scale * drawOut;
-            drawCrossBlade(matrix, buffer, span, fade, 45.0f);
-            drawCrossBlade(matrix, buffer, span, fade, -45.0f);
+            drawCrossBlade(matrix, buffer, span, fade, 45.0f, segments);
+            drawCrossBlade(matrix, buffer, span, fade, -45.0f, segments);
             if (impact > 0.02f) {
                 drawGeometricStarburst(matrix, buffer, 0, 0, 0.1f, 1.15f * scale * impact, 8, 0.0f,
                     1.0f, 0.88f, 0.20f, impact,
@@ -86,13 +94,18 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
             }
         });
 
+        // Outer layer (standard point 1): a wider, faint copy of both blades
+        // so the cross has a wispy rim around its dense core, the mod's
+        // layered translucency technique for glow.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            float span = 4.6f * scale * drawOut * 1.16f;
+            drawCrossBlade(matrix, buffer, span, fade * LayeredRender.ALPHA_OUTER, 45.0f, segments);
+            drawCrossBlade(matrix, buffer, span, fade * LayeredRender.ALPHA_OUTER, -45.0f, segments);
+        });
+
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static float smooth(float t) {
-        float x = Math.max(0.0f, Math.min(1.0f, t));
-        return x * x * (3.0f - 2.0f * x);
     }
 
     private static float strike(float progress) {
@@ -100,13 +113,12 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         return (float) Math.sin(((progress - 0.28f) / 0.34f) * Math.PI);
     }
 
-    private static void drawCrossBlade(Matrix4f matrix, VertexConsumer buffer, float span, float fade, float rollDeg) {
+    private static void drawCrossBlade(Matrix4f matrix, VertexConsumer buffer, float span, float fade, float rollDeg, int segments) {
         float rad = (float) Math.toRadians(rollDeg);
         float cos = (float) Math.cos(rad);
         float sin = (float) Math.sin(rad);
         float reach = Math.abs(span);
         float chord = reach * 0.30f;
-        int segments = 28;
         drawRolledCrescent(matrix, buffer, reach, chord, 0.16f, 0.42f, segments, cos, sin, 1.0f, 0.84f, 0.0f, 0.90f * fade);
         drawRolledCrescent(matrix, buffer, reach * 0.84f, chord * 0.84f, 0.055f, 0.16f, segments, cos, sin, 0.0f, 0.95f, 1.0f, 0.95f * fade);
         drawRolledCrescent(matrix, buffer, reach * 0.72f, chord * 0.72f, 0.02f, 0.06f, segments, cos, sin, 1.0f, 1.0f, 1.0f, fade);
@@ -173,56 +185,6 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         consumer.addVertex(matrix, xr, yr, z).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
     }
 
-    private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {
-        for (int i = 0; i < segments; i++) {
-            float t1 = (i / (float) segments) * 2.0f - 1.0f;
-            float t2 = ((i + 1) / (float) segments) * 2.0f - 1.0f;
-
-            float x1 = t1 * span;
-            float z1 = (1.0f - t1 * t1) * chord;
-            float x2 = t2 * span;
-            float z2 = (1.0f - t2 * t2) * chord;
-
-            float th1 = thickness * (1.0f - Math.abs(t1) * 0.75f);
-            float th2 = thickness * (1.0f - Math.abs(t2) * 0.75f);
-
-            float z1Trail = z1 - trailLength * (1.0f - Math.abs(t1));
-            float z2Trail = z2 - trailLength * (1.0f - Math.abs(t2));
-
-            // Top Surface
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x2, th2 * 0.3f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, x1, th1 * 0.3f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            // Bottom Surface
-            consumer.addVertex(matrix, x1, -th1 * 0.3f, z1Trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2 * 0.3f, z2Trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-            // Front Leading Bevel Face
-            consumer.addVertex(matrix, x1, -th1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, -th2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2, th2, z2).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1, th1, z1).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
-    }
-
-    private static void drawTipSpurs(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float spurSize, float fade) {
-        // Left Tip Spur
-        consumer.addVertex(matrix, -span, 0, 0).setColor(0.0f, 0.95f, 1.0f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span - spurSize * 1.5f, 0, -spurSize * 2.0f).setColor(1.0f, 0.84f, 0.0f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span + spurSize * 0.5f, 0, -spurSize).setColor(0.0f, 0.95f, 1.0f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -span, 0, 0).setColor(0.0f, 0.95f, 1.0f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Right Tip Spur
-        consumer.addVertex(matrix, span, 0, 0).setColor(0.0f, 0.95f, 1.0f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span + spurSize * 1.5f, 0, -spurSize * 2.0f).setColor(1.0f, 0.84f, 0.0f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span - spurSize * 0.5f, 0, -spurSize).setColor(0.0f, 0.95f, 1.0f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, span, 0, 0).setColor(0.0f, 0.95f, 1.0f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-    }
-
     private static void drawGeometricStarburst(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float radius, int points, float rotDeg, float rCenter, float gCenter, float bCenter, float aCenter, float rEdge, float gEdge, float bEdge, float aEdge) {
         double rotRad = Math.toRadians(rotDeg);
         int totalSegments = points * 2;
@@ -250,19 +212,5 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
             consumer.addVertex(matrix, x1, y1, cz).setColor(rEdge, gEdge, bEdge, aEdge).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
             consumer.addVertex(matrix, cx, cy, cz).setColor(rCenter, gCenter, bCenter, aCenter).setUv(0.5f, 0.5f).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, -1);
         }
-    }
-
-    private static void drawTaperedBeam(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float width, float r, float g, float b, float a) {
-        float dx = x2 - x1, dy = y2 - y1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy);
-        if (len < 0.001f) return;
-
-        float nx = (-dy / len) * width;
-        float ny = (dx / len) * width;
-
-        consumer.addVertex(matrix, x1 - nx, y1 - ny, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x1 + nx, y1 + ny, z1).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, 0.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        consumer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, 0.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
     }
 }

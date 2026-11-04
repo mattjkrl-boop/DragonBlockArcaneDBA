@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.KatanaChargeEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -17,8 +19,11 @@ import java.util.Random;
 
 /**
  * Entity Renderer for Katana Flashdraw Charge-up in Minecraft 26.2.
- * Renders physical 3D iaido drawing stance ground focus rings, sheathed hilt spark matrix,
- * and converging crystalline silver motes.
+ * Renders physical 3D iaido drawing stance ground focus rings, three counter
+ * rotating layered vortex bands around the stance (LayeredRender), a sheathed
+ * hilt spark matrix, and converging crystalline silver motes. Alpha follows
+ * the shared lifecycle shape: a smoothstep fade in, and a fade out over the
+ * entity's FADE_TICKS once the charge ends or is cancelled.
  */
 public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, KatanaChargeRenderer.KatanaChargeRenderState> {
 
@@ -32,6 +37,8 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
         public float xRot = 0;
         public float age = 0;
         public long seed = 0;
+        public int fadeStart = -1;
+        public double wx = 0, wy = 0, wz = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -57,6 +64,10 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.fadeStart = entity.getFadeStart();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
     }
 
     @Override
@@ -65,9 +76,16 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
         float charge = state.chargeRatio;
         float age = state.age;
         float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.4f);
-        // Spawn fade-in over the first 4 ticks so the charge construct does not
-        // pop in at full brightness.
-        float alpha = (0.65f + (charge * 0.35f)) * Math.min(1.0f, age / 4.0f);
+        // Lifecycle: smoothstep fade in over the first 4 ticks, and a fade out
+        // over FADE_TICKS once the charge ends, so the stance never pops.
+        float alpha = (0.65f + (charge * 0.35f)) * FxEnvelope.smoothstep(Math.min(1.0f, age / 4.0f));
+        if (state.fadeStart >= 0) {
+            float fadeT = (age - state.fadeStart) / (float) KatanaChargeEntity.FADE_TICKS;
+            if (fadeT >= 1.0f) return;
+            alpha *= 1.0f - FxEnvelope.smoothstep(fadeT);
+        }
+        float dist = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
+        int segments = FxEnvelope.segments(36, dist, 14);
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
@@ -76,8 +94,7 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
 
-            // 1. Planar 3D Ground Iaido Focus Rings
-            int segments = 36;
+            // 1. Planar 3D Ground Iaido Focus Rings (segment count distance scaled)
             float rOuter = 1.3f + (charge * 0.4f);
             // Outer Ring: Electric Cyan
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, rOuter, rOuter * 0.88f, segments, age * 25.0f,
@@ -113,21 +130,29 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
             drawDiamondSpark(matrix, buffer, hiltX, hiltY, hiltZ, sparkSize * 0.6f, 0.2f, 0.9f, 1.0f, alpha * 0.8f);
 
             // 3. Converging Inward Crystalline Silver Motes
-            int moteCount = 10 + (int) (charge * 8);
+            int moteCount = Math.max(4, Math.round((10 + (int) (charge * 8)) * dist));
             for (int m = 0; m < moteCount; m++) {
                 float moteProg = (age * 0.06f + (m / (float) moteCount)) % 1.0f;
                 float inwardProg = 1.0f - moteProg; // Moves from outside in towards hilt
                 double ang = (m * 2.39996) + (age * 0.08f); // Golden ratio angle spread
-                float dist = 0.2f + inwardProg * (1.2f + charge * 0.5f);
+                float moteDist = 0.2f + inwardProg * (1.2f + charge * 0.5f);
 
-                float mx = hiltX + (float) Math.cos(ang) * dist;
+                float mx = hiltX + (float) Math.cos(ang) * moteDist;
                 float my = hiltY + ((rng.nextFloat() - 0.5f) * 0.6f * inwardProg);
-                float mz = hiltZ + (float) Math.sin(ang) * dist;
+                float mz = hiltZ + (float) Math.sin(ang) * moteDist;
                 float mSize = 0.04f * (0.4f + moteProg * 0.6f);
                 float mAlpha = alpha * moteProg;
 
                 drawDiamondSpark(matrix, buffer, mx, my, mz, mSize, 0.8f, 0.95f, 1.0f, mAlpha);
             }
+        });
+
+        // Layered vortex bands around the stance (standard point 1): a tight
+        // bright core, a cyan mid band, and a wispy outer band, counter
+        // rotating at different speeds, giving the charge real vertical depth.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            LayeredRender.drawVortexBands(pose, buffer, 0.85f + charge * 0.3f, 1.2f + charge * 0.5f, age,
+                0.15f, 0.85f, 1.0f, alpha * 0.85f, dist);
         });
 
         // Additive halo pass: a wider, faint copy of the outer cyan ring and
@@ -136,7 +161,7 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
         float haloRadius = (1.3f + (charge * 0.4f)) * 1.15f;
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, haloRadius, haloRadius * 0.82f, 36, age * 25.0f,
+            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, haloRadius, haloRadius * 0.82f, segments, age * 25.0f,
                 0.15f, 0.85f, 1.0f, 0.16f * alpha);
             drawDiamondSpark(matrix, buffer, -0.28f, 0.75f, -0.05f, (0.12f + charge * 0.10f) * 1.7f, 1.0f, 1.0f, 1.0f, 0.20f * alpha);
         });

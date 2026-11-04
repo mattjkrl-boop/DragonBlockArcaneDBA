@@ -26,7 +26,12 @@ import java.util.Set;
 public class VoidSlashEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> TILT_RIGHT = SynchedEntityData.defineId(VoidSlashEntity.class, EntityDataSerializers.BOOLEAN);
 
-    private float damage = 600.0f;
+    // No default damage: the item always sets it from its own formula
+    // (dash damage x 1.8 on a third dash, x 1.5 into the slash). The old 600
+    // default matched no formula in the weapon and was dead weight that a
+    // stray spawn could have dealt by accident, so an unset slash now
+    // deals no damage at all instead of phantom damage.
+    private float damage = 0.0f;
     private final Set<Integer> hitEntities = new HashSet<>();
 
     public VoidSlashEntity(EntityType<? extends Projectile> entityType, Level level) {
@@ -64,11 +69,17 @@ public class VoidSlashEntity extends Projectile {
         this.setPos(this.getX() + movement.x, this.getY() + movement.y, this.getZ() + movement.z);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
-            // Theme particles (T5): the crescent sheds void smoke along its
-            // flight path so the cut reads between the aura layers.
-            if (this.tickCount % 2 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
+            // Theme particles (T5): the crescent sheds layered particles along
+            // its flight path so the cut reads between the aura layers: bright
+            // ki motes at the core of the cut, void smoke as the wispy outer.
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (density > 0f) {
+                serverLevel.sendParticles(
+                    com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                    this.getX(), this.getY(), this.getZ(),
+                    Math.max(1, Math.round(1f * density)),
+                    0.35, 0.35, 0.35, 0.01);
+                if (this.tickCount % 2 == 0) {
                     serverLevel.sendParticles(
                         com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
                         this.getX(), this.getY(), this.getZ(),
@@ -85,8 +96,10 @@ public class VoidSlashEntity extends Projectile {
             for (LivingEntity target : targets) {
                 hitEntities.add(target.getId());
 
-                // Massive void damage
-                target.hurtServer(serverLevel, serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : target), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
+                // Massive void damage, only when the item actually set it.
+                if (this.damage > 0.0f) {
+                    target.hurtServer(serverLevel, serverLevel.damageSources().mobAttack(owner instanceof LivingEntity ? (LivingEntity) owner : target), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
+                }
 
                 // Inflict Dark Faded
                 target.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 80, 1, false, true));

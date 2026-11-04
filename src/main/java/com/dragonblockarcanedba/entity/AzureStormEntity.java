@@ -1,7 +1,5 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -17,25 +15,44 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
- * Azure Storm Entity — Tempest Weather Domain from Azure Dragon Sword.
+ * Azure Storm Entity: Tempest Weather Domain from Azure Dragon Sword.
+ *
+ * Spectacle pass: the storm is a real atmosphere now. For its whole life it
+ * drives server thunder weather plus client gloom through AtmosphereServer,
+ * its lifetime scales with the charge that summoned it, its damage rides on
+ * telegraphed AzureLightningEntity strikes (BoltEntity visuals), a debris
+ * field orbits it and rains down as it dissipates, and a shared vortex gives
+ * everything inside a directed pull, swirl, and lift instead of random jitter.
+ * All of its state is saved: radius, follow mode, target, charge, lifetime,
+ * and age, so a storm that survives a chunk unload comes back as itself.
  */
 public class AzureStormEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> FOLLOWS_PLAYER = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> TARGET_ID = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> IS_MAX_CHARGED = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> LIFE_TICKS = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> CHARGE = SynchedEntityData.defineId(AzureStormEntity.class, EntityDataSerializers.FLOAT);
 
-    private int maxLifetime = 220; // 11 seconds (Fast, intense, punchy combat duration)
+    /** Azure theme color for the layered particle emitters (r 0.31, g 0.78, b 1.0). */
+    public static final int AZURE_ARGB = 0xFF4FC8FF;
+
     private boolean hasSpawnedGiantTornado = false;
+    private boolean debrisSpawned = false;
+    private int ageTicks = 0;
+    private int nextStrikeTick = -1;
+    private UUID targetUuid = null;
 
     public AzureStormEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
         this.noPhysics = true;
     }
 
-    public AzureStormEntity(Level level, LivingEntity owner, Vec3 pos, float radius, boolean followsPlayer, LivingEntity target, boolean isMaxCharged) {
+    public AzureStormEntity(Level level, LivingEntity owner, Vec3 pos, float radius, boolean followsPlayer,
+                            LivingEntity target, boolean isMaxCharged, int lifeTicks, float chargeRatio) {
         super(DbaEntities.AZURE_STORM, level);
         this.setOwner(owner);
         this.setPos(pos.x, pos.y, pos.z);
@@ -44,10 +61,25 @@ public class AzureStormEntity extends Projectile {
         this.entityData.set(FOLLOWS_PLAYER, followsPlayer);
         this.entityData.set(TARGET_ID, target != null ? target.getId() : -1);
         this.entityData.set(IS_MAX_CHARGED, isMaxCharged);
+        this.entityData.set(LIFE_TICKS, Math.max(20, lifeTicks));
+        this.entityData.set(CHARGE, chargeRatio);
+        this.targetUuid = target != null ? target.getUUID() : null;
     }
 
     public boolean isMaxCharged() {
         return this.entityData.get(IS_MAX_CHARGED);
+    }
+
+    public int getLifeTicks() {
+        return this.entityData.get(LIFE_TICKS);
+    }
+
+    public float getChargeRatio() {
+        return this.entityData.get(CHARGE);
+    }
+
+    public int getAgeTicks() {
+        return this.ageTicks;
     }
 
     @Override
@@ -56,22 +88,46 @@ public class AzureStormEntity extends Projectile {
         builder.define(FOLLOWS_PLAYER, true);
         builder.define(TARGET_ID, -1);
         builder.define(IS_MAX_CHARGED, false);
+        builder.define(LIFE_TICKS, 220);
+        builder.define(CHARGE, 0.0f);
     }
 
-    // Persist the storm state: the max-charge flag used to live in a plain field and was
-    // silently lost whenever the storm survived a chunk unload or a relog.
+    // Persist ALL storm state. The old save wrote only the max charge flag and
+    // the giant tornado flag, so a restored storm silently reverted to the
+    // synched defaults: 12 block radius, following the player, no target, and
+    // whatever lifetime the field happened to hold.
     @Override
     protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
         super.addAdditionalSaveData(output);
+        output.putFloat("Radius", this.getRadius());
+        output.putBoolean("FollowsPlayer", this.followsPlayer());
         output.putBoolean("IsMaxCharged", this.isMaxCharged());
         output.putBoolean("HasSpawnedGiantTornado", this.hasSpawnedGiantTornado);
+        output.putBoolean("DebrisSpawned", this.debrisSpawned);
+        output.putInt("LifeTicks", this.getLifeTicks());
+        output.putFloat("Charge", this.getChargeRatio());
+        output.putInt("AgeTicks", this.ageTicks);
+        output.putBoolean("HasTarget", this.targetUuid != null);
+        if (this.targetUuid != null) {
+            output.putLong("TargetUuidMost", this.targetUuid.getMostSignificantBits());
+            output.putLong("TargetUuidLeast", this.targetUuid.getLeastSignificantBits());
+        }
     }
 
     @Override
     protected void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput input) {
         super.readAdditionalSaveData(input);
+        this.setRadius(input.getFloatOr("Radius", 12.0f));
+        this.entityData.set(FOLLOWS_PLAYER, input.getBooleanOr("FollowsPlayer", true));
         this.entityData.set(IS_MAX_CHARGED, input.getBooleanOr("IsMaxCharged", false));
         this.hasSpawnedGiantTornado = input.getBooleanOr("HasSpawnedGiantTornado", false);
+        this.debrisSpawned = input.getBooleanOr("DebrisSpawned", false);
+        this.entityData.set(LIFE_TICKS, input.getIntOr("LifeTicks", 220));
+        this.entityData.set(CHARGE, input.getFloatOr("Charge", 0.0f));
+        this.ageTicks = input.getIntOr("AgeTicks", 0);
+        if (input.getBooleanOr("HasTarget", false)) {
+            this.targetUuid = new UUID(input.getLongOr("TargetUuidMost", 0L), input.getLongOr("TargetUuidLeast", 0L));
+        }
     }
 
     public float getRadius() {
@@ -94,97 +150,141 @@ public class AzureStormEntity extends Projectile {
     public void tick() {
         super.tick();
 
+        if (this.level().isClientSide() || !(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+
+        this.ageTicks++;
         float radius = getRadius();
+        int life = getLifeTicks();
+        float charge = getChargeRatio();
         Entity owner = this.getOwner();
+        LivingEntity livingOwner = owner instanceof LivingEntity ? (LivingEntity) owner : null;
+        float env = com.dragonblockarcanedba.util.FxEnvelope.envelope(this.ageTicks, life);
 
-        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
-            // Update position to follow player (Tweak A) or follow target (Tweak B)
-            if (followsPlayer() && owner != null && owner.isAlive()) {
-                this.setPos(owner.getX(), owner.getY(), owner.getZ());
-            } else if (getTargetId() != -1) {
-                Entity target = serverLevel.getEntity(getTargetId());
-                if (target != null && target.isAlive()) {
-                    this.setPos(target.getX(), target.getY(), target.getZ());
+        // Follow the locked target while it lives; if the target died or was
+        // removed, fall back to following the owner instead of freezing at the
+        // last position for the rest of the storm.
+        Entity followTarget = null;
+        if (!followsPlayer()) {
+            if (getTargetId() != -1) {
+                followTarget = serverLevel.getEntity(getTargetId());
+            }
+            if (followTarget == null && this.targetUuid != null) {
+                followTarget = serverLevel.getEntity(this.targetUuid);
+                if (followTarget != null) {
+                    this.entityData.set(TARGET_ID, followTarget.getId());
                 }
             }
-
-            Vec3 center = this.position();
-
-            // Tweak C: Spawn giant tornado at storm center at max charge
-            if (this.isMaxCharged() && !this.hasSpawnedGiantTornado) {
-                this.hasSpawnedGiantTornado = true;
-                AzureTornadoEntity giantTornado = new AzureTornadoEntity(serverLevel, owner instanceof LivingEntity ? (LivingEntity) owner : null, center, 1.8f, true);
-                serverLevel.addFreshEntity(giantTornado);
+            if (followTarget != null && !followTarget.isAlive()) {
+                followTarget = null;
             }
+        }
+        if (followTarget != null) {
+            this.setPos(followTarget.getX(), followTarget.getY(), followTarget.getZ());
+        } else if (owner != null && owner.isAlive()) {
+            this.setPos(owner.getX(), owner.getY(), owner.getZ());
+        }
 
-            // Wind turbulence on all enemies in radius
+        Vec3 center = this.position();
+
+        // Point 4, atmosphere: real thunder weather and gloom for the storm's
+        // life, refreshed as the storm moves so the gloom center tracks it.
+        if (this.ageTicks == 1 || this.ageTicks % 20 == 0) {
+            int remaining = Math.max(20, life - this.ageTicks + 20);
+            com.dragonblockarcanedba.util.AtmosphereServer.begin(serverLevel, center,
+                radius + 24.0f, 0.7f,
+                com.dragonblockarcanedba.util.AtmosphereServer.Kind.THUNDER, remaining);
+        }
+
+        // Point 3, base dust where the domain meets the ground.
+        if (this.ageTicks == 2) {
+            com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, center,
+                Math.min(radius, 12.0f), AZURE_ARGB);
+        }
+
+        // Point 2, debris: one field of real ground blocks lifted into helical
+        // orbits as the storm reaches full strength. Their orbit length ends
+        // inside the dissipation window, so they rain back down as it dies.
+        int buildEnd = Math.max(2, Math.round(life * 0.2f));
+        if (!this.debrisSpawned && this.ageTicks >= buildEnd) {
+            this.debrisSpawned = true;
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            int count = Math.max(8, Math.round((28f + 44f * charge) * density));
+            int orbitTicks = Math.max(20, life - this.ageTicks - Math.round(life * 0.30f));
+            com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, livingOwner, center,
+                count, radius * 0.8, 7.0 + radius * 0.35, orbitTicks);
+        }
+
+        // Point 3, mob forces: a directed pull, swirl, and core lift through
+        // the shared vortex, scaled by the lifecycle envelope. This replaces
+        // the old random jitter that shook enemies without moving them anywhere.
+        com.dragonblockarcanedba.util.VortexPhysics.applyVortex(serverLevel, center,
+            radius, 14.0, livingOwner, 0.05 + 0.06 * charge, 1.3, 0.12, env);
+
+        // Point 1, layered particles: core, mid, and outer bands scaled by the
+        // same envelope the renderer fades with, plus dissipation drizzle.
+        if (this.ageTicks % 2 == 0) {
+            com.dragonblockarcanedba.util.LayeredParticles.emitVortex(serverLevel, center,
+                radius * 0.6f, 9.0f + charge * 5.0f, this.ageTicks, life,
+                AZURE_ARGB, com.dragonblockarcanedba.particle.DbaParticles.WIND);
+            if (this.ageTicks > life * 0.65f) {
+                com.dragonblockarcanedba.util.LayeredParticles.emitRain(serverLevel, center,
+                    radius * 0.8f, 10.0f, this.ageTicks, life,
+                    com.dragonblockarcanedba.particle.DbaParticles.WIND);
+            }
+        }
+
+        // Giant tornado finisher at the storm's peak, once the build window
+        // completes, instead of on the first tick at partial strength.
+        if (this.isMaxCharged() && !this.hasSpawnedGiantTornado && this.ageTicks >= buildEnd) {
+            this.hasSpawnedGiantTornado = true;
+            AzureTornadoEntity giantTornado = new AzureTornadoEntity(serverLevel, livingOwner, center, 1.8f, true);
+            serverLevel.addFreshEntity(giantTornado);
+        }
+
+        // Telegraph strikes: the cadence tightens at peak density. A strike
+        // prefers a random enemy inside; an empty storm still strikes the
+        // ground, so the weather reads even with nothing to hit.
+        if (this.nextStrikeTick < 0) {
+            this.nextStrikeTick = this.ageTicks + 14;
+        }
+        if (this.ageTicks >= this.nextStrikeTick
+            && com.dragonblockarcanedba.util.FxEnvelope.inActiveWindow(this.ageTicks, life, 0.12f, 0.30f)) {
             AABB stormBox = this.getBoundingBox().inflate(radius, 12.0, radius);
-            List<LivingEntity> enemies = serverLevel.getEntitiesOfClass(LivingEntity.class, stormBox, e -> e.isAlive() && e != owner && center.distanceTo(e.position()) <= radius);
-
-            for (LivingEntity enemy : enemies) {
-                // Rapid back-and-forth wind push
-                if (this.tickCount % 4 == 0) {
-                    double wx = (serverLevel.getRandom().nextDouble() - 0.5) * 1.6;
-                    double wz = (serverLevel.getRandom().nextDouble() - 0.5) * 1.6;
-                    enemy.setDeltaMovement(enemy.getDeltaMovement().add(wx, 0.25, wz));
-                    com.dragonblockarcanedba.util.DbaCompat.markHurt(enemy);
-                }
+            List<LivingEntity> enemies = serverLevel.getEntitiesOfClass(LivingEntity.class, stormBox,
+                e -> e.isAlive() && e != owner && center.distanceTo(e.position()) <= radius);
+            double lx, lz;
+            if (!enemies.isEmpty()) {
+                LivingEntity picked = enemies.get(serverLevel.getRandom().nextInt(enemies.size()));
+                lx = picked.getX();
+                lz = picked.getZ();
+            } else {
+                double ang = serverLevel.getRandom().nextDouble() * Math.PI * 2.0;
+                double rr = radius * 0.8 * Math.sqrt(serverLevel.getRandom().nextDouble());
+                lx = center.x + Math.cos(ang) * rr;
+                lz = center.z + Math.sin(ang) * rr;
             }
+            double ly = serverLevel.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, (int) lx, (int) lz);
 
-            // Ambient storm particles: wind sheets across the radius plus
-            // sparks near the eye (the entity used to emit none at all).
-            if (this.tickCount % 4 == 0) {
-                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
-                    center.x, center.y + 2.0 + serverLevel.getRandom().nextDouble() * 6.0, center.z, 8,
-                    radius * 0.7, 1.5, radius * 0.7, 0.08);
+            AzureLightningEntity lightning = new AzureLightningEntity(serverLevel, livingOwner, lx, ly, lz, 450.0f);
+            lightning.setTelegraphTicks(12);
+            if (serverLevel.getRandom().nextFloat() < 0.2f) {
+                lightning.setRare(true);
             }
-            if (this.tickCount % 7 == 0) {
-                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
-                    center.x, center.y + 3.0, center.z, 3,
-                    radius * 0.15, 2.0, radius * 0.15, 0.05);
-            }
-            // Theme particles (T5): ki motes rising through the storm eye,
-            // feeding the updraft column the renderer draws.
-            if (this.tickCount % 5 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
-                        center.x, center.y + 1.0, center.z,
-                        Math.max(1, Math.round(4f * density)),
-                        radius * 0.12, 2.5, radius * 0.12, 0.03);
-                }
-            }
+            serverLevel.addFreshEntity(lightning);
 
-            // Periodic Azure Lightning strikes on enemies inside storm
-            if (!enemies.isEmpty() && this.tickCount % 25 == 0) {
-                LivingEntity lightningTarget = enemies.get(serverLevel.getRandom().nextInt(enemies.size()));
-                double lx = lightningTarget.getX();
-                double lz = lightningTarget.getZ();
-                double ly = serverLevel.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, (int) lx, (int) lz);
+            this.nextStrikeTick = this.ageTicks + Math.round(30f - 14f * env);
+        }
 
-                AzureLightningEntity lightning = new AzureLightningEntity(serverLevel, owner instanceof LivingEntity ? (LivingEntity) owner : null, lx, ly, lz, 450.0f);
-                if (serverLevel.getRandom().nextFloat() < 0.2f) {
-                    lightning.setRare(true);
-                }
-                serverLevel.addFreshEntity(lightning);
+        // Ambient storm sound
+        if (this.ageTicks % 40 == 0) {
+            serverLevel.playSound(null, center.x, center.y, center.z,
+                SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 1.0f, 0.9f);
+        }
 
-                serverLevel.playSound(null, lx, ly, lz,
-                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 2.5f, 1.0f);
-                serverLevel.playSound(null, lx, ly, lz,
-                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 2.5f, 1.0f);
-            }
-
-
-
-            // Ambient storm sound
-            if (this.tickCount % 40 == 0) {
-                serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 1.0f, 0.9f);
-            }
-
-            if (this.tickCount >= this.maxLifetime) {
-                this.discard();
-            }
+        if (this.ageTicks >= life) {
+            this.discard();
         }
     }
 }

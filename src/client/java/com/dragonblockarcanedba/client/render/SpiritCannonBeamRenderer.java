@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SpiritCannonBeamEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -33,6 +35,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         public float yRot = 0.0f;
         public float xRot = 0.0f;
         public float age = 0.0f;
+        public float fade = 1.0f;
         public int casterId = -1;
         public boolean isFirstPersonOwner = false;
         public boolean onRight = true;
@@ -60,6 +63,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         state.yRot = entity.getBeamYRot();
         state.xRot = entity.getBeamXRot();
         state.age = entity.tickCount + partialTicks;
+        state.fade = entity.getFade();
         state.casterId = entity.getCasterId();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
@@ -79,12 +83,17 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         super.submit(state, poseStack, collector, cameraState);
 
         float beamLength = state.length;
-        if (beamLength < 0.2f) return;
+        if (beamLength < 0.2f || state.fade <= 0.01f) return;
 
         float age = state.age;
         float pulse = 1.0f + 0.06f * (float) Math.sin(age * 1.5f);
         float fadeRaw = Math.min(1.0f, age / 5.0f);
         float fadeIn = fadeRaw * fadeRaw * (3.0f - 2.0f * fadeRaw);
+        // Fade out (standard point 5): the entity counts a synced FADE down
+        // over its last 6 ticks; alpha and drawn length both ride it, so the
+        // beam retracts and thins instead of vanishing in one tick.
+        final float env = fadeIn * state.fade;
+        final float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -99,28 +108,36 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
 
         float zStart = state.isFirstPersonOwner ? 0.25f : 0.0f;
         float fpScale = state.isFirstPersonOwner ? 0.50f : 1.0f;
+        final float drawLength = zStart + (beamLength - zStart) * (0.15f + 0.85f * state.fade);
+        final float fZStart = zStart;
+        final float fFpScale = fpScale;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Multi-Layered Prismatic Core Beam (scaled down in first person)
             // Layer A: Superdense White-Cyan Inner Core (8 sides)
-            float innerRadius = 0.13f * pulse * fpScale;
-            drawPrismBeam(matrix, buffer, innerRadius, zStart, beamLength, 8, age * 5.0f, 1.0f, 1.0f, 1.0f, 0.95f * fadeIn);
+            float innerRadius = 0.13f * pulse * fFpScale;
+            drawPrismBeam(matrix, buffer, innerRadius, fZStart, drawLength, 8, age * 5.0f, 1.0f, 1.0f, 1.0f, 0.95f * env);
 
-            // Layer B: Fluted Radiant Cyan Shroud (8 sides)
-            float midRadius = 0.26f * pulse * fpScale;
-            drawPrismBeam(matrix, buffer, midRadius, zStart, beamLength, 8, -age * 8.0f, 0.0f, 0.92f, 1.0f, 0.65f * fadeIn);
+            // Layer B: Fluted Radiant Cyan Shroud (8 sides), now with the
+            // same traveling flow as the sheath at a slower band speed, so
+            // both the mid and outer layers visibly stream toward the target.
+            float midRadius = 0.26f * pulse * fFpScale;
+            drawPrismBeamFlow(matrix, buffer, midRadius, fZStart, drawLength, 8, -age * 8.0f, age * 0.55f, 0.0f, 0.92f, 1.0f, 0.65f * env,
+                FxEnvelope.segments(10, distScale, 5));
 
             // Layer C: Hexagonal Outer Energy Sheath with Traveling Wave (6 sides)
             // Drawn in segments with a traveling brightness band (redesign T7)
             // so energy visibly flows down the beam instead of sitting uniform.
-            float outerRadius = 0.42f * pulse * fpScale;
-            drawPrismBeamFlow(matrix, buffer, outerRadius, zStart, beamLength, 6, age * 3.0f, age, 0.05f, 0.70f, 1.0f, 0.30f * fadeIn);
+            float outerRadius = 0.42f * pulse * fFpScale;
+            drawPrismBeamFlow(matrix, buffer, outerRadius, fZStart, drawLength, 6, age * 3.0f, age, 0.05f, 0.70f, 1.0f, 0.30f * env,
+                FxEnvelope.segments(12, distScale, 6));
 
-            int ribbonSegments = Math.min((int) (beamLength * 3.0f), 72);
-            float spiralRadius = 0.48f * pulse * fpScale;
-            float ribbonSize = 0.045f * fpScale;
+            // 2. Quad Helical Energy Drill Ribbons
+            int ribbonSegments = Math.min(FxEnvelope.segments((int) (drawLength * 3.0f), distScale, 8), 72);
+            float spiralRadius = 0.48f * pulse * fFpScale;
+            float ribbonSize = 0.045f * fFpScale;
             float spiralSpeed = age * 0.35f;
             if (ribbonSegments > 1) {
                 for (int h = 0; h < 4; h++) {
@@ -129,13 +146,13 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
                     float rCol = isGold ? 1.0f : 0.0f;
                     float gCol = isGold ? 0.85f : 0.95f;
                     float bCol = isGold ? 0.20f : 1.0f;
-                    float aCol = (isGold ? 0.85f : 0.75f) * fadeIn;
+                    float aCol = (isGold ? 0.85f : 0.75f) * env;
                     float dir = isGold ? -1.0f : 1.0f;
                     for (int i = 0; i < ribbonSegments; i++) {
-                        float z1 = (i / (float) ribbonSegments) * (beamLength - zStart) + zStart;
-                        float z2 = ((i + 1) / (float) ribbonSegments) * (beamLength - zStart) + zStart;
-                        float p1 = z1 / beamLength;
-                        float p2 = z2 / beamLength;
+                        float z1 = (i / (float) ribbonSegments) * (drawLength - fZStart) + fZStart;
+                        float z2 = ((i + 1) / (float) ribbonSegments) * (drawLength - fZStart) + fZStart;
+                        float p1 = z1 / drawLength;
+                        float p2 = z2 / drawLength;
                         double a1 = (p1 * Math.PI * 8.0) + (spiralSpeed * dir) + phase;
                         double a2 = (p2 * Math.PI * 8.0) + (spiralSpeed * dir) + phase;
                         float x1 = (float) Math.cos(a1) * spiralRadius;
@@ -160,11 +177,25 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
                 }
             }
 
-            // Muzzle at the blade tip, then the impact where the beam ends.
-            drawMuzzleEmitter(matrix, buffer, age, pulse);
+            // 3. Orbital Ki Ring Nodes and Pulsing Energy Reticles: rings
+            // riding the beam at even intervals, alternating cyan and gold,
+            // each with a smaller counter rotating reticle whose alpha
+            // pulses out of phase with its neighbours.
+            drawBeamRingNodes(matrix, buffer, fZStart, drawLength, age, pulse, fFpScale, env, distScale);
 
-            // 5. Terminus Impact Geometry (at Hit Point Z=beamLength)
-            drawTerminusImpact(matrix, buffer, beamLength, age, pulse);
+            // 4. Muzzle at the blade tip, then the impact where the beam ends.
+            drawMuzzleEmitter(matrix, buffer, age, pulse, env);
+
+            // 5. Terminus Impact Geometry (at Hit Point Z=drawLength)
+            drawTerminusImpact(matrix, buffer, drawLength, age, pulse, env);
+        });
+
+        // Glow pass: a low alpha copy of the core and sheath so the beam
+        // blooms as light instead of reading as matte prisms.
+        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
+            Matrix4f matrix = pose.pose();
+            drawPrismBeam(matrix, buffer, 0.13f * pulse * fFpScale, fZStart, drawLength, 8, age * 5.0f, 1.0f, 1.0f, 1.0f, 0.22f * env);
+            drawPrismBeam(matrix, buffer, 0.42f * pulse * fFpScale, fZStart, drawLength, 6, age * 3.0f, 0.05f, 0.70f, 1.0f, 0.10f * env);
         });
 
         poseStack.popPose();
@@ -196,8 +227,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
      * Alpha pulses in a sine wave whose phase runs along the beam length and
      * advances with age, so the sheath reads as flowing energy.
      */
-    private static void drawPrismBeamFlow(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float length, int sides, float rotDeg, float age, float r, float g, float b, float a) {
-        int flowSegments = 12;
+    private static void drawPrismBeamFlow(Matrix4f matrix, VertexConsumer consumer, float radius, float zStart, float length, int sides, float rotDeg, float age, float r, float g, float b, float a, int flowSegments) {
         for (int sgm = 0; sgm < flowSegments; sgm++) {
             float z1 = zStart + (length - zStart) * (sgm / (float) flowSegments);
             float z2 = zStart + (length - zStart) * ((sgm + 1) / (float) flowSegments);
@@ -227,20 +257,63 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
         }
     }
 
-    private static void drawMuzzleEmitter(Matrix4f matrix, VertexConsumer consumer, float age, float pulse) {
+    /**
+     * Orbital Ki ring nodes along the beam (section 3). Each node is a ring
+     * standing perpendicular to the beam axis with three beads orbiting on
+     * it, plus a smaller counter rotating reticle ring inside whose alpha
+     * pulses. Node count and ring segments step down with camera distance.
+     */
+    private static void drawBeamRingNodes(Matrix4f matrix, VertexConsumer consumer, float zStart, float beamLength,
+                                          float age, float pulse, float fpScale, float env, float distScale) {
+        float usable = beamLength - zStart;
+        if (usable < 3.0f || env <= 0.01f) return;
+        int nodes = FxEnvelope.segments(Math.min(8, Math.max(2, (int) (usable / 4.0f))), distScale, 2);
+        int ringSegs = FxEnvelope.segments(20, distScale, 10);
+        int reticleSegs = FxEnvelope.segments(12, distScale, 8);
+        for (int n = 0; n < nodes; n++) {
+            float frac = (n + 1) / (float) (nodes + 1);
+            float z = zStart + usable * frac;
+            boolean gold = (n % 2 == 1);
+            float r = gold ? 1.0f : 0.0f;
+            float g = gold ? 0.82f : 0.92f;
+            float b = gold ? 0.25f : 1.0f;
+            float nodePulse = 0.72f + 0.28f * (float) Math.sin(age * 3.0f + n * 1.7f);
+            float ringR = (0.64f + 0.08f * (float) Math.sin(age * 2.0f + n * 2.3f)) * pulse * fpScale;
+            float spin = age * (gold ? -38.0f : 38.0f) + n * 30.0f;
+
+            // The node ring itself.
+            drawPlaneRing(matrix, consumer, 0, 0, z, ringR, ringR * 0.80f, ringSegs, spin, r, g, b, 0.50f * nodePulse * env);
+            // Pulsing reticle: smaller, counter rotating, brighter core color.
+            drawPlaneRing(matrix, consumer, 0, 0, z, ringR * 0.55f, ringR * 0.42f, reticleSegs, -spin * 1.4f,
+                Math.min(1f, r + 0.4f), Math.min(1f, g + 0.4f), Math.min(1f, b + 0.4f), 0.55f * nodePulse * env);
+
+            // Three beads orbiting on the node ring.
+            for (int k = 0; k < 3; k++) {
+                double ba = age * 2.2 + n * 1.3 + k * (Math.PI * 2.0 / 3.0);
+                float bx = (float) Math.cos(ba) * ringR;
+                float by = (float) Math.sin(ba) * ringR;
+                float s = 0.055f * fpScale;
+                drawQuad(matrix, consumer,
+                    bx - s, by - s, z, bx + s, by - s, z, bx + s, by + s, z, bx - s, by + s, z,
+                    1.0f, 1.0f, 1.0f, 0.80f * nodePulse * env);
+            }
+        }
+    }
+
+    private static void drawMuzzleEmitter(Matrix4f matrix, VertexConsumer consumer, float age, float pulse, float env) {
         // 2 Concentric Rotating Celestial Muzzle Seals
-        drawPlaneRing(matrix, consumer, 0, 0, 0.15f, 0.70f * pulse, 0.52f * pulse, 24, age * 30.0f, 0.0f, 0.90f, 1.0f, 0.85f);
-        drawPlaneRing(matrix, consumer, 0, 0, 0.20f, 0.48f * pulse, 0.32f * pulse, 16, -age * 45.0f, 0.0f, 0.95f, 1.0f, 0.90f);
+        drawPlaneRing(matrix, consumer, 0, 0, 0.15f, 0.70f * pulse, 0.52f * pulse, 24, age * 30.0f, 0.0f, 0.90f, 1.0f, 0.85f * env);
+        drawPlaneRing(matrix, consumer, 0, 0, 0.20f, 0.48f * pulse, 0.32f * pulse, 16, -age * 45.0f, 0.0f, 0.95f, 1.0f, 0.90f * env);
 
         for (int s = 0; s < 4; s++) {
             double sAngle = (s / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 20.0f);
             float sx = (float) Math.cos(sAngle) * 0.85f * pulse;
             float sy = (float) Math.sin(sAngle) * 0.85f * pulse;
-            drawCurvedNeedle(matrix, consumer, sx, sy, 0.06f, 0.0f, 0.0f, 0.48f, 1.0f, 1.0f, 1.0f, 0.95f);
+            drawCurvedNeedle(matrix, consumer, sx, sy, 0.06f, 0.0f, 0.0f, 0.48f, 1.0f, 1.0f, 1.0f, 0.95f * env);
         }
     }
 
-    private static void drawTerminusImpact(Matrix4f matrix, VertexConsumer consumer, float beamLength, float age, float pulse) {
+    private static void drawTerminusImpact(Matrix4f matrix, VertexConsumer consumer, float beamLength, float age, float pulse, float env) {
         // Expanding Impact Dome at Impact Contact Point
         float domeRadius = 0.85f * pulse;
         int segments = 16;
@@ -260,7 +333,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
                 x2 * 0.5f, y2 * 0.5f, beamLength - 0.3f,
                 x2, y2, beamLength,
                 x1, y1, beamLength,
-                0.0f, 0.95f, 1.0f, 0.75f
+                0.0f, 0.95f, 1.0f, 0.75f * env
             );
 
             // Center dense white flash point
@@ -269,7 +342,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
                 x2 * 0.3f, y2 * 0.3f, beamLength - 0.1f,
                 x2 * 0.3f, y2 * 0.3f, beamLength + 0.1f,
                 x1 * 0.3f, y1 * 0.3f, beamLength + 0.1f,
-                1.0f, 1.0f, 1.0f, 0.95f
+                1.0f, 1.0f, 1.0f, 0.95f * env
             );
         }
 
@@ -277,7 +350,7 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
             double fAngle = (f / 4.0) * Math.PI * 2.0 + Math.toRadians(age * 25.0f);
             float fx = (float) Math.cos(fAngle) * 1.1f * pulse;
             float fy = (float) Math.sin(fAngle) * 1.1f * pulse;
-            drawCurvedNeedle(matrix, consumer, 0.0f, 0.0f, beamLength, fx, fy, beamLength + 0.15f, 1.0f, 0.90f, 0.30f, 0.85f);
+            drawCurvedNeedle(matrix, consumer, 0.0f, 0.0f, beamLength, fx, fy, beamLength + 0.15f, 1.0f, 0.90f, 0.30f, 0.85f * env);
         }
     }
 

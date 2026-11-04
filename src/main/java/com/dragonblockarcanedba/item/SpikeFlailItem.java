@@ -112,7 +112,7 @@ public class SpikeFlailItem extends Item implements com.dragonblockarcanedba.ite
     public static void beginSpin(ServerPlayer player) {
         ServerLevel level = (ServerLevel) player.level();
         boolean already = !level.getEntitiesOfClass(SpikeFlailSpinEntity.class, player.getBoundingBox().inflate(3.0),
-            e -> e.isAlive() && e.getOwner() == player).isEmpty();
+            e -> e.isAlive() && !e.releasing() && e.getOwner() == player).isEmpty();
         if (!already) {
             level.addFreshEntity(new SpikeFlailSpinEntity(level, player));
             level.playSound(null, player.getX(), player.getY(), player.getZ(),

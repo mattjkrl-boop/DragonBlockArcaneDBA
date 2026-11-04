@@ -11,14 +11,16 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Darkness Shatter Entity — Physical 3D Void Shatter Shockwave, Tectonic Fissure Trenches,
+ * Darkness Shatter Entity: Physical 3D Void Shatter Shockwave, Tectonic Fissure Trenches,
  * Erupting Obsidian Monolith Slabs, and Vertical Void Shock Pillars triggered during
  * Darkness Sword (Abyssal Eclipse) execution and falling blade detonations.
  */
 public class DarknessShatterEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(DarknessShatterEntity.class, EntityDataSerializers.FLOAT);
 
-    private int lifetime = 40; // 2.0 seconds
+    private static final int MAX_LIFE = 40; // 2.0 seconds
+
+    private int lifetime = MAX_LIFE;
 
     public DarknessShatterEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -55,20 +57,28 @@ public class DarknessShatterEntity extends Projectile {
         super.tick();
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
-            // Theme particles (T5): the shatter vents void smoke and sparks
-            // while the fissures are fresh, then settles.
-            if (this.tickCount <= 8 && this.tickCount % 2 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
+            // Particles run the shared envelope across the whole 40 tick
+            // life: a fast build, a peak while the fissures are fresh, then a
+            // settling decay. The old gate stopped all emission at tick 8 and
+            // left the decal silent for its last 32 ticks.
+            float env = com.dragonblockarcanedba.util.FxEnvelope.envelope(
+                this.tickCount, MAX_LIFE, 0.08f, 0.45f);
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (env > 0.05f && density > 0f && this.tickCount % 2 == 0) {
+                int smoke = Math.round(4f * density * env);
+                if (smoke > 0) {
                     serverLevel.sendParticles(
                         com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
                         this.getX(), this.getY() + 0.3, this.getZ(),
-                        Math.max(1, Math.round(4f * density)),
+                        smoke,
                         getRadius() * 0.5, 0.4, getRadius() * 0.5, 0.04);
+                }
+                int sparks = Math.round(2f * density * env);
+                if (sparks > 0) {
                     serverLevel.sendParticles(
                         com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                         this.getX(), this.getY() + 0.3, this.getZ(),
-                        Math.max(1, Math.round(2f * density)),
+                        sparks,
                         getRadius() * 0.4, 0.3, getRadius() * 0.4, 0.06);
                 }
             }

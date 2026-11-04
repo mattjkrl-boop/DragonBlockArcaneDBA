@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.DimensionalSlashEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -33,6 +35,7 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         public float yRot = 0;
         public float xRot = 0;
         public float age = 0;
+        public float fadeStart = -1;
         public boolean isFirstPersonOwner = false;
     }
 
@@ -58,6 +61,7 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
+        state.fadeStart = entity.getFadeStart();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null && 
@@ -80,18 +84,32 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         }
 
         float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
-        poseStack.scale(fpScale, fpScale, fpScale);
+
+        // Lifecycle, reconciled with the entity (point 5): one shared envelope
+        // over the real flight life, so the old fade out window (ages 70 to
+        // 100) is exactly the envelope's last 30 percent. On a hit the entity
+        // now lingers instead of discarding, and the tear fades shut across
+        // the linger while swelling slightly, like cut space straining open
+        // before it closes.
+        float distScale = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+        float fade = FxEnvelope.envelope(state.age, DimensionalSlashEntity.MAX_LIFE_TICKS, 0.05f, 0.30f);
+        float lingerT = -1.0f;
+        if (state.fadeStart >= 0) {
+            lingerT = Math.max(0.0f, Math.min(1.0f,
+                (state.age - state.fadeStart) / (float) DimensionalSlashEntity.LINGER_TICKS));
+            fade *= 1.0f - FxEnvelope.smoothstep(lingerT);
+        }
+        float tearScale = lingerT >= 0.0f ? 1.0f + 0.22f * FxEnvelope.smoothstep(lingerT) : 1.0f;
+        poseStack.scale(fpScale * tearScale, fpScale * tearScale, fpScale * tearScale);
+        final float fFade = fade;
 
         // Forward spin along movement vector
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees((float) Math.sin(state.age * 0.4f) * 6.0f)));
 
         float span = 3.4f;
         float chord = 1.12f;
-        int segments = 32;
+        int segments = FxEnvelope.segments(32, distScale, 14);
         float pulse = 0.90f + 0.10f * (float) Math.sin(state.age * 0.6f);
-        float fadeIn = ease(Math.min(1.0f, state.age / 5.0f));
-        float fadeOut = state.age <= 70.0f ? 1.0f : ease(Math.max(0.0f, 1.0f - (state.age - 70.0f) / 30.0f));
-        float fade = fadeIn * fadeOut;
         float body = 0.45f + 0.55f * fade;
         float belly = span * 0.22f;
         float coreZ = chord * 0.38f;
@@ -101,24 +119,24 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
             Matrix4f matrix = pose.pose();
 
             drawVolumetricCrescent(matrix, buffer, span + 0.28f, chord + 0.22f, 0.22f * pulse * body, 0.78f, segments,
-                0.65f, 0.05f, 0.95f, 0.82f * fade);
+                0.65f, 0.05f, 0.95f, 0.82f * fFade);
             drawVolumetricCrescent(matrix, buffer, span, chord, 0.11f * pulse * body, 0.42f, segments,
-                1.0f, 0.10f, 0.35f, 0.96f * fade);
+                1.0f, 0.10f, 0.35f, 0.96f * fFade);
             drawVolumetricCrescent(matrix, buffer, span * 0.70f, chord * 0.90f, 0.032f * body, 0.10f, segments,
-                1.0f, 0.96f, 1.0f, fade);
+                1.0f, 0.96f, 1.0f, fFade);
 
-            drawTipSpurs(matrix, buffer, span, 0.34f, fade);
+            drawTipSpurs(matrix, buffer, span, 0.34f, fFade);
 
             drawSingularityOctahedron(matrix, buffer, 0, belly * 0.70f, coreZ, 0.32f * pulse, age * 30.0f,
-                0.02f, 0.0f, 0.05f, 0.99f * fade,
-                1.0f, 0.15f, 0.85f, 0.95f * fade,
-                1.0f, 1.0f, 1.0f, fade);
+                0.02f, 0.0f, 0.05f, 0.99f * fFade,
+                1.0f, 0.15f, 0.85f, 0.95f * fFade,
+                1.0f, 1.0f, 1.0f, fFade);
             drawConcentricRing(matrix, buffer, 0, belly * 0.70f, coreZ, 0.72f * pulse, 0.54f * pulse, 24, age * 22.0f,
-                0.60f, 0.05f, 0.95f, 0.80f * fade);
+                0.60f, 0.05f, 0.95f, 0.80f * fFade);
             drawConcentricRing(matrix, buffer, 0, belly * 0.70f, coreZ, 0.46f * pulse, 0.34f * pulse, 16, -age * 30.0f,
-                1.0f, 0.15f, 0.35f, 0.92f * fade);
+                1.0f, 0.15f, 0.35f, 0.92f * fFade);
 
-            float ribbonLen = 2.5f * (0.30f + 0.70f * fade);
+            float ribbonLen = 2.5f * (0.30f + 0.70f * fFade);
             float ribbonWidth = 0.11f * body;
             for (int i = 0; i < 5; i++) {
                 float t = (i / 4.0f) * 2.0f - 1.0f;
@@ -129,7 +147,7 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
                 float tail = ribbonLen * (0.40f + 0.60f * arc);
                 drawTaperedRibbon(matrix, buffer, rx, ry, rz, rx * 0.78f, ry * 0.30f, rz - tail,
                     ribbonWidth * (0.35f + 0.65f * arc),
-                    0.75f, 0.05f, 0.90f, 0.75f * fade,
+                    0.75f, 0.05f, 0.90f, 0.75f * fFade,
                     1.0f, 0.15f, 0.45f, 0.0f);
             }
         });
@@ -137,16 +155,27 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             drawVolumetricCrescent(matrix, buffer, span + 0.16f, chord + 0.12f, 0.16f * pulse * body, 0.36f, segments,
-                0.55f, 0.05f, 0.30f, 0.28f * fade);
+                0.55f, 0.05f, 0.30f, 0.28f * fFade);
         });
+
+        // Lingering tear (point 1 and 5): while the struck crescent fades shut,
+        // the cut itself swirls in the shared three layer bands, centered on
+        // the crescent, so the hole in space reads as a closing vortex and not
+        // a sprite dying.
+        if (lingerT >= 0.0f && fade > 0.01f) {
+            final float bandFade = fade;
+            final float bandAge = age;
+            final float bandDist = distScale;
+            poseStack.pushPose();
+            poseStack.translate(0, -0.95f, 0);
+            collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
+                LayeredRender.drawVortexBands(pose, buffer, 1.05f, 1.9f, bandAge,
+                    0.62f, 0.10f, 0.92f, bandFade, bandDist));
+            poseStack.popPose();
+        }
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static float ease(float t) {
-        float c = Math.max(0.0f, Math.min(1.0f, t));
-        return c * c * (3.0f - 2.0f * c);
     }
 
     /**

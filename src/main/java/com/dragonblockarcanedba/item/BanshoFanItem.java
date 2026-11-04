@@ -35,8 +35,14 @@ import com.dragonblockarcanedba.util.WeaponDrainHelper;
  *   - Gale Force: Launches the target with a strong outward and upward velocity & physics modifiers
  *   - Applies Bleeding II for 15 seconds (wind cuts)
  *   - Spawns physical 3D emerald impact shockwave
- *   - Cyclone Slash: 30% chance to summon a physical 3D geometric emerald cyclone entity that
- *     swirls, lifts, and shreds nearby enemies for 50% damage
+ *   - Great Cyclone: every landed hit casts the cyclone at the target while the
+ *     storm cooldown (120 ticks) is ready and no cyclone of yours is standing.
+ *     The cyclone lives 100 ticks (20 build, peak, 35 dissipate), pulls, spins,
+ *     and lifts everything in a 4 block radius, throws a 64 piece debris field,
+ *     drives real rain, scours soft ground, and ejects what it holds at the
+ *     end. Its shred figure is 50% of the main hit; it deals 11% of that figure
+ *     every 4 ticks inside its active window (16 ticks, 88% of the main hit
+ *     over a full stay), plus Bleeding I.
  * 
  * Right-click: "Tempest Barrage"
  *   - Spawns a physical 3D conical launch shockwave
@@ -49,8 +55,38 @@ import com.dragonblockarcanedba.util.WeaponDrainHelper;
  * Unbreakable legendary weapon. No durability.
  */
 public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
+    /** Storm cooldown: 120 ticks, longer than the cyclone's 100 tick life. */
+    private static final long CYCLONE_COOLDOWN_TICKS = 120L;
+    private static final java.util.Map<java.util.UUID, Long> CYCLONE_READY_AT = new java.util.concurrent.ConcurrentHashMap<>();
+
     public BanshoFanItem(Properties properties) {
         super(properties.attributes(createModifiers()));
+    }
+
+    /**
+     * Raise the great cyclone at a point, if this player's storm cooldown has
+     * lapsed and none of their cyclones is already standing nearby.
+     * Returns true when the cyclone was cast.
+     */
+    private static boolean castCyclone(ServerLevel level, ServerPlayer player, Vec3 at, float cycloneDamage) {
+        long now = level.getGameTime();
+        Long readyAt = CYCLONE_READY_AT.get(player.getUUID());
+        if (readyAt != null && now < readyAt) {
+            return false;
+        }
+        boolean standing = !level.getEntitiesOfClass(BanshoCycloneEntity.class,
+            new net.minecraft.world.phys.AABB(at, at).inflate(24.0),
+            e -> e.isAlive() && e.getOwner() == player).isEmpty();
+        if (standing) {
+            return false;
+        }
+        BanshoCycloneEntity cyclone = new BanshoCycloneEntity(level, player, at, cycloneDamage);
+        level.addFreshEntity(cyclone);
+        CYCLONE_READY_AT.put(player.getUUID(), now + CYCLONE_COOLDOWN_TICKS);
+        if (CYCLONE_READY_AT.size() > 64) {
+            CYCLONE_READY_AT.entrySet().removeIf(e -> now >= e.getValue());
+        }
+        return true;
     }
 
     private static ItemAttributeModifiers createModifiers() {
@@ -131,24 +167,14 @@ public class BanshoFanItem extends Item implements com.dragonblockarcanedba.item
                 target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(serverPlayer), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (strengthBonus)));
             }
 
-            // Cyclone Slash: 30% chance to summon a physical 3D emerald cyclone entity.
-            // The cyclone entity is the only damage source: this method used to ALSO
-            // apply the full cycloneDamage instantly in a 3-block AoE, so a proc dealt
-            // the instant hit plus the entity's 25 ticks of shredding, far beyond the
-            // documented 50 percent.
-            if (serverLevel.getRandom().nextFloat() < 0.30f) {
-                float cycloneDamage = (400.0f + strengthBonus) * 0.5f; // 50% of main hit
+            // Great Cyclone: a proper cast, not a proc. A landed hit raises the
+            // storm at the target when the per-player storm cooldown is ready;
+            // the cooldown (120 ticks) exceeds the cyclone's 100 tick life, and
+            // a standing cyclone of yours blocks a second one, so storms never
+            // stack at melee cadence.
+            castCyclone(serverLevel, serverPlayer, target.position(), (400.0f + strengthBonus) * 0.5f);
 
-                BanshoCycloneEntity cyclone = new BanshoCycloneEntity(
-                    serverLevel,
-                    serverPlayer,
-                    target.position(),
-                    cycloneDamage
-                );
-                serverLevel.addFreshEntity(cyclone);
-            }
-
-            // Physical 3D impact shockwave on every Gale Force strike (0 particles)
+            // Physical 3D impact shockwave on every Gale Force strike
             BanshoShockwaveEntity impactWave = new BanshoShockwaveEntity(
                 serverLevel,
                 serverPlayer,

@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Spirit Sword — The Annihilator Blade. Endgame legendary weapon.
+ * Spirit Sword: The Annihilator Blade. Endgame legendary weapon.
  * 
  * Ki Drain: 55% per minute (smooth).
  */
@@ -121,7 +121,7 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
             }
 
             // Physical 3D Spirit Impale Entity (6 celestial swords, 3 ground seals, ascending
-            // divine pillar). At 3 attacks per second a fresh 28-tick entity per hit churns
+            // divine pillar). At 3 attacks per second a fresh 40-tick entity per hit churns
             // hard, so a target that already has one following it does not get another.
             boolean alreadyImpaled = !serverLevel.getEntitiesOfClass(SpiritImpaleEntity.class,
                 target.getBoundingBox().inflate(2.0), e -> e.getTargetId() == target.getId()).isEmpty();
@@ -211,15 +211,31 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
         Vec3 eyePos = player.getEyePosition();
         Vec3 lookVec = player.getViewVector(1.0f);
 
-        // Fire pulse damage every 10 ticks (0.5 seconds)
-        if (ticksUsed > 0 && ticksUsed % 10 == 0) {
-            Vec3 endPos = eyePos.add(lookVec.scale(PULSE_RANGE));
+        // Fire pulse damage every 5 ticks (0.25 seconds). The pulse used to
+        // land every 10 ticks under a beam that looks continuous; halving the
+        // interval and the per pulse numbers spreads the same total damage
+        // across the beam's life instead of half second steps.
+        if (ticksUsed > 0 && ticksUsed % 5 == 0) {
+            // Occlusion: the beam visual truncates at the first block, and
+            // the damage now stops at the same wall. Before this raycast the
+            // pulse tested the full 32 block line and hit targets standing
+            // behind walls the picture never reached.
+            net.minecraft.world.phys.BlockHitResult blockHit = serverLevel.clip(new net.minecraft.world.level.ClipContext(
+                eyePos, eyePos.add(lookVec.scale(PULSE_RANGE)),
+                net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                net.minecraft.world.level.ClipContext.Fluid.NONE, player));
+            double beamDist = blockHit.getType() == net.minecraft.world.phys.HitResult.Type.MISS
+                ? PULSE_RANGE
+                : eyePos.distanceTo(blockHit.getLocation());
+            Vec3 endPos = eyePos.add(lookVec.scale(beamDist));
 
-            // Calculate stat-scaled beam damage: 200 + (Spirit × 1.5). The beam used to be
-            // instant full power from the first tick; it now ramps over the first 2 seconds.
+            // Calculate stat-scaled beam damage: 100 + (Spirit x 0.75) per
+            // pulse at 5 tick intervals, which is the old 200 + Spirit x 1.5
+            // per 10 ticks paid out in twice as many, half sized pulses.
+            // The beam ramps over the first 2 seconds.
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
             float ramp = ticksUsed < 20 ? 0.6f : (ticksUsed < 40 ? 0.85f : 1.0f);
-            float beamDamage = (200.0f + (float) (accessor.dba$getSpirit() * 1.5)) * ramp;
+            float beamDamage = (100.0f + (float) (accessor.dba$getSpirit() * 0.75)) * ramp;
 
             // --- Piercing beam: hit ALL entities in the line ---
             AABB searchArea = new AABB(eyePos, endPos).inflate(1.0);
@@ -234,8 +250,9 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
                     // Main beam damage
                     livingTarget.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (beamDamage)));
 
-                    // 2% of target's max HP as bonus magic damage
-                    float percentDamage = livingTarget.getMaxHealth() * 0.02f;
+                    // 1% of target's max HP as bonus magic damage per pulse
+                    // (was 2% per 10 tick pulse; same rate at the new cadence)
+                    float percentDamage = livingTarget.getMaxHealth() * 0.01f;
                     livingTarget.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (percentDamage)));
 
                     // Apply Spirit Impale for 5 seconds (100 ticks)
@@ -260,11 +277,28 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
                     // Terminus feedback: the beam's impact point used to be silent geometry only.
                     serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                         livingTarget.getX(), livingTarget.getY() + livingTarget.getBbHeight() * 0.5, livingTarget.getZ(),
-                        6, 0.3, 0.3, 0.3, 0.12);
+                        4, 0.3, 0.3, 0.3, 0.12);
 
                     // Impact sound
                     serverLevel.playSound(null, livingTarget.getX(), livingTarget.getY(), livingTarget.getZ(),
                         SoundEvents.BEACON_POWER_SELECT, SoundSource.PLAYERS, 1.2f, 1.5f);
+                }
+            }
+
+            // World mark: once the beam is at full ramp, a sustained strike
+            // on open ground crystallizes the surface cell it lands on.
+            // GroundScar restores it after 120 ticks and refuses protected
+            // blocks; re-scarring the same cell just extends the restore.
+            if (blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS
+                && blockHit.getDirection() == net.minecraft.core.Direction.UP
+                && ticksUsed >= 40) {
+                var crystal = net.minecraft.world.level.block.Blocks.STAINED_GLASS.pick(net.minecraft.world.item.DyeColor.LIGHT_BLUE).defaultBlockState();
+                com.dragonblockarcanedba.util.GroundScar.scar(serverLevel, blockHit.getBlockPos(), crystal, 120);
+                // Once a second at full ramp the strike point throws crystal
+                // shards off the scar it is burning in (point 2).
+                if (ticksUsed % 20 == 0) {
+                    com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, player,
+                        blockHit.getLocation(), 8, 1.4, 2.2, 16, List.of(crystal));
                 }
             }
 
@@ -274,20 +308,21 @@ public class SpiritSwordItem extends Item implements com.dragonblockarcanedba.it
         }
     }
 
-    // --- On release: discard beam entity and apply 1-second cooldown ---
+    // --- On release: fade the beam out and apply 1-second cooldown ---
     @Override
     public boolean releaseUsing(ItemStack stack, Level level, LivingEntity entity, int timeLeft) {
         if (!level.isClientSide() && entity instanceof ServerPlayer player) {
             ServerLevel serverLevel = (ServerLevel) level;
 
-            // Discard active beam entity
+            // Fade the beam out over its dissipation phase instead of
+            // discarding it in one tick; the beam entity ends itself.
             List<SpiritCannonBeamEntity> existingBeams = serverLevel.getEntitiesOfClass(
                 SpiritCannonBeamEntity.class,
                 player.getBoundingBox().inflate(6.0),
                 b -> b.getCasterId() == player.getId()
             );
             for (SpiritCannonBeamEntity b : existingBeams) {
-                b.discard();
+                b.beginFadeOut();
             }
 
             // 1-second cooldown after releasing the cannon (20 ticks)

@@ -70,7 +70,16 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
 
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
                 Matrix4f matrix = pose.pose();
-                float pulse = 0.85f + 0.15f * (float) Math.sin(state.ageInTicks * 0.25f);
+                // Fade out over the last 30 embedded ticks (shared envelope
+                // shape): the hazard used to vanish at full brightness.
+                float fadeOut = 1.0f;
+                float embeddedAge = state.ageInTicks;
+                float fadeStart = GrandBladeShardEntity.MAX_EMBEDDED_TICKS - 30.0f;
+                if (embeddedAge > fadeStart) {
+                    fadeOut = 1.0f - com.dragonblockarcanedba.util.FxEnvelope.smoothstep(
+                        (embeddedAge - fadeStart) / 30.0f);
+                }
+                float pulse = (0.85f + 0.15f * (float) Math.sin(state.ageInTicks * 0.25f)) * fadeOut;
 
                 // 1. Glowing 3D Golden Ground Fracture Mandala & Tripping Hazard Seal
                 int crackRays = 6;
@@ -98,7 +107,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                 bladeStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(Math.max(35.0f, Math.abs(state.xRot)))));
                 bladeStack.scale(0.85f, 0.85f, 0.85f);
 
-                drawPhysicalBlade(bladeStack.last().pose(), buffer, state.ageInTicks, 1.0f);
+                drawPhysicalBlade(bladeStack.last().pose(), buffer, state.ageInTicks, fadeOut);
             });
 
         } else {
@@ -110,8 +119,18 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
 
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
                 Matrix4f matrix = pose.pose();
-                drawPhysicalBlade(matrix, buffer, state.ageInTicks, 1.0f);
-                drawHelicalWake(matrix, buffer, state.ageInTicks);
+                // Lifecycle: builds in over 3 ticks, fades over the last 10
+                // ticks of the 60 tick flight instead of popping at both ends.
+                float buildIn = com.dragonblockarcanedba.util.FxEnvelope.smoothstep(state.ageInTicks / 3.0f);
+                float fadeOut = 1.0f;
+                float flightFadeStart = GrandBladeShardEntity.MAX_FLIGHT_TICKS - 10.0f;
+                if (state.ageInTicks > flightFadeStart) {
+                    fadeOut = 1.0f - com.dragonblockarcanedba.util.FxEnvelope.smoothstep(
+                        (state.ageInTicks - flightFadeStart) / 10.0f);
+                }
+                float vis = buildIn * fadeOut;
+                drawPhysicalBlade(matrix, buffer, state.ageInTicks, vis);
+                drawHelicalWake(matrix, buffer, state.ageInTicks, vis);
             });
         }
 
@@ -176,7 +195,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
         );
     }
 
-    private static void drawHelicalWake(Matrix4f matrix, VertexConsumer consumer, float age) {
+    private static void drawHelicalWake(Matrix4f matrix, VertexConsumer consumer, float age, float visScale) {
         int steps = 12;
         float trailLength = 2.05f;
 
@@ -199,7 +218,7 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
             float y2 = (float) Math.sin(a2) * r2;
 
             float falloff = 1.0f - p1;
-            float alpha = falloff * falloff * 0.8f;
+            float alpha = falloff * falloff * 0.8f * visScale;
             drawCrackLine(matrix, consumer, x1, y1, z1, x2, y2, z2, 0.04f, 1.0f, 0.85f, 0.20f, alpha);
         }
     }

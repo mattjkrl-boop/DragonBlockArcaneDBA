@@ -5,7 +5,6 @@ import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.BraveChargeEntity;
 import com.dragonblockarcanedba.entity.BraveCrossSlashEntity;
 import com.dragonblockarcanedba.entity.BraveRushTrailEntity;
-import com.dragonblockarcanedba.entity.BraveShockwaveEntity;
 import com.dragonblockarcanedba.entity.BraveSlashEntity;
 import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.core.component.DataComponents;
@@ -41,7 +40,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Brave Sword — Heroic Legendary Sword (Tapion's Sword).
+ * Brave Sword - Heroic Legendary Sword (Tapion's Sword).
  * 
  * Drain: Left click Ki 25% + Stamina 20% per minute, Right click Ki 15% per minute.
  */
@@ -165,6 +164,14 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 // Brave Finisher (Tweak C): Dash forward & unleash massive physical 3D cross-slash
                 Vec3 targetCenter = target.position().add(0, target.getBbHeight() * 0.5, 0);
                 Vec3 past = target.position().add(look.scale(2.0));
+                // Never teleport the player into a wall: if the past-the-target
+                // spot is solid at feet or head height, land on the target instead.
+                net.minecraft.core.BlockPos pastPos = net.minecraft.core.BlockPos.containing(past.x, past.y, past.z);
+                boolean feetBlocked = !level.getBlockState(pastPos).getCollisionShape(level, pastPos).isEmpty();
+                boolean headBlocked = !level.getBlockState(pastPos.above()).getCollisionShape(level, pastPos.above()).isEmpty();
+                if (feetBlocked || headBlocked) {
+                    past = target.position();
+                }
                 MovementPhysics.teleport(player, past);
 
                 float finisherDmg = 900.0f + (strength * 4.0f);
@@ -191,7 +198,7 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.6f);
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 2.0f, 0.6f);
                 level.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.8f, 1.2f);
-        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, target.getX(), target.getY(), target.getZ());
+                com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, target.getX(), target.getY(), target.getZ());
 
                 setCombo(stack, 0); // Reset combo
                 player.sendSystemMessage(Component.literal("§6★ BRAVE FINISHER! ★"), true);
@@ -203,15 +210,17 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 BraveSlashEntity cut = new BraveSlashEntity(level, player, heavy ? hitDmg * 1.5f : hitDmg);
                 cut.setDeltaMovement(look.scale(1.8));
                 level.addFreshEntity(cut);
+                // Combo particle feedback & sound. A heavy hit plays its own
+                // louder pair only; before this pass it played both pairs in
+                // the same tick, doubling the sweep and whoosh.
+                level.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1.0, target.getZ(), 8, 0.3, 0.3, 0.3, 0.1);
                 if (heavy) {
                     level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.5f, 1.4f);
                     level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.5f, 1.4f);
+                } else {
+                    level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
+                    level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
                 }
-
-                // Combo particle feedback & sound
-                level.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1.0, target.getZ(), 8, 0.3, 0.3, 0.3, 0.1);
-                level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
-                level.playSound(null, player.getX(), player.getY(), player.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.2f, 1.0f + combo * 0.08f);
                 player.sendSystemMessage(Component.literal(String.format("§6Brave Power: §e%d Hits", combo)), true);
             }
         } else {
@@ -254,22 +263,28 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
-            // Drain Ki: 15% per minute (smooth)
-            if (!WeaponDrainHelper.drainKiPerTick(player, 15.0)) {
-                player.stopUsingItem();
-                return;
+            int heldTicks = getUseDuration(stack, living) - remainingTicks;
+            // Drain Ki: 15% per minute (smooth), but only while the charge is
+            // still growing. At full charge the ratio is capped, so holding
+            // longer used to keep charging Ki for no extra damage, radius,
+            // or visual growth; now a full charge is free to hold.
+            if (heldTicks <= MAX_RIGHT_CHARGE_TICKS) {
+                if (!WeaponDrainHelper.drainKiPerTick(player, 15.0)) {
+                    player.stopUsingItem();
+                    return;
+                }
             }
 
             ServerLevel serverLevel = (ServerLevel) level;
-            int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);
 
             // Heroic Focus: courageous stance, armor & jump power
             player.addEffect(new MobEffectInstance(DbaEffects.HEROIC_FOCUS_HOLDER, 10, 0, false, false));
 
-            // Manage physical 3D Brave Charge Entity
+            // Manage physical 3D Brave Charge Entity. A fading entity is the
+            // previous charge dissolving; a new charge replaces it at once.
             BraveChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.get(player.getUUID());
-            if (chargeEntity == null || !chargeEntity.isAlive()) {
+            if (chargeEntity == null || !chargeEntity.isAlive() || chargeEntity.isFading()) {
                 chargeEntity = new BraveChargeEntity(serverLevel, player);
                 serverLevel.addFreshEntity(chargeEntity);
                 ACTIVE_CHARGE_MAP.put(player.getUUID(), chargeEntity);
@@ -292,12 +307,16 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
             int heldTicks = getUseDuration(stack, living) - timeLeft;
-            float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
+            // No free floor: an instant release is a short, weak dash and a
+            // full 100 tick charge is worth 3x its distance and over 3x its
+            // base damage, so charging honestly pays (standard numbers rule).
+            float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);
 
-            // Clean up 3D charge entity
+            // The charge construct dissolves over its own fade out instead of
+            // being discarded at full alpha in this tick.
             BraveChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
             if (chargeEntity != null && chargeEntity.isAlive()) {
-                chargeEntity.discard();
+                chargeEntity.startFade();
             }
 
             if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
@@ -307,18 +326,20 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
 
             double ccMult = com.dragonblockarcanedba.util.MovementLimiterHelper.getMovementMultiplier(player);
 
-            // High-speed piercing sword dash up to 24 blocks (scaled by CC / movement limiter)
+            // High-speed piercing sword dash, 8 blocks on a tap to 24 blocks at
+            // full charge (scaled by CC / movement limiter)
             Vec3 start = player.position();
             Vec3 look = player.getLookAngle();
-            double dashDist = (14.0 + (chargeRatio * 10.0)) * ccMult;
+            double dashDist = (8.0 + (chargeRatio * 16.0)) * ccMult;
             Vec3 end = start.add(look.scale(dashDist));
 
-            // Hit targets along the dash path
-            AABB pathBox = new AABB(start, end).inflate(2.0 + chargeRatio * 2.5); // Tweak A: wider with charge
-            List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
-                LivingEntity.class, pathBox,
-                e -> e.isAlive() && e != player
-            );
+            // Heroic finishing slash damage: 600.0 + (chargeRatio * 1400.0) + (Strength * 4.0 * chargeRatio).
+            // The rush trail entity resolves it at its visual peak tick against
+            // positions measured then, and fires the radial shockwave itself
+            // on a kill or at charge 0.9 or more.
+            float baseDamage = 600.0f + (chargeRatio * 1400.0f);
+            float strDamage = (float) (accessor.dba$getStrength() * 4.0f * chargeRatio);
+            float totalDamage = baseDamage + strDamage;
 
             // Spawn physical 3D supersonic rush flight trail connecting start to end
             Vec3 dashVec = end.subtract(start);
@@ -330,61 +351,12 @@ public class BraveSwordItem extends Item implements com.dragonblockarcanedba.ite
                 BraveRushTrailEntity trail = new BraveRushTrailEntity(
                     serverLevel, player, start.add(0, 0.8, 0), yaw, pitch, trailLen, 1.0f + chargeRatio * 0.5f
                 );
+                trail.setDashPayload(totalDamage, chargeRatio, look);
                 serverLevel.addFreshEntity(trail);
             }
 
             // Teleport player
             MovementPhysics.teleport(player, end);
-
-            // Delayed heroic finishing slash: 600.0 + (chargeRatio * 1400.0) + (Strength * 4.0 * chargeRatio)
-            float baseDamage = 600.0f + (chargeRatio * 1400.0f);
-            float strDamage = (float) (accessor.dba$getStrength() * 4.0f * chargeRatio);
-            float totalDamage = baseDamage + strDamage;
-
-            boolean anyKilled = false;
-            for (LivingEntity t : targets) {
-                t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
-                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalDamage)));
-
-                // MC 26.2 Physics: Piercing dash launch and bounce
-                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                    t,
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
-                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("brave_dash_bounce"),
-                    0.80,
-                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
-                );
-                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                    t,
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
-                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("brave_dash_drag"),
-                    -0.40,
-                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
-                );
-
-                if (!t.isAlive()) {
-                    anyKilled = true;
-                }
-            }
-
-            // Tweak C: If any enemy killed, or max charge, trigger secondary physical radial heroic shockwave
-            if (anyKilled || chargeRatio >= 0.9f) {
-                float shockRadius = (float) (6.0 + chargeRatio * 2.5);
-                AABB shockAoe = player.getBoundingBox().inflate(shockRadius);
-                List<LivingEntity> shockTargets = serverLevel.getEntitiesOfClass(
-                    LivingEntity.class, shockAoe, e -> e.isAlive() && e != player && !targets.contains(e)
-                );
-                for (LivingEntity st : shockTargets) {
-                    st.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalDamage * 0.4f)));
-                }
-
-                BraveShockwaveEntity shockwave = new BraveShockwaveEntity(serverLevel, player, player.position().add(0, 0.05, 0), shockRadius);
-                serverLevel.addFreshEntity(shockwave);
-
-                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.9f);
-        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, player.getX(), player.getY(), player.getZ());
-            }
 
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 2.0f, 0.7f);

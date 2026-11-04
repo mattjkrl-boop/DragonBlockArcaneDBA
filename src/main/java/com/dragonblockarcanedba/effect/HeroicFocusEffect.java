@@ -20,7 +20,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
  */
 public class HeroicFocusEffect extends MobEffect {
     public HeroicFocusEffect() {
-        super(MobEffectCategory.BENEFICIAL, 0x32CD32); // Lime Green
+        super(MobEffectCategory.BENEFICIAL, 0xFFD700); // Gold, matching the Brave Sword valor palette
 
         this.addAttributeModifier(
             Attributes.ARMOR,
@@ -64,7 +64,7 @@ public class HeroicFocusEffect extends MobEffect {
             double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
 
             level.sendParticles(
-                new DustParticleOptions(0x32CD32, 1.3f), // Lime green
+                new DustParticleOptions(0xFFD700, 1.3f), // Gold
                 px, py, pz,
                 1, 0.0, 0.04, 0.0, 0.01
             );

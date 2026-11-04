@@ -1,13 +1,12 @@
 package com.dragonblockarcanedba.item;
 
+import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.DimensionalSlashEntity;
 import com.dragonblockarcanedba.entity.DimensionalWarpRiftEntity;
-import com.dragonblockarcanedba.movement.MovementPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -82,7 +81,9 @@ public class DimensionalSwordItem extends Item implements com.dragonblockarcaned
     public static void fireSlash(Player player, ItemStack stack) {
         if (!player.level().isClientSide()) {
             // Slashes had no cooldown at all: a full stamina bar bought roughly 90
-            // back-to-back 750 damage projectiles. An 8 tick cadence keeps it fast but paced.
+            // back-to-back 750 damage projectiles. A 16 tick cadence keeps it fast
+            // but paced, and heavy enough per shot for the trail and the lingering
+            // tear on impact to actually read.
             if (player.getCooldowns().isOnCooldown(stack)) {
                 return;
             }
@@ -90,12 +91,16 @@ public class DimensionalSwordItem extends Item implements com.dragonblockarcaned
             if (!WeaponDrainHelper.drainStaminaDiscrete(player, 100.0, 13)) {
                 return;
             }
-            player.getCooldowns().addCooldown(stack, 8);
+            player.getCooldowns().addCooldown(stack, 16);
 
             // Check NBT for tilt state to alternate left and right
             boolean tiltRight = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag().getBoolean("tiltRight").orElse(false);
-            
-            DimensionalSlashEntity slash = new DimensionalSlashEntity(player.level(), player, tiltRight, 750.0f);
+
+            // Stat scaling like every sibling weapon: 750 + Strength x 3 (the
+            // slash used to be a flat 750 and fell behind every level).
+            float strength = player instanceof PlayerStatsAccessor accessor ? accessor.dba$getStrength() : 0;
+            float slashDamage = 750.0f + strength * 3.0f;
+            DimensionalSlashEntity slash = new DimensionalSlashEntity(player.level(), player, tiltRight, slashDamage);
             Vec3 look = player.getLookAngle();
             slash.setDeltaMovement(look.x * 2.5, look.y * 2.5, look.z * 2.5); // Fast projectile
             player.level().addFreshEntity(slash);
@@ -110,80 +115,93 @@ public class DimensionalSwordItem extends Item implements com.dragonblockarcaned
         }
     }
 
+    /**
+     * Find a landing cell at or above start whose feet and head cells are both
+     * free of collision, climbing up to maxClimb cells. Returns null when no
+     * free cell exists, which refuses the warp before any Ki is charged.
+     */
+    private static BlockPos findFreeLanding(ServerLevel level, BlockPos start, int maxClimb) {
+        for (int dy = 0; dy <= maxClimb; dy++) {
+            BlockPos feet = start.above(dy);
+            if (level.getBlockState(feet).getCollisionShape(level, feet).isEmpty()
+                && level.getBlockState(feet.above()).getCollisionShape(level, feet.above()).isEmpty()) {
+                return feet;
+            }
+        }
+        return null;
+    }
+
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
-        
-        // Drain Ki: 100% per minute for 100-tick (5-second) cooldown cycle (8.33% Max Ki)
+
+        if (level.isClientSide()) {
+            return InteractionResult.SUCCESS;
+        }
+        ServerLevel serverLevel = (ServerLevel) level;
+
+        // Step 1: aim and validate FIRST. Ki used to be charged before the
+        // raycast ran, so a blocked warp or a blind sky misclick still cost the
+        // full drain. Now the target has to prove it is real before anything
+        // is paid.
+        double maxDistance = 1024.0;
+        Vec3 eyePos = player.getEyePosition();
+        Vec3 lookDir = player.getLookAngle();
+        Vec3 traceEnd = eyePos.add(lookDir.scale(maxDistance));
+        ClipContext context = new ClipContext(eyePos, traceEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player);
+        HitResult hitResult = level.clip(context);
+
+        Vec3 riftPos;
+        Vec3 landing;
+
+        if (hitResult.getType() == HitResult.Type.BLOCK && hitResult instanceof BlockHitResult blockHit) {
+            Direction face = blockHit.getDirection();
+            BlockPos targetBlock = blockHit.getBlockPos().relative(face);
+            BlockPos free = findFreeLanding(serverLevel, targetBlock, 4);
+            if (free == null) {
+                return InteractionResult.FAIL;
+            }
+            riftPos = blockHit.getLocation();
+            landing = new Vec3(free.getX() + 0.5, free.getY(), free.getZ() + 0.5);
+        } else {
+            // Aiming into open sky with no block in sight: warp 128 blocks
+            // forward along the view line, validated the same way.
+            Vec3 dest = eyePos.add(lookDir.scale(128.0));
+            BlockPos cell = BlockPos.containing(dest.x, dest.y, dest.z);
+            BlockPos free = findFreeLanding(serverLevel, cell, 4);
+            if (free == null) {
+                return InteractionResult.FAIL;
+            }
+            riftPos = dest;
+            landing = free.equals(cell)
+                ? dest
+                : new Vec3(free.getX() + 0.5, free.getY(), free.getZ() + 0.5);
+        }
+
+        // Step 2: the target is real, so charge. Drain Ki: 100% per minute for
+        // the 100-tick (5-second) cooldown cycle (8.33% Max Ki). If the drain
+        // fails, nothing was spawned and no cooldown is set.
         if (!WeaponDrainHelper.drainKiDiscrete(player, 100.0, 100)) {
             return InteractionResult.FAIL;
         }
 
-        if (!level.isClientSide()) {
-            ServerLevel serverLevel = (ServerLevel) level;
-            
-            // Raycast to find destination - any distance you can see (up to 1024 blocks)
-            double maxDistance = 1024.0;
-            Vec3 eyePos = player.getEyePosition();
-            Vec3 lookDir = player.getLookAngle();
-            Vec3 traceEnd = eyePos.add(lookDir.scale(maxDistance));
-            ClipContext context = new ClipContext(eyePos, traceEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player);
-            HitResult hitResult = level.clip(context);
-            
-            Vec3 dest;
-            double targetX, targetY, targetZ;
+        // Step 3: open the origin rift and arm it with the warp. The rift
+        // builds up at the player's feet, pulling the world in, and fires the
+        // teleport at its burst tick: the player lands exactly when the
+        // destination rift opens, and the destination burst (damage, fling,
+        // debris, scar, camera weight) happens there. The origin is the tear
+        // you leave; the destination is the heavier end, and it now renders
+        // bigger so the asymmetry is visible: origin 400 + Strength x 2 at
+        // radius 3.0, destination 900 + Strength x 3 at radius 4.5.
+        float strength = player instanceof PlayerStatsAccessor accessor ? accessor.dba$getStrength() : 0;
+        DimensionalWarpRiftEntity originRift = new DimensionalWarpRiftEntity(
+            serverLevel, player, player.position(), 3.0f, false, 400.0f + strength * 2.0f
+        );
+        originRift.armWarp(landing, riftPos, 900.0f + strength * 3.0f, 4.5f);
+        serverLevel.addFreshEntity(originRift);
 
-            if (hitResult.getType() == HitResult.Type.BLOCK && hitResult instanceof BlockHitResult blockHit) {
-                Direction face = blockHit.getDirection();
-                BlockPos targetBlock = blockHit.getBlockPos().relative(face);
-                dest = blockHit.getLocation();
-                targetX = targetBlock.getX() + 0.5;
-                targetY = targetBlock.getY();
-                targetZ = targetBlock.getZ() + 0.5;
-            } else {
-                // If aiming into open sky/void with no block in sight, warp forward along view line
-                dest = eyePos.add(lookDir.scale(128.0));
-                targetX = dest.x;
-                targetY = dest.y;
-                targetZ = dest.z;
-            }
-                
-            // Phase 1: Physical 3D Departure Origin Rift. Departure is a shockwave, not a
-            // second full slash: the origin rift bursts for 250, the destination for 750.
-            DimensionalWarpRiftEntity originRift = new DimensionalWarpRiftEntity(
-                serverLevel, player, player.position(), 3.5f, false, 250.0f
-            );
-            serverLevel.addFreshEntity(originRift);
-            
-            // Phase 2: Spatial Rift Energy Surge & Momentary Darkness Disorientation
-            player.addEffect(new MobEffectInstance(DbaEffects.RIFTED_HOLDER, 60, 0, false, false));
-            player.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 35, 0, false, false));
-            
-            // Phase 3: Physical 3D Arrival Destination Rift
-            DimensionalWarpRiftEntity destRift = new DimensionalWarpRiftEntity(
-                serverLevel, player, dest, 3.5f, true, 750.0f
-            );
-            serverLevel.addFreshEntity(destRift);
-            // The destination rift sounds like an explosion but had no camera weight behind it.
-            com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, dest.x, dest.y, dest.z);
-
-            // Audio cues
-            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.8f);
-            serverLevel.playSound(null, targetX, targetY, targetZ,
-                net.minecraft.sounds.SoundEvents.ENDERMAN_TELEPORT, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.8f);
-            serverLevel.playSound(null, targetX, targetY, targetZ,
-                com.dragonblockarcanedba.sound.DbaSounds.DARK_PULSE, net.minecraft.sounds.SoundSource.PLAYERS, 1.2f, 0.8f);
-            
-            // Phase 4: Teleport (server side here, so the player is a ServerPlayer)
-            if (player instanceof ServerPlayer serverPlayer) {
-                MovementPhysics.teleport(serverPlayer, new Vec3(targetX, targetY, targetZ));
-            }
-            
-            // 5-second cooldown
-            player.getCooldowns().addCooldown(stack, 100);
-            return InteractionResult.SUCCESS;
-        }
+        // 5-second cooldown, longer than either rift's life.
+        player.getCooldowns().addCooldown(stack, 100);
         return InteractionResult.SUCCESS;
     }
 }

@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SpikeFlailSpinEntity;
+import com.dragonblockarcanedba.item.SpikeFlailItem;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -24,6 +27,8 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
         public float radius;
         public boolean releasing;
         public int releaseAge;
+        public float age;
+        public float charge;
     }
 
     public boolean shouldRender(SpikeFlailSpinEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -46,13 +51,19 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
         state.radius = entity.orbitRadius();
         state.releasing = entity.releasing();
         state.releaseAge = entity.releaseAge();
+        state.age = entity.tickCount + partialTick;
+        state.charge = entity.charge();
     }
 
     @Override
     public void submit(SpinState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float fade = state.releasing
-            ? ease(Math.max(0.0f, 1.0f - state.releaseAge / 8.0f))
-            : 1.0f;
+        // Orbit holds full presence; release holds through the hit, then fades over the settle.
+        float fade = 1.0f;
+        if (state.releasing) {
+            float settleT = Mth.clamp((state.releaseAge - SpikeFlailSpinEntity.RELEASE_TICKS)
+                / (float) SpikeFlailSpinEntity.SETTLE_TICKS, 0.0f, 1.0f);
+            fade = 1.0f - FxEnvelope.smoothstep(settleT);
+        }
         double rad = Math.toRadians(state.angle);
         float bx = (float) (Math.cos(rad) * state.radius);
         float bz = (float) (Math.sin(rad) * state.radius);
@@ -61,11 +72,24 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
         float ballX = bx;
         float ballY = by;
         float ballZ = bz;
+        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
         collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
+            if (!state.releasing) {
+                // Layered band ring at the orbit radius: the wispy outer band rides the ball's path,
+                // and an anchor glow grounds the spin to the floor. Same envelope the particles use.
+                float env = FxEnvelope.envelope(state.age, SpikeFlailItem.CHANNEL_TICKS);
+                LayeredRender.drawAnchorGlow(pose, buffer, state.radius * 0.95f, 0.07f,
+                    0.85f, 0.80f, 0.68f, 0.30f * env, distScale);
+                LayeredRender.drawVortexBands(pose, buffer, state.radius * 0.70f, 1.55f, state.age,
+                    0.78f, 0.74f, 0.66f, env, distScale);
+            }
             SpikeFlailSwingRenderer.drawChain(buffer, matrix, pose, 0.25f, 1.0f, 0.15f, ballX, ballY, ballZ, fade);
             if (state.releasing) {
-                drawCrack(buffer, matrix, pose, state.radius, fade);
+                float crackAlpha = fade * (0.55f + 0.45f * state.charge);
+                LayeredRender.drawAnchorGlow(pose, buffer, state.radius, 0.06f,
+                    1.0f, 0.95f, 0.8f, 0.25f * crackAlpha, distScale);
+                drawCrack(buffer, matrix, pose, state.radius, crackAlpha);
             }
         });
         poseStack.pushPose();
@@ -74,11 +98,6 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
             SpikeFlailSwingRenderer.drawBall(pose, buffer, 0.4f, fade));
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static float ease(float t) {
-        float c = Mth.clamp(t, 0.0f, 1.0f);
-        return c * c * (3.0f - 2.0f * c);
     }
 
     private static void drawCrack(VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose, float radius, float fade) {

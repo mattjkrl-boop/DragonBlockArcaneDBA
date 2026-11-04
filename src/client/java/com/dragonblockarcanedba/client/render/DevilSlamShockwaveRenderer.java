@@ -67,7 +67,14 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
         final long seed = state.seed;
         final float growT = Math.min(1.0f, age / 10.0f);
         final float grow = 1.0f - (1.0f - growT) * (1.0f - growT) * (1.0f - growT);
-        final float shockR = radius * 1.35f * grow;
+        // Telegraph honesty (standard point 5): the seal's outer edge IS the hit
+        // radius now, not a picture a third wider than the damage. The traveling
+        // follow ring still runs past it as a fading echo, and deals nothing.
+        final float shockR = radius * 1.05f * grow;
+        // Distance scaling (standard point 1): ring segment counts step down
+        // beyond 32 and 64 blocks; near views keep the full seal.
+        final float segScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
+            cameraState, state.x, state.y, state.z);
         final float pillarT = Math.min(1.0f, age / 18.0f);
         final float pillarEase = pillarT * pillarT * (3.0f - 2.0f * pillarT);
         final float pillarAlpha = (1.0f - pillarEase) * (1.0f - pillarEase);
@@ -82,17 +89,17 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
 
             // Seal: dark body, hot hairline edge, separate core, a ring that keeps traveling, barbed teeth.
             if (fade > 0.04f) {
-                drawGroundRing(matrix, buffer, 0, 0.03f, 0, shockR, shockR * 0.9f, 48, 0.42f, 0.0f, 0.05f, fade * 0.82f);
-                drawGroundRing(matrix, buffer, 0, 0.055f, 0, shockR * 1.02f, shockR * 0.965f, 56, 1.0f, 0.22f, 0.1f, fade);
-                drawGroundRing(matrix, buffer, 0, 0.045f, 0, shockR * 0.62f, shockR * 0.46f, 36, 0.78f, 0.02f, 0.07f, fade * 0.8f);
-                drawGroundRing(matrix, buffer, 0, 0.07f, 0, Math.max(0.2f, shockR * 0.16f), 0.0f, 20, 1.0f, 0.2f, 0.08f, fade);
-                drawGroundRing(matrix, buffer, 0, 0.09f, 0, Math.max(0.08f, shockR * 0.055f), 0.0f, 12, 1.0f, 0.48f, 0.22f, fade);
+                drawGroundRing(matrix, buffer, 0, 0.03f, 0, shockR, shockR * 0.9f, com.dragonblockarcanedba.util.FxEnvelope.segments(48, segScale, 16), 0.42f, 0.0f, 0.05f, fade * 0.82f);
+                drawGroundRing(matrix, buffer, 0, 0.055f, 0, shockR * 1.02f, shockR * 0.965f, com.dragonblockarcanedba.util.FxEnvelope.segments(56, segScale, 18), 1.0f, 0.22f, 0.1f, fade);
+                drawGroundRing(matrix, buffer, 0, 0.045f, 0, shockR * 0.62f, shockR * 0.46f, com.dragonblockarcanedba.util.FxEnvelope.segments(36, segScale, 12), 0.78f, 0.02f, 0.07f, fade * 0.8f);
+                drawGroundRing(matrix, buffer, 0, 0.07f, 0, Math.max(0.2f, shockR * 0.16f), 0.0f, com.dragonblockarcanedba.util.FxEnvelope.segments(20, segScale, 8), 1.0f, 0.2f, 0.08f, fade);
+                drawGroundRing(matrix, buffer, 0, 0.09f, 0, Math.max(0.08f, shockR * 0.055f), 0.0f, com.dragonblockarcanedba.util.FxEnvelope.segments(12, segScale, 6), 1.0f, 0.48f, 0.22f, fade);
                 float followT = Math.min(1.0f, Math.max(0.0f, (age - 5.0f) / 14.0f));
                 float followEase = followT * followT * (3.0f - 2.0f * followT);
                 float followR = radius * (1.2f + 0.9f * followEase);
                 float followA = fade * (1.0f - followEase) * (1.0f - followEase);
                 if (followA > 0.03f) {
-                    drawGroundRing(matrix, buffer, 0, 0.04f, 0, followR, followR * 0.9f, 44, 0.7f, 0.02f, 0.06f, followA);
+                    drawGroundRing(matrix, buffer, 0, 0.04f, 0, followR, followR * 0.9f, com.dragonblockarcanedba.util.FxEnvelope.segments(44, segScale, 14), 0.7f, 0.02f, 0.06f, followA);
                 }
                 int teeth = 12;
                 for (int i = 0; i < teeth; i++) {
@@ -165,13 +172,13 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             if (fade > 0.04f) {
-                drawGroundRing(matrix, buffer, 0, 0.08f, 0, Math.max(0.2f, shockR * 0.16f), 0.0f, 18, 1.0f, 0.18f, 0.06f, fade * 0.28f);
+                drawGroundRing(matrix, buffer, 0, 0.08f, 0, Math.max(0.2f, shockR * 0.16f), 0.0f, com.dragonblockarcanedba.util.FxEnvelope.segments(18, segScale, 8), 1.0f, 0.18f, 0.06f, fade * 0.28f);
                 float followT = Math.min(1.0f, Math.max(0.0f, (age - 5.0f) / 14.0f));
                 float followEase = followT * followT * (3.0f - 2.0f * followT);
                 float followA = fade * (1.0f - followEase) * (1.0f - followEase) * 0.22f;
                 if (followA > 0.02f) {
                     float followR = radius * (1.2f + 0.9f * followEase);
-                    drawGroundRing(matrix, buffer, 0, 0.05f, 0, followR, followR * 0.92f, 40, 0.9f, 0.08f, 0.08f, followA);
+                    drawGroundRing(matrix, buffer, 0, 0.05f, 0, followR, followR * 0.92f, com.dragonblockarcanedba.util.FxEnvelope.segments(40, segScale, 14), 0.9f, 0.08f, 0.08f, followA);
                 }
             }
             if (pillarAlpha > 0.025f && pillarHeight > 0.15f) {

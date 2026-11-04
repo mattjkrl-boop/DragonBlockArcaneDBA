@@ -19,6 +19,11 @@ import net.minecraft.world.level.Level;
 public class EvilSpearChargeEntity extends Projectile {
     private static final EntityDataAccessor<Float> CHARGE_RATIO = SynchedEntityData.defineId(EvilSpearChargeEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(EvilSpearChargeEntity.class, EntityDataSerializers.INT);
+    // Ticks since the throw released, or -1 while still charging. Synced so
+    // the renderer can dissipate the charge visual instead of cutting it.
+    private static final EntityDataAccessor<Integer> RELEASE_TICKS = SynchedEntityData.defineId(EvilSpearChargeEntity.class, EntityDataSerializers.INT);
+    /** How long the released charge visual takes to dissipate. */
+    public static final int RELEASE_FADE_TICKS = 6;
 
     private int idleTicksWithoutUpdate = 0;
 
@@ -41,6 +46,22 @@ public class EvilSpearChargeEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(CHARGE_RATIO, 0.0f);
         builder.define(CASTER_ID, -1);
+        builder.define(RELEASE_TICKS, -1);
+    }
+
+    /** Ticks since release, or -1 while the charge is still being held. */
+    public int getReleaseTicks() {
+        return this.entityData.get(RELEASE_TICKS);
+    }
+
+    /**
+     * The throw has released: stop following the caster and dissipate over
+     * RELEASE_FADE_TICKS instead of vanishing the frame the spear leaves.
+     */
+    public void beginRelease() {
+        if (this.entityData.get(RELEASE_TICKS) < 0) {
+            this.entityData.set(RELEASE_TICKS, 0);
+        }
     }
 
     public float getChargeRatio() {
@@ -61,6 +82,21 @@ public class EvilSpearChargeEntity extends Projectile {
         super.tick();
 
         if (this.level() instanceof ServerLevel serverLevel) {
+            // Released: hold position, rain the gathered energy back down,
+            // and discard when the renderer's dissipation window closes.
+            int releaseTicks = getReleaseTicks();
+            if (releaseTicks >= 0) {
+                this.entityData.set(RELEASE_TICKS, releaseTicks + 1);
+                com.dragonblockarcanedba.util.LayeredParticles.emitRain(serverLevel,
+                    this.position().add(0, 0.1, 0), 1.2f + getChargeRatio(), 2.2f,
+                    releaseTicks + 1, RELEASE_FADE_TICKS,
+                    com.dragonblockarcanedba.particle.DbaParticles.EMBER);
+                if (releaseTicks + 1 >= RELEASE_FADE_TICKS) {
+                    this.discard();
+                }
+                return;
+            }
+
             Entity caster = this.getOwner();
             if (caster == null && getCasterId() != -1) {
                 caster = serverLevel.getEntity(getCasterId());
@@ -69,17 +105,28 @@ public class EvilSpearChargeEntity extends Projectile {
             if (caster instanceof LivingEntity living && living.isAlive() && !living.isRemoved()) {
                 this.setPos(living.getX(), living.getY(), living.getZ());
 
-                // Theme particles (redesign T5): blood embers spiral up as
-                // the impale charge gathers, thickening with the charge.
+                // Layered charge particles (standard point 1): a bright mote
+                // core at the seal heart, the blood ember mid band spiralling
+                // up as the charge gathers, and void smoke wisps at the rim.
                 if (this.tickCount % 2 == 0) {
                     float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
                     if (density > 0f) {
                         float charge = getChargeRatio();
                         serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                            this.getX(), this.getY() + 0.9, this.getZ(),
+                            Math.max(1, Math.round((1f + charge * 2f) * density)),
+                            0.30, 0.30, 0.30, 0.02);
+                        serverLevel.sendParticles(
                             com.dragonblockarcanedba.particle.DbaParticles.EMBER,
                             this.getX(), this.getY() + 0.3, this.getZ(),
                             Math.max(1, Math.round((2f + charge * 4f) * density)),
                             1.0 + charge * 1.2, 0.8, 1.0 + charge * 1.2, 0.04);
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                            this.getX(), this.getY() + 0.2, this.getZ(),
+                            Math.max(1, Math.round((1f + charge * 2f) * density)),
+                            1.4 + charge * 1.4, 0.5, 1.4 + charge * 1.4, 0.02);
                     }
                 }
 

@@ -14,13 +14,17 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Katana Aim Guide Entity — Sleek physical 3D laser guide, calibrating reticle brackets,
+ * Katana Aim Guide Entity: sleek physical 3D laser guide, calibrating reticle brackets,
  * and focal targeting beam during Iaijutsu: Heaven Splitter charge-up.
  */
 public class KatanaAimGuideEntity extends Projectile {
     private static final EntityDataAccessor<Float> CHARGE_RATIO = SynchedEntityData.defineId(KatanaAimGuideEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> MAX_RANGE = SynchedEntityData.defineId(KatanaAimGuideEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(KatanaAimGuideEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> FADE_START = SynchedEntityData.defineId(KatanaAimGuideEntity.class, EntityDataSerializers.INT);
+
+    /** Ticks the guide takes to dissolve once the stance ends or is cancelled. */
+    public static final int FADE_TICKS = 5;
 
     private int idleTicksWithoutUpdate = 0;
 
@@ -46,8 +50,21 @@ public class KatanaAimGuideEntity extends Projectile {
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(CHARGE_RATIO, 0.0f);
-        builder.define(MAX_RANGE, 24.0f);
+        builder.define(MAX_RANGE, 16.0f);
         builder.define(CASTER_ID, -1);
+        builder.define(FADE_START, -1);
+    }
+
+    /** Tick the fade out began, or -1 while the guide is live. */
+    public int getFadeStart() {
+        return this.entityData.get(FADE_START);
+    }
+
+    /** Starts the dissolve: the beam hangs where it was and expires after FADE_TICKS. */
+    public void beginFadeOut() {
+        if (getFadeStart() < 0) {
+            this.entityData.set(FADE_START, this.tickCount);
+        }
     }
 
     public float getChargeRatio() {
@@ -76,6 +93,14 @@ public class KatanaAimGuideEntity extends Projectile {
         super.tick();
 
         if (this.level() instanceof ServerLevel serverLevel) {
+            int fadeStart = getFadeStart();
+            if (fadeStart >= 0) {
+                if (this.tickCount >= fadeStart + FADE_TICKS) {
+                    this.discard();
+                }
+                return;
+            }
+
             Entity caster = this.getOwner();
             if (caster == null && getCasterId() != -1) {
                 caster = serverLevel.getEntity(getCasterId());

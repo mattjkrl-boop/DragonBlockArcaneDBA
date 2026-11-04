@@ -127,6 +127,7 @@ public class BlasterBoltEntity extends Projectile {
                     impactLevel.playSound(null, hitPoint.x, hitPoint.y, hitPoint.z,
                         SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 0.7f, 1.6f);
                     this.entityData.set(IMPACT_AGE, 0);
+                    emitImpactBurst(impactLevel, hitPoint);
                 }
                 return;
             }
@@ -135,6 +136,26 @@ public class BlasterBoltEntity extends Projectile {
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
             Entity owner = this.getOwner();
+
+            // Flight trail (spectacle pass): the bolt used to shed no particles
+            // at all, so a 72 block flight was a bare mesh. Sparks stream off
+            // the tail every tick and a mote rides the core; the overcharged
+            // bolt also sheds embers.
+            float trailDensity = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            if (trailDensity > 0f && movement.lengthSqr() > 0.0) {
+                Vec3 back = movement.normalize();
+                Vec3 trailPos = this.position().add(back.scale(-0.5));
+                int sparkCount = Math.max(1, Math.round((isOvercharged() ? 3f : 2f) * trailDensity));
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    trailPos.x, trailPos.y, trailPos.z, sparkCount, 0.08, 0.08, 0.08, 0.02);
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                    this.getX(), this.getY(), this.getZ(), 1, 0.05, 0.05, 0.05, 0.01);
+                if (isOvercharged() && this.tickCount % 2 == 0) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                        trailPos.x, trailPos.y, trailPos.z, 1, 0.10, 0.10, 0.10, 0.03);
+                }
+            }
+
             DamageSource damageSource = owner instanceof net.minecraft.world.entity.player.Player playerOwner
                 ? serverLevel.damageSources().playerAttack(playerOwner)
                 : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
@@ -153,6 +174,15 @@ public class BlasterBoltEntity extends Projectile {
                 hitEntityIds.add(target.getId());
 
                 target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
+
+                // Hit spark burst so a piercing hit reads at the target, not
+                // only in its health bar.
+                float hitDensity = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (hitDensity > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                        target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                        Math.max(2, Math.round(4f * hitDensity)), 0.25, 0.25, 0.25, 0.10);
+                }
 
                 if (owner instanceof LivingEntity livingOwner) {
                     target.addEffect(new net.minecraft.world.effect.MobEffectInstance(
@@ -195,8 +225,37 @@ public class BlasterBoltEntity extends Projectile {
             }
 
             if (this.tickCount > 30) {
-                this.discard();
+                // Range death used to be a hard discard in mid flight. The bolt
+                // now fizzles out through the same 5 tick collapse the renderer
+                // already plays on block impact, so nothing pops out of the sky.
+                this.entityData.set(IMPACT_AGE, 0);
             }
         }
+    }
+
+    /**
+     * Impact burst where a bolt meets a block (points 1, 2, 3): a spark burst,
+     * heat colored dust in the bolt's own palette, and a small debris field of
+     * real ground blocks kicked up from the impact point. Counts stay small:
+     * the barrage fires a bolt every 3 ticks, so a heavy field per bolt would
+     * flood the world.
+     */
+    private void emitImpactBurst(ServerLevel level, Vec3 hitPoint) {
+        boolean overcharged = isOvercharged();
+        float heat = getHeatRatio();
+        float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+        if (density > 0f) {
+            level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                hitPoint.x, hitPoint.y, hitPoint.z,
+                Math.max(3, Math.round(8f * density)), 0.25, 0.25, 0.25, 0.12);
+            int green = (int) (200f - heat * 110f);
+            int dustArgb = overcharged ? 0xFFFF2A4D : (0xFF000000 | (0xFF << 16) | (green << 8) | 0x1F);
+            level.sendParticles(com.dragonblockarcanedba.util.LayeredParticles.dust(dustArgb, 1.3f),
+                hitPoint.x, hitPoint.y, hitPoint.z,
+                Math.max(2, Math.round(6f * density)), 0.30, 0.30, 0.30, 0.05);
+        }
+        LivingEntity owner = this.getOwner() instanceof LivingEntity living ? living : null;
+        com.dragonblockarcanedba.util.DebrisSpawner.spawnField(level, owner, hitPoint,
+            overcharged ? 10 : 5, 1.1, 1.5, 18);
     }
 }

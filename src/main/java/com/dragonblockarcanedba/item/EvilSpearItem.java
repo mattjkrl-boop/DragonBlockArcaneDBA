@@ -131,13 +131,18 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Discard active charge entity
+        // Release the charge entity into its dissipation window instead of
+        // discarding it the frame the throw leaves (standard point 5).
         EvilSpearChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
         if (chargeEntity != null && chargeEntity.isAlive()) {
-            chargeEntity.discard();
+            chargeEntity.beginRelease();
         }
-
         float chargeRatio = Math.max(0.1f, Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS));
+
+        // The build-up ends in a base burst at the caster's feet, so six
+        // seconds of gathering resolves into the throw instead of a cut.
+        com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(level, player.position(),
+            1.2f + chargeRatio * 1.3f, HellHuntImpactEntity.THEME_ARGB);
 
         // Damage: 450.0 + (chargeRatio * 700.0) + (Strength * 3.0 * chargeRatio)
         float baseDmg = 450.0f + (chargeRatio * 700.0f);
@@ -154,7 +159,9 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.TRIDENT_THROW.value(), SoundSource.PLAYERS, 1.8f, 0.7f);
 
-        int cooldown = 20 + (int) (chargeRatio * 30);
+        // Cooldown floor is the projectile's 40 tick visual lifetime
+        // (standard numbers guidance), scaling up with the charge.
+        int cooldown = 40 + (int) (chargeRatio * 20);
         player.getCooldowns().addCooldown(stack, cooldown);
     }
 
@@ -168,13 +175,16 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
                 return InteractionResult.PASS;
             }
 
-            // Drain Ki: 45% per minute for 40-tick cooldown cycle (1.5% Max Ki)
-            if (!WeaponDrainHelper.drainKiDiscrete(serverPlayer, 45.0, 40)) {
+            // The immobilized block used to sit after the Ki drain, so a
+            // blocked hunt still charged the player. Ki is now only charged
+            // once the move is known to fire (standard numbers guidance).
+            if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(serverPlayer)) {
+                serverPlayer.sendSystemMessage(Component.literal("§cImmobilized! Cannot rush."), true);
                 return InteractionResult.FAIL;
             }
 
-            if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(serverPlayer)) {
-                serverPlayer.sendSystemMessage(Component.literal("§cImmobilized! Cannot rush."), true);
+            // Drain Ki: 45% per minute for 40-tick cooldown cycle (1.5% Max Ki)
+            if (!WeaponDrainHelper.drainKiDiscrete(serverPlayer, 45.0, 40)) {
                 return InteractionResult.FAIL;
             }
 
@@ -218,7 +228,10 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
         for (LivingEntity e : list) {
             Vec3 toEntity = e.getEyePosition().subtract(eye).normalize();
             double dot = look.dot(toEntity);
-            if (dot > bestScore && player.distanceTo(e) <= maxDist) {
+            // Line of sight is required: the hunt used to lock on through
+            // walls and then teleport the player onto a target it could not
+            // see, striking the ground on the far side of solid terrain.
+            if (dot > bestScore && player.distanceTo(e) <= maxDist && player.hasLineOfSight(e)) {
                 bestScore = dot;
                 best = e;
             }
@@ -228,7 +241,6 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
 
     private static void performHellHunt(ServerPlayer player, ItemStack stack, LivingEntity initialTarget) {
         ServerLevel level = (ServerLevel) player.level();
-        PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
         Set<Integer> visited = new HashSet<>();
         List<LivingEntity> chainTargets = new ArrayList<>();
@@ -256,22 +268,23 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
         }
 
         // The whole chain used to execute in a single tick: every teleport, hit, and
-        // impact landed in one frame. Steps now land every 3 ticks (first step immediate),
-        // processed by tickServer, so the execution actually reads as a chain.
+        // impact landed in one frame. Steps land every 6 ticks (first step immediate),
+        // processed by tickServer, so each impact's 35 tick visual gets room to
+        // read before the next strike lands instead of stacking into one field.
         PendingHunt hunt = new PendingHunt();
         for (LivingEntity t : chainTargets) {
             hunt.targetUuids.add(t.getUUID());
         }
-        hunt.stack = stack;
         hunt.nextStepTick = level.getGameTime();
         PENDING_HUNTS.put(player.getUUID(), hunt);
         // Cooldown starts with the hunt so a second hunt cannot overwrite the pending one.
-        player.getCooldowns().addCooldown(stack, 100);
+        // 160 ticks covers the full 8 step chain (42 ticks) plus the final
+        // impact's 50 tick life with room to spare, so hunts never overlap.
+        player.getCooldowns().addCooldown(stack, 160);
     }
 
     private static class PendingHunt {
         final java.util.List<UUID> targetUuids = new java.util.ArrayList<>();
-        ItemStack stack;
         int index = 0;
         long nextStepTick = 0;
     }
@@ -302,7 +315,7 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
                 }
 
                 int i = hunt.index++;
-                hunt.nextStepTick = level.getGameTime() + 3;
+                hunt.nextStepTick = level.getGameTime() + 6;
                 var entity = level.getEntity(hunt.targetUuids.get(i));
                 if (entity instanceof LivingEntity t && t.isAlive()) {
                     executeHuntStep(player, level, t, i, hunt.targetUuids.size());
@@ -398,5 +411,9 @@ public class EvilSpearItem extends Item implements com.dragonblockarcanedba.item
     public static void onPlayerDisconnect(UUID playerUuid) {
         net.minecraft.world.entity.Entity e0 = ACTIVE_CHARGE_MAP.remove(playerUuid);
         if (e0 != null && e0.isAlive()) e0.discard();
+        // Hunts and lunges used to survive disconnect cleanup while the
+        // charge map did not; all three static maps now clear together.
+        PENDING_HUNTS.remove(playerUuid);
+        PENDING_LUNGES.remove(playerUuid);
     }
 }

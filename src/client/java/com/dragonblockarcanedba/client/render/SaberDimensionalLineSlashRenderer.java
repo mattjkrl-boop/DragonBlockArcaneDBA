@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SaberDimensionalLineSlashEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -34,6 +36,9 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
         public float scale = 1.0f;
         public float age = 0;
         public int maxLifetime = 20;
+        public double ex = 0;
+        public double ey = 0;
+        public double ez = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -59,6 +64,9 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
         state.scale = entity.getSlashScale();
         state.age = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
+        state.ex = entity.getX();
+        state.ey = entity.getY();
+        state.ez = entity.getZ();
     }
 
     @Override
@@ -67,9 +75,16 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
         if (progress >= 1.0f) return;
 
         float cut = smooth(Math.min(1.0f, progress / 0.40f));
-        float fade = 1.0f - smooth(progress);
+        // The shared envelope folds into the fade so beam alpha, the entity's
+        // particle sheath, and the split damage window all share one curve.
+        float env = FxEnvelope.envelope(state.age, (float) state.maxLifetime, 0.15f, 0.35f);
+        float fade = (1.0f - smooth(progress)) * Math.min(1.0f, env * 1.5f);
         float impact = strike(progress);
         float scale = state.scale;
+        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
+        int outerSegs = FxEnvelope.segments(10, ds, 5);
+        int coreSegs = FxEnvelope.segments(7, ds, 4);
+        int ringSegs = FxEnvelope.segments(20, ds, 8);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         Vec3 dir = state.direction.normalize();
@@ -85,20 +100,30 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, 0.16f * scale, 8,
+            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, 0.16f * scale, outerSegs,
                 0.0f, 0.75f, 1.0f, 0.72f * fade);
-            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, 0.045f * scale, 6,
+            drawVolumetricBeam(matrix, buffer, -halfLen, halfLen, 0.045f * scale, coreSegs,
                 1.0f, 1.0f, 1.0f, fade);
             int bands = 3;
             for (int b = 0; b < bands; b++) {
                 float bandProg = (state.age * 0.08f + (b / (float) bands)) % 1.0f;
                 float bandZ = -halfLen + bandProg * (halfLen * 2.0f);
-                drawShockRing(matrix, buffer, bandZ, 0.38f * scale, 0.55f, 0.95f, 1.0f, fade * 0.5f * (1.0f - bandProg * 0.35f));
+                drawShockRing(matrix, buffer, bandZ, 0.38f * scale, ringSegs, 0.55f, 0.95f, 1.0f, fade * 0.5f * (1.0f - bandProg * 0.35f));
             }
             if (impact > 0.02f) {
-                drawShockRing(matrix, buffer, 0.0f, 0.55f * scale * impact, 1.0f, 1.0f, 1.0f, impact);
+                drawShockRing(matrix, buffer, 0.0f, 0.55f * scale * impact, ringSegs, 1.0f, 1.0f, 1.0f, impact);
             }
-            int helix = 18;
+            // Transversal reality-crack ribs across the beam, as the class doc
+            // promises: five diamond ribs spaced along the cut, brightest at
+            // the center where the snap converged.
+            int ribs = 5;
+            for (int ri = 0; ri < ribs; ri++) {
+                float rt = 0.12f + 0.76f * (ri / (float) (ribs - 1));
+                float ribZ = -halfLen + (halfLen * 2.0f) * rt;
+                float ribA = fade * 0.45f * (float) Math.sin(rt * Math.PI);
+                drawTransversalRib(matrix, buffer, ribZ, 0.55f * scale, 0.55f, 0.90f, 1.0f, ribA);
+            }
+            int helix = FxEnvelope.segments(18, ds, 8);
             float spin = state.age * 0.45f;
             float edgeR = 0.22f * scale;
             for (int h = 0; h < helix; h++) {
@@ -173,15 +198,13 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
 
     private static void drawTransversalRib(Matrix4f matrix, VertexConsumer consumer, float z, float span, float r, float g, float b, float a) {
         // Cross Diamond Rib
-        float th = 0.08f;
         consumer.addVertex(matrix, -span, 0, z).setColor(r, g, b, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
         consumer.addVertex(matrix, 0, span, z).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
         consumer.addVertex(matrix, span, 0, z).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
         consumer.addVertex(matrix, 0, -span, z).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
     }
 
-    private static void drawShockRing(Matrix4f matrix, VertexConsumer consumer, float z, float radius, float r, float g, float b, float a) {
-        int segments = 24;
+    private static void drawShockRing(Matrix4f matrix, VertexConsumer consumer, float z, float radius, int segments, float r, float g, float b, float a) {
         float rInner = radius * 0.75f;
         for (int i = 0; i < segments; i++) {
             double a1 = (i / (double) segments) * Math.PI * 2.0;

@@ -1,5 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -11,7 +13,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Saber Void Tear Entity — Physical 3D void warp tear & expanding sonic boom shock rings spawned at
+ * Saber Void Tear Entity: Physical 3D void warp tear & expanding sonic boom shock rings spawned at
  * Flash Step teleport origin and destination positions.
  */
 public class SaberVoidTearEntity extends Projectile {
@@ -41,7 +43,7 @@ public class SaberVoidTearEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(TEAR_SCALE, 1.0f);
         builder.define(IS_DESTINATION, false);
-        builder.define(MAX_LIFETIME, 12);
+        builder.define(MAX_LIFETIME, 20);
     }
 
     public float getTearScale() {
@@ -60,7 +62,19 @@ public class SaberVoidTearEntity extends Projectile {
     public void tick() {
         super.tick();
 
-        if (!this.level().isClientSide() && this.level() instanceof ServerLevel) {
+        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Layered void atmosphere around the tear: bright motes in the
+            // core, a violet mid band, void smoke wisps at the rim, all riding
+            // the shared envelope; smoke drizzle while the tear seals.
+            LayeredParticles.emitVortex(serverLevel, this.position().add(0, -1.0, 0),
+                0.95f * getTearScale(), 2.2f, this.tickCount, getMaxLifetime(),
+                0xFF7A4DFF, DbaParticles.VOID_SMOKE);
+            float progress = (float) this.tickCount / (float) getMaxLifetime();
+            if (progress > 0.65f && this.tickCount % 2 == 0) {
+                LayeredParticles.emitRain(serverLevel, this.position(),
+                    1.1f * getTearScale(), 1.4f, this.tickCount, getMaxLifetime(),
+                    DbaParticles.VOID_SMOKE);
+            }
             if (this.tickCount >= getMaxLifetime()) {
                 this.discard();
             }

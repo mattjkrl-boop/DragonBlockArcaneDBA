@@ -28,7 +28,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 
 /**
- * Whis Staff — The Temporal God Rod. Endgame legendary weapon.
+ * Whis Staff, the Temporal God Rod. Endgame legendary weapon.
  * 
  * Left-click: 350 + (Dexterity × 2) damage.
  *   - Time reversal for 5 seconds (100 ticks, the position history buffer maximum)
@@ -36,14 +36,18 @@ import java.util.List;
  *   - Temporal Stasis amplifier 0 for 100 ticks (full time freeze with temporal drag)
  *   - Physical 3D Time Shatter entity (prismatic tumbling glass shards & fractured chrono-mirror)
  *
- * Right-click: "Temporal Rift" — 12-block radius AOE.
- *   - All entities in range: Temporal Stasis for 3 seconds (60 ticks), then 5-second reversal
- *   - Instant 400 + (Spirit × 1.5) magic damage to all entities in range
+ * Right-click: "Temporal Rift", 12-block radius AOE.
+ *   - All entities in range: Temporal Stasis for 3 seconds (60 ticks), then a
+ *     5-second (100 tick) reversal that starts when the freeze ends, triggered
+ *     by the rift entity at tick 60
+ *   - 400 + (Spirit × 1.5) magic damage to all entities in range, split in two
+ *     halves: the first at cast, the second at the rift's envelope peak (tick 15)
  *   - Self-Buff: Celestial Grace for 10 seconds
  *   - Physical 3D Translucent Celestial Dome & 3D Rotating Clock Astrolabe Entity
- *   - 5-second cooldown
+ *     that lives 5 seconds (100 ticks)
+ *   - 7-second cooldown (140 ticks), longer than the rift's own life
  *
- * Passive: Auto-Dodge — 50% chance to negate incoming damage while held in mainhand.
+ * Passive: Auto-Dodge: 50% chance to negate incoming damage while held in mainhand.
  *   (Implemented via LivingEntityMixin)
  *
  * Unbreakable legendary weapon. No durability.
@@ -52,6 +56,9 @@ import java.util.List;
  */
 public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     private static final double AOE_RADIUS = 12.0;
+    private static final int RIFT_LIFETIME_TICKS = 100;
+    private static final int RIFT_COOLDOWN_TICKS = 140;
+    private static final int RIFT_STASIS_TICKS = 60;
 
     public WhisStaffItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -106,7 +113,7 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             timeTracker.dba$startReversing(100);
         }
 
-        // Temporal Stasis — time distortion freeze & extreme temporal drag
+        // Temporal Stasis: time distortion freeze & extreme temporal drag
         target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, 100, 0, false, true), attacker);
 
         com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
@@ -141,7 +148,7 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             float temporalDamage = target.getMaxHealth() * 0.015f;
             target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (temporalDamage)));
 
-            // Physical 3D Time Shatter Entity — Prismatic Glass & Chrono-Mirror Burst
+            // Physical 3D Time Shatter Entity: Prismatic Glass & Chrono-Mirror Burst
             TimeShatterEntity shatter = new TimeShatterEntity(
                 serverLevel,
                 serverPlayer,
@@ -180,9 +187,13 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
         ServerLevel level = (ServerLevel) player.level();
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle();
-        for (int step = 1; step <= 3; step++) {
-            Vec3 pos = eye.add(look.scale(1.5 * step));
-            level.addFreshEntity(new TimeShatterEntity(level, player, pos, 0.55f + step * 0.2f));
+        // The crack escalates toward the target instead of ticking at even
+        // steps: each shatter lands further out and lands bigger.
+        double[] shatterDistances = {1.2, 2.6, 4.2};
+        float[] shatterScales = {0.8f, 1.05f, 1.4f};
+        for (int step = 0; step < shatterDistances.length; step++) {
+            Vec3 pos = eye.add(look.scale(shatterDistances[step]));
+            level.addFreshEntity(new TimeShatterEntity(level, player, pos, shatterScales[step]));
         }
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.PLAYERS, 1.0f, 1.7f);
@@ -251,7 +262,9 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
 
-        // Drain Ki: 100% per minute for 100-tick (5-second) cooldown cycle (8.33% Max Ki)
+        // Drain Ki: one charge of 100% per minute prorated over 100 ticks
+        // (8.33% of max Ki), checked before anything fires, so a blocked cast
+        // never charges.
         if (!WeaponDrainHelper.drainKiDiscrete(player, 100.0, 100)) {
             return InteractionResult.FAIL;
         }
@@ -260,10 +273,15 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             ServerLevel serverLevel = (ServerLevel) level;
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-            // Calculate AOE burst damage: 400 + (Spirit × 1.5)
+            // AOE burst damage: 400 + (Spirit × 1.5), dealt in two halves.
+            // The first half lands at cast; the rift entity deals the second
+            // half at its envelope peak (tick 15), inside the visual's active
+            // window, instead of the whole burst landing on tick 1 of a
+            // 100 tick visual.
             float burstDamage = 400.0f + (float) (accessor.dba$getSpirit() * 1.5);
+            float castDamage = burstDamage * 0.5f;
 
-            // 12-block radius AOE — reverse all living entities
+            // 12-block radius AOE: freeze all living entities
             AABB aoe = player.getBoundingBox().inflate(AOE_RADIUS);
             List<LivingEntity> targets = level.getEntitiesOfClass(
                 LivingEntity.class, aoe, e -> e != player && e.isAlive()
@@ -271,17 +289,16 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
 
             for (LivingEntity target : targets) {
                 if (player.distanceTo(target) <= AOE_RADIUS) {
-                    // Instant burst magic damage
-                    target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
+                    // First half of the burst magic damage
+                    target.hurtServer(serverLevel, serverLevel.damageSources().magic(), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (castDamage)));
 
                     // Temporal Stasis: Custom time paralysis for 3 seconds (60 ticks)
-                    target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, 60, 0, false, true), player);
+                    target.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, RIFT_STASIS_TICKS, 0, false, true), player);
 
-                    // Time reversal for 5 seconds (100 ticks, the history buffer
-                    // maximum) — starts after freeze ends
-                    if (target instanceof TimeTracker tracker) {
-                        tracker.dba$startReversing(100);
-                    }
+                    // The time reversal starts after the freeze ends: the rift
+                    // entity triggers dba$startReversing(100) at its tick 60,
+                    // the moment this stasis expires. It used to be called
+                    // here, immediately, while the comment claimed it waited.
                 }
             }
 
@@ -294,7 +311,8 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
                 player,
                 player.position(),
                 (float) AOE_RADIUS,
-                60
+                RIFT_LIFETIME_TICKS,
+                burstDamage - castDamage
             );
             serverLevel.addFreshEntity(rift);
 
@@ -320,8 +338,9 @@ public class WhisStaffItem extends Item implements com.dragonblockarcanedba.item
             );
         }
 
-        // 5-second cooldown (100 ticks)
-        player.getCooldowns().addCooldown(stack, 100);
+        // 7-second cooldown (140 ticks): longer than the rift's 100 tick
+        // life, so two suspension domes can never stack.
+        player.getCooldowns().addCooldown(stack, RIFT_COOLDOWN_TICKS);
         return InteractionResult.SUCCESS;
     }
 }

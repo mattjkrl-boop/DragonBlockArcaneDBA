@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.AzureTornadoEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -14,7 +16,17 @@ import org.joml.Matrix4f;
 
 /**
  * Entity Renderer for Azure Tornado in Minecraft 26.2.
- * Renders physical 3D multi-layered swirling vortex funnels, ascending helical wind ribbons, ground suction discs, and orbital kinetic wind shards.
+ *
+ * Spectacle pass: the funnel itself is the shared funnel standard,
+ * LayeredRender.drawVortexBands (dense bright core, theme mid band, wispy
+ * outer band, counter rotating, distance scaled), over ground suction rings,
+ * orbiting wind shards, a ground anchor glow, and the crown outflow ring.
+ * The old hand built funnel, ribbon strands, and a private halo pass are
+ * gone: one layered system instead of three overlapping ones. Sizes match
+ * the entity's physics zone exactly (radius scale x 8 giant / x 3 mini,
+ * height scale x 16 / x 6); the renderer used to draw the giant at 7 and
+ * the mini 6.5 high, so the visible funnel and the pull zone disagreed.
+ * The fade is the shared FxEnvelope over the entity's real max lifetime.
  */
 public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, AzureTornadoRenderer.TornadoRenderState> {
 
@@ -26,6 +38,8 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
         public float scale = 1.0f;
         public boolean isGiant = false;
         public float age = 0;
+        public int maxLife = 60;
+        public double wx, wy, wz;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -49,6 +63,10 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
         state.scale = entity.getScale();
         state.isGiant = entity.isGiant();
         state.age = entity.tickCount + partialTicks;
+        state.maxLife = entity.getMaxLifetime();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
     }
 
     @Override
@@ -57,114 +75,34 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
 
         float scale = state.scale;
         boolean giant = state.isGiant;
-        float baseRadius = scale * (giant ? 7.0f : 3.0f);
-        float totalHeight = scale * (giant ? 16.0f : 6.5f);
+        // Same numbers as the entity's physics zone, so what you see is what pulls you.
+        float baseRadius = scale * (giant ? 8.0f : 3.0f);
+        float totalHeight = scale * (giant ? 16.0f : 6.0f);
         float age = state.age;
 
-        // Lifetime fade envelope: the tornado lives 60 ticks (mini) or 200
-        // (giant) and used to sit at constant alpha the whole time, popping in
-        // and out. In over the first 10 ticks, out over the last 20.
-        float maxLife = giant ? 200.0f : 60.0f;
-        float fadeIn = Math.min(1.0f, age / 10.0f);
-        float fadeOut = age <= maxLife - 20.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - (maxLife - 20.0f)) / 20.0f);
-        float fade = fadeIn * fadeOut;
+        float fade = FxEnvelope.envelope(age, Math.max(1.0f, state.maxLife));
+        float ds = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
 
         poseStack.pushPose();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            // 1. Ground Whirlpool Suction Discs (Base vortex)
-            int groundSegments = 32;
+            // 1. Ground anchor glow at the funnel base.
+            LayeredRender.drawAnchorGlow(pose, buffer, baseRadius * 0.85f, 0.06f,
+                0.20f, 0.80f, 1.0f, 0.32f * fade, ds);
+
+            // 2. Ground Whirlpool Suction Discs (Base vortex)
+            int groundSegments = FxEnvelope.segments(32, ds, 12);
             float gRadius = baseRadius * 0.9f;
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, gRadius, gRadius * 0.6f, groundSegments, age * 35.0f, 0.0f, 0.9f, 1.0f, (giant ? 0.70f : 0.50f) * fade);
             drawRotatingRing(matrix, buffer, 0, 0.10f, 0, gRadius * 0.75f, gRadius * 0.3f, groundSegments, -age * 45.0f, 0.2f, 1.0f, 0.9f, (giant ? 0.60f : 0.40f) * fade);
 
-            // 2. High-Speed Inner Core Funnel (Dense inverted vortex cone)
-            int coreLevels = 8;
-            int coreSegments = 24;
-            float coreRot = age * 28.0f * (float) (Math.PI / 180.0);
-
-            for (int lvl = 0; lvl < coreLevels; lvl++) {
-                float p1 = lvl / (float) coreLevels;
-                float p2 = (lvl + 1) / (float) coreLevels;
-
-                float y1 = p1 * totalHeight;
-                float y2 = p2 * totalHeight;
-
-                float r1 = (baseRadius * 0.35f) * (0.25f + 0.75f * p1);
-                float r2 = (baseRadius * 0.35f) * (0.25f + 0.75f * p2);
-
-                float alpha = (giant ? 0.75f : 0.55f) * (1.0f - p1 * 0.2f) * fade;
-
-                // T2 gradient: near-white cyan at the funnel base cooling to a
-                // deeper teal at the crown, instead of one flat color per layer.
-                float gradR = 0.85f - (0.55f * p1);
-                float gradG = 1.0f - (0.12f * p1);
-                float gradB = 1.0f - (0.05f * p1);
-
-                for (int i = 0; i < coreSegments; i++) {
-                    double a1 = ((i / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.2);
-                    double a2 = (((i + 1) / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p1 * 1.2);
-                    double a3 = (((i + 1) / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p2 * 1.2);
-                    double a4 = ((i / (double) coreSegments) * Math.PI * 2.0) + coreRot + (p2 * 1.2);
-
-                    float x1 = (float) Math.cos(a1) * r1;
-                    float z1 = (float) Math.sin(a1) * r1;
-                    float x2 = (float) Math.cos(a2) * r1;
-                    float z2 = (float) Math.sin(a2) * r1;
-
-                    float x3 = (float) Math.cos(a3) * r2;
-                    float z3 = (float) Math.sin(a3) * r2;
-                    float x4 = (float) Math.cos(a4) * r2;
-                    float z4 = (float) Math.sin(a4) * r2;
-
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, gradR, gradG, gradB, alpha);
-                }
-            }
-
-            // 3. Multi-Strand Outer Helical Wind Ribbons (3 ascending spiral bands)
-            int strands = 3;
-            int ribbonSteps = 16;
-            for (int s = 0; s < strands; s++) {
-                float strandOffset = (s / (float) strands) * (float) (Math.PI * 2.0);
-
-                for (int step = 0; step < ribbonSteps; step++) {
-                    float t1 = step / (float) ribbonSteps;
-                    float t2 = (step + 1) / (float) ribbonSteps;
-
-                    float y1 = t1 * totalHeight;
-                    float y2 = t2 * totalHeight;
-
-                    // Flaring outward with altitude
-                    float r1 = baseRadius * (0.3f + 0.7f * t1 * t1);
-                    float r2 = baseRadius * (0.3f + 0.7f * t2 * t2);
-
-                    double ang1 = strandOffset + (age * 18.0f * (Math.PI / 180.0)) + (t1 * Math.PI * 3.5);
-                    double ang2 = strandOffset + (age * 18.0f * (Math.PI / 180.0)) + (t2 * Math.PI * 3.5);
-
-                    float x1 = (float) Math.cos(ang1) * r1;
-                    float z1 = (float) Math.sin(ang1) * r1;
-                    float x2 = (float) Math.cos(ang2) * r2;
-                    float z2 = (float) Math.sin(ang2) * r2;
-
-                    float bandWidth1 = 0.35f * scale * (0.5f + t1 * 0.8f);
-                    float bandWidth2 = 0.35f * scale * (0.5f + t2 * 0.8f);
-
-                    float tx1 = (float) -Math.sin(ang1) * bandWidth1;
-                    float tz1 = (float) Math.cos(ang1) * bandWidth1;
-                    float tx2 = (float) -Math.sin(ang2) * bandWidth2;
-                    float tz2 = (float) Math.cos(ang2) * bandWidth2;
-
-                    drawQuad(matrix, buffer,
-                        x1 - tx1, y1, z1 - tz1,
-                        x1 + tx1, y1, z1 + tz1,
-                        x2 + tx2, y2, z2 + tz2,
-                        x2 - tx2, y2, z2 - tz2,
-                        0.0f, 0.90f, 1.0f, (giant ? 0.70f : 0.50f) * fade
-                    );
-                }
-            }
+            // 3. The funnel: three counter rotating layered bands. The mid
+            // band sits at 0.7 of the physics radius so the wispy outer band
+            // (1.45x) lands right at the edge of the pull zone.
+            LayeredRender.drawVortexBands(pose, buffer, baseRadius * 0.7f, totalHeight, age,
+                0.25f, 0.80f, 1.0f, fade, ds);
 
             // 4. Physical Orbiting Wind Blades / Kinetic Shards
             int shardCount = giant ? 12 : 6;
@@ -204,49 +142,8 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
             // 5. Crown Outflow Ring (Flared upper storm rim)
             float crownY = totalHeight;
             float crownR = baseRadius * 1.15f;
-            drawRotatingRing(matrix, buffer, 0, crownY, 0, crownR, crownR * 0.75f, 28, -age * 22.0f, 0.0f, 0.8f, 1.0f, (giant ? 0.60f : 0.40f) * fade);
-        });
-
-        // T1: additive halo pass over the core funnel silhouette, slightly
-        // wider than the funnel, so the vortex blooms instead of reading matte.
-        collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
-            Matrix4f matrix = pose.pose();
-
-            int haloLevels = 8;
-            int haloSegments = 24;
-            float haloRot = age * 28.0f * (float) (Math.PI / 180.0);
-
-            for (int lvl = 0; lvl < haloLevels; lvl++) {
-                float p1 = lvl / (float) haloLevels;
-                float p2 = (lvl + 1) / (float) haloLevels;
-
-                float y1 = p1 * totalHeight;
-                float y2 = p2 * totalHeight;
-
-                float r1 = (baseRadius * 0.35f) * (0.25f + 0.75f * p1) * 1.18f;
-                float r2 = (baseRadius * 0.35f) * (0.25f + 0.75f * p2) * 1.18f;
-
-                float haloAlpha = 0.16f * fade * (1.0f - p1 * 0.3f);
-
-                for (int i = 0; i < haloSegments; i++) {
-                    double a1 = ((i / (double) haloSegments) * Math.PI * 2.0) + haloRot + (p1 * 1.2);
-                    double a2 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + haloRot + (p1 * 1.2);
-                    double a3 = (((i + 1) / (double) haloSegments) * Math.PI * 2.0) + haloRot + (p2 * 1.2);
-                    double a4 = ((i / (double) haloSegments) * Math.PI * 2.0) + haloRot + (p2 * 1.2);
-
-                    float x1 = (float) Math.cos(a1) * r1;
-                    float z1 = (float) Math.sin(a1) * r1;
-                    float x2 = (float) Math.cos(a2) * r1;
-                    float z2 = (float) Math.sin(a2) * r1;
-
-                    float x3 = (float) Math.cos(a3) * r2;
-                    float z3 = (float) Math.sin(a3) * r2;
-                    float x4 = (float) Math.cos(a4) * r2;
-                    float z4 = (float) Math.sin(a4) * r2;
-
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, 0.0f, 0.45f, 0.50f, haloAlpha);
-                }
-            }
+            drawRotatingRing(matrix, buffer, 0, crownY, 0, crownR, crownR * 0.75f,
+                FxEnvelope.segments(28, ds, 10), -age * 22.0f, 0.0f, 0.8f, 1.0f, (giant ? 0.60f : 0.40f) * fade);
         });
 
         poseStack.popPose();

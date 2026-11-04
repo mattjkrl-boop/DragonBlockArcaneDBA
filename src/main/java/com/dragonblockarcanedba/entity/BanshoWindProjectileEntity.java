@@ -135,16 +135,20 @@ public class BanshoWindProjectileEntity extends Projectile {
                 return;
             }
 
-            // Theme particles (T5): a thin wind trail streams off the drill
-            // in flight. Hits and the timeout already had feedback; the flight
-            // itself had none.
-            if (this.tickCount % 2 == 0) {
+            // Layered trail (SPECTACLE-STANDARD point 1): a bright ki mote core
+            // streams down the drill's spine with wind wisps shedding off it,
+            // every tick instead of a thin puff every second tick.
+            {
                 float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
                 if (density > 0f) {
+                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                        this.getX(), this.getY(), this.getZ(),
+                        Math.max(1, Math.round(1f * density)),
+                        0.05, 0.05, 0.05, 0.01);
                     serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
                         this.getX(), this.getY(), this.getZ(),
                         Math.max(1, Math.round(2f * density)),
-                        0.12, 0.12, 0.12, 0.02);
+                        0.14, 0.14, 0.14, 0.03);
                 }
             }
 
@@ -182,6 +186,11 @@ public class BanshoWindProjectileEntity extends Projectile {
             Vec3 move = this.getDeltaMovement().normalize().scale(1.4);
             target.setDeltaMovement(target.getDeltaMovement().add(move.x, 0.45, move.z));
             com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
+        }
+
+        // Block hits kick dust off the surface they strike (point 3).
+        if (target == null) {
+            com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, hitPos, 1.4f, 0x26FFA6);
         }
 
         // Spawn physical 3D impact shockwave entity (replacing particles)

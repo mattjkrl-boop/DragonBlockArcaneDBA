@@ -30,6 +30,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
         public float powerRatio = 0.0f;
         public float age = 0;
         public long seed = 0;
+        public int fadeTicks = -1;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -54,6 +55,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
         state.powerRatio = entity.getPowerRatio();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.fadeTicks = entity.getFadeTicks();
     }
 
     @Override
@@ -61,9 +63,15 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
         RenderType renderType = KiRenderHelper.kiRenderType();
         float power = state.powerRatio;
         float age = state.age;
+        float dist = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
         float baseRadius = 2.0f + (power * 3.5f);
-        float baseAlpha = 0.70f + (power * 0.28f);
+        // The alpha used to have no age term at all: the field appeared at 0.70
+        // alpha on its first tick and vanished whole on release. Fade in over
+        // 5 ticks, fade out over the entity's FADE_LENGTH ticks.
+        float fadeOut = state.fadeTicks < 0 ? 1.0f
+            : Math.max(0.0f, 1.0f - state.fadeTicks / (float) ZStanceAuraEntity.FADE_LENGTH);
+        float baseAlpha = (0.70f + (power * 0.28f)) * Math.min(1.0f, age / 5.0f) * fadeOut;
         float pulse = 0.94f + 0.06f * (float) Math.sin(age * 0.40f);
         float tremble = (float) Math.sin(age * 3.2f) * (0.015f + power * 0.05f);
 
@@ -72,7 +80,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
             Random rng = new Random(state.seed);
 
             // 1. Gravitational Compression Ground Disc & Singularity Eye
-            int groundSegments = 48;
+            int groundSegments = com.dragonblockarcanedba.util.FxEnvelope.segments(48, dist, 20);
             drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.05f, baseRadius * 0.92f, groundSegments, age * 6.0f,
                 0.40f, 0.10f, 0.80f, baseAlpha * 0.85f);
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 0.92f, baseRadius * 0.80f, groundSegments, age * -8.0f,
@@ -105,8 +113,10 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
                 float mx = (float) Math.cos(mAng) * mDist + (rng.nextFloat() - 0.5f) * tremble;
                 float mz = (float) Math.sin(mAng) * mDist + (rng.nextFloat() - 0.5f) * tremble;
 
-                float mHeight = (1.4f + power * 1.6f) * pulse;
-                float mWidth = 0.35f + power * 0.15f;
+                // Per monolith size variety: they used to share one height and
+                // one width formula, a ring of identical slabs.
+                float mHeight = (1.4f + power * 1.6f) * pulse * (0.75f + rng.nextFloat() * 0.6f);
+                float mWidth = (0.35f + power * 0.15f) * (0.8f + rng.nextFloat() * 0.5f);
 
                 // Tangent vector for width
                 float tx = -(float) Math.sin(mAng) * mWidth * 0.5f;
@@ -132,7 +142,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
             }
 
             // 4. Inward Dimensional Gravity Funnel (Inverted Suction Mesh)
-            int funnelSteps = 16;
+            int funnelSteps = com.dragonblockarcanedba.util.FxEnvelope.segments(16, dist, 8);
             for (int s = 0; s < funnelSteps; s++) {
                 float p1 = s / (float) funnelSteps;
                 float p2 = (s + 1) / (float) funnelSteps;
@@ -143,7 +153,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
                 float r1 = (0.3f + p1 * baseRadius) * pulse;
                 float r2 = (0.3f + p2 * baseRadius) * pulse;
 
-                int segs = 28;
+                int segs = com.dragonblockarcanedba.util.FxEnvelope.segments(28, dist, 12);
                 for (int i = 0; i < segs; i++) {
                     double a1 = (i / (double) segs) * Math.PI * 2.0 + (age * 0.12f + p1 * 1.5f);
                     double a2 = ((i + 1) / (double) segs) * Math.PI * 2.0 + (age * 0.12f + p1 * 1.5f);

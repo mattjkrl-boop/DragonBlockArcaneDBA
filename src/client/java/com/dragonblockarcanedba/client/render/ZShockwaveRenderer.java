@@ -13,8 +13,6 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import org.joml.Matrix4f;
 
-import java.util.Random;
-
 /**
  * Entity Renderer for Z-Sword Massive Kinetic Shockwave in Minecraft 26.2.
  * Renders a colossal, towering 3D volumetric golden crescent blade model with multi-tier incandescent
@@ -79,7 +77,7 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         float age = state.age;
 
         // Lifetime fade: the wave lives up to 80 ticks and used to vanish at full
-        // opacity on discard. Fade in over the first 3 ticks, hold, then ease out
+        // opacity on discard. Fade in over the first 6 ticks, hold, then ease out
         // over the final 25 ticks.
         float fadeIn = smooth(Math.min(1.0f, age / 6.0f));
         float fadeOut = age <= 55.0f ? 1.0f : 1.0f - smooth((age - 55.0f) / 25.0f);
@@ -87,11 +85,17 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         float impact = strike(Math.min(1.0f, age / 18.0f));
 
         float fpScale = (state.isFirstPersonOwner && state.age < 6.0f) ? (0.55f + (state.age / 6.0f) * 0.45f) : 1.0f;
-        float span = (sub ? (3.2f + charge * 3.2f) : (4.8f + charge * 6.2f)) * fpScale;
+        // Mild growth across the fade in window: the crescent used to appear at
+        // full 22 block span on its first tick. It now opens from 80 percent
+        // while it leaves the caster; the damage band uses the full span, and
+        // the core covers the small early gap at point blank range.
+        float grow = 0.8f + 0.2f * fadeIn;
+        float span = (sub ? (3.2f + charge * 3.2f) : (4.8f + charge * 6.2f)) * fpScale * grow;
         float chord = (sub ? (1.0f + charge * 0.6f) : (1.6f + charge * 1.4f)) * fpScale;
         float height = (sub ? (0.9f + charge * 0.8f) : (1.5f + charge * 1.8f)) * fpScale;
         float thickness = (sub ? (0.22f + charge * 0.15f) : (0.38f + charge * 0.32f)) * fpScale;
-        int segments = 36;
+        float dist = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        int segments = com.dragonblockarcanedba.util.FxEnvelope.segments(36, dist, 16);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -175,23 +179,6 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         }
     }
 
-    private static void drawShockRib(Matrix4f matrix, VertexConsumer consumer, float rx, float rz, float height, float trail, float width,
-                                     float r, float g, float b, float a) {
-        float halfW = width * 0.5f;
-
-        // Vertical Rib Blade
-        consumer.addVertex(matrix, rx - halfW, -height, rz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, rx + halfW, -height, rz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, rx + halfW, height, rz - trail * 0.4f).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, rx - halfW, height, rz - trail * 0.4f).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        // Backward Taper
-        consumer.addVertex(matrix, rx - halfW, height, rz - trail * 0.4f).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, rx + halfW, height, rz - trail * 0.4f).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, rx + halfW, 0, rz - trail).setColor(r, g, b, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, rx - halfW, 0, rz - trail).setColor(r, g, b, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-    }
-
     private static void drawWakeRibbon(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float height, float offsetZ, int segments,
                                        float r, float g, float b, float a) {
         for (int i = 0; i < segments; i++) {
@@ -255,27 +242,4 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         }
     }
 
-    private static void drawFrontCompressionRing(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float radius, float thickness, int segments, float rotDeg,
-                                                 float r, float g, float b, float a) {
-        double rotRad = Math.toRadians(rotDeg);
-        for (int i = 0; i < segments; i++) {
-            double a1 = rotRad + (i / (double) segments) * Math.PI * 2.0;
-            double a2 = rotRad + ((i + 1) / (double) segments) * Math.PI * 2.0;
-
-            float x1Out = cx + (float) Math.cos(a1) * radius;
-            float y1Out = cy + (float) Math.sin(a1) * radius;
-            float x2Out = cx + (float) Math.cos(a2) * radius;
-            float y2Out = cy + (float) Math.sin(a2) * radius;
-
-            float x1In = cx + (float) Math.cos(a1) * (radius - thickness);
-            float y1In = cy + (float) Math.sin(a1) * (radius - thickness);
-            float x2In = cx + (float) Math.cos(a2) * (radius - thickness);
-            float y2In = cy + (float) Math.sin(a2) * (radius - thickness);
-
-            consumer.addVertex(matrix, x1Out, y1Out, cz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2Out, y2Out, cz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x2In, y2In, cz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, x1In, y1In, cz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
-    }
 }

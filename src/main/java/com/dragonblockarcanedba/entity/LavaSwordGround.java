@@ -1,13 +1,19 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.DragonBlockArcaneDBA;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
+import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.BaseFireBlock;
 import net.minecraft.world.level.block.Block;
@@ -15,12 +21,16 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -30,6 +40,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * sword always leaves some lava on the ground. The rest is fire. Both are
  * put back after a few seconds. The placement skips the fluid's on-place so the
  * source does not flow, and the server tick puts the old block back.
+ *
+ * Crash safety: the pending list below is only a working cache. Every pending
+ * restore is also written into the level's SavedData the moment it is placed,
+ * the same pattern GroundScar uses, so if the server dies mid burn the record
+ * survives in the world file. The first level tick after a restart adopts the
+ * saved entries back: overdue ones restore at once, live ones resume their
+ * tick watch, and the 80 tick restore stays exact across the crash.
  */
 public final class LavaSwordGround {
     /** Four seconds. Long enough to see, short enough that it does not become the world. */
@@ -45,6 +62,38 @@ public final class LavaSwordGround {
     private static final Direction[] NEIGHBORS = Direction.values();
     private static final List<Pending> PENDING = new ArrayList<>();
     private static final AtomicBoolean HOOKED = new AtomicBoolean();
+    /** Levels whose saved entries this server run has already adopted back. */
+    private static final Set<ServerLevel> ADOPTED = new HashSet<>();
+
+    /** One saved restore, in the level's SavedData. Watch cells are a lava cell's neighbor snapshot. */
+    public record Entry(BlockPos pos, String original, long restoreAt, boolean lava,
+                        List<BlockPos> watch, List<String> watched) {
+        public static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
+            BlockPos.CODEC.fieldOf("pos").forGetter(Entry::pos),
+            Codec.STRING.fieldOf("original").forGetter(Entry::original),
+            Codec.LONG.fieldOf("restoreAt").forGetter(Entry::restoreAt),
+            Codec.BOOL.fieldOf("lava").forGetter(Entry::lava),
+            BlockPos.CODEC.listOf().fieldOf("watch").forGetter(Entry::watch),
+            Codec.STRING.listOf().fieldOf("watched").forGetter(Entry::watched)
+        ).apply(i, Entry::new));
+    }
+
+    public static final class Data extends SavedData {
+        public final List<Entry> entries = new ArrayList<>();
+        public static final Codec<Data> CODEC = RecordCodecBuilder.create(i -> i.group(
+            Entry.CODEC.listOf().fieldOf("entries").forGetter(d -> d.entries)
+        ).apply(i, list -> {
+            Data d = new Data();
+            d.entries.addAll(list);
+            return d;
+        }));
+    }
+
+    private static final SavedDataType<Data> TYPE = new SavedDataType<>(
+        DragonBlockArcaneDBA.id("lava_sword_ground"),
+        Data::new,
+        Data.CODEC,
+        DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 
     private LavaSwordGround() {}
 
@@ -74,7 +123,7 @@ public final class LavaSwordGround {
      * {@code lavaBudget} is how many sources this eruption may still leave.
      */
     public static int scorchArc(ServerLevel level, double x, double y, double z, float yRot,
-                                float inner, float outer, int lavaBudget) {
+                                float inner, float outer, int lavaBudget, double minDot) {
         ensureHooks();
         double yaw = Math.toRadians(yRot);
         double lookX = -Math.sin(yaw);
@@ -91,7 +140,7 @@ public final class LavaSwordGround {
                     continue;
                 }
                 double dot = dist < 0.05 ? 1.0 : (dx * lookX + dz * lookZ) / dist;
-                if (dot < 0.15) {
+                if (dot < minDot) {
                     continue;
                 }
                 if (scorchColumn(level, cx + dx, cz + dz, yHint, placed < lavaBudget)) {
@@ -164,17 +213,25 @@ public final class LavaSwordGround {
                 continue;
             }
             BlockPos surface = new BlockPos(x, cursor.getY(), z);
-            return igniteSurface(level, surface, allowLava);
+            return igniteSurface(level, surface, ground, allowLava);
         }
         return false;
     }
 
-    private static boolean igniteSurface(ServerLevel level, BlockPos surface, boolean allowLava) {
+    private static boolean igniteSurface(ServerLevel level, BlockPos surface, BlockState ground, boolean allowLava) {
         if (alreadyPending(level, surface)) {
             return false;
         }
         BlockState previous = level.getBlockState(surface);
-        if (!previous.isAir() || protectedSolid(previous)) {
+        if (!previous.isAir()) {
+            return false;
+        }
+        // The placed cell is always air, so the protection list can never
+        // guard the cell itself (an earlier version consulted it there, where
+        // it could never fire). Where it does guard something real is the
+        // ground the burn sits on: never put fire or lava directly on top of
+        // a chest, a spawner, a barrel, or a bedrock floor.
+        if (protectedSolid(ground)) {
             return false;
         }
         if (occupiedByPlayer(level, surface)) {
@@ -220,8 +277,110 @@ public final class LavaSwordGround {
                 }
             }
         }
-        PENDING.add(new Pending(level, pos, previous, level.getGameTime() + LIFE_TICKS, lava, watch, watched));
+        Pending pending = new Pending(level, pos, previous, level.getGameTime() + LIFE_TICKS, lava, watch, watched);
+        PENDING.add(pending);
+        persistAdd(pending);
         clearTicks(level, pos);
+    }
+
+    /** Mirror a fresh pending restore into the level's SavedData, so a crash cannot orphan the placed block. */
+    private static void persistAdd(Pending pending) {
+        Data data = pending.level.getDataStorage().computeIfAbsent(TYPE);
+        List<BlockPos> watch = new ArrayList<>();
+        List<String> watched = new ArrayList<>();
+        if (pending.watch != null && pending.watched != null) {
+            for (int i = 0; i < pending.watch.length; i++) {
+                if (pending.watch[i] == null || pending.watched[i] == null) {
+                    continue;
+                }
+                watch.add(pending.watch[i]);
+                watched.add(BlockStateParser.serialize(pending.watched[i]));
+            }
+        }
+        data.entries.add(new Entry(pending.pos, BlockStateParser.serialize(pending.restore),
+            pending.until, pending.lava, watch, watched));
+        data.setDirty();
+    }
+
+    /** Drop a saved restore once the cell has been dealt with, so it is never restored twice. */
+    private static void persistRemove(ServerLevel level, BlockPos pos) {
+        Data data = level.getDataStorage().get(TYPE);
+        if (data == null) {
+            return;
+        }
+        if (data.entries.removeIf(e -> e.pos().equals(pos))) {
+            data.setDirty();
+        }
+    }
+
+    private static BlockState parseState(ServerLevel level, String text) {
+        try {
+            var lookup = level.holderLookup(Registries.BLOCK);
+            BlockStateParser.BlockResult result = BlockStateParser.parseForBlock(lookup, text, false);
+            return result.blockState();
+        } catch (Exception e) {
+            return Blocks.AIR.defaultBlockState();
+        }
+    }
+
+    /**
+     * First tick for a level in this server run: take back whatever the
+     * SavedData kept through a crash or a hard kill. Overdue entries restore
+     * immediately, live ones resume their tick watch with their neighbor
+     * snapshots intact, and entries whose cell no longer holds our burn are
+     * dropped, so a block a player placed while the server was down is never
+     * stomped by a stale restore.
+     */
+    private static void adoptPersisted(ServerLevel level) {
+        if (!ADOPTED.add(level)) {
+            return;
+        }
+        Data data = level.getDataStorage().get(TYPE);
+        if (data == null || data.entries.isEmpty()) {
+            return;
+        }
+        long now = level.getGameTime();
+        boolean changed = false;
+        Iterator<Entry> it = data.entries.iterator();
+        while (it.hasNext()) {
+            Entry entry = it.next();
+            if (alreadyPending(level, entry.pos())) {
+                continue;
+            }
+            Pending pending = rebuild(level, entry);
+            if (now >= entry.restoreAt()) {
+                restore(pending);
+                it.remove();
+                changed = true;
+                continue;
+            }
+            if (level.isLoaded(entry.pos()) && !stillOurs(level, pending)) {
+                it.remove();
+                changed = true;
+                continue;
+            }
+            PENDING.add(pending);
+        }
+        if (changed) {
+            data.setDirty();
+        }
+    }
+
+    private static Pending rebuild(ServerLevel level, Entry entry) {
+        BlockPos[] watch = null;
+        BlockState[] watched = null;
+        if (entry.lava() && !entry.watch().isEmpty()) {
+            int n = entry.watch().size();
+            watch = new BlockPos[n];
+            watched = new BlockState[n];
+            for (int i = 0; i < n; i++) {
+                watch[i] = entry.watch().get(i);
+                String text = i < entry.watched().size() ? entry.watched().get(i) : null;
+                watched[i] = text != null ? parseState(level, text) : level.getBlockState(watch[i]);
+            }
+        }
+        return new Pending(level, entry.pos().immutable(), parseState(level, entry.original()),
+            entry.restoreAt(), entry.lava(), watch, watched);
     }
 
     private static boolean nearWater(ServerLevel level, BlockPos pos) {
@@ -240,7 +399,11 @@ public final class LavaSwordGround {
         return !level.getEntitiesOfClass(Player.class, new AABB(pos), Player::isAlive).isEmpty();
     }
 
-    /** Cells this weapon is not allowed to destroy, even for a moment. */
+    /**
+     * Blocks a burn is never placed on top of, and the neighbor states hold()
+     * never reverts a cell away from. The placed cell itself is always air, so
+     * this list guards the ground under the burn and the lava cells' neighbors.
+     */
     private static boolean protectedSolid(BlockState state) {
         return state.is(Blocks.BEDROCK)
             || state.is(Blocks.SPAWNER)
@@ -260,14 +423,25 @@ public final class LavaSwordGround {
         return false;
     }
 
+    /**
+     * Startup registration, called from the lava sword item's class init so
+     * the restore ticker and the crash adoption run from the first server
+     * tick, not only after the first swing. Safe to call more than once.
+     */
+    public static void register() {
+        ensureHooks();
+    }
+
     private static void ensureHooks() {
         if (HOOKED.compareAndSet(false, true)) {
             ServerTickEvents.END_LEVEL_TICK.register(LavaSwordGround::onLevelTick);
             ServerLifecycleEvents.SERVER_STOPPING.register(LavaSwordGround::onStopping);
+            ServerLifecycleEvents.SERVER_STOPPED.register(server -> ADOPTED.clear());
         }
     }
 
     private static void onLevelTick(ServerLevel level) {
+        adoptPersisted(level);
         if (PENDING.isEmpty()) {
             return;
         }
@@ -280,6 +454,7 @@ public final class LavaSwordGround {
             }
             if (now >= pending.until) {
                 restore(pending);
+                persistRemove(level, pending.pos);
                 it.remove();
                 continue;
             }
@@ -287,6 +462,7 @@ public final class LavaSwordGround {
                 continue;
             }
             if (!stillOurs(level, pending)) {
+                persistRemove(level, pending.pos);
                 it.remove();
                 continue;
             }
@@ -300,6 +476,7 @@ public final class LavaSwordGround {
         for (Pending pending : copy) {
             if (pending.level.getServer() == server) {
                 restore(pending);
+                persistRemove(pending.level, pending.pos);
             } else {
                 PENDING.add(pending);
             }
@@ -354,7 +531,10 @@ public final class LavaSwordGround {
             return;
         }
         hold(level, pending);
-        if (stillOurs(level, pending) && !protectedSolid(pending.restore)) {
+        // The restore state is the air the burn was placed into, so there is
+        // nothing for the protection list to guard here; the only question
+        // that matters is whether the cell still holds our burn.
+        if (stillOurs(level, pending)) {
             level.setBlock(pending.pos, pending.restore, PLACE_FLAGS);
         }
         clearTicks(level, pending.pos);

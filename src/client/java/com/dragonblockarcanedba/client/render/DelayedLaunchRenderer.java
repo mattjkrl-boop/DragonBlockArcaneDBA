@@ -13,10 +13,16 @@ import net.minecraft.client.renderer.state.level.CameraRenderState;
 import org.joml.Matrix4f;
 
 /**
- * Telegraph for the Z Sword delayed launch. This used to draw nothing at all, so
- * rooted targets stood in the launch zone for the full 40 tick delay with no
- * warning. Now a violet gravity ring contracts around the slam center as the
- * delay runs down, with gold rune ticks that spin faster near the end.
+ * Telegraph for the Z Sword delayed launch. A violet gravity ring contracts
+ * around the slam center as the delay runs down, with gold rune ticks that
+ * spin faster near the end.
+ *
+ * Spectacle pass: the ring used to be hardcoded at 5.0 blocks shrinking to 1.2
+ * while the slam that spawned it reached a radius of 18, so the warning covered
+ * less than a third of the real area. The ring now starts at the true slam
+ * radius (synced from the entity) and contracts to 35 percent of it, over the
+ * true delay (40 to 80 ticks, also synced), and a faint anchor disc marks the
+ * full footprint for the whole countdown.
  */
 public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, DelayedLaunchRenderer.DelayedLaunchRenderState> {
     public DelayedLaunchRenderer(EntityRendererProvider.Context context) {
@@ -25,6 +31,8 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
 
     public static class DelayedLaunchRenderState extends EntityRenderState {
         public float age = 0;
+        public float radius = 10.0f;
+        public int delayTicks = 40;
     }
 
     @Override
@@ -36,29 +44,39 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
     public void extractRenderState(DelayedLaunchEntity entity, DelayedLaunchRenderState state, float partialTicks) {
         super.extractRenderState(entity, state, partialTicks);
         state.age = entity.tickCount + partialTicks;
+        state.radius = entity.getRadius();
+        state.delayTicks = Math.max(1, entity.getDelayTicks());
     }
 
     @Override
     public void submit(DelayedLaunchRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         RenderType renderType = KiRenderHelper.kiRenderType();
         float age = state.age;
-        float progress = Math.min(1.0f, age / 40.0f);
+        float progress = Math.min(1.0f, age / (float) state.delayTicks);
+        float slamRadius = state.radius;
 
-        // Contracting ring: 5 blocks wide at the start, closing to 1.2 at launch.
-        float radius = 5.0f - progress * 3.8f;
+        // Contracting ring: starts at the real slam radius, closing to 35
+        // percent of it at the launch tick.
+        float radius = slamRadius * (1.0f - progress * 0.65f);
         float pulse = 0.60f + 0.40f * (float) Math.sin(age * (0.35 + progress * 0.85));
         float ringAlpha = (0.35f + progress * 0.45f) * pulse;
         float rot = age * (6.0f + progress * 30.0f);
+        float dist = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        int ringSegs = com.dragonblockarcanedba.util.FxEnvelope.segments(48, dist, 20);
 
         poseStack.pushPose();
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
+            // Full footprint marker at the true slam radius for the whole
+            // countdown, faint, so the warning size equals the hit size.
+            drawGroundRing(matrix, buffer, slamRadius, 0.30f, ringSegs, 0.0f,
+                0.58f, 0.10f, 0.98f, ringAlpha * 0.30f);
             // Outer violet ring band, alpha 0 at both edges, bright at the crest line.
-            drawGroundRing(matrix, buffer, radius, 0.45f, 32, 0.0f,
+            drawGroundRing(matrix, buffer, radius, 0.45f, ringSegs, 0.0f,
                 0.58f, 0.10f, 0.98f, ringAlpha);
             // Inner gold ring closing tighter.
-            drawGroundRing(matrix, buffer, radius * 0.62f, 0.22f, 32, 0.0f,
+            drawGroundRing(matrix, buffer, radius * 0.62f, 0.22f, ringSegs, 0.0f,
                 1.0f, 0.85f, 0.30f, ringAlpha * 0.9f);
 
             // Four rune ticks at the cardinal points, rotating as the launch nears.
@@ -72,11 +90,14 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
         });
 
         // Additive halo pass: a wider faint violet ring under the telegraph so
-        // the warning glows against the ground as the launch nears.
+        // the warning glows against the ground as the launch nears, plus the
+        // shared anchor glow across the full slam footprint.
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            drawGroundRing(matrix, buffer, radius * 1.12f, 0.60f, 32, 0.0f,
+            drawGroundRing(matrix, buffer, radius * 1.12f, 0.60f, ringSegs, 0.0f,
                 0.58f, 0.10f, 0.98f, ringAlpha * 0.35f);
+            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawAnchorGlow(pose, buffer,
+                slamRadius, 0.03f, 0.58f, 0.10f, 0.98f, ringAlpha * 0.22f, dist);
         });
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);

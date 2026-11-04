@@ -46,7 +46,7 @@ public class SorrowSlashEntity extends Projectile {
      * @param spawnPos The starting position
      * @param yRot The yaw rotation
      * @param xRot The pitch rotation
-     * @param damage Total stat-scaled damage
+     * @param damage Total stat-scaled damage for the flying wave; impact bursts pass 0.0f and are pure visuals
      * @param tiltRight Whether to tilt right or left
      * @param isImpactBurst True if spawned directly on a melee target impact
      */
@@ -96,6 +96,33 @@ public class SorrowSlashEntity extends Projectile {
         this.setPos(this.getX() + movement.x, this.getY() + movement.y, this.getZ() + movement.z);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Impact burst mode is a pure visual by design: it is spawned by the
+            // melee hit with damage 0.0f because the hit already applied all
+            // damage and effects directly in the item. It never scans targets
+            // and never runs hit logic; it only renders its crescent, puffs
+            // soul particles on its first tick, and expires at 16 ticks.
+            if (isImpactBurst()) {
+                if (this.tickCount == 1) {
+                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                    if (density > 0f) {
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                            this.getX(), this.getY(), this.getZ(),
+                            Math.max(1, Math.round(6f * density)),
+                            0.5, 0.4, 0.5, 0.06);
+                        serverLevel.sendParticles(
+                            com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
+                            this.getX(), this.getY(), this.getZ(),
+                            Math.max(1, Math.round(4f * density)),
+                            0.5, 0.3, 0.5, 0.03);
+                    }
+                }
+                if (this.tickCount > 16) {
+                    this.discard();
+                }
+                return;
+            }
+
             // Theme particles (redesign T5): the flying wave trails void
             // smoke so its path lingers a beat behind the crescent.
             if (!isImpactBurst() && this.tickCount % 2 == 0) {
@@ -114,8 +141,9 @@ public class SorrowSlashEntity extends Projectile {
                 ? serverLevel.damageSources().playerAttack(playerOwner)
                 : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().generic());
 
-            double hitWidth = isImpactBurst() ? 2.5 : 3.8;
-            double hitHeight = isImpactBurst() ? 2.0 : 1.6;
+            // Wave mode only from here on: impact bursts returned above.
+            double hitWidth = 3.8;
+            double hitHeight = 1.6;
             AABB hitbox = this.getBoundingBox().inflate(hitWidth, hitHeight, hitWidth);
 
             List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
@@ -125,12 +153,6 @@ public class SorrowSlashEntity extends Projectile {
 
             for (LivingEntity target : targets) {
                 hitEntityIds.add(target.getId());
-
-                // The melee impact burst spawns with damage 0 because the melee hit
-                // already applied everything directly. It is pure geometry: without
-                // this guard it re-applied Melting, Sorrow Rift, the friction
-                // distortion, and a 0-damage Soul Rend to every bystander in its box.
-                if (this.damage <= 0.0f) continue;
 
                 // Apply damage
                 target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.damage)));
@@ -163,9 +185,8 @@ public class SorrowSlashEntity extends Projectile {
                     SoundEvents.SOUL_ESCAPE.value(), SoundSource.PLAYERS, 1.2f, 0.7f);
             }
 
-            // Lifetime limits (16 ticks for impact burst, 30 ticks for wave)
-            int maxTicks = isImpactBurst() ? 16 : 30;
-            if (this.tickCount > maxTicks) {
+            // Lifetime limit for the flying wave (impact bursts expire in their branch above)
+            if (this.tickCount > 30) {
                 this.discard();
             }
         }

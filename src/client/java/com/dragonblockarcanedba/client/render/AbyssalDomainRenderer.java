@@ -32,6 +32,7 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
     public static class AbyssalDomainRenderState extends EntityRenderState {
         public float radius = 10.0f;
         public float age = 0;
+        public float fade = 1.0f;
         public long seed = 0;
     }
 
@@ -55,6 +56,7 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
         super.extractRenderState(entity, state, partialTicks);
         state.radius = entity.getRadius();
         state.age = entity.tickCount + partialTicks;
+        state.fade = entity.getFadeFraction();
         state.seed = entity.getUUID().getMostSignificantBits();
     }
 
@@ -64,6 +66,14 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
 
         float radius = state.radius;
         float age = state.age;
+        // Lifecycle envelope (point 5): the dome builds in over its first
+        // 40 ticks and collapses across the entity's synced fade, instead of
+        // the old constant alphas that popped in and out with the entity.
+        // Every alpha below is multiplied by env.
+        float build = com.dragonblockarcanedba.util.FxEnvelope.smoothstep(Math.min(1.0f, age / 40.0f));
+        float env = build * com.dragonblockarcanedba.util.FxEnvelope.smoothstep(state.fade);
+        if (env <= 0.01f) return;
+        float ds = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
@@ -75,7 +85,7 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
                 float rOuter = radius * (0.30f + band * 0.23f);
                 float rInner = rOuter * 0.83f;
                 float rotSpeed = (band % 2 == 0 ? 1.0f : -1.3f) * (12.0f + band * 6.0f);
-                float bandAlpha = 0.65f - (band * 0.08f);
+                float bandAlpha = (0.65f - (band * 0.08f)) * env;
 
                 float red = band % 2 == 0 ? 0.95f : 0.45f;
                 float green = 0.02f;
@@ -100,7 +110,7 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
                 float r1 = radius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
                 float r2 = radius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
 
-                float domeAlpha = 0.35f + (latProgress1 * 0.35f);
+                float domeAlpha = (0.35f + (latProgress1 * 0.35f)) * env;
                 float red = 0.15f + (latProgress1 * 0.65f);
                 float green = 0.01f;
                 float blue = 0.35f + (latProgress1 * 0.55f);
@@ -140,7 +150,7 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
                 float ir1 = innerRadius * (float) Math.cos(p1 * (Math.PI / 2.0));
                 float ir2 = innerRadius * (float) Math.cos(p2 * (Math.PI / 2.0));
 
-                float alpha = 0.28f + (p1 * 0.22f);
+                float alpha = (0.28f + (p1 * 0.22f)) * env;
 
                 // T2 gradient: deep violet at the inner ceiling base rising to
                 // the cursed crimson of the spire tips at the crown.
@@ -193,8 +203,8 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
                     sx - tx, sy, sz - tz,
                     sx + tx, sy, sz + tz,
                     sx + leanX, sy + spireHeight, sz + leanZ,
-                    0.15f, 0.05f, 0.22f, 0.95f,
-                    0.95f, 0.05f, 0.40f, 1.0f
+                    0.15f, 0.05f, 0.22f, 0.95f * env,
+                    0.95f, 0.05f, 0.40f, 1.0f * env
                 );
             }
 
@@ -230,18 +240,18 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
                     float x4 = (float) Math.cos(a1) * er2;
                     float z4 = (float) Math.sin(a1) * er2;
 
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, eyeR, eyeG, eyeB, 0.45f);
+                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, eyeR, eyeG, eyeB, 0.45f * env);
                 }
             }
 
-            drawRotatingRing(matrix, buffer, 0, 1.05f, 0, radius * 0.98f, radius * 0.93f, 48, age * 6.0f, 0.95f, 0.08f, 0.38f, 0.55f);
-            drawRotatingRing(matrix, buffer, 0, 0.55f, 0, radius * 0.86f, radius * 0.78f, 40, age * 6.0f - 22.0f, 0.55f, 0.04f, 0.85f, 0.22f);
+            drawRotatingRing(matrix, buffer, 0, 1.05f, 0, radius * 0.98f, radius * 0.93f, 48, age * 6.0f, 0.95f, 0.08f, 0.38f, 0.55f * env);
+            drawRotatingRing(matrix, buffer, 0, 0.55f, 0, radius * 0.86f, radius * 0.78f, 40, age * 6.0f - 22.0f, 0.55f, 0.04f, 0.85f, 0.22f * env);
 
             // Bolts born on the cloud shell and ending at a point inside the dome.
             // Each one flashes and is gone; it is not a bar left sitting on the storm.
             float boltCycle = age % 8.0f;
             float boltOn = boltCycle < 3.5f ? (1.0f - boltCycle / 3.5f) : 0.0f;
-            float boltFlash = boltOn * boltOn * (3.0f - 2.0f * boltOn);
+            float boltFlash = boltOn * boltOn * (3.0f - 2.0f * boltOn) * env;
             if (boltFlash > 0.04f) {
                 Random boltRng = new Random(state.seed + ((long) (age / 8.0f) * 1000L));
                 for (int a = 0; a < 3; a++) {
@@ -273,6 +283,14 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
                     }
                 }
             }
+
+            // Shared layered vortex bands (point 1): the same three layer
+            // language every spectacle effect speaks, wrapped around the
+            // funnel at mid radius, over the standard ground anchor glow.
+            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawVortexBands(pose, buffer,
+                radius * 0.30f, domeHeight, age, 0.90f, 0.05f, 0.30f, env, ds);
+            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawAnchorGlow(pose, buffer,
+                radius * 0.55f, 0.06f, 0.85f, 0.04f, 0.25f, 0.35f * env, ds);
         });
 
         // T1 plus T6: one additive pass holding a halo shell around the
@@ -307,11 +325,11 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
                     float x4 = (float) Math.cos(a1) * er2;
                     float z4 = (float) Math.sin(a1) * er2;
 
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.50f, 0.03f, 0.55f, 0.15f);
+                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.50f, 0.03f, 0.55f, 0.15f * env);
                 }
             }
 
-            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, radius * 0.50f, 0.0f, 48, age * 10.0f, 0.45f, 0.02f, 0.30f, 0.10f);
+            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, radius * 0.50f, 0.0f, 48, age * 10.0f, 0.45f, 0.02f, 0.30f, 0.10f * env);
         });
     }
 

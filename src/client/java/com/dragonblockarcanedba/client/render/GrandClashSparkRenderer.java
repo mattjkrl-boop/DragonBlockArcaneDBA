@@ -62,10 +62,15 @@ public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntit
     @Override
     public void submit(ClashRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
-        if (progress >= 1.0f) return;
-
-        float fade = 1.0f - (progress * progress);
-        float scale = state.scale * (0.85f + progress * 0.95f);
+        // Shared envelope: builds over the first 20 percent of the 24 tick
+        // life, peaks, then dissipates over the last 45 percent. The old
+        // 10 tick version sat at full alpha on tick one and only faded.
+        float fade = com.dragonblockarcanedba.util.FxEnvelope.envelope(
+            state.age, state.maxLifetime, 0.20f, 0.45f);
+        if (fade <= 0.01f) return;
+        float grow = com.dragonblockarcanedba.util.FxEnvelope.smoothstep(
+            Math.min(1.0f, state.age / (state.maxLifetime * 0.20f)));
+        float scale = state.scale * (0.55f + grow * 1.25f);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -140,7 +145,7 @@ public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntit
         collector.submitCustomGeometry(poseStack, renderType, geometry);
         poseStack.popPose();
 
-        // Additive halo pass (light touch for a 10 tick burst): an oversized
+        // Additive halo pass (light touch for a short burst): an oversized
         // faint copy of the core flash and one clash ring so the deflection blooms.
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

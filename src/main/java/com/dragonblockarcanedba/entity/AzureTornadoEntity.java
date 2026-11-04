@@ -1,7 +1,6 @@
 package com.dragonblockarcanedba.entity;
 
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -12,19 +11,31 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
 /**
- * Azure Tornado Entity — Swirling dragon wind vortex that lifts and spins enemies.
+ * Azure Tornado Entity: Swirling dragon wind vortex that lifts and spins enemies.
+ *
+ * Spectacle pass: the funnel runs on the shared blocks. VortexPhysics pulls
+ * mobs in, lifts them at the core, and flings them out at release; a
+ * DebrisSpawner field of real ground blocks orbits the funnel and rains back
+ * down; LayeredParticles feed the three particle layers; the ground under
+ * the funnel gets torn (grass ripped to dirt through crash safe GroundScar).
+ * maxLifetime is persisted: a restored giant used to keep the 60 tick field
+ * default while its renderer faded against 200, so it popped mid fade.
  */
 public class AzureTornadoEntity extends Projectile {
     private static final EntityDataAccessor<Float> SCALE = SynchedEntityData.defineId(AzureTornadoEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Boolean> IS_GIANT = SynchedEntityData.defineId(AzureTornadoEntity.class, EntityDataSerializers.BOOLEAN);
 
     private int maxLifetime = 60; // 3s default for mini, 200 (10s) for giant
+    private boolean debrisSpawned = false;
+    private boolean flungOut = false;
 
     public AzureTornadoEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -47,6 +58,23 @@ public class AzureTornadoEntity extends Projectile {
         builder.define(IS_GIANT, false);
     }
 
+    @Override
+    protected void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
+        super.addAdditionalSaveData(output);
+        output.putInt("MaxLifetime", this.maxLifetime);
+        output.putBoolean("DebrisSpawned", this.debrisSpawned);
+        output.putBoolean("FlungOut", this.flungOut);
+    }
+
+    @Override
+    protected void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput input) {
+        super.readAdditionalSaveData(input);
+        // Fall back to the giant flag for saves written before MaxLifetime existed.
+        this.maxLifetime = input.getIntOr("MaxLifetime", this.isGiant() ? 200 : 60);
+        this.debrisSpawned = input.getBooleanOr("DebrisSpawned", false);
+        this.flungOut = input.getBooleanOr("FlungOut", false);
+    }
+
     public float getScale() {
         return this.entityData.get(SCALE);
     }
@@ -59,91 +87,140 @@ public class AzureTornadoEntity extends Projectile {
         return this.entityData.get(IS_GIANT);
     }
 
+    public int getMaxLifetime() {
+        return this.maxLifetime;
+    }
+
     @Override
     public void tick() {
         super.tick();
+
+        if (this.level().isClientSide() || !(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
 
         float scale = getScale();
         boolean giant = isGiant();
         double radius = scale * (giant ? 8.0 : 3.0);
         double height = scale * (giant ? 16.0 : 6.0);
         Vec3 center = this.position();
+        LivingEntity livingOwner = this.getOwner() instanceof LivingEntity ? (LivingEntity) this.getOwner() : null;
+        float env = com.dragonblockarcanedba.util.FxEnvelope.envelope(this.tickCount, this.maxLifetime);
 
-        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
-            // Pull and swirl entities
+        // Point 3, base dust on touchdown.
+        if (this.tickCount == 2) {
+            com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, center,
+                (float) Math.min(radius, 10.0), AzureStormEntity.AZURE_ARGB);
+        }
+
+        // Point 2, debris: real ground blocks on helical orbits, sized by the
+        // standard (24 pieces for the mini, 72 for the storm class giant).
+        // Their orbit ends inside the decay window so they rain back down.
+        if (!this.debrisSpawned && this.tickCount >= 3) {
+            this.debrisSpawned = true;
+            float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+            int count = Math.max(6, Math.round((giant ? 72f : 24f) * density));
+            int orbitTicks = Math.max(15, this.maxLifetime - this.tickCount - Math.round(this.maxLifetime * 0.25f));
+            com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, livingOwner, center,
+                count, radius * 0.85, height * 0.7, orbitTicks);
+        }
+
+        // Point 3, forces through the shared vortex: inward pull, tangential
+        // swirl, core lift, all weight classed and envelope scaled. The old
+        // hand rolled version added its full lift every tick with no cap, so
+        // victims accelerated upward without limit.
+        com.dragonblockarcanedba.util.VortexPhysics.applyVortex(serverLevel, center,
+            radius, height, livingOwner,
+            giant ? 0.50 : 0.30, giant ? 1.5 : 1.3, giant ? 0.85 : 0.55, env);
+
+        // Point 5, release: in the last 15 percent of life the funnel lets go
+        // and throws everything it holds outward and up, once.
+        if (!this.flungOut && this.tickCount >= this.maxLifetime - Math.round(this.maxLifetime * 0.15f)) {
+            this.flungOut = true;
+            AABB aoe = new AABB(center.x - radius, center.y - 1.0, center.z - radius,
+                                center.x + radius, center.y + height, center.z + radius);
+            List<LivingEntity> held = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe,
+                e -> e.isAlive() && e != this.getOwner());
+            for (LivingEntity target : held) {
+                com.dragonblockarcanedba.util.VortexPhysics.fling(target, center,
+                    giant ? 1.7 : 1.1, giant ? 1.0 : 0.7);
+            }
+        }
+
+        // Continuous wind damage, only inside the active window so nothing is
+        // hurt while the funnel is still forming or already dissipating.
+        if (this.tickCount % 10 == 0
+            && com.dragonblockarcanedba.util.FxEnvelope.inActiveWindow(this.tickCount, this.maxLifetime,
+                com.dragonblockarcanedba.util.FxEnvelope.STD_BUILD, com.dragonblockarcanedba.util.FxEnvelope.STD_DECAY)) {
             AABB aoe = new AABB(center.x - radius, center.y, center.z - radius,
                                 center.x + radius, center.y + height, center.z + radius);
-            List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e.isAlive() && e != this.getOwner());
-
+            List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe,
+                e -> e.isAlive() && e != this.getOwner());
+            net.minecraft.world.damagesource.DamageSource tornadoSource = livingOwner != null
+                ? serverLevel.damageSources().indirectMagic(this, livingOwner)
+                : serverLevel.damageSources().magic();
             for (LivingEntity target : targets) {
-                Vec3 toTarget = target.position().subtract(center);
-                double dist = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
-                
-                // Tangential vortex spin velocity
-                double angle = Math.atan2(toTarget.z, toTarget.x) + 0.4;
-                double speed = (giant ? 1.2 : 0.8) * Math.max(0.2, 1.0 - (dist / radius));
-                double vx = -Math.sin(angle) * speed;
-                double vz = Math.cos(angle) * speed;
-                double vy = 0.35 + (giant ? 0.3 : 0.1);
+                target.hurtServer(serverLevel, tornadoSource,
+                    com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (giant ? 60.0f : 25.0f)));
+            }
+        }
 
-                target.setDeltaMovement(target.getDeltaMovement().add(vx * 0.5, vy, vz * 0.5));
-                com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
+        // Point 3, ground tearing: grass under the funnel is ripped to dirt,
+        // restored later by GroundScar. Surface height is read per column so
+        // slopes scar at their own level, not at the funnel's base plane.
+        if (this.tickCount % 10 == 0 && env > 0.3f) {
+            scarGround(serverLevel, center, radius);
+        }
 
-                // Continuous wind damage
-                if (this.tickCount % 10 == 0) {
-                    net.minecraft.world.damagesource.DamageSource tornadoSource = this.getOwner() instanceof LivingEntity owner
-                        ? serverLevel.damageSources().indirectMagic(this, owner)
-                        : serverLevel.damageSources().magic();
-                    target.hurtServer(serverLevel, tornadoSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (giant ? 60.0f : 25.0f)));
+        // Point 1, layered particles every tick, envelope scaled.
+        com.dragonblockarcanedba.util.LayeredParticles.emitVortex(serverLevel, center,
+            (float) (radius * 0.8), (float) height, this.tickCount, this.maxLifetime,
+            AzureStormEntity.AZURE_ARGB, com.dragonblockarcanedba.particle.DbaParticles.WIND);
+        if (this.tickCount % 2 == 0 && this.tickCount > this.maxLifetime * 0.7f) {
+            com.dragonblockarcanedba.util.LayeredParticles.emitRain(serverLevel, center,
+                (float) (radius * 0.8), (float) (height * 0.7), this.tickCount, this.maxLifetime,
+                com.dragonblockarcanedba.particle.DbaParticles.WIND);
+        }
+
+        // Giant tornado telegraphed lightning at random ground points. The
+        // owner cast is guarded now; it used to throw on any non living owner.
+        if (giant && this.tickCount % 20 == 0
+            && com.dragonblockarcanedba.util.FxEnvelope.inActiveWindow(this.tickCount, this.maxLifetime,
+                com.dragonblockarcanedba.util.FxEnvelope.STD_BUILD, com.dragonblockarcanedba.util.FxEnvelope.STD_DECAY)) {
+            double rx = center.x + (serverLevel.getRandom().nextDouble() - 0.5) * radius * 1.5;
+            double rz = center.z + (serverLevel.getRandom().nextDouble() - 0.5) * radius * 1.5;
+            double ry = serverLevel.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, (int) rx, (int) rz);
+            AzureLightningEntity lightning = new AzureLightningEntity(serverLevel, livingOwner, rx, ry, rz, 350.0f);
+            lightning.setTelegraphTicks(10);
+            serverLevel.addFreshEntity(lightning);
+        }
+
+        // Howling wind sound
+        if (this.tickCount % 20 == 0) {
+            serverLevel.playSound(null, center.x, center.y, center.z,
+                SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.5f, 0.8f);
+        }
+
+        if (this.tickCount >= this.maxLifetime) {
+            this.discard();
+        }
+    }
+
+    /** Rip grass blocks in the inner disk to dirt, restored after 240 ticks. */
+    private void scarGround(ServerLevel level, Vec3 center, double radius) {
+        int r = Math.max(1, (int) Math.ceil(radius * 0.35));
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        int cx = (int) Math.floor(center.x), cz = (int) Math.floor(center.z);
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dz = -r; dz <= r; dz++) {
+                if (dx * dx + dz * dz > r * r) continue;
+                if (level.getRandom().nextFloat() > 0.3f) continue;
+                int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, cx + dx, cz + dz) - 1;
+                m.set(cx + dx, y, cz + dz);
+                BlockState state = level.getBlockState(m);
+                if (state.is(Blocks.GRASS_BLOCK)) {
+                    com.dragonblockarcanedba.util.GroundScar.scar(level, m, Blocks.DIRT.defaultBlockState(), 240);
                 }
-            }
-
-
-
-            // Giant tornado periodic lightning (Tweak C)
-            if (giant && this.tickCount % 20 == 0) {
-                double rx = center.x + (serverLevel.getRandom().nextDouble() - 0.5) * radius * 1.5;
-                double rz = center.z + (serverLevel.getRandom().nextDouble() - 0.5) * radius * 1.5;
-                double ry = serverLevel.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, (int) rx, (int) rz);
-
-                AzureLightningEntity lightning = new AzureLightningEntity(serverLevel, (LivingEntity) this.getOwner(), rx, ry, rz, 350.0f);
-                serverLevel.addFreshEntity(lightning);
-
-                serverLevel.playSound(null, rx, ry, rz,
-                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.WEATHER, 1.5f, 1.2f);
-                serverLevel.playSound(null, rx, ry, rz,
-                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.WEATHER, 1.5f, 1.2f);
-            }
-
-            // Howling wind sound
-            if (this.tickCount % 20 == 0) {
-                serverLevel.playSound(null, center.x, center.y, center.z,
-                    SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, 1.5f, 0.8f);
-            }
-
-            // Wind particles streaming around the funnel (the entity used to
-            // emit none; its particle imports sat unused).
-            if (this.tickCount % 3 == 0) {
-                double h = serverLevel.getRandom().nextDouble() * (giant ? 14.0 : 6.0);
-                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
-                    center.x, center.y + h, center.z, giant ? 6 : 3,
-                    radius * 0.55, 0.6, radius * 0.55, 0.06);
-            }
-
-            // Theme particles (T5): sparking debris flecks kicked up at the
-            // funnel base, density scaled like the other entity emitters.
-            if (this.tickCount % 5 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
-                        center.x, center.y + 0.4, center.z,
-                        Math.max(1, Math.round((giant ? 4f : 2f) * density)),
-                        radius * 0.5, 0.4, radius * 0.5, 0.05);
-                }
-            }
-
-            if (this.tickCount >= this.maxLifetime) {
-                this.discard();
             }
         }
     }

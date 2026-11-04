@@ -32,6 +32,8 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
         public float ageInTicks = 0;
         public float yRot = 0;
         public float xRot = 0;
+        /** Stable per shard size factor, 0.80 to 1.16 in five steps, from the entity id. */
+        public float sizeVar = 1.0f;
     }
 
     @Override
@@ -45,6 +47,8 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
         state.ageInTicks = entity.tickCount + partialTicks;
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
+        int step = Math.floorMod(entity.getUUID().hashCode(), 5);
+        state.sizeVar = 0.80f + step * 0.09f;
     }
 
     @Override
@@ -64,7 +68,7 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
         // the first 5 ticks.
         float bodyPulse = 0.93f + 0.07f * Mth.sin(state.ageInTicks * 0.35f);
         float spawnScale = 0.5f + 0.5f * Math.min(1.0f, state.ageInTicks / 5.0f);
-        float shardScale = 0.85f * bodyPulse * spawnScale;
+        float shardScale = 0.85f * state.sizeVar * bodyPulse * spawnScale;
         poseStack.scale(shardScale, shardScale, shardScale);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {

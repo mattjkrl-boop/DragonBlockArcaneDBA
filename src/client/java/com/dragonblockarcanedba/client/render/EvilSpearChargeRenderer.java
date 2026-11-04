@@ -27,6 +27,7 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
     public static class ChargeRenderState extends EntityRenderState {
         public float chargeRatio = 0.0f;
         public float age = 0;
+        public int releaseTicks = -1;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -49,6 +50,7 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
         super.extractRenderState(entity, state, partialTicks);
         state.chargeRatio = entity.getChargeRatio();
         state.age = entity.tickCount + partialTicks;
+        state.releaseTicks = entity.getReleaseTicks();
     }
 
     @Override
@@ -57,15 +59,37 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
         float charge = state.chargeRatio;
         float age = state.age;
 
-        float baseRadius = 1.35f + (charge * 1.55f);
-        float baseAlpha = 0.65f + (charge * 0.35f);
+        // Lifecycle (standard point 5): the seal builds in over its first 6
+        // ticks instead of popping in at alpha 0.65 or more, and after the
+        // throw releases it expands and dissipates over the release window
+        // the entity reports, instead of cutting out in one frame.
+        float spawnEnv = com.dragonblockarcanedba.util.FxEnvelope.smoothstep(Math.min(1.0f, age / 6.0f));
+        float releaseFade = 1.0f;
+        float releaseExpand = 1.0f;
+        if (state.releaseTicks >= 0) {
+            float rt = Math.min(1.0f, state.releaseTicks / (float) EvilSpearChargeEntity.RELEASE_FADE_TICKS);
+            releaseFade = 1.0f - rt;
+            releaseExpand = 1.0f + rt * 0.35f;
+        }
+        final float lifecycle = spawnEnv * releaseFade;
+        final float ds = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+
+        float baseRadius = (1.35f + (charge * 1.55f)) * releaseExpand;
+        float baseAlpha = (0.65f + (charge * 0.35f)) * lifecycle;
         float pulse = 0.90f + 0.10f * (float) Math.sin(age * 0.55f);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
+            // Shared layered column (standard point 1): three counter
+            // rotating bands around the seal heart, breathing with the
+            // charge and with the same lifecycle as the rest of the seal.
+            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawVortexBands(pose, buffer,
+                baseRadius * 0.55f, 2.6f, age, 1.0f, 0.06f, 0.18f,
+                (0.30f + 0.70f * charge) * lifecycle, ds);
+
             // 1. Planar 3D Demonic Ground Seals (3 counter-rotating runic rings)
-            int groundSegments = 40;
+            int groundSegments = com.dragonblockarcanedba.util.FxEnvelope.segments(40, ds, 16);
             // Outer Ring: Dark Crimson Jagged Seal
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.18f, baseRadius * 1.0f, groundSegments, age * -18.0f,
                 0.80f, 0.0f, 0.10f, baseAlpha * 0.85f);
@@ -85,7 +109,7 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
                 float currentY = 0.3f + ringPhase * 0.9f;
                 float ringAlpha = (float) Math.sin(ringPhase * Math.PI) * baseAlpha * 0.85f;
 
-                drawRotatingRing(matrix, buffer, 0, currentY, 0, currentR, currentR * 0.86f, 28, age * (30.0f + r * 15.0f),
+                drawRotatingRing(matrix, buffer, 0, currentY, 0, currentR, currentR * 0.86f, com.dragonblockarcanedba.util.FxEnvelope.segments(28, ds, 12), age * (30.0f + r * 15.0f),
                     1.0f, 0.05f + ringPhase * 0.4f, 0.15f + ringPhase * 0.5f, ringAlpha);
             }
 
@@ -140,7 +164,7 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
                 0.85f + 0.15f * heart, 0.12f + 0.78f * heart, 0.22f + 0.73f * heart, baseAlpha);
             // A thin filament tightens onto the seals while the button is held.
             float filament = baseRadius * (1.02f - charge * 0.42f);
-            drawRotatingRing(matrix, buffer, 0, 0.12f, 0, filament, filament * 0.90f, 36, age * 48.0f,
+            drawRotatingRing(matrix, buffer, 0, 0.12f, 0, filament, filament * 0.90f, com.dragonblockarcanedba.util.FxEnvelope.segments(36, ds, 14), age * 48.0f,
                 1.0f, 0.82f, 0.90f, baseAlpha * 0.72f);
 
             // 5. Twin Helical Blood Plasma Vortex Ribbons (Ascending dark-crimson ribbons)

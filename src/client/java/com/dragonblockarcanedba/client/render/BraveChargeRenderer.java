@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.BraveChargeEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -26,6 +28,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
     public static class ChargeRenderState extends EntityRenderState {
         public float chargeRatio = 0.0f;
         public float age = 0;
+        public float fadeFactor = 1.0f;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -48,6 +51,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
         super.extractRenderState(entity, state, partialTicks);
         state.chargeRatio = entity.getChargeRatio();
         state.age = entity.tickCount + partialTicks;
+        state.fadeFactor = entity.getFadeFactor();
     }
 
     @Override
@@ -58,15 +62,18 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
 
         float baseRadius = 1.3f + (charge * 1.5f);
         // Spawn fade-in over the first 4 ticks so the charge construct does not
-        // pop in at full brightness.
-        float baseAlpha = (0.65f + (charge * 0.35f)) * Math.min(1.0f, age / 4.0f);
-        float pulse = 0.90f + 0.10f * (float) Math.sin(age * 0.5f);
+        // pop in at full brightness, and the entity's synced fade factor takes
+        // it back out over 10 ticks when charging ends, so it never pops out
+        // at full alpha either (standard point 5).
+        float baseAlpha = (0.65f + (charge * 0.35f)) * Math.min(1.0f, age / 4.0f) * state.fadeFactor;
+        float pulse = FxEnvelope.pulse(age, 0.5f, 0.90f, 0.10f);
+        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Planar 3D Ground Heroic Runes (3 counter-rotating ground rings)
-            int groundSegments = 40;
+            int groundSegments = FxEnvelope.segments(40, distScale, 16);
             // Outer Ring: Radiant Gold Starburst Ring
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.15f, baseRadius * 0.98f, groundSegments, age * -16.0f,
                 1.0f, 0.84f, 0.0f, baseAlpha * 0.80f);
@@ -177,10 +184,14 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
         // and the octahedron core so the charge blooms and anchors to the ground.
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.30f, baseRadius * 1.10f, 40, age * -16.0f,
+            drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.30f, baseRadius * 1.10f,
+                FxEnvelope.segments(40, distScale, 16), age * -16.0f,
                 1.0f, 0.84f, 0.0f, baseAlpha * 0.15f);
             float coreSize = (0.70f - charge * 0.20f) * pulse * 1.25f;
             drawOctahedron(matrix, buffer, coreSize, 0.85f, age * 22.0f, 1.0f, 0.84f, 0.0f, baseAlpha * 0.18f);
+            // Shared ground anchor glow under the caster (standard point 1).
+            LayeredRender.drawAnchorGlow(pose, buffer, baseRadius * 1.55f, 0.02f,
+                1.0f, 0.84f, 0.0f, baseAlpha * 0.40f, distScale);
         });
 
         super.submit(state, poseStack, collector, cameraState);

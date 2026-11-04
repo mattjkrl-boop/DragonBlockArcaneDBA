@@ -127,6 +127,16 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
         }
         chargeEntity.setChargeRatio(chargeRatio);
 
+        // Layered particles around the charging player (spectacle point 1):
+        // the shared vortex emitter at body scale, breathing with the
+        // charge envelope instead of only the charge mesh growing.
+        if (chargeTicks % 2 == 0) {
+            com.dragonblockarcanedba.util.LayeredParticles.emitVortex(level,
+                player.position().add(0, 0.2, 0), 1.35f, 1.8f,
+                chargeTicks, MAX_LEFT_CHARGE_TICKS,
+                0x800DE0, com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE);
+        }
+
         if (chargeTicks % 20 == 0) {
             level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENDERMAN_AMBIENT, SoundSource.PLAYERS, 0.7f, 0.5f + chargeRatio * 0.6f);
@@ -253,8 +263,13 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
             level.addFreshEntity(trail);
         }
 
+        // The blink tears the ground at both ends (spectacle point 3): a
+        // void dust burst where the player leaves and where they arrive.
+        com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(level, startPos, 1.6f, 0x800DE0);
+
         // Perform Teleport
         MovementPhysics.teleport(player, destination);
+        com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(level, destination, 1.6f, 0x800DE0);
 
         // Grant Hollowed custom effect for 3s (60 ticks)
         player.addEffect(new MobEffectInstance(DbaEffects.HOLLOWED_HOLDER, 60, 0, false, false));
@@ -395,7 +410,11 @@ public class HollowsEdgeItem extends Item implements com.dragonblockarcanedba.it
                 rift.triggerImplosion();
             }
 
-            player.getCooldowns().addCooldown(stack, 60);
+            // The cooldown pays for the charge: a tapped rift reopens in 3
+            // seconds, a fully channeled one takes 6. It always exceeds the
+            // 30 tick collapse visual, so rifts can never stack.
+            float releaseChargeRatio = Math.min(1.0f, heldTicks / 100.0f);
+            player.getCooldowns().addCooldown(stack, 60 + Math.round(60 * releaseChargeRatio));
         }
         return true;
     }

@@ -1,7 +1,6 @@
 package com.dragonblockarcanedba.item;
 
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
-import com.dragonblockarcanedba.entity.AzureLightningEntity;
 import com.dragonblockarcanedba.entity.AzureRushTrailEntity;
 import com.dragonblockarcanedba.entity.AzureSonicQuakeEntity;
 import com.dragonblockarcanedba.entity.AzureStormEntity;
@@ -15,7 +14,6 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -89,14 +87,20 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
 
     public static final Map<UUID, Long> LAST_RUSH_START_TIME = new ConcurrentHashMap<>();
     public static final Map<UUID, Boolean> DOUBLE_RUSHING_MAP = new ConcurrentHashMap<>();
+    // Game tick of each player's last rush spawned mini tornado (proc rate limit).
+    public static final Map<UUID, Long> LAST_MINI_TORNADO_TICK = new ConcurrentHashMap<>();
+    // Game tick of each player's last Sonic Quake (impact rate limit).
+    public static final Map<UUID, Long> LAST_QUAKE_TICK = new ConcurrentHashMap<>();
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
         // Basic Azure melee was bare damage with no wind identity at all. A hit now kicks
         // up a gust at the victim, shoves them lightly along the swing, and sips Ki like
-        // its sibling blades do.
+        // its sibling blades do. The gust is a paid effect: if the Ki drain fails the
+        // plain sword hit still lands, but no wind rides on it.
         if (attacker instanceof Player player && !player.level().isClientSide()) {
-            WeaponDrainHelper.drainKiDiscrete(player, 15.0, 7);
+            boolean paid = WeaponDrainHelper.drainKiDiscrete(player, 15.0, 7);
+            if (!paid) return;
             if (player.level() instanceof ServerLevel serverLevel) {
                 serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
                     target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
@@ -116,12 +120,14 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Double click detection
+        // Double click detection, in game ticks (8 ticks = the old 400ms window).
+        // Wall clock used to decide this, so a pause or a lag spike could turn a
+        // fresh rush into a double rush or eat a real one.
         boolean wasRushing = IS_RUSHING_MAP.getOrDefault(player.getUUID(), false);
         if (!wasRushing) {
-            long now = System.currentTimeMillis();
-            long lastStart = LAST_RUSH_START_TIME.getOrDefault(player.getUUID(), 0L);
-            if (now - lastStart < 400) { // 400ms double click window
+            long now = level.getGameTime();
+            long lastStart = LAST_RUSH_START_TIME.getOrDefault(player.getUUID(), -1000L);
+            if (now - lastStart < 8) { // 8 tick double click window
                 DOUBLE_RUSHING_MAP.put(player.getUUID(), true);
             } else {
                 DOUBLE_RUSHING_MAP.put(player.getUUID(), false);
@@ -200,8 +206,15 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
                     6, 0.3, 0.3, 0.3, 0.15);
             }
 
-            // Tweak C: Passing through an enemy creates a miniature tornado that launches them
-            if (level.getRandom().nextFloat() < (isDoubleRushing ? 0.8f : 0.4f)) {
+            // Tweak C: Passing through an enemy creates a miniature tornado that launches them.
+            // The roll used to run per enemy per rush tick, so one pass through a crowd
+            // could stack several tornadoes at once. It now rolls only on a fresh hit
+            // and at most once per 25 ticks for this rusher.
+            boolean freshHit = com.dragonblockarcanedba.util.DbaCompat.getInvulnerableTime(enemy) >= 20;
+            long lastProc = LAST_MINI_TORNADO_TICK.getOrDefault(player.getUUID(), -1000L);
+            if (freshHit && level.getGameTime() - lastProc >= 25
+                && level.getRandom().nextFloat() < (isDoubleRushing ? 0.8f : 0.4f)) {
+                LAST_MINI_TORNADO_TICK.put(player.getUUID(), level.getGameTime());
                 AzureTornadoEntity miniTornado = new AzureTornadoEntity(level, player, enemy.position(), 1.0f, false);
                 level.addFreshEntity(miniTornado);
             }
@@ -240,14 +253,36 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
         Vec3 pos = player.position();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
+        // The quake used to refire on every rush tick that touched ground or a
+        // wall, free. It now fires at most once per 30 ticks and pays Ki: a
+        // 60 percent per minute rate over 20 ticks, 1 percent of max Ki.
+        long now = level.getGameTime();
+        if (now - LAST_QUAKE_TICK.getOrDefault(player.getUUID(), -1000L) < 30) {
+            return;
+        }
+        if (!WeaponDrainHelper.drainKiDiscrete(player, 60.0, 20)) {
+            return;
+        }
+        LAST_QUAKE_TICK.put(player.getUUID(), now);
+
         float quakeDamage = 450.0f + (float) (accessor.dba$getStrength() * 2.5);
         double radius = 8.0;
+
+        // Physical 3D supersonic ground shockwave and kinetic shatter geometry.
+        // Spawned before the hit loop so every bounced victim registers with it:
+        // the quake entity owns removing their bounce modifier when it expires.
+        AzureSonicQuakeEntity quake = new AzureSonicQuakeEntity(level, player, pos.add(0, 0.05, 0), (float) radius);
+        level.addFreshEntity(quake);
 
         AABB quakeBox = player.getBoundingBox().inflate(radius, 3.0, radius);
         List<LivingEntity> targets = level.getEntitiesOfClass(LivingEntity.class, quakeBox, e -> e.isAlive() && e != player && pos.distanceTo(e.position()) <= radius);
 
         for (LivingEntity target : targets) {
-            target.hurtServer(level, level.damageSources().mobAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (quakeDamage)));
+            // Damage falls off with distance: full at the center, half at the rim.
+            // A target at 7.9 blocks used to take the same hit as one at zero.
+            double distFrac = Math.min(1.0, pos.distanceTo(target.position()) / radius);
+            float falloffDamage = quakeDamage * (float) (1.0 - 0.5 * distFrac);
+            target.hurtServer(level, level.damageSources().mobAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (falloffDamage)));
             // Launch high into the air with MC 26.2 elastic bounciness
             target.setDeltaMovement(target.getDeltaMovement().add(0, 1.4, 0));
             com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
@@ -257,12 +292,9 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
                 0.85,
                 net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
             );
+            quake.addBounceTarget(target.getUUID());
             com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
         }
-
-        // Physical 3D supersonic ground shockwave and kinetic shatter geometry
-        AzureSonicQuakeEntity quake = new AzureSonicQuakeEntity(level, player, pos.add(0, 0.05, 0), (float) radius);
-        level.addFreshEntity(quake);
 
         level.playSound(null, pos.x, pos.y, pos.z,
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0f, 0.8f);
@@ -303,11 +335,14 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
             int heldTicks = getUseDuration(stack, living) - remainingTicks;
             float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_TEMPEST_CHARGE_TICKS);
 
-            // Manage physical 3D tempest channeling wind tunnel entity
+            // Manage physical 3D tempest channeling wind tunnel entity. The search
+            // box matches the release search (6.0); a narrower box here could miss
+            // the live channel and spawn a second one. A channel that is already
+            // collapsing after a release does not count as the active channel.
             List<AzureTempestChannelEntity> existingChannels = serverLevel.getEntitiesOfClass(
                 AzureTempestChannelEntity.class,
-                player.getBoundingBox().inflate(4.0),
-                c -> c.getCasterId() == player.getId() && c.isAlive()
+                player.getBoundingBox().inflate(6.0),
+                c -> c.getCasterId() == player.getId() && c.isAlive() && !c.isReleasing()
             );
             AzureTempestChannelEntity channel;
             if (existingChannels.isEmpty()) {
@@ -335,20 +370,25 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
             ServerLevel serverLevel = (ServerLevel) level;
             int heldTicks = getUseDuration(stack, living) - timeLeft;
 
-            // Discard tempest channeling entity
+            // Collapse the tempest channel instead of discarding it in one tick:
+            // it fades out over 8 ticks while the storm takes over.
             List<AzureTempestChannelEntity> existingChannels = serverLevel.getEntitiesOfClass(
                 AzureTempestChannelEntity.class,
                 player.getBoundingBox().inflate(6.0),
                 c -> c.getCasterId() == player.getId()
             );
             for (AzureTempestChannelEntity c : existingChannels) {
-                c.discard();
+                c.beginRelease();
             }
 
             if (heldTicks >= 10) {
                 float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_TEMPEST_CHARGE_TICKS);
                 float radius = 10.0f + (chargeRatio * 20.0f); // 10 to 30 blocks radius
                 boolean isMaxCharge = (chargeRatio >= 0.95f);
+                // Storm life scales with the charge spent: 120 ticks for a bare
+                // release up to 340 at full charge. A 10 tick tap used to buy the
+                // same flat 220 ticks as a 15 second channel.
+                int lifeTicks = 120 + (int) (chargeRatio * 220.0f);
 
                 UUID targetUuid = LOCKED_TARGET_MAP.get(player.getUUID());
                 LivingEntity target = null;
@@ -364,7 +404,7 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
                 boolean followsPlayer = (target == null); // Tweak A (follows player) vs Tweak B (follows target)
 
                 Vec3 spawnPos = target != null ? target.position() : player.position();
-                AzureStormEntity storm = new AzureStormEntity(serverLevel, player, spawnPos, radius, followsPlayer, target, isMaxCharge);
+                AzureStormEntity storm = new AzureStormEntity(serverLevel, player, spawnPos, radius, followsPlayer, target, isMaxCharge, lifeTicks, chargeRatio);
                 serverLevel.addFreshEntity(storm);
 
                 player.sendSystemMessage(Component.literal("§b✦ Tempest Summoned! (" + (int) radius + "m domain) ✦"), true);
@@ -374,7 +414,10 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
                     SoundEvents.LIGHTNING_BOLT_IMPACT, SoundSource.WEATHER, 3.0f, 0.8f);
                 com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, spawnPos.x, spawnPos.y, spawnPos.z);
 
-                player.getCooldowns().addCooldown(stack, 60 + (int) (chargeRatio * 60));
+                // The cooldown outlives the storm by 100 ticks at every charge
+                // level, so a second domain can never stack on the first. The old
+                // 60 to 120 tick cooldown expired while a 220 tick storm still ran.
+                player.getCooldowns().addCooldown(stack, lifeTicks + 100);
             }
         }
         return true;
@@ -384,6 +427,8 @@ public class AzureDragonSwordItem extends Item implements com.dragonblockarcaned
         IS_RUSHING_MAP.remove(playerUuid);
         DOUBLE_RUSHING_MAP.remove(playerUuid);
         LAST_RUSH_START_TIME.remove(playerUuid);
+        LAST_MINI_TORNADO_TICK.remove(playerUuid);
+        LAST_QUAKE_TICK.remove(playerUuid);
         LOCKED_TARGET_MAP.remove(playerUuid);
     }
 }

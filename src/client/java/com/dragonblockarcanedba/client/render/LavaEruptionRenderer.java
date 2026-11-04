@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.LavaEruptionEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -24,6 +26,9 @@ public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, Lav
         public float age;
         public float yRot;
         public float reach;
+        public double posX;
+        public double posY;
+        public double posZ;
     }
 
     public boolean shouldRender(LavaEruptionEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -45,18 +50,35 @@ public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, Lav
         state.age = entity.tickCount + partialTick;
         state.yRot = entity.getYRot();
         state.reach = entity.reachAt(state.age);
+        state.posX = entity.getX();
+        state.posY = entity.getY();
+        state.posZ = entity.getZ();
     }
 
     @Override
     public void submit(EruptState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float fade = ease(Math.max(0.0f, 1.0f - state.age / 12.0f));
+        // The shared envelope drives the alpha, so the wave builds over its
+        // first ticks and burns down over its last instead of popping in at
+        // full alpha. Distance steps the segment count down (standard point 1).
+        float scale = LayeredRender.distScale(cameraState, state.posX, state.posY, state.posZ);
+        float env = FxEnvelope.envelope(state.age, 12.0f);
+        float fade = ease(Math.max(0.0f, 1.0f - state.age / 12.0f)) * env;
         float bow = (0.45f + 0.9f * ease(Math.min(1.0f, state.age / 4.0f))) * fade;
+        int across = FxEnvelope.segments(14, scale, 8);
         RenderType type = KiRenderHelper.kiRenderType();
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            drawWave(buffer, matrix, pose, state.reach, bow, fade);
+            // Mid sheet: the wave itself. Core sheet: a shorter, denser pass
+            // inside it, so the middle reads bright and deep instead of flat.
+            drawWave(buffer, matrix, pose, state.reach, bow, fade, across);
+            drawWave(buffer, matrix, pose, state.reach * 0.55f, bow * 0.8f, fade, across);
+            // Anchor glow at the origin only: a base splash around the caster
+            // the wave erupts from, kept well inside the wave's own reach so
+            // the glow never claims ground the wave does not cover.
+            LayeredRender.drawAnchorGlow(pose, buffer, Math.min(state.reach * 0.45f, 2.2f), 0.03f,
+                1.0f, 0.42f, 0.05f, LayeredRender.ALPHA_MID * env, scale);
         });
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
@@ -68,9 +90,11 @@ public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, Lav
     }
 
     private static void drawWave(VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
-                                 float reach, float bow, float fade) {
-        int across = 14;
+                                 float reach, float bow, float fade, int across) {
         int bands = 5;
+        // Half angle of the drawn wave. The damage cone and the ground burn
+        // use cos of this same angle (LavaEruptionEntity.CONE_MIN_DOT), so
+        // all three agree on where the eruption ends.
         float arc = 1.15f;
         for (int i = 0; i < across; i++) {
             float u0 = i / (float) across;

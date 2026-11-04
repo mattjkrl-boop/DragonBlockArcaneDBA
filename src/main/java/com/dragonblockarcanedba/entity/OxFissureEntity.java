@@ -16,8 +16,9 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 
 /**
- * Ox Fissure Entity — Temporary burning ground fissure left by max-charge Groundbreaker (Tweak C).
- * Lasts 5 seconds (100 ticks) and deals 50 damage/sec to enemies on the fissure.
+ * Ox Fissure Entity: temporary burning ground fissure left by max-charge Groundbreaker (Tweak C).
+ * Lasts 5 seconds (100 ticks) and deals its constructor damagePerSec (150 from
+ * the Groundbreaker) to enemies standing on the drawn trench.
  */
 public class OxFissureEntity extends Projectile {
     private float damagePerSec = 50.0f;
@@ -65,11 +66,20 @@ public class OxFissureEntity extends Projectile {
                 );
             }
 
+            // Dissipation (point 5): embers rain back down over the cooling
+            // crack during the final 30 ticks instead of the fissure simply
+            // stopping at full brightness.
+            if (this.tickCount > MAX_LIFETIME - 30 && this.tickCount % 2 == 0) {
+                com.dragonblockarcanedba.util.LayeredParticles.emitRain(serverLevel, pos, 1.8f, 1.2f,
+                    this.tickCount, MAX_LIFETIME, com.dragonblockarcanedba.particle.DbaParticles.EMBER);
+            }
+
             if (this.tickCount % 10 == 0) {
                 // Sizzle / crackle sound
                 serverLevel.playSound(null, pos.x, pos.y, pos.z, SoundEvents.LAVA_POP, SoundSource.PLAYERS, 0.6f, 0.8f);
 
-                // Damage enemies standing on the fissure (50 dmg/sec = 25 per 10 ticks)
+                // Damage enemies standing on the fissure (damagePerSec per
+                // second, paid as half a second per 10 tick hit).
                 AABB aoe = this.getBoundingBox().inflate(2.5, 1.5, 2.5);
                 List<LivingEntity> enemies = serverLevel.getEntitiesOfClass(
                     LivingEntity.class, aoe,
@@ -80,8 +90,27 @@ public class OxFissureEntity extends Projectile {
                     ? serverLevel.damageSources().indirectMagic(this, owner)
                     : serverLevel.damageSources().hotFloor();
 
+                // The damage zone now shares the drawn trench's shape and
+                // orientation: the renderer draws a 3.6 block crack along the
+                // entity's yaw axis, so the hit test runs in that local frame
+                // (about 4.2 long, 2.0 wide) instead of the old unrotated
+                // 5 x 3 x 5 square that ignored the yaw entirely.
+                double yawRad = Math.toRadians(this.getYRot());
+                double axisX = -Math.sin(yawRad);
+                double axisZ = Math.cos(yawRad);
+                double perpX = Math.cos(yawRad);
+                double perpZ = Math.sin(yawRad);
+
                 float hitDamage = this.damagePerSec * 0.5f;
                 for (LivingEntity enemy : enemies) {
+                    double relX = enemy.getX() - pos.x;
+                    double relZ = enemy.getZ() - pos.z;
+                    double relY = enemy.getY() - pos.y;
+                    double localZ = relX * axisX + relZ * axisZ;
+                    double localX = relX * perpX + relZ * perpZ;
+                    if (Math.abs(localZ) > 2.1 || Math.abs(localX) > 1.0 || relY < -1.5 || relY > 2.0) {
+                        continue;
+                    }
                     enemy.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (hitDamage)));
                     enemy.igniteForSeconds(2.0f);
                 }

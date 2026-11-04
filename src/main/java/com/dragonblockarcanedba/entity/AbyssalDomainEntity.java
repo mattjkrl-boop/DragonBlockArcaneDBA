@@ -12,13 +12,17 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Abyssal Domain Entity — Physical 3D Geometric Void Storm Domain for Curse Blade (Abyssal Eclipse).
+ * Abyssal Domain Entity: Physical 3D Geometric Void Storm Domain for Curse Blade (Abyssal Eclipse).
  * Tracks the expanding domain radius (10.0 to 30.0 blocks) and renders the volumetric void dome,
  * quad-tier ground whirlpools, orbiting void spires, central vortex column, and atmospheric arcs.
  */
 public class AbyssalDomainEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(AbyssalDomainEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(AbyssalDomainEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> FADE_REMAINING = SynchedEntityData.defineId(AbyssalDomainEntity.class, EntityDataSerializers.INT);
+
+    /** Ticks the dome spends collapsing once the channel stops refreshing it. */
+    public static final int FADE_TICKS = 30;
 
     private int lifetime = 10; // Matches refreshLifetime: alive only while channeled
 
@@ -40,6 +44,7 @@ public class AbyssalDomainEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(RADIUS, 10.0f);
         builder.define(CASTER_ID, -1);
+        builder.define(FADE_REMAINING, -1);
     }
 
     public float getRadius() {
@@ -56,6 +61,22 @@ public class AbyssalDomainEntity extends Projectile {
 
     public void refreshLifetime() {
         this.lifetime = 10; // Keep alive as long as refreshed each tick
+        // A re-channel during the collapse revives the dome instead of
+        // fighting the fade.
+        if (getFadeRemaining() >= 0) {
+            this.entityData.set(FADE_REMAINING, -1);
+        }
+    }
+
+    /** Remaining dissipation ticks, or -1 while the storm is standing. */
+    public int getFadeRemaining() {
+        return this.entityData.get(FADE_REMAINING);
+    }
+
+    /** 1.0 while standing, falling to 0 across the dissipation. */
+    public float getFadeFraction() {
+        int f = getFadeRemaining();
+        return f < 0 ? 1.0f : Math.max(0.0f, f / (float) FADE_TICKS);
     }
 
     @Override
@@ -74,35 +95,41 @@ public class AbyssalDomainEntity extends Projectile {
             this.setPos(owner.getX(), owner.getY(), owner.getZ());
         }
 
-        // Theme particles (T5): void smoke drifting through the domain and
-        // ki motes feeding the vortex, density scaled like other emitters.
-        if (this.level() instanceof ServerLevel serverLevel) {
-            if (this.tickCount % 4 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    serverLevel.sendParticles(
-                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
-                        this.getX(), this.getY() + 1.0, this.getZ(),
-                        Math.max(1, Math.round(5f * density)),
-                        getRadius() * 0.6, 1.5, getRadius() * 0.6, 0.03);
-                }
-            }
-            if (this.tickCount % 12 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    serverLevel.sendParticles(
-                        com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
-                        this.getX(), this.getY() + 0.6, this.getZ(),
-                        Math.max(1, Math.round(2f * density)),
-                        getRadius() * 0.25, 0.8, getRadius() * 0.25, 0.04);
-                }
+        // Layered storm particles (point 1): the shared three layer vortex
+        // emitter replaces the old flat void smoke puffs, and the dying storm
+        // winds down through the same envelope while theme rain falls.
+        if (this.level() instanceof ServerLevel serverLevel && this.tickCount % 2 == 0) {
+            float height = Math.min(24.0f, getRadius() * 1.30f);
+            Vec3 center = new Vec3(this.getX(), this.getY() + 0.4, this.getZ());
+            int fade = getFadeRemaining();
+            if (fade >= 0) {
+                float age = 70.0f + (1.0f - fade / (float) FADE_TICKS) * 30.0f;
+                com.dragonblockarcanedba.util.LayeredParticles.emitVortex(serverLevel, center, getRadius() * 0.8f, height, age, 100.0f, 0xFFE61230,
+                    com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE);
+                com.dragonblockarcanedba.util.LayeredParticles.emitRain(serverLevel, center, getRadius(), height, age, 100.0f,
+                    com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE);
+            } else {
+                // The synthetic age and life pin the shared envelope at its
+                // peak; the channel build up is carried by the growing radius.
+                com.dragonblockarcanedba.util.LayeredParticles.emitVortex(serverLevel, center, getRadius() * 0.8f, height, 50.0f, 100.0f, 0xFFE61230,
+                    com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE);
             }
         }
 
         if (!this.level().isClientSide()) {
-            this.lifetime--;
-            if (this.lifetime <= 0 || (owner != null && !owner.isAlive())) {
-                this.discard();
+            if (getFadeRemaining() >= 0) {
+                // Dissipation (point 5): collapse over FADE_TICKS instead of
+                // vanishing the tick the channel ends.
+                int f = getFadeRemaining() - 1;
+                this.entityData.set(FADE_REMAINING, f);
+                if (f <= 0) {
+                    this.discard();
+                }
+            } else {
+                this.lifetime--;
+                if (this.lifetime <= 0 || (owner != null && !owner.isAlive())) {
+                    this.entityData.set(FADE_REMAINING, FADE_TICKS);
+                }
             }
         }
     }

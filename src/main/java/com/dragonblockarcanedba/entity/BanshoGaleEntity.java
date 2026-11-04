@@ -58,6 +58,37 @@ public class BanshoGaleEntity extends Projectile {
                 this.discard();
                 return;
             }
+            // Block collision: the gale used to fly through solid walls for its
+            // full travel while the fan's own wind projectile clips. Same world
+            // rules as the projectile now: clip the step, burst on the face.
+            Vec3 stepFrom = this.position();
+            Vec3 stepTo = stepFrom.add(motion);
+            net.minecraft.world.phys.BlockHitResult blockHit = this.level().clip(new net.minecraft.world.level.ClipContext(
+                stepFrom, stepTo,
+                net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                net.minecraft.world.level.ClipContext.Fluid.NONE, this
+            ));
+            if (blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+                Vec3 hitPos = blockHit.getLocation();
+                this.setPos(hitPos.x, hitPos.y, hitPos.z);
+                Entity owner = this.getOwner();
+                BanshoShockwaveEntity burst = new BanshoShockwaveEntity(
+                    serverLevel,
+                    owner instanceof LivingEntity living ? living : null,
+                    hitPos,
+                    this.getYRot(),
+                    this.getXRot(),
+                    2.2f,
+                    false // Radial impact burst
+                );
+                burst.setOrientToImpact(true);
+                serverLevel.addFreshEntity(burst);
+                com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, hitPos, 1.6f, 0x26FFA6);
+                serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z,
+                    net.minecraft.sounds.SoundEvents.WIND_CHARGE_BURST.value(), net.minecraft.sounds.SoundSource.PLAYERS, 0.9f, 1.2f);
+                this.discard();
+                return;
+            }
             Entity owner = this.getOwner();
             AABB box = this.getBoundingBox().expandTowards(motion).inflate(1.6, 0.8, 1.6);
             List<LivingEntity> hits = serverLevel.getEntitiesOfClass(LivingEntity.class, box,

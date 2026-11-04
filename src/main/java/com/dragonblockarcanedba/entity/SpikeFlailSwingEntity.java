@@ -1,5 +1,9 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.config.DbaEffectsConfig;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
+import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -97,6 +101,15 @@ public class SpikeFlailSwingEntity extends Projectile {
         this.setPos(ball.x, ball.y, ball.z);
         if (this.level().isClientSide() || !(this.level() instanceof ServerLevel server)) {
             return;
+        }
+        // Spark and dust trail off the ball, breathing with the swing's own envelope.
+        float env = FxEnvelope.envelope(this.tickCount, SWING_TICKS);
+        float density = DbaEffectsConfig.effectDensity();
+        if (env > 0f && density > 0f) {
+            server.sendParticles(DbaParticles.SPARK, ball.x, ball.y, ball.z,
+                Math.max(1, Math.round(3f * env * density)), 0.22, 0.22, 0.22, 0.01);
+            server.sendParticles(LayeredParticles.dust(0xD8C9A3, 1.1f), ball.x, ball.y, ball.z,
+                Math.max(1, Math.round(2f * env * density)), 0.3, 0.2, 0.3, 0.01);
         }
         float damage = this.entityData.get(DAMAGE);
         AABB box = this.getBoundingBox().inflate(1.15);

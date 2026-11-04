@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.DimensionalWarpRiftEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -64,37 +66,134 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
 
     @Override
     public void submit(WarpRiftRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
+        float life = (float) state.maxLifetime;
+        float progress = Math.min(1.0f, state.age / life);
         if (progress >= 1.0f) return;
 
-        float entrance = ease(Math.min(1.0f, state.age / 6.0f));
-        float fade = (float) Math.sin(progress * Math.PI);
-        if (fade <= 0.001f) return;
+        // Shared lifecycle envelope (point 5): build over the first 20 percent,
+        // full presence through the burst, dissipate over the last 35 percent.
+        // Replaces the old sine hump, which spent half the rift's short life
+        // half faded. The tear's own open and shut shaping below still applies.
+        float env = FxEnvelope.envelope(state.age, life, 0.20f, 0.35f);
+        if (env <= 0.001f) return;
+        float fade = env;
+        float distScale = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
 
+        float entrance = ease(Math.min(1.0f, state.age / 6.0f));
         float expansion = state.isDestination ? (0.6f + progress * 0.7f) : (1.0f - progress * 0.4f);
         float radius = state.radius * entrance * expansion;
         float pulse = 0.88f + 0.12f * (float) Math.sin(state.age * 0.5f);
         RenderType renderType = KiRenderHelper.kiRenderType();
+
+        final float fRadius = radius;
+        final float fAge = state.age;
+        final float fFade = fade;
+        final float fDist = distScale;
+        final float fProgress = progress;
+        final boolean fDest = state.isDestination;
+        final long fSeed = state.seed;
 
         poseStack.pushPose();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            float shut = ease(Math.max(0.0f, (progress - 0.55f) / 0.45f));
+            float shut = ease(Math.max(0.0f, (fProgress - 0.55f) / 0.45f));
             float openTear = 1.0f - 0.88f * shut;
-            float tearH = (2.8f + pulse * 0.35f) * entrance * openTear * (state.isDestination ? (0.55f + 0.55f * ease(progress)) : (1.0f - 0.45f * ease(progress)));
-            float tearW = 0.42f * entrance * openTear * (state.isDestination ? (0.35f + 0.75f * ease(progress)) : (1.0f - 0.7f * ease(progress)));
+            float tearH = (2.8f + pulse * 0.35f) * entrance * openTear * (fDest ? (0.55f + 0.55f * ease(fProgress)) : (1.0f - 0.45f * ease(fProgress)));
+            float tearW = 0.42f * entrance * openTear * (fDest ? (0.35f + 0.75f * ease(fProgress)) : (1.0f - 0.7f * ease(fProgress)));
             float tearY = 1.4f;
 
-            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, radius * 0.72f, radius * 0.58f, 32, state.age * 10.0f,
-                0.55f, 0.02f, 0.90f, fade * 0.75f);
-            drawVerticalTearSlit(matrix, buffer, tearW, tearH, tearY, 0.0f, fade * openTear);
-            drawTearWake(matrix, buffer, tearW, tearH, tearY, fade * (1.0f - shut), shut);
+            // Ground anchor glow and the layered vortex column around the tear
+            // (point 1): the shared three band system, so the rift reads in the
+            // same visual language as every other spectacle effect.
+            LayeredRender.drawAnchorGlow(pose, buffer, fRadius * 1.2f, 0.05f,
+                0.62f, 0.10f, 0.92f, 0.55f * fFade, fDist);
+            LayeredRender.drawVortexBands(pose, buffer, fRadius * 0.55f, 3.4f, fAge,
+                0.62f, 0.10f, 0.92f, fFade, fDist);
+
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, fRadius * 0.72f, fRadius * 0.58f, 32, fAge * 10.0f,
+                0.55f, 0.02f, 0.90f, fFade * 0.75f);
+
+            // Eight radiating fissure trenches cracking out from the tear.
+            for (int i = 0; i < 8; i++) {
+                double ang = Math.toRadians(i * 45.0 + hash(fSeed, i) * 22.0);
+                float inner = fRadius * 0.25f;
+                float outer = fRadius * (0.95f + 0.30f * hash(fSeed, i + 40));
+                drawTrenchSegment(matrix, buffer,
+                    (float) Math.cos(ang) * inner, (float) Math.sin(ang) * inner,
+                    (float) Math.cos(ang) * outer, (float) Math.sin(ang) * outer,
+                    0.16f, 0.55f, 0.05f, 0.90f, fFade * 0.50f);
+            }
+
+            // Dual gyroscopic orbital rings around the tear.
+            drawTiltedOrbitalRing(matrix, buffer, fRadius * 0.62f, tearY, 38.0f, fAge * 24.0f,
+                1.0f, 0.15f, 0.85f, fFade * 0.65f);
+            drawTiltedOrbitalRing(matrix, buffer, fRadius * 0.62f, tearY, -38.0f, -fAge * 19.0f,
+                0.60f, 0.05f, 0.95f, fFade * 0.55f);
+
+            drawVerticalTearSlit(matrix, buffer, tearW, tearH, tearY, 0.0f, fFade * openTear);
+            drawTearWake(matrix, buffer, tearW, tearH, tearY, fFade * (1.0f - shut), shut);
+
+            // Central spinning singularity, the same octahedron language as
+            // the slash's core.
+            drawSingularityOctahedron(matrix, buffer, 0, tearY, 0, 0.34f * pulse, fAge * 35.0f,
+                0.02f, 0.0f, 0.05f, 0.99f * fFade,
+                1.0f, 0.15f, 0.85f, 0.95f * fFade,
+                1.0f, 1.0f, 1.0f, fFade);
+
+            // Eight crystalline void shards: they spiral inward at the origin
+            // as the world is pulled apart, and erupt outward at the
+            // destination as the arrival blows the tear open.
+            for (int i = 0; i < 8; i++) {
+                double ang = fSeed * 0.001 + i * (Math.PI * 2.0 / 8.0) + fAge * 0.06;
+                float orbitFrac = fDest
+                    ? 0.30f + 0.65f * ease(fProgress)
+                    : 0.85f - 0.50f * ease(fProgress);
+                float orbitR = fRadius * orbitFrac;
+                float cx = (float) Math.cos(ang) * orbitR;
+                float cz = (float) Math.sin(ang) * orbitR;
+                float cy = 0.6f + 1.7f * hash(fSeed, i + 80) + 0.18f * (float) Math.sin(fAge * 0.35 + i);
+                float tx = (float) -Math.sin(ang), tz = (float) Math.cos(ang);
+                float hw = 0.14f;
+                draw3DShardPyramid(matrix, buffer,
+                    cx + tx * hw, cy, cz + tz * hw,
+                    cx - tx * hw, cy, cz - tz * hw,
+                    cx * 0.55f, cy + 0.55f, cz * 0.55f,
+                    0.55f, 0.05f, 0.90f, fFade * 0.75f,
+                    1.0f, 0.15f, 0.85f, fFade * 0.95f);
+            }
+
+            // Six shattered void slabs levered up around the rim, tipped with
+            // the tear's magenta where the space broke.
+            for (int i = 0; i < 6; i++) {
+                double ang = Math.toRadians(i * 60.0 + hash(fSeed, i + 120) * 26.0);
+                float rimR = fRadius * 0.85f;
+                float cx = (float) Math.cos(ang) * rimR;
+                float cz = (float) Math.sin(ang) * rimR;
+                float tx = (float) -Math.sin(ang), tz = (float) Math.cos(ang);
+                float hw = 0.30f;
+                float tipR = fRadius * 0.60f;
+                drawRockSlab(matrix, buffer,
+                    cx + tx * hw, 0.06f, cz + tz * hw,
+                    cx - tx * hw, 0.06f, cz - tz * hw,
+                    (float) Math.cos(ang) * tipR, 1.0f + 0.45f * hash(fSeed, i + 160), (float) Math.sin(ang) * tipR,
+                    0.08f, 0.01f, 0.14f, fFade * 0.90f,
+                    0.85f, 0.10f, 0.60f, fFade * 0.90f);
+            }
         });
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /** Deterministic per-rift, per-index variation in 0..1, so every tear differs slightly but never flickers. */
+    private static float hash(long seed, int i) {
+        long h = seed ^ (i * 0x9E3779B97F4A7C15L);
+        h ^= h >>> 33;
+        h *= 0xff51afd7ed558ccdL;
+        h ^= h >>> 33;
+        return (h & 0xFFFFFF) / (float) 0x1000000;
     }
 
     private static float ease(float t) {

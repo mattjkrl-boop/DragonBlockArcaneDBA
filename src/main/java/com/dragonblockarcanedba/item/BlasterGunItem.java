@@ -159,6 +159,12 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
         bolt.setDeltaMovement(look.x * speed, look.y * speed, look.z * speed);
         level.addFreshEntity(bolt);
 
+        // Muzzle flash: a small spark snap at the barrel on every shot so the
+        // barrage has a visible source, not just bolts appearing mid-air.
+        Vec3 muzzle = player.getEyePosition().add(look.scale(0.7));
+        level.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+            muzzle.x, muzzle.y, muzzle.z, 2, 0.08, 0.08, 0.08, 0.03);
+
         if (isOvercharged) {
             setHeat(stack, 0); // Reset heat after overcharged blast
             // Heat finally has a downside: venting. The barrage pauses for a second
@@ -188,8 +194,13 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
         ItemStack stack = player.getItemInHand(hand);
         int ammo = getAmmoCount(player);
         if (ammo < 10 && !player.isCreative()) {
-            player.sendSystemMessage(Component.literal("§cNeed at least 10 Blaster Ammo for Erasure Cannon!"));
-            return InteractionResult.PASS;
+            // Matches the rest of the mod: a failed cost gate returns FAIL and
+            // reports on the action bar, not a chat message with PASS. The
+            // action-bar overload only exists on ServerPlayer, hence the cast.
+            if (player instanceof ServerPlayer serverPlayer) {
+                serverPlayer.sendSystemMessage(Component.literal("§cNeed at least 10 Blaster Ammo for Erasure Cannon!"), true);
+            }
+            return InteractionResult.FAIL;
         }
         player.startUsingItem(hand);
         return InteractionResult.CONSUME;
@@ -246,7 +257,21 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
             }
 
             int heldTicks = getUseDuration(stack, living) - timeLeft;
-            float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
+            float chargeRatio = Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS);
+
+            // Low charge fizzle (spectacle pass): the old 0.1 charge floor
+            // meant an accidental click still fired an 11 ammo beam worth
+            // over a thousand damage. Below 20 percent charge the shot now
+            // fizzles at the muzzle: no beam, no ammo spent, no cooldown.
+            if (chargeRatio < 0.2f) {
+                Vec3 fizzlePos = player.getEyePosition().add(player.getLookAngle().scale(0.8));
+                serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                    fizzlePos.x, fizzlePos.y, fizzlePos.z, 6, 0.20, 0.20, 0.20, 0.05);
+                player.sendSystemMessage(Component.literal("§cErasure Cannon fizzled: hold the charge longer!"), true);
+                serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.DISPENSER_FAIL, SoundSource.PLAYERS, 1.0f, 1.2f);
+                return true;
+            }
 
             // Ammo cost: 10 base, up to 20 at max charge. The full cost is required:
             // the shot used to fire at full damage while paying only whatever ammo
@@ -276,7 +301,12 @@ public class BlasterGunItem extends Item implements com.dragonblockarcanedba.ite
                 beamLength = (float) start.distanceTo(blockHit.getLocation());
             }
 
-            float baseDamage = 900.0f + (chargeRatio * 1400.0f);
+            // Rebased so charge pays monotonically past the standard's 2x
+            // rule: the weakest real shot (0.2 charge) is 1100 plus Spirit,
+            // full charge stays 2300 plus Spirit, and the beam entity now
+            // delivers the total as 6 pulses across its burn instead of one
+            // tick 1 hit.
+            float baseDamage = 800.0f + (chargeRatio * 1500.0f);
             float spiritBonus = accessor.dba$getSpirit() * 4.0f;
             float totalDamage = baseDamage + spiritBonus;
 

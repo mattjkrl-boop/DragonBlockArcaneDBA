@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.BraveRushTrailEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -30,8 +32,8 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         public float age = 0;
         public float yRot = 0;
         public float xRot = 0;
+        public int maxLifetime = 30;
         public boolean isFirstPersonOwner = false;
-        public boolean onRight = true;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -57,27 +59,24 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         state.age = entity.tickCount + partialTicks;
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
+        state.maxLifetime = entity.getMaxLifetime();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-        state.isFirstPersonOwner = (mc.player != null && 
-            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) && 
+        state.isFirstPersonOwner = (mc.player != null &&
+            (entity.getCasterId() == mc.player.getId() || entity.getOwner() == mc.player) &&
             mc.options.getCameraType().isFirstPerson());
-        if (mc.player != null) {
-            boolean isRightHanded = (mc.player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT);
-            boolean isOffhand = (mc.player.getOffhandItem().getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem && 
-                !(mc.player.getMainHandItem().getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem));
-            state.onRight = isRightHanded ? !isOffhand : isOffhand;
-        }
     }
 
     @Override
     public void submit(TrailRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        float maxLife = 14.0f;
+        // The lifetime comes from the entity, not a second hardcoded copy:
+        // the trail now lives 30 ticks, long enough for the dash to read.
+        float maxLife = (float) state.maxLifetime;
         float progress = Math.min(1.0f, state.age / maxLife);
         if (progress >= 1.0f) return;
 
-        float open = smooth(Math.min(1.0f, progress / 0.40f));
-        float alpha = (1.0f - smooth(progress)) * 0.90f;
+        float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.25f));
+        float alpha = FxEnvelope.envelope(state.age, maxLife, 0.25f, 0.4f) * 0.90f;
         float impact = strike(progress);
         float scale = state.trailScale * (state.isFirstPersonOwner ? 0.45f : 1.0f);
         float len = state.trailLength * (0.35f + 0.65f * open);
@@ -89,10 +88,11 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
+        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
-            int coneSegments = 24;
+            int coneSegments = FxEnvelope.segments(24, distScale, 10);
             float coneLength = len;
             float coneBase = (state.isFirstPersonOwner ? 1.05f : 0.90f) * scale;
             float baseZ = tipZ - coneLength;
@@ -109,38 +109,47 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
                 drawTriangle(matrix, buffer, 0, 0, tipZ, x1 * 0.12f, y1 * 0.12f, tipZ - coneLength * 0.72f, x2 * 0.12f, y2 * 0.12f, tipZ - coneLength * 0.72f, 1.0f, 0.98f, 0.85f, alpha);
             }
 
+            // Twin helical valor streamlines, as the header promises: two
+            // strands half a turn apart, gold and cyan, each with a white
+            // core. Before this pass the loop drew a single gold strand.
             int ribbonSteps = 14;
-            for (int s = 0; s < ribbonSteps; s++) {
-                float t1 = s / (float) ribbonSteps;
-                float t2 = (s + 1) / (float) ribbonSteps;
-                float z1 = tipZ - (t1 * len);
-                float z2 = tipZ - (t2 * len);
-                float r1 = (0.18f + t1 * 0.85f * open) * scale;
-                float r2 = (0.18f + t2 * 0.85f * open) * scale;
-                double ang1 = (t1 * Math.PI * 2.4) + (state.age * 0.18);
-                double ang2 = (t2 * Math.PI * 2.4) + (state.age * 0.18);
-                float rx1 = (float) Math.cos(ang1) * r1;
-                float ry1 = (float) Math.sin(ang1) * r1;
-                float rx2 = (float) Math.cos(ang2) * r2;
-                float ry2 = (float) Math.sin(ang2) * r2;
-                float rw1 = 0.10f * (1.0f - t1 * 0.4f) * scale;
-                float rw2 = 0.10f * (1.0f - t2 * 0.4f) * scale;
-                drawQuad(matrix, buffer,
-                    rx1 - rw1, ry1, z1,
-                    rx1 + rw1, ry1, z1,
-                    rx2 + rw2, ry2, z2,
-                    rx2 - rw2, ry2, z2,
-                    1.0f, 0.84f, 0.0f, alpha * (1.0f - t1)
-                );
-                float cw1 = rw1 * 0.28f;
-                float cw2 = rw2 * 0.28f;
-                drawQuad(matrix, buffer,
-                    rx1 - cw1, ry1, z1,
-                    rx1 + cw1, ry1, z1,
-                    rx2 + cw2, ry2, z2,
-                    rx2 - cw2, ry2, z2,
-                    1.0f, 0.98f, 0.9f, alpha * (1.0f - t1)
-                );
+            for (int strand = 0; strand < 2; strand++) {
+                double phase = strand * Math.PI;
+                float sr = strand == 0 ? 1.0f : 0.0f;
+                float sg = strand == 0 ? 0.84f : 0.95f;
+                float sb = strand == 0 ? 0.0f : 1.0f;
+                for (int s = 0; s < ribbonSteps; s++) {
+                    float t1 = s / (float) ribbonSteps;
+                    float t2 = (s + 1) / (float) ribbonSteps;
+                    float z1 = tipZ - (t1 * len);
+                    float z2 = tipZ - (t2 * len);
+                    float r1 = (0.18f + t1 * 0.85f * open) * scale;
+                    float r2 = (0.18f + t2 * 0.85f * open) * scale;
+                    double ang1 = phase + (t1 * Math.PI * 2.4) + (state.age * 0.18);
+                    double ang2 = phase + (t2 * Math.PI * 2.4) + (state.age * 0.18);
+                    float rx1 = (float) Math.cos(ang1) * r1;
+                    float ry1 = (float) Math.sin(ang1) * r1;
+                    float rx2 = (float) Math.cos(ang2) * r2;
+                    float ry2 = (float) Math.sin(ang2) * r2;
+                    float rw1 = 0.10f * (1.0f - t1 * 0.4f) * scale;
+                    float rw2 = 0.10f * (1.0f - t2 * 0.4f) * scale;
+                    drawQuad(matrix, buffer,
+                        rx1 - rw1, ry1, z1,
+                        rx1 + rw1, ry1, z1,
+                        rx2 + rw2, ry2, z2,
+                        rx2 - rw2, ry2, z2,
+                        sr, sg, sb, alpha * (1.0f - t1)
+                    );
+                    float cw1 = rw1 * 0.28f;
+                    float cw2 = rw2 * 0.28f;
+                    drawQuad(matrix, buffer,
+                        rx1 - cw1, ry1, z1,
+                        rx1 + cw1, ry1, z1,
+                        rx2 + cw2, ry2, z2,
+                        rx2 - cw2, ry2, z2,
+                        1.0f, 0.98f, 0.9f, alpha * (1.0f - t1)
+                    );
+                }
             }
 
             if (impact > 0.02f) {
@@ -151,11 +160,6 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
-    }
-
-    private static float smooth(float t) {
-        float x = Math.max(0.0f, Math.min(1.0f, t));
-        return x * x * (3.0f - 2.0f * x);
     }
 
     private static float strike(float progress) {
@@ -214,29 +218,5 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
 
             drawQuad(matrix, consumer, x1In, y1In, cz, x2In, y2In, cz, x2Out, y2Out, cz, x1Out, y1Out, cz, r, g, b, a);
         }
-    }
-
-    private static void drawBeam(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float radius, float r, float g, float b, float a) {
-        float dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.001f) return;
-
-        float nx = radius;
-        float ny = radius;
-
-        drawQuad(matrix, consumer,
-            x1 - nx, y1, z1,
-            x1 + nx, y1, z1,
-            x2 + nx, y2, z2,
-            x2 - nx, y2, z2,
-            r, g, b, a
-        );
-        drawQuad(matrix, consumer,
-            x1, y1 - ny, z1,
-            x1, y1 + ny, z1,
-            x2, y2 + ny, z2,
-            x2, y2 - ny, z2,
-            r, g, b, a
-        );
     }
 }

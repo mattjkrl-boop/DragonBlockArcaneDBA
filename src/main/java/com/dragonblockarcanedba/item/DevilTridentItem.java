@@ -127,9 +127,18 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
         if (!player.level().isClientSide()) {
             // The lasers were free and spammable at 750 damage a click. They now cost
             // Ki and carry a short cooldown like the other weapons' click abilities.
+            // The stack is resolved strictly: main hand if it is the trident, else
+            // the offhand if it is, else no shot and no Ki charged. The old code
+            // took the offhand unconditionally, so an unusual call path with no
+            // trident in either hand drained Ki and silently skipped the cooldown.
             ItemStack tridentStack = player.getMainHandItem().getItem() instanceof DevilTridentItem
-                ? player.getMainHandItem() : player.getOffhandItem();
-            if (tridentStack.getItem() instanceof DevilTridentItem && player.getCooldowns().isOnCooldown(tridentStack)) {
+                ? player.getMainHandItem()
+                : player.getOffhandItem().getItem() instanceof DevilTridentItem
+                    ? player.getOffhandItem() : ItemStack.EMPTY;
+            if (!(tridentStack.getItem() instanceof DevilTridentItem)) {
+                return;
+            }
+            if (player.getCooldowns().isOnCooldown(tridentStack)) {
                 return;
             }
             if (!WeaponDrainHelper.drainKiDiscrete(player, 60.0, 10)) {
@@ -138,9 +147,7 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
                 }
                 return;
             }
-            if (tridentStack.getItem() instanceof DevilTridentItem) {
-                player.getCooldowns().addCooldown(tridentStack, 10);
-            }
+            player.getCooldowns().addCooldown(tridentStack, 10);
             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 0.9f);
 
@@ -158,9 +165,20 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
             shard.recall();
         }
         SwarmHelper.recallSwarm(stack);
+        clearWipeKeys(stack);
         // Manual recall is a choice, so it costs 30 seconds. The 3-minute cooldown is
         // reserved for the forced recall when the swarm starves on Ki (manageShardSwarm).
         player.getCooldowns().addCooldown(stack, 600);
+    }
+
+    /** Removes the starvation wipe bookkeeping keys from a trident stack, if present. */
+    private static void clearWipeKeys(ItemStack stack) {
+        net.minecraft.nbt.CompoundTag tag = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
+        if (tag.contains("swarmWipePending") || tag.contains("swarmWipeEmptyTicks")) {
+            tag.remove("swarmWipePending");
+            tag.remove("swarmWipeEmptyTicks");
+            stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+        }
     }
 
     // Right Click: Deployment / Recall
@@ -175,9 +193,12 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
                 // Recall Shards
                 recallShards(serverLevel, player, stack, stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag());
             } else {
-                // Physical 3D Demonic Ground Slam & Shockwave
+                // Physical 3D Demonic Ground Slam & Shockwave. The slam entity owns
+                // the hit now: its damage and launch land at tick 8, when the seal
+                // has grown in and the spikes stand, over radius 6.0, the same
+                // radius its seal draws. The cast tick itself only telegraphs.
                 Vec3 pos = player.position();
-                DevilSlamShockwaveEntity slamEntity = new DevilSlamShockwaveEntity(serverLevel, player, pos, 5.0f);
+                DevilSlamShockwaveEntity slamEntity = new DevilSlamShockwaveEntity(serverLevel, player, pos, 6.0f);
                 serverLevel.addFreshEntity(slamEntity);
 
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -186,46 +207,19 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
 
                 com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, pos.x, pos.y, pos.z);
 
-                AABB aoe = player.getBoundingBox().inflate(5.0);
-                List<LivingEntity> targets = serverLevel.getEntitiesOfClass(LivingEntity.class, aoe, e -> e != player && e.isAlive());
-                for (LivingEntity t : targets) {
-                    // Distance falloff: full 750 point blank, down to 40 percent at the rim.
-                    double dist = t.distanceTo(player);
-                    double falloff = dist <= 2.5 ? 1.0 : Math.max(0.4, 1.0 - (dist - 2.5) / 2.5 * 0.6);
-                    t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (750.0 * falloff)));
-                    t.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 300, 2, false, true), player);
-                    t.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 300, 0, false, false, false), player);
-                    
-                    // MC 26.2 Physics: Demonic ground slam kinetic bounce
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                        t,
-                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
-                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("devil_slam_bounce"),
-                        0.85,
-                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
-                    );
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                        t,
-                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
-                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("devil_slam_drag"),
-                        -0.40,
-                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
-                    );
-
-                    // Ground pull
-                    t.setDeltaMovement(t.getDeltaMovement().add(0, -2.0, 0));
-                    com.dragonblockarcanedba.util.DbaCompat.markHurt(t);
-                }
-
-                // Spawn 10 Shards
+                // Spawn 10 Shards bursting out of the slam crater in a ring. Each
+                // shard flies out to its place over its first ticks (staggered by
+                // index, see TridentShardEntity) instead of popping in overhead.
                 for (int i = 0; i < 10; i++) {
                     TridentShardEntity shard = new TridentShardEntity(player.level(), player, i);
-                    shard.setPos(pos.x, pos.y + 2.0, pos.z);
+                    double a = i * (Math.PI * 2.0 / 10.0);
+                    shard.setPos(pos.x + Math.cos(a) * 0.9, pos.y + 0.5, pos.z + Math.sin(a) * 0.9);
                     serverLevel.addFreshEntity(shard);
                 }
 
                 SwarmHelper.deploySwarm(stack, 10, 15000.0f); // 15000 is default health
-                
+                clearWipeKeys(stack);
+
                 player.getCooldowns().addCooldown(stack, 20); // 1 second buffer before recall
             }
             return InteractionResult.SUCCESS;
@@ -272,15 +266,48 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
                 }
             }
 
+            net.minecraft.nbt.CompoundTag tag = trident.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
+
+            // Starvation wipe settlement: when Ki starved, the shards were sent home
+            // and the 3-minute cooldown normally starts when the last one arrives
+            // (onSwarmArrivedHome). A shard discarded by distance, logoff, or chunk
+            // unload never arrives, so the cooldown used to be skippable entirely.
+            // Now the wipe is a debt on the stack: if every shard is simply gone for
+            // 40 straight ticks while a wipe is pending, the swarm is settled here
+            // with the same recall and the same 3600 tick cooldown. The 40 tick
+            // delay keeps a shard in a briefly unloaded chunk from settling early.
+            if (tag.getBoolean("isDeployed").orElse(false) && tag.getBoolean("swarmWipePending").orElse(false)) {
+                int totalShards = world.getEntitiesOfClass(TridentShardEntity.class,
+                    player.getBoundingBox().inflate(160.0), e -> e.getOwnerId() == player.getId()).size();
+                if (totalShards > 0) {
+                    if (tag.getInt("swarmWipeEmptyTicks").orElse(0) != 0) {
+                        tag.putInt("swarmWipeEmptyTicks", 0);
+                        trident.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+                    }
+                } else {
+                    int emptyTicks = tag.getInt("swarmWipeEmptyTicks").orElse(0) + 1;
+                    if (emptyTicks >= 40) {
+                        SwarmHelper.recallSwarm(trident);
+                        clearWipeKeys(trident);
+                        player.getCooldowns().addCooldown(trident, 3600);
+                        return;
+                    }
+                    tag.putInt("swarmWipeEmptyTicks", emptyTicks);
+                    trident.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+                }
+            }
+
             if (activeShards.isEmpty()) return;
 
-            net.minecraft.nbt.CompoundTag tag = trident.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
-            
             // Ki Drain logic: 20% per minute (all shards die when Ki is exhausted)
             if (tag.getBoolean("isDeployed").orElse(false)) {
                 if (!WeaponDrainHelper.drainKiPerTick(player, 20.0)) {
-                    // Out of Ki. Every shard flies home. The same 3-minute cooldown
-                    // starts in onSwarmArrivedHome, once the last one is in the trident.
+                    // Out of Ki. Every shard flies home and the wipe debt is marked on
+                    // the stack. The same 3-minute cooldown starts in
+                    // onSwarmArrivedHome once the last one is in the trident, or in
+                    // the settlement above if none of them ever arrive.
+                    tag.putBoolean("swarmWipePending", true);
+                    trident.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
                     for (TridentShardEntity shard : activeShards) {
                         shard.returnHome();
                     }
@@ -362,6 +389,7 @@ public class DevilTridentItem extends Item implements com.dragonblockarcanedba.i
             return;
         }
         SwarmHelper.recallSwarm(trident);
+        clearWipeKeys(trident);
         player.getCooldowns().addCooldown(trident, 3600);
     }
 }

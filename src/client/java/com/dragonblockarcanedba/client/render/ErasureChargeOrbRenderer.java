@@ -16,11 +16,13 @@ import org.joml.Matrix4f;
 /**
  * Entity Renderer for Erasure Cannon Muzzle Charge Orb in MC 26.2.
  * Renders an expanding physical 3D geometric energy orb model:
- * - Blinding white-cyan octahedron/icosahedron energy singularity core
+ * - Blinding white-cyan octahedron energy singularity core (rotates for real)
  * - Expanding outer geodesic energy cage with counter-rotating polyhedral shells
- * - 3 concentric synchrotron accelerator rings aligned with the gun muzzle axis
+ *   plus a faint wispy outer shell
+ * - 3 synchrotron accelerator rings in three planes (muzzle, horizontal, side)
  * - 8 inward-converging 3D plasma intake spikes spiraling into the singularity
- * - Helical containment ribbons and overdrive corona discharge arcs
+ * (Header corrected in the spectacle pass: it used to also promise helical
+ * containment ribbons and corona discharge arcs that were never drawn.)
  */
 public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEntity, ErasureChargeOrbRenderer.ErasureChargeRenderState> {
 
@@ -111,9 +113,21 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
             drawGeodesicSphere(matrix, buffer, orbRadius * 0.82f, age * -18.0f, 16, shellR, shellG, shellB, alpha * 0.72f);
             drawGeodesicSphere(matrix, buffer, orbRadius * 0.48f, age * 26.0f, 12, 0.85f + hot * 0.15f, 0.96f, 1.0f, alpha * (0.40f + hot * 0.45f));
 
+            // Outer wispy layer (standard point 1): a larger, faint shell at
+            // the standard outer band alpha so the orb's edge dissolves
+            // instead of ending at the mid shell.
+            drawGeodesicSphere(matrix, buffer, orbRadius * 1.18f, age * 9.0f, 12, 0.35f, 0.90f, 1.0f, alpha * 0.18f);
+
+            // Three accelerator rings in three planes, gyroscope style. The
+            // header has always promised 3 concentric rings; submit() used
+            // to draw only the muzzle-axis one below.
             float ringR = orbRadius * (1.48f - chargeEase * 0.28f);
             drawPlaneRing(matrix, buffer, 0, 0, 0, ringR, ringR * 0.86f, 28, age * 22.0f,
                 hot, 0.90f, 1.0f, alpha * 0.90f);
+            drawAxisRing(matrix, buffer, ringR * 0.94f, ringR * 0.94f * 0.86f, 24, age * -16.0f,
+                1, 0, 0, 0, 0, 1, hot * 0.6f, 0.85f, 1.0f, alpha * 0.60f);
+            drawAxisRing(matrix, buffer, ringR * 0.88f, ringR * 0.88f * 0.86f, 24, age * 27.0f,
+                0, 1, 0, 0, 0, 1, hot * 0.6f, 0.85f, 1.0f, alpha * 0.50f);
 
             // Intake spikes spiral inward as the charge eases up. They are the follow-through, not a second orb.
             int spikeCount = 8;
@@ -157,18 +171,38 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         poseStack.popPose();
     }
 
+    // Rotates one vertex: yaw around Y first, then pitch around X.
+    private static float[] rotVertex(float x, float y, float z, double cosYaw, double sinYaw, double cosPitch, double sinPitch) {
+        float x1 = (float) (x * cosYaw + z * sinYaw);
+        float z1 = (float) (-x * sinYaw + z * cosYaw);
+        float y2 = (float) (y * cosPitch - z1 * sinPitch);
+        float z2 = (float) (y * sinPitch + z1 * cosPitch);
+        return new float[]{x1, y2, z2};
+    }
+
     private static void drawRotatingOctahedron(Matrix4f matrix, VertexConsumer consumer, float r, float yawDeg, float pitchDeg, float red, float green, float blue, float alpha) {
         double yaw = Math.toRadians(yawDeg);
         double pitch = Math.toRadians(pitchDeg);
+        double cosYaw = Math.cos(yaw), sinYaw = Math.sin(yaw);
+        double cosPitch = Math.cos(pitch), sinPitch = Math.sin(pitch);
 
-        // 6 Vertices of an octahedron
-        float topX = 0, topY = r, topZ = 0;
-        float botX = 0, botY = -r, botZ = 0;
+        // 6 Vertices of an octahedron, actually rotated by yaw and pitch.
+        // Bug fix: this method used to convert both angles to radians and
+        // then never use them, so the "rotating" core was drawn unrotated
+        // while the shells and ring spun around it.
+        float[] top = rotVertex(0, r, 0, cosYaw, sinYaw, cosPitch, sinPitch);
+        float[] bot = rotVertex(0, -r, 0, cosYaw, sinYaw, cosPitch, sinPitch);
+        float[] p1 = rotVertex(r, 0, 0, cosYaw, sinYaw, cosPitch, sinPitch);
+        float[] p2 = rotVertex(0, 0, r, cosYaw, sinYaw, cosPitch, sinPitch);
+        float[] p3 = rotVertex(-r, 0, 0, cosYaw, sinYaw, cosPitch, sinPitch);
+        float[] p4 = rotVertex(0, 0, -r, cosYaw, sinYaw, cosPitch, sinPitch);
 
-        float p1X = r, p1Y = 0, p1Z = 0;
-        float p2X = 0, p2Y = 0, p2Z = r;
-        float p3X = -r, p3Y = 0, p3Z = 0;
-        float p4X = 0, p4Y = 0, p4Z = -r;
+        float topX = top[0], topY = top[1], topZ = top[2];
+        float botX = bot[0], botY = bot[1], botZ = bot[2];
+        float p1X = p1[0], p1Y = p1[1], p1Z = p1[2];
+        float p2X = p2[0], p2Y = p2[1], p2Z = p2[2];
+        float p3X = p3[0], p3Y = p3[1], p3Z = p3[2];
+        float p4X = p4[0], p4Y = p4[1], p4Z = p4[2];
 
         // Draw 8 triangular faces
         drawTriangle(matrix, consumer, topX, topY, topZ, p1X, p1Y, p1Z, p2X, p2Y, p2Z, red, green, blue, alpha);
@@ -248,6 +282,29 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
             float y2In = cy + (float) Math.sin(a2) * rInner;
 
             drawQuad(matrix, consumer, x1In, y1In, cz, x2In, y2In, cz, x2Out, y2Out, cz, x1Out, y1Out, cz, r, g, b, a);
+        }
+    }
+
+    // Ring in the plane spanned by two axis vectors (u, v), so the orb can
+    // carry rings in the horizontal and side planes as well as the muzzle
+    // plane drawPlaneRing covers.
+    private static void drawAxisRing(Matrix4f matrix, VertexConsumer consumer, float rOuter, float rInner, int segments, float rotDeg,
+                                     float ux, float uy, float uz, float vx, float vy, float vz,
+                                     float r, float g, float b, float a) {
+        double rotRad = Math.toRadians(rotDeg);
+        for (int i = 0; i < segments; i++) {
+            double a1 = (i / (double) segments) * Math.PI * 2.0 + rotRad;
+            double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0 + rotRad;
+
+            float c1 = (float) Math.cos(a1), s1 = (float) Math.sin(a1);
+            float c2 = (float) Math.cos(a2), s2 = (float) Math.sin(a2);
+
+            float x1Out = (ux * c1 + vx * s1) * rOuter, y1Out = (uy * c1 + vy * s1) * rOuter, z1Out = (uz * c1 + vz * s1) * rOuter;
+            float x2Out = (ux * c2 + vx * s2) * rOuter, y2Out = (uy * c2 + vy * s2) * rOuter, z2Out = (uz * c2 + vz * s2) * rOuter;
+            float x1In = (ux * c1 + vx * s1) * rInner, y1In = (uy * c1 + vy * s1) * rInner, z1In = (uz * c1 + vz * s1) * rInner;
+            float x2In = (ux * c2 + vx * s2) * rInner, y2In = (uy * c2 + vy * s2) * rInner, z2In = (uz * c2 + vz * s2) * rInner;
+
+            drawQuad(matrix, consumer, x1In, y1In, z1In, x2In, y2In, z2In, x2Out, y2Out, z2Out, x1Out, y1Out, z1Out, r, g, b, a);
         }
     }
 

@@ -1,10 +1,19 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.movement.MovementPhysics;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DebrisSpawner;
+import com.dragonblockarcanedba.util.FxEnvelope;
+import com.dragonblockarcanedba.util.GroundScar;
+import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.VortexPhysics;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
@@ -15,25 +24,59 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
- * Dimensional Warp Rift Entity — Physical 3D Spacetime Tear and Gravitational Void Portal
- * spawned at the departure origin and arrival destination during Dimensional Sword teleportation.
+ * Dimensional Warp Rift Entity: a physical 3D spacetime tear spawned at the
+ * departure origin and arrival destination of the Dimensional Sword warp.
+ *
+ * Lifecycle (SPECTACLE-STANDARD point 5): the tear builds first, dragging the
+ * world toward itself with VortexPhysics, and the burst (damage, and at the
+ * destination the fling, debris field, ground scar, and camera weight) lands
+ * at the burst tick, inside the visual's peak window, never on tick 1. The
+ * origin rift carries the warp itself: at its burst tick it teleports the
+ * owner and opens the destination rift, so crossing up to 1024 blocks has a
+ * visible build-up at both ends instead of an instant pop.
  */
 public class DimensionalWarpRiftEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> IS_DESTINATION = SynchedEntityData.defineId(DimensionalWarpRiftEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(DimensionalWarpRiftEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> LIFE = SynchedEntityData.defineId(DimensionalWarpRiftEntity.class, EntityDataSerializers.INT);
 
-    public static final int MAX_LIFETIME = 24; // 1.2 seconds
+    /** Origin: a shorter tear, it only has to let the player out. */
+    public static final int ORIGIN_LIFE = 34;
+    public static final int ORIGIN_BURST_TICK = 10;
+    /** Destination: the arrival is the spectacle, so it lives and dissipates longer. */
+    public static final int DEST_LIFE = 46;
+    public static final int DEST_BURST_TICK = 12;
+    /** Kept for compatibility with older call sites; per-instance life is in LIFE. */
+    public static final int MAX_LIFETIME = DEST_LIFE;
+
+    /** Theme dust color: the sword's violet magenta. */
+    public static final int THEME_ARGB = 0xCC26D9;
+
+    /** Shards of torn ground and space at the origin, where the world gets pulled apart. */
+    private static final List<BlockState> VOID_PALETTE = List.of(
+        Blocks.OBSIDIAN.defaultBlockState(),
+        Blocks.CRYING_OBSIDIAN.defaultBlockState(),
+        Blocks.AMETHYST_BLOCK.defaultBlockState()
+    );
 
     private float burstDamage = 750.0f;
-    private final Set<Integer> damagedTargets = new HashSet<>();
+    private boolean burstDone = false;
+
+    // Warp payload, origin rifts only: where the owner lands, where the
+    // destination tear opens, and how hard that end hits.
+    private boolean warpArmed = false;
+    private Vec3 warpLanding = null;
+    private Vec3 warpRiftPos = null;
+    private float warpDestDamage = 0f;
+    private float warpDestRadius = 0f;
 
     public DimensionalWarpRiftEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -48,12 +91,23 @@ public class DimensionalWarpRiftEntity extends Projectile {
         this.noPhysics = true;
         this.entityData.set(RADIUS, radius);
         this.entityData.set(IS_DESTINATION, isDestination);
+        this.entityData.set(LIFE, isDestination ? DEST_LIFE : ORIGIN_LIFE);
+    }
+
+    /** Arm this origin rift to carry a warp. Called by the item before the rift enters the world. */
+    public void armWarp(Vec3 landing, Vec3 riftPos, float destDamage, float destRadius) {
+        this.warpArmed = true;
+        this.warpLanding = landing;
+        this.warpRiftPos = riftPos;
+        this.warpDestDamage = destDamage;
+        this.warpDestRadius = destRadius;
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(IS_DESTINATION, false);
         builder.define(RADIUS, 3.5f);
+        builder.define(LIFE, ORIGIN_LIFE);
     }
 
     public boolean isDestination() {
@@ -65,124 +119,202 @@ public class DimensionalWarpRiftEntity extends Projectile {
     }
 
     public int getMaxLifetime() {
-        return MAX_LIFETIME;
+        return this.entityData.get(LIFE);
+    }
+
+    public int getBurstTick() {
+        return this.isDestination() ? DEST_BURST_TICK : ORIGIN_BURST_TICK;
     }
 
     @Override
     public void tick() {
         super.tick();
 
+        if (this.level().isClientSide() || !(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+
         Vec3 center = this.position();
         Entity owner = this.getOwner();
         float radius = this.getRiftRadius();
         boolean isDest = this.isDestination();
+        int life = this.getMaxLifetime();
+        int burstTick = this.getBurstTick();
+        LivingEntity livingOwner = owner instanceof LivingEntity living ? living : null;
 
-        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
-            // Audio cue on initial spawn
-            if (this.tickCount == 1) {
-                if (!isDest) {
-                    serverLevel.playSound(null, center.x, center.y, center.z,
-                        SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 2.0f, 0.7f);
-                    serverLevel.playSound(null, center.x, center.y, center.z,
-                        com.dragonblockarcanedba.sound.DbaSounds.DARK_PULSE, SoundSource.PLAYERS, 2.0f, 0.7f);
-                    serverLevel.playSound(null, center.x, center.y, center.z,
-                        SoundEvents.RESPAWN_ANCHOR_SET_SPAWN, SoundSource.PLAYERS, 1.8f, 0.6f);
-                    serverLevel.playSound(null, center.x, center.y, center.z,
-                        SoundEvents.PORTAL_TRAVEL, SoundSource.PLAYERS, 1.5f, 1.4f);
-                } else {
-                    serverLevel.playSound(null, center.x, center.y, center.z,
-                        SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.2f, 0.8f);
-                    serverLevel.playSound(null, center.x, center.y, center.z,
-                        com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.2f, 0.8f);
-                    serverLevel.playSound(null, center.x, center.y, center.z,
-                        SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 2.0f, 0.6f);
-                    serverLevel.playSound(null, center.x, center.y, center.z,
-                        SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 0.5f);
-                }
+        // Audio cue on initial spawn
+        if (this.tickCount == 1) {
+            if (!isDest) {
+                serverLevel.playSound(null, center.x, center.y, center.z,
+                    SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 2.0f, 0.7f);
+                serverLevel.playSound(null, center.x, center.y, center.z,
+                    com.dragonblockarcanedba.sound.DbaSounds.DARK_PULSE, SoundSource.PLAYERS, 2.0f, 0.7f);
+                serverLevel.playSound(null, center.x, center.y, center.z,
+                    SoundEvents.RESPAWN_ANCHOR_SET_SPAWN, SoundSource.PLAYERS, 1.8f, 0.6f);
+                serverLevel.playSound(null, center.x, center.y, center.z,
+                    SoundEvents.PORTAL_TRAVEL, SoundSource.PLAYERS, 1.5f, 1.4f);
+            } else {
+                serverLevel.playSound(null, center.x, center.y, center.z,
+                    SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.2f, 0.8f);
+                serverLevel.playSound(null, center.x, center.y, center.z,
+                    com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.2f, 0.8f);
+                serverLevel.playSound(null, center.x, center.y, center.z,
+                    SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.PLAYERS, 2.0f, 0.6f);
+                serverLevel.playSound(null, center.x, center.y, center.z,
+                    SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5f, 0.5f);
             }
+        }
 
-            // Theme particles (T5): void smoke wisping off the tear for its
-            // whole life, with sparks on the destination side where the
-            // travel finishes.
-            if (this.tickCount % 3 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    serverLevel.sendParticles(
-                        com.dragonblockarcanedba.particle.DbaParticles.VOID_SMOKE,
-                        center.x, center.y + 1.2, center.z,
-                        Math.max(1, Math.round(3f * density)),
-                        radius * 0.6, 1.2, radius * 0.6, 0.03);
-                }
-            }
-            if (isDest && this.tickCount % 6 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    serverLevel.sendParticles(
-                        com.dragonblockarcanedba.particle.DbaParticles.SPARK,
-                        center.x, center.y + 1.2, center.z,
-                        Math.max(1, Math.round(2f * density)),
-                        radius * 0.3, 0.8, radius * 0.3, 0.04);
-                }
-            }
+        // Layered particles for the whole life (point 1): bright core motes,
+        // a theme mid band, void smoke wisps at the rim, all breathing with
+        // the shared envelope, plus a spark drizzle while the tear dissipates.
+        LayeredParticles.emitVortex(serverLevel, center.add(0, 0.1, 0), radius * 0.8f, 3.2f,
+            this.tickCount, life, THEME_ARGB, DbaParticles.VOID_SMOKE);
+        float progress = (float) this.tickCount / (float) life;
+        if (progress > 0.65f) {
+            LayeredParticles.emitRain(serverLevel, center, radius, 2.6f,
+                this.tickCount, life, DbaParticles.SPARK);
+        }
 
-            // Damage and Physics distortion for entities in the rift area
-            AABB aoeBox = new AABB(
-                center.x - radius, center.y - 1.5, center.z - radius,
-                center.x + radius, center.y + 2.5, center.z + radius
+        // Build-up and aftershock forces (point 3): before the burst the tear
+        // drags everything toward itself, the destination harder to escape
+        // because the arrival is coming; after the burst only a fading swirl
+        // remains. Weight classes apply, so bosses barely move.
+        if (!burstDone) {
+            float build = Math.min(1.0f, this.tickCount / (float) burstTick);
+            VortexPhysics.applyVortex(serverLevel, center, radius, 3.0, livingOwner,
+                isDest ? 0.20 : 0.32, 0.8, isDest ? 0.02 : 0.05, build);
+        } else {
+            float env = FxEnvelope.envelope(this.tickCount, life);
+            if (env > 0f) {
+                VortexPhysics.applyVortex(serverLevel, center, radius, 3.0, livingOwner,
+                    0.10, 0.8, 0.02, env);
+            }
+        }
+
+        if (!burstDone && this.tickCount >= burstTick) {
+            burstDone = true;
+            doBurst(serverLevel, center, radius, isDest, livingOwner);
+        }
+
+        if (this.tickCount >= life) {
+            this.discard();
+        }
+    }
+
+    /**
+     * The burst: the one damaging moment, fired at the visual's peak tick.
+     * Damage, Melting, and the friction and drag distortion land together;
+     * the destination also flings its victims out, throws a debris field of
+     * the ground it tore open, scars that ground, and carries camera weight.
+     * An armed origin rift teleports its owner at this same tick and opens
+     * the destination rift.
+     */
+    private void doBurst(ServerLevel serverLevel, Vec3 center, float radius, boolean isDest, LivingEntity livingOwner) {
+        Entity owner = this.getOwner();
+        AABB aoeBox = new AABB(
+            center.x - radius, center.y - 1.5, center.z - radius,
+            center.x + radius, center.y + 2.5, center.z + radius
+        );
+        List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
+            LivingEntity.class, aoeBox,
+            e -> e.isAlive() && e != owner && center.distanceTo(e.position()) <= radius
+        );
+
+        for (LivingEntity target : targets) {
+            DamageSource damageSource = owner instanceof Player playerOwner
+                ? serverLevel.damageSources().playerAttack(playerOwner)
+                : (livingOwner != null ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().magic());
+
+            target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(this.burstDamage));
+            target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 200, 1, false, true), owner);
+
+            // MC 26.2 Physics: Spatial rift warp friction & drag distortion
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                target,
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
+                com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dimensional_wave_friction"),
+                -0.90,
+                net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
             );
-            List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
-                LivingEntity.class, aoeBox,
-                e -> e.isAlive() && e != owner && center.distanceTo(e.position()) <= radius
+            com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                target,
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dimensional_wave_drag"),
+                -0.80,
+                net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
             );
 
-            for (LivingEntity target : targets) {
-                if (!damagedTargets.contains(target.getId())) {
-                    damagedTargets.add(target.getId());
-
-                    DamageSource damageSource = owner instanceof Player playerOwner
-                        ? serverLevel.damageSources().playerAttack(playerOwner)
-                        : (owner instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobAttack(livingOwner) : serverLevel.damageSources().magic());
-
-                    target.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.burstDamage)));
-                    target.addEffect(new MobEffectInstance(DbaEffects.MELTING_HOLDER, 200, 1, false, true), owner);
-
-                    // MC 26.2 Physics: Spatial rift warp friction & drag distortion
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                        target,
-                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.FRICTION_ID,
-                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dimensional_wave_friction"),
-                        -0.90,
-                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
-                    );
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                        target,
-                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
-                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("dimensional_wave_drag"),
-                        -0.80,
-                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
-                    );
-
-                    // Gravitational force: pull towards origin rift or push outward from destination rift
-                    if (!isDest) {
-                        Vec3 toCenter = center.subtract(target.position());
-                        if (toCenter.length() > 0.3) {
-                            Vec3 pull = toCenter.normalize().scale(0.35);
-                            target.setDeltaMovement(target.getDeltaMovement().add(pull.x, 0.1, pull.z));
-                            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
-                        }
-                    } else {
-                        Vec3 fromCenter = target.position().subtract(center);
-                        if (fromCenter.length() > 0.1) {
-                            Vec3 push = fromCenter.normalize().scale(0.5);
-                            target.setDeltaMovement(target.getDeltaMovement().add(push.x, 0.2, push.z));
-                            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
-                        }
-                    }
-                }
+            if (isDest) {
+                // Arrival ejects: everything the tear dragged in gets thrown out.
+                VortexPhysics.fling(target, center, 0.95, 0.5);
             }
+        }
 
-            if (this.tickCount >= MAX_LIFETIME) {
-                this.discard();
+        if (isDest) {
+            // The arrival tears the ground it lands on: debris field of the
+            // real terrain, a temporary scar disk, a base burst, camera weight.
+            DebrisSpawner.spawnField(serverLevel, livingOwner, center, 24, radius, 3.5, 36);
+            scarGroundDisk(serverLevel, center, 2, 240);
+            LayeredParticles.emitGroundBurst(serverLevel, center, radius, THEME_ARGB);
+            com.dragonblockarcanedba.fx.DbaImpactFx.medium(serverLevel, center.x, center.y, center.z);
+        } else {
+            // Departure: the ground around the tear cracks as the player is
+            // pulled out of the world, and void shards swirl into the closing cut.
+            DebrisSpawner.spawnField(serverLevel, livingOwner, center, 12, radius * 0.8, 2.4, 28, VOID_PALETTE);
+            scarGroundDisk(serverLevel, center, 1, 200);
+            LayeredParticles.emitGroundBurst(serverLevel, center, radius * 0.7f, THEME_ARGB);
+        }
+
+        // The warp itself: the owner crosses at the burst tick, exactly when
+        // the departure shockwave fires, and the destination tear opens at the
+        // far end to build toward its own burst. RIFTED marks the crossing;
+        // the ability no longer DARK_FADEDs its own user.
+        if (warpArmed && owner instanceof ServerPlayer serverPlayer
+            && serverPlayer.isAlive() && serverPlayer.level() == serverLevel) {
+            MovementPhysics.teleport(serverPlayer, warpLanding);
+            serverPlayer.addEffect(new MobEffectInstance(DbaEffects.RIFTED_HOLDER, 60, 0, false, false));
+            DimensionalWarpRiftEntity destRift = new DimensionalWarpRiftEntity(
+                serverLevel, serverPlayer, warpRiftPos, warpDestRadius, true, warpDestDamage
+            );
+            serverLevel.addFreshEntity(destRift);
+            serverLevel.playSound(null, warpLanding.x, warpLanding.y, warpLanding.z,
+                SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.2f, 0.8f);
+        }
+    }
+
+    /** The top solid block under a point, scanning down a short way; null when the point hangs over open air or void. */
+    private BlockPos findSurface(ServerLevel level, double x, double y, double z) {
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        int bx = (int) Math.floor(x), bz = (int) Math.floor(z);
+        int startY = (int) Math.floor(y) + 2;
+        for (int yy = startY; yy >= startY - 8 && yy > level.getMinY(); yy--) {
+            m.set(bx, yy, bz);
+            BlockState state = level.getBlockState(m);
+            if (!state.isAir() && state.getFluidState().isEmpty()
+                && !state.getCollisionShape(level, m).isEmpty()) {
+                return m.immutable();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Scar a disk of real ground cells to crying obsidian, following the
+     * terrain column by column so nothing floats on slopes. GroundScar
+     * restores every cell on its own crash-safe clock and refuses protected
+     * blocks itself.
+     */
+    private void scarGroundDisk(ServerLevel level, Vec3 center, int radius, int restoreTicks) {
+        BlockState scarState = Blocks.CRYING_OBSIDIAN.defaultBlockState();
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                if (dx * dx + dz * dz > radius * radius) continue;
+                if (level.getRandom().nextFloat() > 0.6f) continue;
+                BlockPos surface = findSurface(level, center.x + dx, center.y, center.z + dz);
+                if (surface != null) {
+                    GroundScar.scar(level, surface, scarState, restoreTicks);
+                }
             }
         }
     }

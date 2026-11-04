@@ -1,7 +1,6 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.effect.DbaEffects;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -11,7 +10,6 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -34,9 +32,15 @@ import java.util.List;
  * - Acts as a persistent TRIPPING HAZARD on the ground for up to 10 seconds (200 ticks).
  * - When an enemy steps on the blade:
  *     1. Deals stacking damage (full damage per blade).
- *     2. Stacks Slowness AMPLIFIER level (Duration stays fixed at 3 seconds / 60 ticks, but amplifier increases by +1 per blade).
- *     3. Applies Movement Curse CC so Delayed Damage combo pops smoothly.
- *     4. Shatters with golden crit particles and blade sound.
+ *     2. Stacks the Valor Stun effect AMPLIFIER by +1 per blade (duration stays
+ *        fixed at 3 seconds / 60 ticks, amplifier caps at 5). Valor Stun is the
+ *        Grand Sword's custom pinning effect; no vanilla Slowness is applied.
+ *     3. Applies the cinematic tracking holder so Delayed Damage combo pops smoothly.
+ *     4. Shatters with golden crit particles, blade sound, and a small debris burst.
+ *
+ * Flight and embedded lifetimes run on separate counters (flightTicks and
+ * embeddedTicks). tickCount is still reset on embedding, but only because the
+ * renderer uses it as the embedded age for its pulse and fade out.
  */
 public class GrandBladeShardEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> EMBEDDED = SynchedEntityData.defineId(GrandBladeShardEntity.class, EntityDataSerializers.BOOLEAN);
@@ -45,6 +49,10 @@ public class GrandBladeShardEntity extends Projectile {
 
     private float damage = 80.0f;
     public static final int MAX_EMBEDDED_TICKS = 200; // 10 seconds
+    public static final int MAX_FLIGHT_TICKS = 60; // 3 seconds
+
+    private int flightTicks = 0;
+    private int embeddedTicks = 0;
 
     public GrandBladeShardEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -91,6 +99,7 @@ public class GrandBladeShardEntity extends Projectile {
         if (this.isEmbedded()) {
             // --- EMBEDDED STATE (Tripping Hazard) ---
             if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+                this.embeddedTicks++;
                 Entity owner = this.getOwner();
 
                 // Hazard detection radius: 0.9m horizontal, 1.0m vertical
@@ -134,18 +143,22 @@ public class GrandBladeShardEntity extends Projectile {
                         this.getX(), this.getY() + 0.4, this.getZ(), 14, 0.35, 0.35, 0.35, 0.25);
                     serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                         this.getX(), this.getY() + 0.4, this.getZ(), 8, 0.3, 0.3, 0.3, 0.15);
+                    spawnImpactDebris(serverLevel, this.position(), 8);
 
                     this.discard();
                     return;
                 }
 
-                // Disappear over time (10 seconds)
-                if (this.tickCount >= MAX_EMBEDDED_TICKS) {
+                // Disappear over time (10 seconds). The renderer fades the
+                // hazard out over the last 30 of these ticks, so it never
+                // vanishes at full brightness.
+                if (this.embeddedTicks >= MAX_EMBEDDED_TICKS) {
                     this.discard();
                 }
             }
         } else {
             // --- FLYING STATE ---
+            this.flightTicks++;
             Vec3 movement = this.getDeltaMovement();
             Vec3 start = this.position();
             Vec3 end = start.add(movement);
@@ -181,12 +194,14 @@ public class GrandBladeShardEntity extends Projectile {
                     serverLevel.playSound(null, this.getX(), this.getY(), this.getZ(), com.dragonblockarcanedba.sound.DbaSounds.SLASH_WHOOSH, SoundSource.PLAYERS, 1.0f, 1.4f);
                     serverLevel.sendParticles(ParticleTypes.CRIT,
                         this.getX(), this.getY() + 0.4, this.getZ(), 12, 0.3, 0.3, 0.3, 0.25);
+                    spawnImpactDebris(serverLevel, this.position(), 6);
                     this.discard();
                     return;
                 }
 
-                // Theme particles: the flying shard sheds a thin gold spark
-                // trail (the class header always promised trailing sparks).
+                // Theme particles: the flying shard sheds a layered trail, a
+                // bright SPARK core with KI_MOTE motes around it (the class
+                // header always promised trailing sparks).
                 if (this.tickCount % 2 == 0) {
                     float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
                     if (density > 0f) {
@@ -194,6 +209,10 @@ public class GrandBladeShardEntity extends Projectile {
                             this.getX(), this.getY(), this.getZ(),
                             Math.max(1, Math.round(2f * density)),
                             0.15, 0.15, 0.15, 0.03);
+                        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                            this.getX(), this.getY(), this.getZ(),
+                            Math.max(1, Math.round(1f * density)),
+                            0.22, 0.22, 0.22, 0.02);
                     }
                 }
             }
@@ -207,10 +226,14 @@ public class GrandBladeShardEntity extends Projectile {
                 this.entityData.set(EMBEDDED, true);
                 this.entityData.set(EMBEDDED_YAW, (float) Math.toDegrees(Math.atan2(-movement.x, movement.z)));
                 this.entityData.set(EMBEDDED_PITCH, (float) Math.toDegrees(Math.atan2(-movement.y, Math.sqrt(movement.x * movement.x + movement.z * movement.z))));
-                this.tickCount = 0; // Reset tick count for embedded duration
+                this.tickCount = 0; // Renderer age only: embedded lifetimes run on embeddedTicks.
+                this.embeddedTicks = 0;
 
                 if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
                     serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z, SoundEvents.ARROW_HIT, SoundSource.PLAYERS, 0.8f, 1.4f);
+                    // Impact debris: chunks of the struck ground burst out,
+                    // orbit briefly, and rain back down.
+                    spawnImpactDebris(serverLevel, hitPos, 8);
                 }
                 return;
             }
@@ -219,9 +242,15 @@ public class GrandBladeShardEntity extends Projectile {
             this.setPos(end.x, end.y, end.z);
             this.setDeltaMovement(movement.x * 0.98, movement.y - 0.04, movement.z * 0.98);
 
-            if (this.tickCount > 60) {
+            if (this.flightTicks > MAX_FLIGHT_TICKS) {
                 this.discard();
             }
         }
+    }
+
+    /** Small debris burst where a shard strikes: pieces sampled from the ground at the impact. */
+    private void spawnImpactDebris(ServerLevel level, Vec3 pos, int count) {
+        LivingEntity owner = this.getOwner() instanceof LivingEntity living ? living : null;
+        com.dragonblockarcanedba.util.DebrisSpawner.spawnField(level, owner, pos, count, 0.9, 1.2, 14);
     }
 }

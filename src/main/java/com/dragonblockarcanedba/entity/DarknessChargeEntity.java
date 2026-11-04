@@ -13,7 +13,7 @@ import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 
 /**
- * Darkness Charge Entity — Physical 3D dark geometric aura, converging shadow tendrils,
+ * Darkness Charge Entity: Physical 3D dark geometric aura, converging shadow tendrils,
  * orbiting obsidian prisms, and pulsating void core during Darkness Sword Left-Click charging.
  */
 public class DarknessChargeEntity extends Projectile {
@@ -69,8 +69,9 @@ public class DarknessChargeEntity extends Projectile {
             if (caster instanceof LivingEntity living && living.isAlive() && !living.isRemoved()) {
                 this.setPos(living.getX(), living.getY(), living.getZ());
 
-                // Theme particles (T5): void smoke curling around the caster
-                // while the abyssal charge builds.
+                // Theme particles: void smoke curling around the caster, plus
+                // a ki mote core that thickens as the charge builds, so the
+                // particle layer agrees with the charge scaled mesh.
                 if (this.tickCount % 3 == 0) {
                     float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
                     if (density > 0f) {
@@ -79,6 +80,14 @@ public class DarknessChargeEntity extends Projectile {
                             living.getX(), living.getY() + 0.8, living.getZ(),
                             Math.max(1, Math.round(2f * density)),
                             1.0, 0.6, 1.0, 0.02);
+                        int motes = Math.round((1f + 3f * getChargeRatio()) * density);
+                        if (motes > 0) {
+                            serverLevel.sendParticles(
+                                com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                                living.getX(), living.getY() + 0.9, living.getZ(),
+                                motes,
+                                0.5, 0.5, 0.5, 0.02);
+                        }
                     }
                 }
 

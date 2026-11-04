@@ -21,11 +21,20 @@ import java.util.Set;
 
 /**
  * The devil trident's shot: three barbed crimson needles flying as one formation.
- * This is not a ki blast. One hit is the whole trident, 750.
+ * This is not a ki blast. The formation pierces: the first body takes the full
+ * trident (750), the second and third take falling shares, and the shot dies on
+ * the third hit, on a block, or at max range. hitIds is the pierce ledger: one
+ * entry per body pierced, so no target is ever billed twice by one shot.
  */
 public class TridentProngEntity extends Projectile {
     private static final EntityDataAccessor<Integer> DIE_TICK =
         SynchedEntityData.defineId(TridentProngEntity.class, EntityDataSerializers.INT);
+
+    /** Pierce falloff per body struck: full, two thirds, just under half. */
+    private static final float[] PIERCE_SHARES = {1.0f, 0.66f, 0.45f};
+    private static final int MAX_PIERCES = PIERCE_SHARES.length;
+    /** Crimson of the shard blades, as a dust color for the trail layers. */
+    private static final int TRAIL_ARGB = 0xFFFF3319;
 
     private float damage = 750.0f;
     private final Set<Integer> hitIds = new HashSet<>();
@@ -73,14 +82,59 @@ public class TridentProngEntity extends Projectile {
         builder.define(DIE_TICK, 0);
     }
 
+    /** Layered flight trail (standard point 1): bright mote core, crimson dust mid, ember wisps. */
+    private void emitTrail(ServerLevel serverLevel) {
+        float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+        if (density <= 0f) {
+            return;
+        }
+        serverLevel.sendParticles(
+            com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+            this.getX(), this.getY(), this.getZ(),
+            Math.max(1, Math.round(2f * density)), 0.10, 0.10, 0.10, 0.01);
+        serverLevel.sendParticles(
+            com.dragonblockarcanedba.util.LayeredParticles.dust(TRAIL_ARGB, 1.2f),
+            this.getX(), this.getY(), this.getZ(),
+            Math.max(1, Math.round(2f * density)), 0.16, 0.16, 0.16, 0.01);
+        if (this.tickCount % 2 == 0) {
+            serverLevel.sendParticles(
+                com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                this.getX(), this.getY(), this.getZ(),
+                1, 0.20, 0.20, 0.20, 0.01);
+        }
+    }
+
+    /** Hit feedback: a crimson spark burst where a prong bites, so hits read at range. */
+    private void emitHitBurst(ServerLevel serverLevel, Vec3 at) {
+        float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+        if (density <= 0f) {
+            return;
+        }
+        serverLevel.sendParticles(
+            com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+            at.x, at.y, at.z,
+            Math.max(2, Math.round(6f * density)), 0.25, 0.25, 0.25, 0.12);
+        serverLevel.sendParticles(
+            com.dragonblockarcanedba.util.LayeredParticles.dust(TRAIL_ARGB, 1.3f),
+            at.x, at.y, at.z,
+            Math.max(1, Math.round(4f * density)), 0.3, 0.3, 0.3, 0.05);
+    }
+
     @Override
     public void tick() {
         super.tick();
         int die = this.getDieTick();
         if (die > 0) {
             this.setDeltaMovement(Vec3.ZERO);
-            if (!this.level().isClientSide() && this.tickCount - die > 6) {
-                this.discard();
+            if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+                // Dissolve drizzle: the needles shed embers as they fade, nothing pops out.
+                serverLevel.sendParticles(
+                    com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                    this.getX(), this.getY(), this.getZ(),
+                    2, 0.15, 0.15, 0.15, 0.02);
+                if (this.tickCount - die > 6) {
+                    this.discard();
+                }
             }
             return;
         }
@@ -90,11 +144,17 @@ public class TridentProngEntity extends Projectile {
                 this.beginDying();
                 return;
             }
+            this.emitTrail(serverLevel);
             Vec3 start = this.position();
             Vec3 end = start.add(motion);
             BlockHitResult block = this.level().clip(new ClipContext(
                 start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
             if (block.getType() != HitResult.Type.MISS) {
+                // The shot ends on the block it struck, with a burst on the struck face.
+                this.setPos(block.getLocation().x, block.getLocation().y, block.getLocation().z);
+                this.emitHitBurst(serverLevel, block.getLocation());
+                serverLevel.playSound(null, block.getLocation().x, block.getLocation().y, block.getLocation().z,
+                    net.minecraft.sounds.SoundEvents.TRIDENT_HIT_GROUND, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 0.8f);
                 this.beginDying();
                 return;
             }
@@ -102,14 +162,25 @@ public class TridentProngEntity extends Projectile {
             List<LivingEntity> hits = serverLevel.getEntitiesOfClass(LivingEntity.class, box,
                 e -> e.isAlive() && e != this.getOwner() && !this.hitIds.contains(e.getId()));
             for (LivingEntity living : hits) {
+                int pierceIndex = this.hitIds.size();
                 this.hitIds.add(living.getId());
                 Entity owner = this.getOwner();
                 var source = owner instanceof net.minecraft.world.entity.player.Player player
                     ? serverLevel.damageSources().playerAttack(player)
                     : serverLevel.damageSources().magic();
-                living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(this.damage));
-                this.beginDying();
-                return;
+                float dealt = this.damage * PIERCE_SHARES[pierceIndex];
+                living.hurtServer(serverLevel, source, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(dealt));
+                // A prong hit marks the victim for the devil, the same mark the
+                // swarm targeting applies, so the shot and the swarm speak one language.
+                living.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    com.dragonblockarcanedba.effect.DbaEffects.MARKED_BY_EVIL_HOLDER, 60, 0, false, false), owner);
+                this.emitHitBurst(serverLevel, living.position().add(0, living.getBbHeight() * 0.5, 0));
+                serverLevel.playSound(null, living.getX(), living.getY(), living.getZ(),
+                    net.minecraft.sounds.SoundEvents.TRIDENT_HIT, net.minecraft.sounds.SoundSource.PLAYERS, 0.8f, 0.9f);
+                if (this.hitIds.size() >= MAX_PIERCES) {
+                    this.beginDying();
+                    return;
+                }
             }
         }
         this.setPos(this.getX() + motion.x, this.getY() + motion.y, this.getZ() + motion.z);

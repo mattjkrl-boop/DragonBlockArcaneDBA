@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.entity.OxChargeEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -62,15 +63,19 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
 
         float chargeEase = charge * charge * (3.0f - 2.0f * charge);
         float baseRadius = 1.2f + (chargeEase * 2.6f);
-        float baseAlpha = 0.70f + (chargeEase * 0.30f);
+        // Lifecycle (point 5): the charge visual used to appear at full alpha
+        // on frame one. It now builds in over the first 6 ticks.
+        float fadeIn = FxEnvelope.smoothstep(Math.min(1.0f, age / 6.0f));
+        float baseAlpha = (0.70f + (chargeEase * 0.30f)) * fadeIn;
         float tremble = (float) Math.sin(age * 2.5f) * (0.02f + charge * 0.06f);
+        float distScale = FxEnvelope.distScale(Math.sqrt(state.distanceToCameraSq));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
 
             // 1. 3D Dynamic Ground-Shatter Decal: Branching Tectonic Magma Fissure Trenches
-            int trenchCount = 8 + (int) (charge * 6); // 8 to 14 trenches
+            int trenchCount = FxEnvelope.segments(8 + (int) (charge * 6), distScale, 6); // 8 to 14 trenches near
             for (int t = 0; t < trenchCount; t++) {
                 double tAngle = (t / (double) trenchCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.25);
                 float trenchLen = baseRadius * (0.65f + rng.nextFloat() * 0.45f);
@@ -92,7 +97,7 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
             }
 
             // One compression ring: dark basalt lip on the outside, molten gold along the inner edge.
-            int ringSegments = 40;
+            int ringSegments = FxEnvelope.segments(40, distScale, 16);
             drawRotatingRing(matrix, buffer, 0, 0.03f, 0, baseRadius * 1.04f, baseRadius * 0.90f, ringSegments, age * 8.0f,
                 0.55f, 0.16f, 0.02f, baseAlpha * 0.85f);
             drawRotatingRing(matrix, buffer, 0, 0.045f, 0, baseRadius * 0.93f, baseRadius * 0.88f, ringSegments, age * 8.0f,
@@ -130,8 +135,12 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
                 }
             }
 
-            // 3. Physical Levitating and Vibrating 3D Rock Debris / Basalt Slabs
-            int rockCount = 10 + (int) (charge * 8); // 10 to 18 rocks
+            // 3. Physical Levitating and Tumbling 3D Rock Debris / Basalt Slabs.
+            // The chunks used to only bob on a sine and lean at a fixed angle;
+            // each one now also tumbles: its base orientation and tip lean
+            // rotate with age on its own phase, so the ring reads as debris
+            // churning in the charge field, not a fixed formation.
+            int rockCount = FxEnvelope.segments(10 + (int) (charge * 8), distScale, 6); // 10 to 18 rocks near
             for (int r = 0; r < rockCount; r++) {
                 double rockAngle = (r / (double) rockCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.4);
                 float rockDist = 0.6f + rng.nextFloat() * (baseRadius * 0.85f);
@@ -146,12 +155,16 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
                 float slabHeight = 0.25f + rng.nextFloat() * 0.35f + charge * 0.25f;
                 float slabWidth = 0.20f + rng.nextFloat() * 0.25f;
 
-                // Leaning angle in 3D
-                float tiltX = (float) Math.cos(rockAngle) * (0.15f + charge * 0.2f);
-                float tiltZ = (float) Math.sin(rockAngle) * (0.15f + charge * 0.2f);
-
-                float tx = -(float) Math.sin(rockAngle) * slabWidth * 0.5f;
-                float tz = (float) Math.cos(rockAngle) * slabWidth * 0.5f;
+                // Tumble: rotate the chunk's footprint and lean with age.
+                double spin = age * 0.55 + r * 2.1;
+                float baseTx = -(float) Math.sin(rockAngle) * slabWidth * 0.5f;
+                float baseTz = (float) Math.cos(rockAngle) * slabWidth * 0.5f;
+                float tx = (float) (baseTx * Math.cos(spin) - baseTz * Math.sin(spin));
+                float tz = (float) (baseTx * Math.sin(spin) + baseTz * Math.cos(spin));
+                float leanMag = 0.15f + charge * 0.2f;
+                double leanAng = rockAngle + age * 0.4 + r * 1.3;
+                float tiltX = (float) Math.cos(leanAng) * leanMag;
+                float tiltZ = (float) Math.sin(leanAng) * leanMag;
 
                 // 3D Rock Chunk Geometry (dark basalt top with fiery molten underbelly)
                 drawRockChunk(matrix, buffer,

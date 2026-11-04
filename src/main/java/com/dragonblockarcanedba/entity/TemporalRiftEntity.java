@@ -1,5 +1,10 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.util.DebrisSpawner;
+import com.dragonblockarcanedba.util.FxEnvelope;
+import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.TimeTracker;
+import com.dragonblockarcanedba.util.VortexPhysics;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -11,25 +16,51 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.List;
+
 /**
- * Temporal Rift Entity — Physical 3D Translucent Celestial Dome & Rotating Ground Astrolabe
+ * Temporal Rift Entity: Physical 3D Translucent Celestial Dome & Rotating Ground Astrolabe
  * spawned on Right-Click (Temporal Rift) with the Whis Staff.
+ *
+ * The rift is a time suspension field, not a storm. For its whole life it runs
+ * the shared lifecycle envelope: layered particles in three bands, a debris
+ * field caught hanging in the air on slow helical paths, and a gentle vortex
+ * drift that makes everything inside orbit slowly instead of sitting dead
+ * still. The item applies the first half of the burst and the freeze at cast;
+ * this entity lands the second half of the burst at the envelope peak and
+ * starts the time reversal at tick 60, the moment the freeze ends.
  */
 public class TemporalRiftEntity extends Projectile {
     private static final EntityDataAccessor<Float> RADIUS = SynchedEntityData.defineId(TemporalRiftEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(TemporalRiftEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> MAX_LIFE = SynchedEntityData.defineId(TemporalRiftEntity.class, EntityDataSerializers.INT);
+
+    /** Tick at which the envelope peaks (15 percent build of a 100 tick life): the second burst half lands here. */
+    public static final int PEAK_TICK = 15;
+    /** Tick at which the item's 60 tick freeze ends and the reversal begins. */
+    public static final int REVERSAL_TICK = 60;
+    /** Reversal length once it starts: 100 ticks, the position history buffer maximum. */
+    public static final int REVERSAL_TICKS = 100;
+    /** Debris pieces caught in the suspension field (domain class count per the spectacle standard). */
+    private static final int DEBRIS_COUNT = 60;
+
+    /** Celestial cyan, the rift's theme color as a dust RGB int. */
+    private static final int THEME_RGB = 0x61C2FF;
 
     private int maxLifetime = 60;
     private int lifetime = 60;
+    private float peakDamage = 0f;
+    private boolean debrisSpawned = false;
 
     public TemporalRiftEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
         this.noPhysics = true;
     }
 
-    public TemporalRiftEntity(Level level, LivingEntity caster, Vec3 pos, float radius, int lifetime) {
+    public TemporalRiftEntity(Level level, LivingEntity caster, Vec3 pos, float radius, int lifetime, float peakDamage) {
         super(DbaEntities.TEMPORAL_RIFT, level);
         this.setOwner(caster);
         this.setPos(pos.x, pos.y, pos.z);
@@ -37,13 +68,16 @@ public class TemporalRiftEntity extends Projectile {
         this.setRadius(radius);
         this.maxLifetime = lifetime;
         this.lifetime = lifetime;
+        this.peakDamage = peakDamage;
         this.entityData.set(CASTER_ID, caster != null ? caster.getId() : -1);
+        this.entityData.set(MAX_LIFE, lifetime);
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(RADIUS, 12.0f);
         builder.define(CASTER_ID, -1);
+        builder.define(MAX_LIFE, 60);
     }
 
     public float getRadius() {
@@ -59,7 +93,7 @@ public class TemporalRiftEntity extends Projectile {
     }
 
     public int getMaxLifetime() {
-        return this.maxLifetime;
+        return this.entityData.get(MAX_LIFE);
     }
 
     @Override
@@ -75,6 +109,12 @@ public class TemporalRiftEntity extends Projectile {
         }
 
         if (this.level() instanceof ServerLevel serverLevel) {
+            int life = Math.max(1, this.maxLifetime);
+            float env = FxEnvelope.envelope(this.tickCount, life);
+            float radius = getRadius();
+            Vec3 center = this.position();
+            LivingEntity ownerLiving = owner instanceof LivingEntity living ? living : null;
+
             // Ambient temporal hum sound
             if (this.tickCount % 20 == 0) {
                 serverLevel.playSound(
@@ -84,20 +124,73 @@ public class TemporalRiftEntity extends Projectile {
                 );
             }
 
-            // Theme particles (T5): ki motes drift inside the dome under the
-            // meridian streams. The rift emitted no particles before.
-            if (this.tickCount % 3 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    double moteAngle = serverLevel.getRandom().nextDouble() * Math.PI * 2.0;
-                    double moteRadius = getRadius() * (0.3 + serverLevel.getRandom().nextDouble() * 0.6);
-                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
-                        this.getX() + Math.cos(moteAngle) * moteRadius,
-                        this.getY() + 0.3,
-                        this.getZ() + Math.sin(moteAngle) * moteRadius,
-                        Math.max(1, Math.round(2f * density)),
-                        0.2, 1.2, 0.2, 0.02);
+            // Point 1: layered particles at standard density. The shared
+            // emitter lays down a bright KI_MOTE core, a celestial cyan mid
+            // band on a helical path, and wispy motes at the rim, all scaled
+            // by this rift's envelope, replacing the old single ring of about
+            // 2 motes every 3 ticks (about 13 per second over a 24 block dome).
+            LayeredParticles.emitVortex(serverLevel, center, radius * 0.92f, radius * 0.85f,
+                this.tickCount, life, THEME_RGB,
+                com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE);
+
+            // Point 3: time made visible. A gentle vortex drift, far below
+            // storm strength, so bodies and players inside slowly orbit and
+            // hover in suspension instead of freezing in dead air. The swirl
+            // dominates the pull on purpose: things circle, they do not get
+            // dragged to the middle.
+            VortexPhysics.applyVortex(serverLevel, center, radius, radius * 1.05,
+                ownerLiving, 0.030, 1.6, 0.05, env);
+
+            // Point 2: the ground the rift stands on, caught mid-air. Sixty
+            // pieces rise only a little and hang on slow helical paths for
+            // most of the rift's life, then release and rain back down while
+            // the dome dissipates. Spawned once, just after the build starts.
+            if (!this.debrisSpawned && this.tickCount >= 2) {
+                this.debrisSpawned = true;
+                DebrisSpawner.spawnField(serverLevel, ownerLiving, center,
+                    DEBRIS_COUNT, radius * 0.8, 2.5, 80);
+            }
+
+            // Point 5: the second half of the burst lands at the envelope
+            // peak, inside the visual's active window, on everything the
+            // dome covers at that moment. The item dealt the first half at
+            // cast; the total is unchanged.
+            if (this.tickCount == PEAK_TICK && this.peakDamage > 0f) {
+                AABB aoe = this.getBoundingBox().inflate(radius);
+                List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
+                    LivingEntity.class, aoe, e -> e != owner && e.isAlive());
+                for (LivingEntity target : targets) {
+                    if (this.distanceTo(target) <= radius) {
+                        target.hurtServer(serverLevel, serverLevel.damageSources().magic(),
+                            com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(this.peakDamage));
+                    }
                 }
+                serverLevel.playSound(
+                    null, this.getX(), this.getY() + 1.0, this.getZ(),
+                    SoundEvents.AMETHYST_CLUSTER_BREAK, SoundSource.PLAYERS,
+                    0.8f, 1.8f
+                );
+            }
+
+            // The reversal starts when the freeze ends, exactly as the item
+            // describes it: the item freezes targets for 60 ticks at cast,
+            // and at this tick the rift rewinds everything still inside it.
+            if (this.tickCount == REVERSAL_TICK) {
+                AABB aoe = this.getBoundingBox().inflate(radius);
+                List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
+                    LivingEntity.class, aoe, e -> e != owner && e.isAlive());
+                for (LivingEntity target : targets) {
+                    if (this.distanceTo(target) <= radius && target instanceof TimeTracker tracker) {
+                        tracker.dba$startReversing(REVERSAL_TICKS);
+                    }
+                }
+            }
+
+            // Point 5: dissipation drizzle of motes falling as the dome dies.
+            if (this.tickCount > life * 0.65f) {
+                LayeredParticles.emitRain(serverLevel, center, radius * 0.9f, radius * 0.8f,
+                    this.tickCount, life,
+                    com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE);
             }
 
             this.lifetime--;

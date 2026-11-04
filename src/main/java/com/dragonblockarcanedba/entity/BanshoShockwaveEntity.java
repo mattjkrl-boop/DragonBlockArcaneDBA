@@ -93,6 +93,30 @@ public class BanshoShockwaveEntity extends Projectile {
         super.tick();
 
         if (!this.level().isClientSide()) {
+            // Particle accent (SPECTACLE-STANDARD point 1): the mesh ring used
+            // to be the whole effect. Radial bursts now throw wind wisps off
+            // the expanding rim; cone waves keep their mesh-only read.
+            if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel
+                && !isCone() && this.tickCount % 2 == 0) {
+                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                if (density > 0f) {
+                    float progress = this.tickCount / (float) this.maxLifetime;
+                    double rimRadius = Math.max(0.3, getMaxRadius() * progress);
+                    int count = Math.max(1, Math.round(4f * density));
+                    if (isOrientToImpact()) {
+                        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                            this.getX(), this.getY(), this.getZ(),
+                            count, 0.3, 0.3, 0.3, 0.05);
+                    } else {
+                        for (int i = 0; i < count; i++) {
+                            double a = serverLevel.getRandom().nextDouble() * Math.PI * 2.0;
+                            serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.WIND,
+                                this.getX() + Math.cos(a) * rimRadius, this.getY() + 0.15, this.getZ() + Math.sin(a) * rimRadius,
+                                1, 0.06, 0.04, 0.06, 0.03);
+                        }
+                    }
+                }
+            }
             if (this.tickCount >= this.maxLifetime) {
                 this.discard();
             }

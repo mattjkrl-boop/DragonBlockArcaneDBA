@@ -84,15 +84,23 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         float charge = state.chargeRatio;
         float age = state.age;
         float maxLifetime = ErasureCannonBeamEntity.MAX_LIFETIME;
-        float progress = Math.min(1.0f, age / maxLifetime);
 
-        float scaleInT = Math.min(1.0f, age / 3.0f);
-        float scaleIn = 1.0f - (1.0f - scaleInT) * (1.0f - scaleInT) * (1.0f - scaleInT);
-        float exitT = progress <= 0.58f ? 0.0f : Math.min(1.0f, (progress - 0.58f) / 0.42f);
-        float alpha = scaleIn * (1.0f - exitT * exitT * (3.0f - 2.0f * exitT));
+        // Shared envelope (spectacle standard point 5): the renderer now uses
+        // the same FxEnvelope the entity's particle counts use, so mesh alpha
+        // and particle density build and dissipate together over the 24 tick
+        // life instead of the old private 3 tick in, 0.58 out curve over 16.
+        float env = com.dragonblockarcanedba.util.FxEnvelope.envelope(age, maxLifetime);
+        float alpha = env;
+        float exitT = age <= maxLifetime * 0.7f ? 0.0f : Math.min(1.0f, (age - maxLifetime * 0.7f) / (maxLifetime * 0.3f));
 
-        float pulse = (1.0f + 0.04f * (float) Math.sin(age * 1.4f)) * scaleIn;
+        float pulse = (1.0f + 0.04f * (float) Math.sin(age * 1.4f)) * (0.55f + 0.45f * env);
         float impactPulse = pulse * (1.12f - exitT * 0.50f);
+
+        // Distance scaling (standard point 1): ribbon segment counts step
+        // down beyond 32 and 64 blocks so a 48 block beam stays cheap to
+        // watch from across a field.
+        double camDist = cameraState.pos.distanceTo(new net.minecraft.world.phys.Vec3(state.x, state.y, state.z));
+        final float distScale = com.dragonblockarcanedba.util.FxEnvelope.distScale(camDist);
         // Scaled down smaller in first person
         float baseRadius = (0.35f + charge * 0.45f) * pulse * (state.isFirstPersonOwner ? 0.50f : 1.0f);
 
@@ -120,7 +128,7 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
             drawFlowBeam(matrix, buffer, baseRadius * 0.86f, zStart, beamLength, 12, -age * 6.0f, 0.0f, 0.55f, 0.85f, alpha * 0.35f, 0.35f, 1.6f, age);
 
             // Helical drill ribbons riding the tapered beam. They are the curve around the core, not a second tube.
-            int ribbonSegments = Math.min((int) (beamLength * 3.0f), 96);
+            int ribbonSegments = Math.max(12, Math.round(Math.min((int) (beamLength * 3.0f), 96) * distScale));
             float spiralRadius = baseRadius * 1.15f;
             float ribbonSize = 0.045f * pulse;
             float spiralSpeed = age * 0.45f;
@@ -162,6 +170,23 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
                         );
                     }
                 }
+            }
+
+            // Stationed hexagonal focusing aperture rings along the beam:
+            // the class header has promised these since the renderer was
+            // written and submit() never drew them. Three hex rings sit at
+            // quarter, half, and three-quarter length, counter-rotating,
+            // tightening slightly with distance from the muzzle, alpha on
+            // the shared envelope. Far views drop the last ring first.
+            float[] ringFracs = {0.25f, 0.50f, 0.75f};
+            for (int ri = 0; ri < ringFracs.length; ri++) {
+                if (distScale < 0.55f && ri == 2) continue;
+                float frac = ringFracs[ri];
+                float ringZ = zStart + frac * (beamLength - zStart);
+                float ringRadius = baseRadius * (2.3f - frac * 0.7f);
+                float ringRot = age * (ri % 2 == 0 ? 30.0f : -30.0f) + ri * 30.0f;
+                drawPlaneRing(matrix, buffer, 0, 0, ringZ, ringRadius, ringRadius * 0.82f, 6, ringRot,
+                    0.35f, 0.95f, 1.0f, alpha * 0.55f);
             }
 
             drawMuzzleEmitter(matrix, buffer, age, pulse, alpha);

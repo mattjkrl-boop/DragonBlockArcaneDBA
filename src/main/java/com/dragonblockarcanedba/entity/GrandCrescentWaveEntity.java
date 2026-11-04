@@ -22,12 +22,21 @@ import java.util.Set;
 /**
  * Grand Crescent Wave Entity — Fired upon releasing Grand Cyclone (Tweak B).
  * Piercing glowing golden-white crescent energy wave that cuts through lines of enemies.
+ *
+ * On block contact the wave no longer discards at full brightness: it bursts
+ * into a finisher class debris field with a ground burst and a temporary
+ * scar, then hangs for DISSIPATE_TICKS while the renderer fades it out.
+ * Flying low over ground it sheds ground bursts along its path.
  */
 public class GrandCrescentWaveEntity extends Projectile {
     private float damage = 600.0f;
     private final Set<Integer> hitEntityIds = new HashSet<>();
 
+    public static final int MAX_LIFE_TICKS = 80;
+    public static final int DISSIPATE_TICKS = 12;
+
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(GrandCrescentWaveEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> HIT_TICK = SynchedEntityData.defineId(GrandCrescentWaveEntity.class, EntityDataSerializers.INT);
 
     public GrandCrescentWaveEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -63,15 +72,34 @@ public class GrandCrescentWaveEntity extends Projectile {
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(CASTER_ID, -1);
+        builder.define(HIT_TICK, -1);
     }
 
     public int getCasterId() {
         return this.entityData.get(CASTER_ID);
     }
 
+    /** Tick at which the wave struck a block, or -1 while it is still flying. */
+    public int getHitTick() {
+        return this.entityData.get(HIT_TICK);
+    }
+
+    public boolean hasHit() {
+        return this.getHitTick() >= 0;
+    }
+
     @Override
     public void tick() {
         super.tick();
+
+        // Dissipating after a block strike: hang in place while the renderer
+        // fades the crescent out, then discard.
+        if (this.hasHit()) {
+            if (!this.level().isClientSide() && this.tickCount - this.getHitTick() >= DISSIPATE_TICKS) {
+                this.discard();
+            }
+            return;
+        }
 
         Vec3 movement = this.getDeltaMovement();
         double nextX = this.getX() + movement.x;
@@ -89,6 +117,19 @@ public class GrandCrescentWaveEntity extends Projectile {
                         this.getX(), this.getY() + 0.4, this.getZ(),
                         Math.max(2, Math.round(6f * density)),
                         1.6, 0.8, 1.6, 0.06);
+                }
+            }
+
+            // Ground contact: flying low over solid ground, the wave's
+            // underside tears dust off the surface as it passes.
+            if (this.tickCount % 4 == 0) {
+                net.minecraft.core.BlockPos belowPos = net.minecraft.core.BlockPos.containing(
+                    this.getX(), this.getY() - 1.4, this.getZ());
+                if (!serverLevel.getBlockState(belowPos).isAir()
+                    && serverLevel.getBlockState(belowPos.above()).isAir()) {
+                    com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel,
+                        new Vec3(this.getX(), belowPos.getY() + 1.0, this.getZ()),
+                        1.6f, 0xFFD833);
                 }
             }
 
@@ -126,15 +167,33 @@ public class GrandCrescentWaveEntity extends Projectile {
                 com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
             }
 
-            // Check solid block collision
+            // Block contact: burst into debris, scar the struck ground, and
+            // dissipate over DISSIPATE_TICKS instead of discarding at full
+            // brightness in one tick.
             Vec3 start = this.position();
             Vec3 end = start.add(movement);
             HitResult blockHit = this.level().clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
             if (blockHit.getType() != HitResult.Type.MISS) {
-                this.discard();
+                this.entityData.set(HIT_TICK, this.tickCount);
+                this.setDeltaMovement(Vec3.ZERO);
+                Vec3 hitPos = blockHit instanceof net.minecraft.world.phys.BlockHitResult bhr
+                    ? bhr.getLocation() : this.position();
+                LivingEntity livingOwner = owner instanceof LivingEntity living ? living : null;
+                com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, livingOwner,
+                    hitPos, 26, 2.6, 2.8, 30);
+                com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, hitPos, 2.4f, 0xFFD833);
+                net.minecraft.core.BlockPos scarPos = net.minecraft.core.BlockPos.containing(hitPos.x, hitPos.y - 1.0, hitPos.z);
+                if (!serverLevel.getBlockState(scarPos).isAir()) {
+                    com.dragonblockarcanedba.util.GroundScar.scarDisk(serverLevel, scarPos, 1,
+                        net.minecraft.world.level.block.Blocks.COARSE_DIRT.defaultBlockState(),
+                        200, 0.5f, serverLevel.getRandom());
+                }
+                serverLevel.playSound(null, hitPos.x, hitPos.y, hitPos.z,
+                    net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE.value(), net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 1.3f);
+                return;
             }
 
-            if (this.tickCount > 80) {
+            if (this.tickCount > MAX_LIFE_TICKS) {
                 this.discard();
             }
         }

@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.OxFissureEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -71,6 +72,11 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
+
+            // Anchor glow (point 1): a molten pool under the crack so the
+            // trench sits in its own light along its whole length.
+            LayeredRender.drawAnchorGlow(pose, buffer, 2.0f, 0.05f,
+                1.0f, 0.50f, 0.08f, LayeredRender.ALPHA_MID * fade, 1.0f);
 
             // Draw jagged branching fracture trenches
             int mainSegments = 8;

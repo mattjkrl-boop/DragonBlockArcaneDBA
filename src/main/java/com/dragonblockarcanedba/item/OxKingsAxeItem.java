@@ -101,8 +101,54 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
 
     @Override
     public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        // Groundbreaker and the king's slam already pay. A vanilla connect used to
-        // spend stamina again and show nothing of its own.
+        // Royal weight: a plain connect used to be a bare vanilla hit with no
+        // effect, no cost, and no visual of its own, on the heaviest weapon in
+        // the set. It now lands like the weapon it is: a heavy shove scaled by
+        // the target's weight class, a brief fissure stun tremor, embers, and
+        // an anvil thud. Still no stamina or Ki cost: the abilities pay those.
+        if (!(attacker.level() instanceof ServerLevel serverLevel)) return;
+
+        Vec3 away = target.position().subtract(attacker.position());
+        Vec3 flat = new Vec3(away.x, 0, away.z);
+        if (flat.lengthSqr() < 0.001) {
+            Vec3 look = attacker.getLookAngle();
+            flat = new Vec3(look.x, 0, look.z);
+        }
+        if (flat.lengthSqr() < 0.001) return;
+        flat = flat.normalize();
+
+        // Weight classes replicated from MobPhysics (its weightOf is private):
+        // knockback resistance >= 0.9 or max health >= 400 is BOSS class.
+        double kbRes = target.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE);
+        float maxHealth = target.getMaxHealth();
+        double weightScale;
+        if (kbRes >= 0.9 || maxHealth >= 400f) {
+            weightScale = 0.12;
+        } else if (kbRes >= 0.45 || maxHealth >= 90f) {
+            weightScale = 0.45;
+        } else {
+            weightScale = 1.0;
+        }
+
+        Vec3 vel = target.getDeltaMovement();
+        target.setDeltaMovement(
+            vel.x * 0.3 + flat.x * 0.85 * weightScale,
+            Math.max(vel.y, 0.42 * weightScale),
+            vel.z * 0.3 + flat.z * 0.85 * weightScale
+        );
+        com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
+
+        target.addEffect(new MobEffectInstance(DbaEffects.FISSURE_STUN_HOLDER, 12, 0, false, true));
+
+        float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+        if (density > 0f) {
+            serverLevel.sendParticles(
+                com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                Math.max(1, Math.round(6f * density)), 0.3, 0.3, 0.3, 0.04);
+        }
+        serverLevel.playSound(null, target.getX(), target.getY(), target.getZ(),
+            SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 0.5f, 0.9f);
     }
 
     // --- LEFT CLICK: Groundbreaker Charging & Downward Shockwave Strike ---
@@ -246,23 +292,31 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
             for (LivingEntity enemy : enemies) {
                 double dist = Math.sqrt(enemy.distanceToSqr(player));
                 if (dist <= auraRadius) {
+                    // Distance falloff: the King's Force is crushing at the
+                    // center and a shove at the rim, instead of one flat push
+                    // and flat damage everywhere inside 12 blocks. The stun
+                    // stays full strength across the radius: it is the denial.
+                    double rimT = Math.min(1.0, dist / auraRadius);
+                    double pushScale = 0.30 + 0.70 * (1.0 - rimT);
+                    double damageScale = 1.0 - 0.5 * rimT;
+
                     // Fissure Stun (Volcanic tremor slow)
                     enemy.addEffect(new MobEffectInstance(DbaEffects.FISSURE_STUN_HOLDER, 20, 0, false, true));
 
                     // Deal pressure damage every 5 ticks (caught by Delayed Damage Mixin)
                     if (heldTicks % 5 == 0) {
                         PlayerStatsAccessor acc = (PlayerStatsAccessor) player;
-                        float auraPressureDmg = 45.0f + (float) (acc.dba$getStrength() * 0.4f);
+                        float auraPressureDmg = (45.0f + (float) (acc.dba$getStrength() * 0.4f)) * (float) damageScale;
                         enemy.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (auraPressureDmg)));
                         enemy.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 25, 0, false, false, false), player);
                     }
 
-                    // Outward repulsion push
+                    // Outward repulsion push, falling off toward the rim
                     Vec3 toEnemy = enemy.position().subtract(player.position());
                     Vec3 pushDir = new Vec3(toEnemy.x, 0, toEnemy.z);
                     if (pushDir.lengthSqr() > 0.001) {
-                        pushDir = pushDir.normalize().scale(0.35);
-                        enemy.setDeltaMovement(enemy.getDeltaMovement().add(pushDir.x, 0.05, pushDir.z));
+                        pushDir = pushDir.normalize().scale(0.35 * pushScale);
+                        enemy.setDeltaMovement(enemy.getDeltaMovement().add(pushDir.x, 0.05 * pushScale, pushDir.z));
                         com.dragonblockarcanedba.util.DbaCompat.markHurt(enemy);
                     }
                 }
@@ -340,28 +394,12 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
                     float peakDamage = 2000.0f + (float) (accessor.dba$getStrength() * 5.0f);
                     double slamRadius = 20.0;
 
-                    AABB slamBox = player.getBoundingBox().inflate(slamRadius);
-                    List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
-                        LivingEntity.class, slamBox,
-                        e -> e.isAlive() && e != player
-                    );
-
-                    for (LivingEntity target : targets) {
-                        double dist = Math.sqrt(target.distanceToSqr(player));
-                        if (dist <= slamRadius) {
-                            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (peakDamage)));
-                            target.addEffect(new MobEffectInstance(DbaEffects.FISSURE_STUN_HOLDER, 140, 1, false, true));
-                            target.addEffect(new MobEffectInstance(DbaEffects.CINEMATIC_TRACKING_HOLDER, 60, 0, false, false, false), player);
-                            target.addEffect(new MobEffectInstance(DbaEffects.MOVEMENT_CURSE_HOLDER, 60, 2, false, true), player);
-
-                            Vec3 toTarget = target.position().subtract(player.position()).normalize().scale(2.5);
-                            target.setDeltaMovement(target.getDeltaMovement().add(toTarget.x, 0.9, toTarget.z));
-                            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
-                        }
-                    }
-
-                    // Spawn physical 3D KingsSlamEntity (20-block radiating canyon trenches, colossal basalt crags & vertical magma geysers)
-                    KingsSlamEntity slam = new KingsSlamEntity(serverLevel, player, player.position(), (float) slamRadius, true);
+                    // The slam entity owns the damage now, timed to its visual:
+                    // targets are hit as the growing dome rim reaches them (rim
+                    // tick 31 of 55) instead of everything taking 2000+ damage
+                    // instantly at the release tick. Same damage, same effects,
+                    // same launch, applied by KingsSlamEntity.applyRimDamage.
+                    KingsSlamEntity slam = new KingsSlamEntity(serverLevel, player, player.position(), (float) slamRadius, true, peakDamage);
                     serverLevel.addFreshEntity(slam);
 
                     serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, player.getX(), player.getY() + 0.5, player.getZ(), 3, 0.5, 0.2, 0.5, 0);
@@ -381,30 +419,14 @@ public class OxKingsAxeItem extends Item implements com.dragonblockarcanedba.ite
                     float baseSlamDmg = 400.0f + (holdRatio * 900.0f);
                     float strBonus = (float) (accessor.dba$getStrength() * 3.0f * holdRatio);
                     float totalSlamDmg = baseSlamDmg + strBonus;
-                    double slamRadius = 10.0;
+                    // Radius scales with the hold like the damage does. It used
+                    // to be frozen at 10.0, so a 0.5 second hold and a capped
+                    // hold covered identical ground.
+                    double slamRadius = 6.0 + holdRatio * 8.0;
 
-                    AABB slamBox = player.getBoundingBox().inflate(slamRadius);
-                    List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
-                        LivingEntity.class, slamBox,
-                        e -> e.isAlive() && e != player
-                    );
-
-                    for (LivingEntity target : targets) {
-                        double dist = Math.sqrt(target.distanceToSqr(player));
-                        if (dist <= slamRadius) {
-                            target.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalSlamDmg)));
-                            target.addEffect(new MobEffectInstance(DbaEffects.FISSURE_STUN_HOLDER, 80, 0, false, true));
-                            target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 40, 0, false, false, false), player);
-                            target.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.MOVEMENT_CURSE_HOLDER, 40, 1, false, true), player);
-
-                            Vec3 toTarget = target.position().subtract(player.position()).normalize().scale(1.5);
-                            target.setDeltaMovement(target.getDeltaMovement().add(toTarget.x, 0.5, toTarget.z));
-                            com.dragonblockarcanedba.util.DbaCompat.markHurt(target);
-                        }
-                    }
-
-                    // Spawn physical 3D KingsSlamEntity (10-block ground shatter, basalt monoliths & volcanic shockwave dome)
-                    KingsSlamEntity slam = new KingsSlamEntity(serverLevel, player, player.position(), (float) slamRadius, false);
+                    // Damage is applied by the slam entity as its dome rim
+                    // reaches each target (rim tick 22 of 40), not instantly.
+                    KingsSlamEntity slam = new KingsSlamEntity(serverLevel, player, player.position(), (float) slamRadius, false, totalSlamDmg);
                     serverLevel.addFreshEntity(slam);
 
                     serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),

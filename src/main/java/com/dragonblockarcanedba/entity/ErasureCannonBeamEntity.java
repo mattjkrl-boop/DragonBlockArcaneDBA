@@ -32,11 +32,22 @@ public class ErasureCannonBeamEntity extends Projectile {
     private static final EntityDataAccessor<Float> BEAM_X_ROT = SynchedEntityData.defineId(ErasureCannonBeamEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> CHARGE_RATIO = SynchedEntityData.defineId(ErasureCannonBeamEntity.class, EntityDataSerializers.FLOAT);
 
-    public static final int MAX_LIFETIME = 16;
+    public static final int MAX_LIFETIME = 24;
     public static final float DEFAULT_MAX_RANGE = 48.0f;
 
+    // Damage pulses (spectacle pass): the beam used to pay its entire damage
+    // on tick 1 of a 16 tick visual. The total is now split into PULSE_COUNT
+    // equal pulses across the beam's active window, so standing in the beam
+    // hurts for as long as the beam is visibly burning.
+    public static final int FIRST_PULSE_TICK = 3;
+    public static final int PULSE_INTERVAL = 3;
+    public static final int PULSE_COUNT = 6;
+    public static final int LAST_PULSE_TICK = FIRST_PULSE_TICK + PULSE_INTERVAL * (PULSE_COUNT - 1);
+
     private float totalDamage = 900.0f;
-    private final Set<Integer> hitEntityIds = new HashSet<>();
+    // Targets that already received the one-time attribute modifiers. Damage
+    // itself is NOT once-only anymore: every pulse re-tests the beam line.
+    private final Set<Integer> effectAppliedIds = new HashSet<>();
 
     public ErasureCannonBeamEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -96,116 +107,215 @@ public class ErasureCannonBeamEntity extends Projectile {
     public void tick() {
         super.tick();
 
-        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
-            Entity caster = this.getOwner();
-            if (caster == null && getCasterId() != -1) {
-                caster = serverLevel.getEntity(getCasterId());
+        if (this.level().isClientSide() || !(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+
+        Entity caster = this.getOwner();
+        if (caster == null && getCasterId() != -1) {
+            caster = serverLevel.getEntity(getCasterId());
+        }
+        final Entity finalCaster = caster;
+
+        final int age = this.tickCount;
+        final float length = getBeamLength();
+        final float charge = getChargeRatio();
+        final Vec3 start = this.position();
+        final Vec3 look = this.calculateViewVector(getBeamXRot(), getBeamYRot());
+        final Vec3 end = start.add(look.scale(length));
+
+        if (age == 1) {
+            // Fire beat: thunder and zap at the muzzle, a dust burst where the
+            // beam lands, and a real branched lightning strike at the terminus
+            // so the thunder sound finally has a visual (point 4).
+            serverLevel.playSound(null, start.x, start.y, start.z,
+                SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.2f, 0.6f);
+            serverLevel.playSound(null, start.x, start.y, start.z,
+                com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.PLAYERS, 2.2f, 0.6f);
+            com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, end, 1.6f, 0xFF37E6FF);
+            com.dragonblockarcanedba.entity.BoltEntity strike = new com.dragonblockarcanedba.entity.BoltEntity(
+                serverLevel, end, serverLevel.getRandom().nextInt(), 0xFF7DF4FF, 12.0f, 8);
+            serverLevel.addFreshEntity(strike);
+        }
+
+        // Damage lands inside the visual's active window, spread across it:
+        // one pulse every PULSE_INTERVAL ticks from FIRST_PULSE_TICK to
+        // LAST_PULSE_TICK, each worth totalDamage / PULSE_COUNT.
+        if (age >= FIRST_PULSE_TICK && age <= LAST_PULSE_TICK && (age - FIRST_PULSE_TICK) % PULSE_INTERVAL == 0) {
+            applyDamagePulse(serverLevel, finalCaster, start, look, length, charge);
+        }
+
+        // Max charge endpoint detonation, moved from tick 1 to the final
+        // pulse: the terminus builds all beam long and then blows, and a
+        // target on the beam line no longer eats beam plus explosion on the
+        // same tick.
+        if (age == LAST_PULSE_TICK && charge >= 0.9f) {
+            detonateEndpoint(serverLevel, finalCaster, end);
+        }
+
+        emitBeamParticles(serverLevel, start, look, end, length, charge, age);
+
+        if (age >= MAX_LIFETIME) {
+            this.discard();
+        }
+    }
+
+    private void applyDamagePulse(ServerLevel serverLevel, Entity finalCaster, Vec3 start, Vec3 look, float length, float charge) {
+        DamageSource damageSource = finalCaster instanceof net.minecraft.world.entity.player.Player playerOwner
+            ? serverLevel.damageSources().playerAttack(playerOwner)
+            : (finalCaster instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+
+        float pulseDamage = this.totalDamage / PULSE_COUNT;
+        AABB beamBox = new AABB(start, start.add(look.scale(length))).inflate(1.5 + charge * 1.5);
+        List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
+            LivingEntity.class, beamBox,
+            e -> e.isAlive() && e != finalCaster
+        );
+
+        double beamRadius = 1.5 + charge * 1.5;
+        for (LivingEntity t : targets) {
+            // The candidate box is a fat diagonal AABB; without a real distance
+            // test, targets several blocks off the beam line (or behind cover
+            // near the box) took beam damage. Require the target center to
+            // actually be within the beam radius of the beam segment.
+            Vec3 targetCenter = t.position().add(0, t.getBbHeight() * 0.5, 0);
+            double along = Math.max(0.0, Math.min(length, look.dot(targetCenter.subtract(start))));
+            Vec3 closest = start.add(look.scale(along));
+            if (targetCenter.distanceTo(closest) > beamRadius + t.getBbWidth() * 0.5) {
+                continue;
             }
-            final Entity finalCaster = caster;
 
-            // On first tick, execute devastating piercing damage & impulse along the 48m beam
-            if (this.tickCount == 1) {
-                float length = getBeamLength();
-                float charge = getChargeRatio();
-                Vec3 start = this.position();
-                Vec3 look = this.calculateViewVector(getBeamXRot(), getBeamYRot());
-                Vec3 end = start.add(look.scale(length));
+            if (finalCaster instanceof LivingEntity livingOwner) {
+                t.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 25, 0, false, false, false
+                ), livingOwner);
+            }
 
-                DamageSource damageSource = finalCaster instanceof net.minecraft.world.entity.player.Player playerOwner
-                    ? serverLevel.damageSources().playerAttack(playerOwner)
-                    : (finalCaster instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+            t.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(pulseDamage));
 
-                AABB beamBox = new AABB(start, end).inflate(1.5 + charge * 1.5);
-                List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
-                    LivingEntity.class, beamBox,
-                    e -> e.isAlive() && e != finalCaster && !hitEntityIds.contains(e.getId())
+            // One-time concussive modifiers per target, on its first pulse.
+            if (effectAppliedIds.add(t.getId())) {
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    t,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_beam_bounce"),
+                    0.85,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
                 );
-
-                double beamRadius = 1.5 + charge * 1.5;
-                for (LivingEntity t : targets) {
-                    // The candidate box is a fat diagonal AABB; without a real distance
-                    // test, targets several blocks off the beam line (or behind cover
-                    // near the box) took full beam damage. Require the target center
-                    // to actually be within the beam radius of the beam segment.
-                    Vec3 targetCenter = t.position().add(0, t.getBbHeight() * 0.5, 0);
-                    double along = Math.max(0.0, Math.min(length, look.dot(targetCenter.subtract(start))));
-                    Vec3 closest = start.add(look.scale(along));
-                    if (targetCenter.distanceTo(closest) > beamRadius + t.getBbWidth() * 0.5) {
-                        continue;
-                    }
-                    hitEntityIds.add(t.getId());
-
-                    if (finalCaster instanceof LivingEntity livingOwner) {
-                        t.addEffect(new net.minecraft.world.effect.MobEffectInstance(
-                            com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 25, 0, false, false, false
-                        ), livingOwner);
-                    }
-
-                    t.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.totalDamage)));
-
-                    // Concussive impulse & air drag modification
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                        t,
-                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.BOUNCINESS_ID,
-                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_beam_bounce"),
-                        0.85,
-                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE
-                    );
-                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
-                        t,
-                        com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
-                        com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_beam_drag"),
-                        -0.40,
-                        net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
-                    );
-
-                    // Gravitational suction pulling enemies into centerline
-                    Vec3 toCenter = start.add(look.scale(look.dot(t.position().subtract(start)))).subtract(t.position()).normalize().scale(0.8);
-                    t.setDeltaMovement(t.getDeltaMovement().add(toCenter.x, 0.2, toCenter.z));
-                    com.dragonblockarcanedba.util.DbaCompat.markHurt(t);
-                }
-
-                // Max charge endpoint explosion
-                if (charge >= 0.9f) {
-                    serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, end.x, end.y, end.z, 3, 0.5, 0.5, 0.5, 0);
-                    AABB endAoe = new AABB(end.subtract(4, 4, 4), end.add(4, 4, 4));
-                    List<LivingEntity> endTargets = serverLevel.getEntitiesOfClass(LivingEntity.class, endAoe, e -> e.isAlive() && e != finalCaster);
-                    for (LivingEntity et : endTargets) {
-                        et.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.totalDamage * 0.5f)));
-                    }
-                }
-
-                serverLevel.playSound(null, start.x, start.y, start.z,
-                    SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.2f, 0.6f);
-                serverLevel.playSound(null, start.x, start.y, start.z,
-                    com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.PLAYERS, 2.2f, 0.6f);
+                com.dragonblockarcanedba.util.DbaPhysicsAttributes.applyModifier(
+                    t,
+                    com.dragonblockarcanedba.util.DbaPhysicsAttributes.AIR_DRAG_ID,
+                    com.dragonblockarcanedba.DragonBlockArcaneDBA.id("blaster_beam_drag"),
+                    -0.40,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE
+                );
             }
 
-            // Theme particles (T5): while the beam burns, sparks shed along its
-            // whole path and embers boil off the terminus. Only the max-charge
-            // endpoint explosion existed before.
-            if (this.tickCount <= 3) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    Vec3 beamStart = this.position();
-                    Vec3 beamLook = this.calculateViewVector(getBeamXRot(), getBeamYRot());
-                    int sparkCount = Math.max(2, Math.round(10f * density));
-                    for (int i = 0; i < sparkCount; i++) {
-                        Vec3 sparkPos = beamStart.add(beamLook.scale(serverLevel.getRandom().nextDouble() * getBeamLength()));
-                        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
-                            sparkPos.x, sparkPos.y, sparkPos.z, 1, 0.25, 0.25, 0.25, 0.05);
-                    }
-                    Vec3 beamEnd = beamStart.add(beamLook.scale(getBeamLength()));
-                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.EMBER,
-                        beamEnd.x, beamEnd.y, beamEnd.z,
-                        Math.max(2, Math.round(6f * density)),
-                        0.6, 0.6, 0.6, 0.08);
-                }
-            }
+            // Gravitational suction pulling enemies into the centerline, now
+            // per pulse at reduced strength so the total pull across the burn
+            // matches the old single tick without the one-tick yank.
+            Vec3 toCenter = start.add(look.scale(look.dot(t.position().subtract(start)))).subtract(t.position()).normalize().scale(0.35);
+            t.setDeltaMovement(t.getDeltaMovement().add(toCenter.x, 0.08, toCenter.z));
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(t);
+        }
+    }
 
-            if (this.tickCount >= MAX_LIFETIME) {
-                this.discard();
+    private void detonateEndpoint(ServerLevel serverLevel, Entity finalCaster, Vec3 end) {
+        DamageSource damageSource = finalCaster instanceof net.minecraft.world.entity.player.Player playerOwner
+            ? serverLevel.damageSources().playerAttack(playerOwner)
+            : (finalCaster instanceof LivingEntity livingOwner ? serverLevel.damageSources().mobProjectile(this, livingOwner) : serverLevel.damageSources().generic());
+
+        serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, end.x, end.y, end.z, 3, 0.5, 0.5, 0.5, 0);
+        serverLevel.playSound(null, end.x, end.y, end.z,
+            SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.6f, 0.9f);
+
+        AABB endAoe = new AABB(end.subtract(4, 4, 4), end.add(4, 4, 4));
+        List<LivingEntity> endTargets = serverLevel.getEntitiesOfClass(LivingEntity.class, endAoe, e -> e.isAlive() && e != finalCaster);
+        for (LivingEntity et : endTargets) {
+            et.hurtServer(serverLevel, damageSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (this.totalDamage * 0.5f)));
+        }
+
+        // The detonation tears up the ground it lands on: a finisher-class
+        // debris field sampled from the blocks around the terminus, plus a
+        // second dust burst at full radius.
+        LivingEntity owner = finalCaster instanceof LivingEntity living ? living : null;
+        com.dragonblockarcanedba.util.DebrisSpawner.spawnField(serverLevel, owner, end, 24, 2.2, 3.0, 26);
+        com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, end, 2.2f, 0xFF37E6FF);
+    }
+
+    /**
+     * Layered particles for the beam's whole life (points 1 and 5): a dense
+     * KI_MOTE core hugging the centerline, a SPARK mid layer that travels
+     * muzzle to terminus like the renderer's flow bands, a sparse cyan dust
+     * outer layer at the beam radius, and embers boiling off the terminus.
+     * Counts ride the shared envelope so particles build and dissipate with
+     * the mesh instead of stopping at tick 3 of 16 as before.
+     */
+    private void emitBeamParticles(ServerLevel serverLevel, Vec3 start, Vec3 look, Vec3 end, float length, float charge, int age) {
+        float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+        if (density <= 0f) return;
+        float env = com.dragonblockarcanedba.util.FxEnvelope.envelope(age, MAX_LIFETIME);
+        if (env <= 0f) return;
+
+        net.minecraft.util.RandomSource rand = serverLevel.getRandom();
+        Vec3 perpA = look.cross(new Vec3(0, 1, 0));
+        if (perpA.lengthSqr() < 0.001) perpA = new Vec3(1, 0, 0);
+        perpA = perpA.normalize();
+        Vec3 perpB = perpA.cross(look).normalize();
+        double midRadius = 0.35 + charge * 0.45;
+
+        // Core: bright motes on the centerline.
+        int coreCount = Math.max(1, Math.round(4f * density * env));
+        for (int i = 0; i < coreCount; i++) {
+            Vec3 p = start.add(look.scale(rand.nextDouble() * length));
+            serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                p.x, p.y, p.z, 1, 0.12, 0.12, 0.12, 0.01);
+        }
+
+        // Mid: sparks on a disc around the line, their distance along the beam
+        // advancing with age so the layer visibly flows toward the terminus.
+        int midCount = Math.max(1, Math.round(5f * density * env));
+        for (int i = 0; i < midCount; i++) {
+            double along = (age * 2.2 + rand.nextDouble() * 6.0) % Math.max(1.0, length);
+            double ang = rand.nextDouble() * Math.PI * 2.0;
+            double rr = midRadius * Math.sqrt(rand.nextDouble());
+            Vec3 p = start.add(look.scale(along))
+                .add(perpA.scale(Math.cos(ang) * rr))
+                .add(perpB.scale(Math.sin(ang) * rr));
+            serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                p.x, p.y, p.z, 1, 0.05, 0.05, 0.05, 0.03);
+        }
+
+        // Outer: wispy cyan dust at and beyond the beam radius, every 2 ticks.
+        if (age % 2 == 0) {
+            int outerCount = Math.max(1, Math.round(2f * density * env));
+            for (int i = 0; i < outerCount; i++) {
+                double along = rand.nextDouble() * length;
+                double ang = rand.nextDouble() * Math.PI * 2.0;
+                double rr = midRadius * (1.15 + rand.nextDouble() * 0.5);
+                Vec3 p = start.add(look.scale(along))
+                    .add(perpA.scale(Math.cos(ang) * rr))
+                    .add(perpB.scale(Math.sin(ang) * rr));
+                serverLevel.sendParticles(com.dragonblockarcanedba.util.LayeredParticles.dust(0xFF37E6FF, 1.5f),
+                    p.x, p.y, p.z, 1, 0.06, 0.06, 0.06, 0.01);
             }
+        }
+
+        // Terminus: embers and sparks boiling off the impact point.
+        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+            end.x, end.y, end.z,
+            Math.max(1, Math.round(3f * density * env)),
+            0.5, 0.5, 0.5, 0.07);
+        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+            end.x, end.y, end.z,
+            Math.max(1, Math.round(2f * density * env)),
+            0.4, 0.4, 0.4, 0.10);
+
+        // Dissipation: as the envelope falls, spent sparks rain down around
+        // the terminus instead of the beam simply ending.
+        if (age >= MAX_LIFETIME * 0.7f) {
+            com.dragonblockarcanedba.util.LayeredParticles.emitRain(serverLevel, end, 2.0f, 3.0f,
+                age, MAX_LIFETIME, com.dragonblockarcanedba.particle.DbaParticles.SPARK);
         }
     }
 }

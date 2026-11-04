@@ -10,7 +10,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Curse Telegraph Entity — 3D Ground Runic Decal and Contracting Implosion Ring for Curse Lightning Strikes.
+ * Curse Telegraph Entity: 3D Ground Runic Decal and Contracting Implosion Ring for Curse Lightning Strikes.
  * Replaces vanilla particle circles with a precise, high-fidelity 3D warning projector.
  */
 public class CurseTelegraphEntity extends Projectile {

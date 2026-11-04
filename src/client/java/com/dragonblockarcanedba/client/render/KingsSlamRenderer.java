@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.KingsSlamEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -76,6 +78,8 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
         float gCol = isFlawless ? 0.85f : 0.35f;
         float bCol = isFlawless ? 0.20f : 0.02f;
 
+        float distScale = FxEnvelope.distScale(Math.sqrt(state.distanceToCameraSq));
+
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             Random rng = new Random(state.seed);
@@ -83,6 +87,10 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
             // 1. Expanding 3D Volcanic Ground Shockwave Discs & Caldera Blast Core
             float shockR = radius * grow;
             if (fade > 0.05f) {
+                // Anchor glow (point 1): a soft molten pool under the whole
+                // slam so the dome and trenches sit in light, not on bare ground.
+                LayeredRender.drawAnchorGlow(pose, buffer, Math.max(1.0f, shockR), 0.07f,
+                    rCol, gCol, bCol, LayeredRender.ALPHA_MID * fade, distScale);
                 // Outer Shockwave Crest
                 drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.84f, 48, rCol, gCol, bCol, fade * 0.85f);
                 // Inner Incandescent Caldera Bed
@@ -96,7 +104,7 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
             }
 
             // 2. Radiating 3D Tectonic Canyon Fissure Trenches
-            int trenchCount = isFlawless ? 18 : 12;
+            int trenchCount = FxEnvelope.segments(isFlawless ? 18 : 12, distScale, 8);
             for (int t = 0; t < trenchCount; t++) {
                 double tAngle = (t / (double) trenchCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.25);
                 float trenchLen = radius * (0.70f + rng.nextFloat() * 0.45f);
@@ -119,7 +127,7 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
             }
 
             // 3. Colossal Erupted Basalt Monoliths & Jagged Earth Crags
-            int rockCount = isFlawless ? 28 : 16;
+            int rockCount = FxEnvelope.segments(isFlawless ? 28 : 16, distScale, 8);
             for (int r = 0; r < rockCount; r++) {
                 double rockAngle = (r / (double) rockCount) * Math.PI * 2.0 + (rng.nextDouble() * 0.35);
                 float rockDist = radius * (0.25f + rng.nextFloat() * 0.65f);

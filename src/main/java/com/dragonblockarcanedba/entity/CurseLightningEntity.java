@@ -10,12 +10,21 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 
 public class CurseLightningEntity extends Projectile {
     private static final EntityDataAccessor<Boolean> IS_RARE = SynchedEntityData.defineId(CurseLightningEntity.class, EntityDataSerializers.BOOLEAN);
-    
+
+    /**
+     * Visible life of a strike flash, in ticks. CurseLightningRenderer draws
+     * the bolt over 2.5 ticks and has it fully faded by tick 9.5, so the
+     * entity life is 10: the two lifetimes agree and no invisible tail is
+     * left ticking after the picture ends. (The Cursed Tempest's strikes are
+     * carried by BoltEntity now; this type stays registered and honest.)
+     */
+    public static final int LIFE_TICKS = 10;
+
     public int life;
 
     public CurseLightningEntity(EntityType<? extends CurseLightningEntity> entityType, Level level) {
         super(entityType, level);
-        this.life = 20; // 1 second
+        this.life = LIFE_TICKS;
     }
 
     public void setRare(boolean isRare) {

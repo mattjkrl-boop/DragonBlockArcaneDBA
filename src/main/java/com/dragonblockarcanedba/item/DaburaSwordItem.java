@@ -3,12 +3,19 @@ package com.dragonblockarcanedba.item;
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
 import com.dragonblockarcanedba.effect.DbaEffects;
+import com.dragonblockarcanedba.entity.BoltEntity;
 import com.dragonblockarcanedba.entity.DarknessBladeEntity;
 import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.dragonblockarcanedba.entity.DarknessChargeEntity;
 import com.dragonblockarcanedba.entity.DarknessDomainEntity;
 import com.dragonblockarcanedba.entity.DarknessShatterEntity;
 import com.dragonblockarcanedba.entity.DarknessWaveEntity;
+import com.dragonblockarcanedba.util.AtmosphereServer;
+import com.dragonblockarcanedba.util.DebrisSpawner;
+import com.dragonblockarcanedba.util.GroundScar;
+import com.dragonblockarcanedba.util.LayeredParticles;
+import com.dragonblockarcanedba.util.VortexPhysics;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -27,6 +34,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -38,13 +46,24 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Darkness Sword (Dabura Sword) — Abyssal Darkness Weapon.
+ * Darkness Sword (Dabura Sword): Abyssal Darkness Weapon.
  * 
  * Ki Drain: 35% per minute (smooth).
  */
 public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_CHARGE_TICKS = 160; // 8 seconds
     public static final int MAX_RIGHT_CHANNEL_TICKS = 300; // 15 seconds
+
+    /** Demon violet theme color for dust bursts and bolt strikes. */
+    private static final int THEME_ARGB = 0xA605F2;
+    private static final int BOLT_ARGB = 0xFFA605F2;
+    /** Dark stone palette for eclipse debris: void shards, not torn up dirt. */
+    private static final java.util.List<net.minecraft.world.level.block.state.BlockState> DEBRIS_PALETTE = java.util.List.of(
+        Blocks.OBSIDIAN.defaultBlockState(),
+        Blocks.BLACKSTONE.defaultBlockState(),
+        Blocks.POLISHED_BLACKSTONE.defaultBlockState(),
+        Blocks.BASALT.defaultBlockState()
+    );
 
     private static final Map<UUID, DarknessChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
 
@@ -176,6 +195,9 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2f, 1.2f);
         com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
 
+        // Base dust where the slash leaves the caster (point 3).
+        LayeredParticles.emitGroundBurst(level, player.position(), 2.5f, THEME_ARGB);
+
         int cooldown = 20 + (int) (chargeRatio * 40);
         player.getCooldowns().addCooldown(stack, cooldown);
     }
@@ -217,11 +239,13 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             // Expanding domain radius from 8 to 30 blocks (follows player)
             double domainRadius = 8.0 + (chargeRatio * 22.0);
 
-            // Manage Physical 3D Darkness Domain Entity (Volumetric Void Dome & Whirlpools)
+            // Manage Physical 3D Darkness Domain Entity (Volumetric Void Dome & Whirlpools).
+            // A domain that is already dissipating is left to die; a fresh
+            // channel raises a fresh dome beside it.
             List<DarknessDomainEntity> existingDomains = serverLevel.getEntitiesOfClass(
                 DarknessDomainEntity.class,
                 player.getBoundingBox().inflate(6.0),
-                d -> d.getCasterId() == player.getId() && d.isAlive()
+                d -> d.getCasterId() == player.getId() && d.isAlive() && !d.isTearingDown()
             );
             DarknessDomainEntity domain;
             if (existingDomains.isEmpty()) {
@@ -254,6 +278,24 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
                 com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
             }
 
+            // The vortex is a force now, not just a picture (point 3):
+            // everything inside is dragged toward the center, swirled, and
+            // lifted near the core, growing stronger as the domain grows.
+            // Weight classes apply inside VortexPhysics, so bosses barely
+            // move and players keep most of their control.
+            VortexPhysics.applyVortex(serverLevel, player.position(), domainRadius,
+                Math.min(26.0, domainRadius * 1.35), player,
+                0.055, 0.85, 0.05, 0.35f + 0.65f * chargeRatio);
+
+            // Point 4: the domain IS the eclipse. Real thunder weather for
+            // the channel's life plus a strong client gloom grade, refreshed
+            // in steps so AtmosphereServer keeps both alive and restores the
+            // prior weather when the channel ends.
+            if (heldTicks % 20 == 0) {
+                AtmosphereServer.begin(serverLevel, player.position(),
+                    (float) domainRadius + 14.0f, 0.85f, AtmosphereServer.Kind.THUNDER, 45);
+            }
+
             // Sound cue
             if (heldTicks % 30 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -284,8 +326,57 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
         }
 
-        // Spawn falling darkness blades raining from the sky across domain
-        for (int i = 0; i < 10; i++) {
+        // Blade rain scales with the domain it falls across: a flat 10
+        // blades read empty in a radius 30 dome. 350 damage each, unchanged.
+        spawnBladeRain(player, radius, bladeCountFor(radius, 1.0f));
+
+        // Physical 3D Void Shatter Shockwave & Fissure Eruption
+        DarknessShatterEntity shatter = new DarknessShatterEntity(
+            level, player, player.position().add(0, 0.05, 0), (float) Math.min(12.0, radius * 0.5)
+        );
+        level.addFreshEntity(shatter);
+
+        // World interaction at the peak: the eclipse scars the ground it
+        // stands on with temporary obsidian, throws the domain's orbiting
+        // debris outward to rain down, and rings itself with real strikes.
+        BlockPos ground = findGround(level, player.position());
+        if (ground != null) {
+            GroundScar.scarDisk(level, ground, (int) Math.min(12.0, radius * 0.5),
+                Blocks.OBSIDIAN.defaultBlockState(), 240, 0.55f, level.getRandom());
+        }
+        LayeredParticles.emitGroundBurst(level, player.position(),
+            (float) Math.min(12.0, radius * 0.5), THEME_ARGB);
+        DebrisSpawner.spawnField(level, player, player.position(), 48, radius * 0.7, 9.0, 90, DEBRIS_PALETTE);
+        for (int i = 0; i < 5; i++) {
+            double angle = (i / 5.0) * Math.PI * 2.0 + level.getRandom().nextDouble() * 0.6;
+            double r = radius * 0.75;
+            BoltEntity bolt = new BoltEntity(level, new Vec3(
+                player.getX() + Math.cos(angle) * r, player.getY(), player.getZ() + Math.sin(angle) * r),
+                level.getRandom().nextInt(), BOLT_ARGB, 16.0f, 8);
+            bolt.setOwner(player);
+            level.addFreshEntity(bolt);
+        }
+
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.5f);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.5f);
+        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
+
+        // 8-second cooldown: the domain lived 15 seconds, and the raised
+        // spectacle (scar, debris, strikes) needs room before it repeats.
+        player.getCooldowns().addCooldown(stack, 160);
+    }
+
+    /** Eclipse blade count for a domain radius, scaled by the charge fraction paid. */
+    private static int bladeCountFor(double radius, float scale) {
+        return Math.max(4, Math.round((10 + (int) (radius * 0.5)) * scale));
+    }
+
+    /** Darkness blades raining from 18 to 23 blocks up across the domain. */
+    private static void spawnBladeRain(ServerPlayer player, double radius, int count) {
+        ServerLevel level = (ServerLevel) player.level();
+        for (int i = 0; i < count; i++) {
             double angle = level.getRandom().nextDouble() * Math.PI * 2;
             double r = level.getRandom().nextDouble() * (radius * 0.8);
             double bx = player.getX() + Math.cos(angle) * r;
@@ -295,21 +386,32 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             DarknessBladeEntity blade = new DarknessBladeEntity(level, player, new Vec3(bx, by, bz), 350.0f);
             level.addFreshEntity(blade);
         }
+    }
 
-        // Physical 3D Void Shatter Shockwave & Fissure Eruption
-        DarknessShatterEntity shatter = new DarknessShatterEntity(
-            level, player, player.position().add(0, 0.05, 0), (float) Math.min(12.0, radius * 0.5)
+    /** First solid block at or below a position, scanning a few blocks down. Null when there is no floor. */
+    private static BlockPos findGround(ServerLevel level, Vec3 center) {
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        int cx = (int) Math.floor(center.x), cz = (int) Math.floor(center.z);
+        for (int dy = 2; dy >= -6; dy--) {
+            m.set(cx, (int) Math.floor(center.y) + dy, cz);
+            if (!level.getBlockState(m).isAir()) {
+                return m.immutable();
+            }
+        }
+        return null;
+    }
+
+    /** End the player's domain gracefully: the dome dissipates over its teardown instead of popping out. */
+    private static void endDomain(ServerPlayer player) {
+        ServerLevel level = (ServerLevel) player.level();
+        List<DarknessDomainEntity> domains = level.getEntitiesOfClass(
+            DarknessDomainEntity.class,
+            player.getBoundingBox().inflate(40.0),
+            d -> d.getCasterId() == player.getId() && d.isAlive() && !d.isTearingDown()
         );
-        level.addFreshEntity(shatter);
-
-        level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.5f, 0.5f);
-        level.playSound(null, player.getX(), player.getY(), player.getZ(),
-            com.dragonblockarcanedba.sound.DbaSounds.WIND_GUST, SoundSource.PLAYERS, 2.5f, 0.5f);
-        com.dragonblockarcanedba.fx.DbaImpactFx.heavy(level, player.getX(), player.getY(), player.getZ());
-
-        // 5-second cooldown
-        player.getCooldowns().addCooldown(stack, 100);
+        for (DarknessDomainEntity d : domains) {
+            d.beginTeardown();
+        }
     }
 
     /** A channel released at two thirds charge or more still detonates, weakened. */
@@ -330,10 +432,24 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
             enemy.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (burstDamage)));
         }
 
+        // The unfinished eclipse still rains blades, scaled by what was
+        // paid: the full eclipse's signature visual is no longer all or
+        // nothing at exactly tick 300.
+        spawnBladeRain(player, radius, bladeCountFor(radius, chargeRatio));
+
         DarknessShatterEntity shatter = new DarknessShatterEntity(
             level, player, player.position().add(0, 0.05, 0), (float) Math.min(12.0, radius * 0.5)
         );
         level.addFreshEntity(shatter);
+
+        BlockPos ground = findGround(level, player.position());
+        if (ground != null) {
+            GroundScar.scarDisk(level, ground, (int) Math.min(8.0, radius * 0.4),
+                Blocks.OBSIDIAN.defaultBlockState(), 160, 0.4f, level.getRandom());
+        }
+        LayeredParticles.emitGroundBurst(level, player.position(),
+            (float) Math.min(8.0, radius * 0.4), THEME_ARGB);
+        DebrisSpawner.spawnField(level, player, player.position(), 24, radius * 0.6, 7.0, 70, DEBRIS_PALETTE);
 
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 2.0f, 0.7f);
@@ -345,10 +461,13 @@ public class DaburaSwordItem extends Item implements com.dragonblockarcanedba.it
     public boolean releaseUsing(ItemStack stack, Level level, LivingEntity living, int timeLeft) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
             int heldTicks = getUseDuration(stack, living) - timeLeft;
+            // Whatever ended the channel, the dome dissipates gracefully
+            // instead of vanishing the tick the refresh stops.
+            endDomain(player);
             if (heldTicks >= 200 && heldTicks < MAX_RIGHT_CHANNEL_TICKS) {
                 // Two thirds of a 15 second channel used to pay out exactly nothing.
                 triggerPartialEclipse(player, heldTicks / (float) MAX_RIGHT_CHANNEL_TICKS);
-                player.getCooldowns().addCooldown(stack, 80);
+                player.getCooldowns().addCooldown(stack, 100);
             } else if (heldTicks < MAX_RIGHT_CHANNEL_TICKS) {
                 player.getCooldowns().addCooldown(stack, 40);
             }

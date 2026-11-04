@@ -1,5 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -11,7 +13,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Saber Dodge Spark Entity — Physical 3D geometric golden deflection shield shatter & clash spark
+ * Saber Dodge Spark Entity: Physical 3D geometric golden deflection shield shatter & clash spark
  * burst spawned on Perfect Dodge counter.
  */
 public class SaberDodgeSparkEntity extends Projectile {
@@ -36,7 +38,7 @@ public class SaberDodgeSparkEntity extends Projectile {
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(SPARK_SCALE, 1.0f);
-        builder.define(MAX_LIFETIME, 12);
+        builder.define(MAX_LIFETIME, 20);
     }
 
     public float getSparkScale() {
@@ -51,7 +53,19 @@ public class SaberDodgeSparkEntity extends Projectile {
     public void tick() {
         super.tick();
 
-        if (!this.level().isClientSide() && this.level() instanceof ServerLevel) {
+        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Gold dust bursts at the player's feet on the dodge tick, then a
+            // layered gold vortex (core motes, gold mid band, spark wisps)
+            // rides the envelope for the rest of the burst's life.
+            if (this.tickCount == 1) {
+                LayeredParticles.emitGroundBurst(serverLevel, this.position().add(0, -1.0, 0),
+                    1.3f, 0xFFFFD75E);
+            }
+            if (this.tickCount % 2 == 0) {
+                LayeredParticles.emitVortex(serverLevel, this.position().add(0, -0.8, 0),
+                    1.0f * getSparkScale(), 1.7f, this.tickCount, getMaxLifetime(),
+                    0xFFFFD75E, DbaParticles.SPARK);
+            }
             if (this.tickCount >= getMaxLifetime()) {
                 this.discard();
             }

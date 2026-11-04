@@ -1,5 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -11,7 +13,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Saber Dimensional Line Slash Entity — Massive physical 3D reality cut beam drawn along the
+ * Saber Dimensional Line Slash Entity: Massive physical 3D reality cut beam drawn along the
  * computed 3D Best-Fit Line Snap Finisher vector.
  */
 public class SaberDimensionalLineSlashEntity extends Projectile {
@@ -49,7 +51,7 @@ public class SaberDimensionalLineSlashEntity extends Projectile {
         builder.define(DIR_Z, 0.0f);
         builder.define(LINE_LENGTH, 10.0f);
         builder.define(SLASH_SCALE, 1.0f);
-        builder.define(MAX_LIFETIME, 20);
+        builder.define(MAX_LIFETIME, 34);
     }
 
     public Vec3 getLineDirection() {
@@ -72,7 +74,24 @@ public class SaberDimensionalLineSlashEntity extends Projectile {
     public void tick() {
         super.tick();
 
-        if (!this.level().isClientSide() && this.level() instanceof ServerLevel) {
+        if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
+            // Layered sheath along the beam: three vortex emitters sampled
+            // along the line wrap the mesh in core motes, a cyan mid band, and
+            // spark wisps; mote rain falls along the line as it dissipates.
+            Vec3 center = this.position();
+            Vec3 dir = getLineDirection();
+            float len = getLineLength();
+            for (float t : new float[]{-0.32f, 0.0f, 0.32f}) {
+                Vec3 sample = center.add(dir.scale(len * t));
+                LayeredParticles.emitVortex(serverLevel, sample.add(0, -0.7, 0),
+                    0.85f * getSlashScale(), 1.6f, this.tickCount, getMaxLifetime(),
+                    0xFF4DD8FF, DbaParticles.SPARK);
+            }
+            float progress = (float) this.tickCount / (float) getMaxLifetime();
+            if (progress > 0.6f && this.tickCount % 2 == 0) {
+                LayeredParticles.emitRain(serverLevel, center, len * 0.4f, 1.6f,
+                    this.tickCount, getMaxLifetime(), DbaParticles.KI_MOTE);
+            }
             if (this.tickCount >= getMaxLifetime()) {
                 this.discard();
             }

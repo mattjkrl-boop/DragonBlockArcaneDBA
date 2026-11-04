@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SaberDodgeSparkEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -33,6 +35,9 @@ public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntit
         public float age = 0;
         public int maxLifetime = 12;
         public long seed = 0;
+        public double ex = 0;
+        public double ey = 0;
+        public double ez = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -57,6 +62,9 @@ public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntit
         state.age = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.ex = entity.getX();
+        state.ey = entity.getY();
+        state.ez = entity.getZ();
     }
 
     @Override
@@ -64,8 +72,18 @@ public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntit
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         if (progress >= 1.0f) return;
 
-        float fade = (1.0f - progress * progress);
-        float scale = state.scale * (0.9f + progress * 1.1f);
+        // Build in over the first fifth of life: the burst used to appear at
+        // near full size and near full alpha on frame one. Alpha now rides
+        // the shared envelope's opening while the old quadratic fade keeps
+        // the dissipation shape, and the burst grows from a small core.
+        float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.20f));
+        float fade = (1.0f - progress * progress) * open;
+        float grow = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.25f));
+        float scale = state.scale * (0.55f + 0.85f * grow + progress * 0.35f);
+        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
+        int ringSegs = FxEnvelope.segments(20, ds, 10);
+        int coreRingSegs = FxEnvelope.segments(16, ds, 8);
+        int haloSegs = FxEnvelope.segments(28, ds, 12);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -75,12 +93,12 @@ public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntit
             Random rng = new Random(state.seed);
 
             // 1. Dual Counter-Rotating Golden Clash Shock Rings
-            int ringSegments = 20;
+            int ringSegments = ringSegs;
             float rOuter = 1.8f * scale;
             float rInner = rOuter * 0.72f;
             drawClashRing(matrix, buffer, rOuter, rInner, ringSegments, state.age * 35.0f, 1.0f, 0.85f, 0.15f, fade * 0.90f);
             drawClashRing(matrix, buffer, rOuter * 0.75f, rInner * 0.65f, ringSegments, -state.age * 50.0f, 1.0f, 0.98f, 0.70f, fade * 0.98f);
-            drawClashRing(matrix, buffer, rOuter * 0.28f, rOuter * 0.10f, 16, state.age * 22.0f, 1.0f, 1.0f, 1.0f, fade);
+            drawClashRing(matrix, buffer, rOuter * 0.28f, rOuter * 0.10f, coreRingSegs, state.age * 22.0f, 1.0f, 1.0f, 1.0f, fade);
 
             // 2. 8-Point Physical 3D Diamond Energy Clash Spikes
             int spikeCount = 8;
@@ -146,7 +164,7 @@ public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntit
             Matrix4f matrix = pose.pose();
             float coreSize = (0.8f * (1.0f - progress * 0.6f)) * scale * 1.6f;
             drawDiamondSpark(matrix, buffer, 0, 0, 0, coreSize, 1.0f, 1.0f, 0.95f, fade * 0.22f);
-            drawClashRing(matrix, buffer, 1.8f * scale * 1.15f, 1.8f * scale * 0.80f, 28, state.age * 35.0f, 1.0f, 0.85f, 0.15f, fade * 0.14f);
+            drawClashRing(matrix, buffer, 1.8f * scale * 1.15f, 1.8f * scale * 0.80f, haloSegs, state.age * 35.0f, 1.0f, 0.85f, 0.15f, fade * 0.14f);
         });
 
         poseStack.popPose();

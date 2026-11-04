@@ -26,6 +26,7 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
         public float radius = 3.0f;
         public boolean isCollapsing = false;
         public float age = 0;
+        public double wx = 0, wy = 0, wz = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -49,6 +50,9 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
         state.radius = entity.getRadius();
         state.isCollapsing = entity.isCollapsing();
         state.age = entity.tickCount + partialTicks;
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
     }
 
     @Override
@@ -62,11 +66,16 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
             pull = Math.min(1.0f, pull + 0.40f);
         }
         final float pullIn = pull;
-        float fadeInRaw = Math.min(1.0f, state.age / 6.0f);
-        float fadeInEased = fadeInRaw * fadeInRaw * (3.0f - 2.0f * fadeInRaw);
-        float collapseRaw = Math.max(0.0f, Math.min(1.0f, (maxLife - state.age) / 10.0f));
-        float collapseEased = collapseRaw * collapseRaw * (3.0f - 2.0f * collapseRaw);
-        final float fade = state.isCollapsing ? collapseEased : fadeInEased;
+        // One shared envelope for alpha, the same fractions the entity uses for
+        // its pull and particles, so the visual builds across the expansion and
+        // dies across the collapse instead of popping at either end.
+        final float fade = com.dragonblockarcanedba.util.FxEnvelope.envelope(
+            state.age, maxLife,
+            DimensionalRiftEntity.ENVELOPE_BUILD_FRAC, DimensionalRiftEntity.ENVELOPE_DECAY_FRAC);
+        // Distance scaling (standard point 1): distant rifts step their segment
+        // counts down, near rifts stay rich.
+        final float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
+            cameraState, state.wx, state.wy, state.wz);
         float radius = state.radius;
 
         float rot = state.age * (state.isCollapsing ? 25.0f : 8.0f);
@@ -77,8 +86,13 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
+            // Ground anchor glow (shared LayeredRender): a soft violet disc that
+            // grounds the rift to the world under everything else.
+            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawAnchorGlow(
+                pose, buffer, radius * 1.05f, 0.04f, 0.75f, 0.20f, 1.0f, 0.50f * fade, distScale);
+
             // 1. Concentric 3D Ground Accretion Shockwave Rings (Expanding across terrain)
-            int ringSegments = 48;
+            int ringSegments = com.dragonblockarcanedba.util.FxEnvelope.segments(48, distScale, 20);
 
             // Outer Accretion Shockwave (Primary ring at current radius)
             float outerWidth = Math.min(2.0f, radius * 0.25f);
@@ -88,21 +102,24 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
                 1.0f, 0.05f, 0.80f, 0.95f * fade
             );
             // Thin bright lip on the outer ring, so the rift edge cuts instead of sitting flat.
-            drawRotatingFlatRing(matrix, buffer, rot * 0.55f, radius * 1.04f, radius * 0.94f, 48,
+            drawRotatingFlatRing(matrix, buffer, rot * 0.55f, radius * 1.04f, radius * 0.94f,
+                com.dragonblockarcanedba.util.FxEnvelope.segments(48, distScale, 20),
                 1.0f, 0.72f, 0.95f, 0.5f * fade
             );
 
             // Middle Accretion Shockwave (Counter-rotating at 65% radius)
             float midRadius = radius * 0.65f;
             float midWidth = Math.min(1.6f, midRadius * 0.28f);
-            drawRotatingFlatRing(matrix, buffer, -rot * 1.4f, midRadius, midRadius - midWidth, 32,
+            drawRotatingFlatRing(matrix, buffer, -rot * 1.4f, midRadius, midRadius - midWidth,
+                com.dragonblockarcanedba.util.FxEnvelope.segments(32, distScale, 14),
                 0.85f, 0.05f, 0.95f, 0.80f * fade
             );
 
             // Inner Accretion Compression Disk (High speed at 35% radius)
             float innerRadius = radius * 0.35f;
             float innerWidth = Math.min(1.2f, innerRadius * 0.35f);
-            drawRotatingFlatRing(matrix, buffer, rot * 2.2f, innerRadius, innerRadius - innerWidth, 28,
+            drawRotatingFlatRing(matrix, buffer, rot * 2.2f, innerRadius, innerRadius - innerWidth,
+                com.dragonblockarcanedba.util.FxEnvelope.segments(28, distScale, 12),
                 0.20f, 0.90f, 1.0f, 0.85f * fade
             );
 
@@ -115,28 +132,45 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
             drawVerticalTearPlane(matrix, buffer, vWidth, vHeight, 60.0f, 0.05f, 0.0f, 0.10f, 0.95f * fade, 0.20f, 0.90f, 1.0f, 0.90f * fade);
             drawVerticalTearPlane(matrix, buffer, vWidth, vHeight, 120.0f, 0.05f, 0.0f, 0.10f, 0.95f * fade, 1.0f, 0.10f, 0.70f, 0.90f * fade);
 
+            // Layered vortex bands (shared LayeredRender): three counter rotating
+            // layers around the tears, bright core, violet mid, wispy outer, so the
+            // rift body has the standard's depth instead of only flat ground rings.
+            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawVortexBands(
+                pose, buffer, radius * 0.62f, vHeight, state.age,
+                0.62f, 0.05f, 0.95f, fade, distScale);
+
             // 3. Orbital Gravitational Void Spikes / Soul Shards (18 3D crystalline spikes orbiting)
             int shardCount = 18;
             // The ring eases into the hole over the rift's life.
             float shardOrbitRadius = radius * (0.90f - 0.58f * pullIn);
-            float shardHeight = 1.4f * pulse;
 
             for (int i = 0; i < shardCount; i++) {
-                double shardAngle = (i / (double) shardCount) * Math.PI * 2.0 + Math.toRadians(rot * 0.8f);
-                float sx = (float) Math.cos(shardAngle) * shardOrbitRadius;
-                float sz = (float) Math.sin(shardAngle) * shardOrbitRadius;
+                // The 18 signature spikes stay, but each is now its own shard:
+                // deterministic per spike variation in size, thickness, orbit
+                // band, height band, and precession speed, instead of 18
+                // identical pyramids on one ring at one height.
+                float sizeVar = 0.75f + 0.55f * hash(i, 0.13f);
+                float shardHeight = 1.4f * pulse * sizeVar;
+                float bandRadius = shardOrbitRadius * (i % 2 == 0 ? 1.0f : 0.84f);
+                float speedVar = 0.85f + 0.30f * hash(i, 0.47f);
+                double shardAngle = (i / (double) shardCount) * Math.PI * 2.0
+                    + i * 2.399963 // golden angle offset breaks the uniform ring spacing
+                    + Math.toRadians(rot * 0.8f * speedVar);
+                float sx = (float) Math.cos(shardAngle) * bandRadius;
+                float sz = (float) Math.sin(shardAngle) * bandRadius;
 
                 // Inward lean toward singularity core
                 float leanInX = -(float) Math.cos(shardAngle) * 0.35f;
                 float leanInZ = -(float) Math.sin(shardAngle) * 0.35f;
 
-                float shardThickness = 0.22f;
+                float shardThickness = 0.22f * (0.70f + 0.60f * hash(i, 0.29f));
                 float perpX = -(float) Math.sin(shardAngle) * shardThickness;
                 float perpZ = (float) Math.cos(shardAngle) * shardThickness;
 
-                // Secondary motion (redesign T4): each shard bobs on its own
-                // phase instead of the whole ring riding one flat plane.
-                float bobY = 0.06f + 0.16f * (0.5f + 0.5f * (float) Math.sin(state.age * 0.35f + i * 0.7f));
+                // Each shard rides its own height band and bobs on its own phase
+                // and amplitude instead of the whole ring sharing one flat plane.
+                float bobY = 0.05f + 0.35f * hash(i, 0.71f)
+                    + (0.05f + 0.25f * hash(i, 0.53f)) * (0.5f + 0.5f * (float) Math.sin(state.age * 0.35f + i * 0.7f));
 
                 draw3DShardPyramid(matrix, buffer,
                     sx - perpX, bobY, sz - perpZ,
@@ -157,6 +191,12 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
 
         poseStack.popPose();
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /** Stable per index variation in 0..1 (golden ratio hash), identical every frame for a given spike. */
+    private static float hash(int i, float salt) {
+        float v = (i * 0.6180339887f + salt) % 1.0f;
+        return v < 0 ? v + 1.0f : v;
     }
 
     private static void drawBeveledShockRing(Matrix4f matrix, VertexConsumer consumer,

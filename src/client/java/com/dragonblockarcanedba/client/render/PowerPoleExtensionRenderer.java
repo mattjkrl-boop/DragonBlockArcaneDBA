@@ -83,7 +83,10 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
 
         float age = state.age;
 
-        // The staff eases out to the poke, holds, then eases back in.
+        // The staff eases out to the poke, holds, then eases back in, fading
+        // fully to zero across the retract so the pole is gone exactly when
+        // the entity discards at tick 12. The alpha used to bottom out at
+        // 0.65, so the pole vanished at 65 percent opacity: a visible cut.
         float extendProgress;
         float alphaMult = 1.0f;
         if (age < 3.0f) {
@@ -93,7 +96,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             float t = Math.min(1.0f, (age - 9.0f) / 3.0f);
             float back = t * t * (3.0f - 2.0f * t);
             extendProgress = 1.0f - back;
-            alphaMult = 1.0f - back * 0.35f;
+            alphaMult = 1.0f - back;
         } else {
             extendProgress = 1.0f;
         }
@@ -124,6 +127,14 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             float shaftRadius = 0.13f * fpScale;
             float shaftZ1 = Math.max(baseZStart, 0.4f);
             float shaftZ2 = currentLength - 0.4f;
+            if (shaftZ2 > shaftZ1) {
+                // Outer layer of the strike trail (standard point 1): a wide,
+                // faint pale gold sheath around the shaft, the displaced air
+                // and energy the extension drags with it. The crimson bands
+                // below are the mid layer and the thin core shaft the core.
+                draw12SidedShaft(matrix, buffer, shaftRadius * 2.1f, shaftZ1, shaftZ2,
+                    1.0f, 0.88f, 0.66f, finalAlpha * 0.14f);
+            }
             if (shaftZ2 > shaftZ1) {
                 float band1 = shaftZ1 + (shaftZ2 - shaftZ1) / 3.0f;
                 float band2 = shaftZ1 + (shaftZ2 - shaftZ1) * 2.0f / 3.0f;
@@ -204,6 +215,13 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
                             1.0f, 0.92f, 0.50f, shockAlpha);
                     }
                 }
+            }
+
+            // Tip wake: a translucent cone trailing off the striking tip,
+            // widening backward, so the extension's speed has a shape.
+            if (currentLength > 1.6f) {
+                drawMachCone(matrix, buffer, currentLength, currentLength - 1.3f,
+                    0.5f * fpScale, 1.0f, 0.95f, 0.75f, 0.16f * finalAlpha);
             }
 
             // Gold strike glint on the tip. The impact entity is the hit itself.

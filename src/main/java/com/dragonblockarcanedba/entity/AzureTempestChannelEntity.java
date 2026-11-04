@@ -13,11 +13,21 @@ import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 
 /**
- * Azure Tempest Channel Entity — Physical 3D swirling wind tunnel and storm aura during Call of the Tempest channeling.
+ * Azure Tempest Channel Entity: Physical 3D swirling wind tunnel and storm aura during Call of the Tempest channeling.
+ *
+ * Spectacle pass: the channel emits the shared layered vortex particles,
+ * tugs nearby mobs toward the caster as the charge builds, and no longer
+ * pops out in one tick on release. beginRelease() starts an 8 tick collapse
+ * that the renderer fades with, then the entity discards itself.
  */
 public class AzureTempestChannelEntity extends Projectile {
     private static final EntityDataAccessor<Float> CHARGE_RATIO = SynchedEntityData.defineId(AzureTempestChannelEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> CASTER_ID = SynchedEntityData.defineId(AzureTempestChannelEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Boolean> RELEASING = SynchedEntityData.defineId(AzureTempestChannelEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> RELEASE_AGE = SynchedEntityData.defineId(AzureTempestChannelEntity.class, EntityDataSerializers.INT);
+
+    /** Ticks the collapse fade runs after beginRelease(). */
+    public static final int RELEASE_TICKS = 8;
 
     public AzureTempestChannelEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -38,6 +48,8 @@ public class AzureTempestChannelEntity extends Projectile {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         builder.define(CHARGE_RATIO, 0.0f);
         builder.define(CASTER_ID, -1);
+        builder.define(RELEASING, false);
+        builder.define(RELEASE_AGE, 0);
     }
 
     public float getChargeRatio() {
@@ -52,6 +64,22 @@ public class AzureTempestChannelEntity extends Projectile {
         return this.entityData.get(CASTER_ID);
     }
 
+    public boolean isReleasing() {
+        return this.entityData.get(RELEASING);
+    }
+
+    public int getReleaseAge() {
+        return this.entityData.get(RELEASE_AGE);
+    }
+
+    /** Start the collapse: the renderer fades over RELEASE_TICKS, then the entity discards. */
+    public void beginRelease() {
+        if (!isReleasing()) {
+            this.entityData.set(RELEASING, true);
+            this.entityData.set(RELEASE_AGE, 0);
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();
@@ -62,21 +90,39 @@ public class AzureTempestChannelEntity extends Projectile {
                 caster = serverLevel.getEntity(getCasterId());
             }
 
+            // Collapse path: count the fade, then leave. The storm the caster
+            // just summoned takes over the sky from here.
+            if (isReleasing()) {
+                int next = getReleaseAge() + 1;
+                this.entityData.set(RELEASE_AGE, next);
+                if (caster instanceof LivingEntity living && living.isAlive()) {
+                    this.setPos(living.getX(), living.getY(), living.getZ());
+                }
+                if (next >= RELEASE_TICKS) {
+                    this.discard();
+                }
+                return;
+            }
+
             if (caster instanceof LivingEntity living && living.isAlive() && !living.isRemoved()) {
                 this.setPos(living.getX(), living.getY(), living.getZ());
+                float charge = getChargeRatio();
 
-                // Theme particles (T5): wind spiraling up around the caster,
-                // widening and thickening as the charge builds.
-                if (this.tickCount % 2 == 0) {
-                    float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                    if (density > 0f) {
-                        float charge = getChargeRatio();
-                        serverLevel.sendParticles(
-                            com.dragonblockarcanedba.particle.DbaParticles.WIND,
-                            living.getX(), living.getY() + 0.4, living.getZ(),
-                            Math.max(1, Math.round((2f + charge * 4f) * density)),
-                            1.2 + charge * 1.8, 0.8, 1.2 + charge * 1.8, 0.04);
-                    }
+                // Point 1, layered particles: the shared vortex emitter at the
+                // renderer's tunnel size, replacing the single flat WIND puff.
+                // A fixed mid life age keeps the envelope at full while the
+                // channel runs; the charge drives radius and height instead.
+                com.dragonblockarcanedba.util.LayeredParticles.emitVortex(serverLevel,
+                    living.position(), 1.2f + charge * 2.0f, 3.2f + charge * 2.4f,
+                    50.0f, 100.0f, AzureStormEntity.AZURE_ARGB,
+                    com.dragonblockarcanedba.particle.DbaParticles.WIND);
+
+                // Point 3, the gathering storm tugs at what stands nearby,
+                // harder as the charge builds. No damage while channeling.
+                if (charge > 0.3f && this.tickCount % 2 == 0) {
+                    com.dragonblockarcanedba.util.VortexPhysics.applyVortex(serverLevel,
+                        living.position(), 2.5 + charge * 3.5, 4.0, living,
+                        0.04 + 0.10 * charge, 1.2, 0.05 + 0.15 * charge, charge);
                 }
 
                 if (living instanceof Player player) {

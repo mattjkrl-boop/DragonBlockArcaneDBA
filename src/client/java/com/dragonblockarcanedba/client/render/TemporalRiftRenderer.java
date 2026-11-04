@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.TemporalRiftEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -31,6 +33,9 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
         public float radius = 12.0f;
         public float ageInTicks = 0;
         public int maxLifetime = 60;
+        public double worldX = 0;
+        public double worldY = 0;
+        public double worldZ = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -54,25 +59,36 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
         state.radius = entity.getRadius();
         state.ageInTicks = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
+        state.worldX = entity.getX();
+        state.worldY = entity.getY();
+        state.worldZ = entity.getZ();
     }
 
     @Override
     public void submit(RiftRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float age = state.ageInTicks;
         float maxLife = (float) state.maxLifetime;
-        float progress = Math.min(1.0f, age / maxLife);
-        if (progress >= 1.0f) return;
 
-        // Smooth deployment expansion in first 6 ticks, smooth collapse in last 10 ticks
-        float entrance = Math.min(1.0f, age / 6.0f);
-        float exitLinear = Math.min(1.0f, (maxLife - age) / 10.0f);
-        float exit = exitLinear * exitLinear * (3.0f - 2.0f * exitLinear);
-        float scaleMultiplier = (float) Math.sin(entrance * (Math.PI / 2.0)) * Math.max(0.0f, exit);
-        if (scaleMultiplier <= 0.001f) return;
+        // Shared lifecycle envelope (point 5): build over the first 15
+        // percent, peak, dissipate over the last 35 percent. The same
+        // envelope drives the entity's particles, drift, and damage, so the
+        // dome's alpha, the motes, and the second burst half all agree.
+        // Nothing pops in at full alpha and nothing discards at visible alpha.
+        float env = FxEnvelope.envelope(age, maxLife, 0.15f, 0.35f);
+        if (env <= 0.001f) return;
 
-        float radius = state.radius * scaleMultiplier;
+        // The radius unfolds during the build and holds through dissipation;
+        // the old version also shrank the radius to zero over the last 10
+        // ticks on top of the fade, which read as the dome collapsing early.
+        float buildT = FxEnvelope.smoothstep(Math.min(1.0f, age / (maxLife * 0.15f)));
+        float radiusScale = 0.35f + 0.65f * buildT;
+        float radius = state.radius * radiusScale;
         float pulse = 0.88f + 0.12f * (float) Math.sin(age * 0.20f);
-        float fade = Math.min(1.0f, exit);
+        float fade = env;
+
+        // Point 1: geometry and alpha step down with camera distance.
+        float ds = LayeredRender.distScale(cameraState, state.worldX, state.worldY, state.worldZ);
+        float alphaScale = (float) Math.sqrt(ds);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -81,8 +97,8 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             Matrix4f matrix = pose.pose();
 
             // 1. Volumetric 3D Translucent Celestial Dome Shell (Multi-Latitude Mesh)
-            int domeLatitudes = 14;
-            int domeLongitudes = 40;
+            int domeLatitudes = FxEnvelope.segments(14, ds, 6);
+            int domeLongitudes = FxEnvelope.segments(40, ds, 16);
             float domeHeight = radius * 1.05f;
 
             for (int lat = 0; lat < domeLatitudes; lat++) {
@@ -95,7 +111,7 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
                 float r1 = radius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
                 float r2 = radius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
 
-                float domeAlpha = (0.13f + latProgress1 * 0.15f) * pulse * fade;
+                float domeAlpha = (0.13f + latProgress1 * 0.15f) * pulse * fade * alphaScale;
 
                 // Color shift from celestial cyan at base to diamond silver at apex.
                 // 3-stop ramp (T2): the base band now starts in a deeper cyan so
@@ -125,8 +141,8 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             }
 
             // Brighter inner shell of the same dome, so the clock has a hot core under the glass.
-            int coreLats = 8;
-            int coreLons = 28;
+            int coreLats = FxEnvelope.segments(8, ds, 4);
+            int coreLons = FxEnvelope.segments(28, ds, 12);
             float coreRadius = radius * 0.72f;
             float coreHeight = coreRadius * 1.05f;
             for (int lat = 0; lat < coreLats; lat++) {
@@ -136,7 +152,7 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
                 float y2 = 0.12f + (float) Math.sin(latProgress2 * (Math.PI / 2.0)) * coreHeight;
                 float r1 = coreRadius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
                 float r2 = coreRadius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
-                float coreAlpha = (0.05f + latProgress1 * 0.16f) * pulse * fade;
+                float coreAlpha = (0.05f + latProgress1 * 0.16f) * pulse * fade * alphaScale;
                 for (int lon = 0; lon < coreLons; lon++) {
                     double angleOffset = (-age * 0.6f) * (Math.PI / 180.0);
                     double a1 = ((lon / (double) coreLons) * Math.PI * 2.0) + angleOffset;
@@ -154,8 +170,17 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
                 }
             }
 
+            // Layered interior (point 1): three counter-rotating time
+            // current bands inside the dome shells, plus the shared ground
+            // anchor glow, so the dome has moving depth instead of two
+            // static glass shells. Both run on the same envelope.
+            LayeredRender.drawVortexBands(pose, buffer, radius * 0.52f, domeHeight * 0.72f, age,
+                0.55f, 0.85f, 1.0f, env * 0.85f, ds);
+            LayeredRender.drawAnchorGlow(pose, buffer, radius * 0.98f, 0.05f,
+                0.45f, 0.78f, 1.0f, 0.50f * env * pulse, ds);
+
             // 2. Physical 3D Rotating Clock Decal & Ground Chronometer Mandala
-            int groundSegments = 48;
+            int groundSegments = FxEnvelope.segments(48, ds, 20);
 
             // Outer Chrono Rim
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, radius, radius * 0.91f, groundSegments, age * 6.0f,
@@ -197,7 +222,7 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
                 0.60f, 0.90f, 1.0f, 0.95f * pulse * fade);
 
             // Center Jewel Cap
-            drawOctahedralJewel(matrix, buffer, 0, 0.20f, 0, 0.55f * scaleMultiplier, age * 25.0f,
+            drawOctahedralJewel(matrix, buffer, 0, 0.20f, 0, 0.55f * radiusScale, age * 25.0f,
                 1.0f, 1.0f, 1.0f, 0.95f * fade);
 
             // 4. Dual Tilted Orbital Precession Chrono-Rings
@@ -217,7 +242,7 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             }
 
             // 6. Zenith Stasis Apex Jewel
-            drawOctahedralJewel(matrix, buffer, 0, domeHeight + 0.1f, 0, 0.85f * scaleMultiplier, age * 30.0f,
+            drawOctahedralJewel(matrix, buffer, 0, domeHeight + 0.1f, 0, 0.85f * radiusScale, age * 30.0f,
                 0.95f, 0.98f, 1.0f, 0.95f * fade);
         });
 
@@ -437,19 +462,5 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
             consumer.addVertex(matrix, cx, cy - h, cz).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         }
-    }
-
-    private static void drawTrenchSegment(Matrix4f matrix, VertexConsumer consumer, float x1, float z1, float x2, float z2, float width, float r, float g, float b, float a) {
-        float dx = x2 - x1, dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dz * dz);
-        if (len < 0.001f) return;
-
-        float nx = -dz / len * width * 0.5f;
-        float nz = dx / len * width * 0.5f;
-
-        consumer.addVertex(matrix, x1 - nx, 0.08f, z1 - nz).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1 + nx, 0.08f, z1 + nz).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx, 0.08f, z2 + nz).setColor(r, g, b, a).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx, 0.08f, z2 - nz).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 }

@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SaberVoidTearEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -31,6 +33,9 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
         public float xRot = 0;
         public float age = 0;
         public int maxLifetime = 12;
+        public double ex = 0;
+        public double ey = 0;
+        public double ez = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -57,6 +62,9 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
+        state.ex = entity.getX();
+        state.ey = entity.getY();
+        state.ez = entity.getZ();
     }
 
     @Override
@@ -64,10 +72,21 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
         float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
         if (progress >= 1.0f) return;
 
-        float fade = 1.0f - smooth(progress);
+        // Alpha rides the shared envelope as well as the local fade, so the
+        // tear builds in and seals shut on the same curve the entity's
+        // particles use, and never pops at either end.
+        float env = FxEnvelope.envelope(state.age, (float) state.maxLifetime, 0.25f, 0.35f);
+        float fade = (1.0f - smooth(progress)) * Math.min(1.0f, env * 1.6f);
         float open = smooth(Math.min(1.0f, progress / 0.45f));
         float impact = strike(progress);
         float scale = state.scale * (0.55f + 0.7f * open);
+        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
+        int ringSegments = FxEnvelope.segments(24, ds, 10);
+        // The synced destination flag now actually renders: the tear the
+        // player arrives through is wider and burns at full core alpha, the
+        // origin tear they left is narrower and dimmer.
+        float slitBoost = state.isDestination ? 1.30f : 1.0f;
+        float coreBoost = state.isDestination ? 1.0f : 0.8f;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -77,8 +96,8 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             float slitH = 1.35f * (0.4f + 0.6f * open) * state.scale;
-            float slitW = 0.12f * (1.0f - progress * 0.55f) * state.scale;
-            drawRiftSlit(matrix, buffer, slitW, slitH, fade);
+            float slitW = 0.12f * (1.0f - progress * 0.55f) * state.scale * slitBoost;
+            drawRiftSlit(matrix, buffer, slitW, slitH, fade * coreBoost);
             int spikeCount = 6;
             for (int i = 0; i < spikeCount; i++) {
                 double angle = (i / (double) spikeCount) * Math.PI * 2.0 + (state.age * 0.12);
@@ -92,9 +111,15 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
                 drawSonicCone(matrix, buffer, scale, open, coneFade);
             }
             if (impact > 0.02f) {
+                // Dual counter-rotating shock rings, as the class doc promises:
+                // a cyan ring spinning one way and a tighter violet ring
+                // spinning against it.
                 float rOuter = 1.15f * scale * (0.45f + impact);
-                drawShockRing(matrix, buffer, rOuter, rOuter * 0.78f, 24, 0.0f,
+                drawShockRing(matrix, buffer, rOuter, rOuter * 0.78f, ringSegments, state.age * 40.0f,
                     0.0f, 0.85f, 1.0f, impact * 0.9f);
+                float rCounter = 0.95f * scale * (0.50f + impact);
+                drawShockRing(matrix, buffer, rCounter, rCounter * 0.80f, ringSegments, -state.age * 55.0f,
+                    0.45f, 0.20f, 1.0f, impact * 0.65f);
             }
         });
 

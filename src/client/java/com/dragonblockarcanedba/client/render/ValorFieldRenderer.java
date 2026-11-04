@@ -36,6 +36,7 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
     public static class ValorFieldRenderState extends EntityRenderState {
         public float radius = 9.0f;
         public float ageInTicks = 0;
+        public float fadeStart = -1;
         public final List<Vec3> suspendedRelPositions = new ArrayList<>();
     }
 
@@ -59,8 +60,15 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
         super.extractRenderState(entity, state, partialTicks);
         state.radius = ValorFieldEntity.FIELD_RADIUS;
         state.ageInTicks = entity.tickCount + partialTicks;
+        state.fadeStart = entity.getFadeStart();
 
         state.suspendedRelPositions.clear();
+        // Cages only around projectiles the field actually suspended: the ids
+        // come from the entity's own suspended map, synced to the client.
+        // This used to cage any projectile moving slowly inside the radius,
+        // including ones the field never touched.
+        java.util.Set<Integer> suspendedIds = entity.getSuspendedIds();
+        if (suspendedIds.isEmpty()) return;
         Vec3 fieldPos = entity.position();
         float r = state.radius;
         AABB box = new AABB(
@@ -70,14 +78,13 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
 
         List<Projectile> projectiles = entity.level().getEntitiesOfClass(
             Projectile.class, box,
-            p -> p.isAlive() && p != entity && p.distanceToSqr(fieldPos) <= r * r
+            p -> p.isAlive() && p != entity && suspendedIds.contains(p.getId())
+                && p.distanceToSqr(fieldPos) <= r * r
         );
 
         for (Projectile p : projectiles) {
-            if (p.getDeltaMovement().lengthSqr() < 0.08) {
-                Vec3 pPos = p.position();
-                state.suspendedRelPositions.add(pPos.subtract(fieldPos));
-            }
+            Vec3 pPos = p.position();
+            state.suspendedRelPositions.add(pPos.subtract(fieldPos));
         }
     }
 
@@ -87,16 +94,31 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
 
         float radius = state.radius;
         float age = state.ageInTicks;
-        // Spawn fade-in over the first 6 ticks: the 9 block dome used to appear
+        // Spawn fade-in over the first 10 ticks: the 9 block dome used to appear
         // at full strength in a single tick when cast.
         float spawnIn = Math.min(1.0f, age / 10.0f);
         float rise = smooth(spawnIn);
-        float pulse = (0.88f + 0.12f * (float) Math.sin(age * 0.18f)) * rise;
+        // Fade out over FADE_OUT_TICKS once the entity starts dissipating, so
+        // the dome leaves the same way it arrived instead of vanishing in one
+        // tick on release, Ki exhaustion, death, or disconnect.
+        float fadeOut = 1.0f;
+        if (state.fadeStart >= 0) {
+            fadeOut = 1.0f - smooth(Math.min(1.0f,
+                (age - state.fadeStart) / (float) ValorFieldEntity.FADE_OUT_TICKS));
+        }
+        float pulse = (0.88f + 0.12f * (float) Math.sin(age * 0.18f)) * rise * fadeOut;
+        float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
+            cameraState, state.x, state.y, state.z);
 
         poseStack.pushPose();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
+
+            // 0. Ground anchor glow (shared LayeredRender block): a soft gold
+            // disc grounding the dome to the world at its base.
+            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawAnchorGlow(pose, buffer,
+                radius * 0.95f, 0.06f, 1.0f, 0.85f, 0.20f, 0.35f * pulse, distScale);
 
             // 1. Volumetric 3D Translucent Golden Dome Shell (Multi-Latitude Mesh)
             int domeLatitudes = 14;

@@ -54,7 +54,10 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
         state.radius = entity.getRadius();
         state.isFinal = entity.isFinal();
         state.age = entity.tickCount + partialTicks;
-        state.lifetime = entity.getLifetime();
+        // The client side entity never runs the convenience constructor, so
+        // the total life comes from the synced final flag and the shared
+        // constants, not from the entity's server side countdown field.
+        state.lifetime = state.isFinal ? HellHuntImpactEntity.LIFE_FINAL : HellHuntImpactEntity.LIFE_NORMAL;
         state.seed = entity.getUUID().getMostSignificantBits();
     }
 
@@ -64,9 +67,12 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
 
         float radius = state.radius;
         float age = state.age;
-        // Spikes rise, hold, then sink. The fade eases out instead of cutting.
+        // Shared lifecycle envelope (standard point 5): builds over the
+        // first fifth of life, peaks, then dissipates over the last third,
+        // so the renderer agrees with the entity side particles and scar.
         float lifeT = Math.min(1.0f, age / (float) state.lifetime);
-        final float fade = 1.0f - lifeT * lifeT * (3.0f - 2.0f * lifeT);
+        final float fade = com.dragonblockarcanedba.util.FxEnvelope.envelope(age, state.lifetime);
+        final float ds = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
         boolean isFinal = state.isFinal;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
@@ -82,14 +88,24 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
             float shockR = radius * 1.35f * grow;
             if (fade > 0.05f) {
                 // Outer Shock Ring: Dark Crimson Runes
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.82f, 32, age * 10.0f, 0.85f, 0.0f, 0.15f, fade * 0.85f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, shockR, shockR * 0.82f, com.dragonblockarcanedba.util.FxEnvelope.segments(32, ds, 16), age * 10.0f, 0.85f, 0.0f, 0.15f, fade * 0.85f);
                 // Inner Blood Ring, a ring rather than a filled disc, plus a tight bright core.
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, shockR * 0.40f, 24, -age * 14.0f, 1.0f, 0.05f, 0.25f, fade * 0.75f);
-                drawGroundRing(matrix, buffer, 0, 0.07f, 0, shockR * 0.22f, shockR * 0.12f, 20, age * 22.0f, 1.0f, 0.88f, 0.92f, fade * 0.9f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, shockR * 0.65f, shockR * 0.40f, com.dragonblockarcanedba.util.FxEnvelope.segments(24, ds, 12), -age * 14.0f, 1.0f, 0.05f, 0.25f, fade * 0.75f);
+                drawGroundRing(matrix, buffer, 0, 0.07f, 0, shockR * 0.22f, shockR * 0.12f, com.dragonblockarcanedba.util.FxEnvelope.segments(20, ds, 10), age * 22.0f, 1.0f, 0.88f, 0.92f, fade * 0.9f);
                 if (isFinal) {
                     // Extra Halos on Final Finisher Impact
-                    drawGroundRing(matrix, buffer, 0, 0.06f, 0, shockR * 1.15f, shockR * 0.95f, 32, age * 6.0f, 1.0f, 0.85f, 0.90f, fade * 0.90f);
+                    drawGroundRing(matrix, buffer, 0, 0.06f, 0, shockR * 1.15f, shockR * 0.95f, com.dragonblockarcanedba.util.FxEnvelope.segments(32, ds, 16), age * 6.0f, 1.0f, 0.85f, 0.90f, fade * 0.90f);
                 }
+
+                // Shared layered language (standard point 1): an anchor glow
+                // grounding the seal, and a three band vortex column while
+                // the execution pillar stands, so the impact reads with the
+                // same depth as every other spectacle effect.
+                com.dragonblockarcanedba.client.render.ki.LayeredRender.drawAnchorGlow(pose, buffer,
+                    shockR * 0.95f, 0.02f, 1.0f, 0.10f, 0.22f, 0.50f * fade, ds);
+                float bandEnv = fade * (age <= 14f ? 1.0f : Math.max(0f, 1.0f - (age - 14f) / 10f));
+                com.dragonblockarcanedba.client.render.ki.LayeredRender.drawVortexBands(pose, buffer,
+                    radius * 0.5f, isFinal ? 4.2f : 3.0f, age, 1.0f, 0.07f, 0.16f, bandEnv, ds);
             }
 
             // 2. 8 Radiating 3D Demonic Tectonic Fissure Trenches
@@ -148,7 +164,11 @@ public class HellHuntImpactRenderer extends EntityRenderer<HellHuntImpactEntity,
             float pillarLife = isFinal ? 18.0f : 12.0f;
             if (age < pillarLife) {
                 float pillarProgress = age / pillarLife;
-                float pillarAlpha = (1.0f - pillarProgress) * (isFinal ? 1.0f : 0.85f);
+                // The pillar is an instant strike visual, so it builds over
+                // 3 ticks instead of the full envelope build, but it no
+                // longer appears at full alpha on frame one either.
+                float pillarBuild = com.dragonblockarcanedba.util.FxEnvelope.smoothstep(Math.min(1.0f, age / 3.0f));
+                float pillarAlpha = (1.0f - pillarProgress) * (isFinal ? 1.0f : 0.85f) * pillarBuild;
                 float pillarHeight = (isFinal ? 8.5f : 5.5f) * Math.min(1.0f, age * 0.4f);
                 float pillarRadius = (isFinal ? 0.85f : 0.55f) * (1.0f + pillarProgress * 0.3f);
 

@@ -89,7 +89,7 @@ public final class GroundScar {
         for (int i = 0; i < data.entries.size(); i++) {
             Entry e = data.entries.get(i);
             if (e.pos().equals(pos)) {
-                data.entries.set(i, new Entry(pos, e.original(), BlockStateParser.serialize(newState), Math.max(e.restoreAt(), restoreAt)));
+                data.entries.set(i, new Entry(pos.immutable(), e.original(), BlockStateParser.serialize(newState), Math.max(e.restoreAt(), restoreAt)));
                 level.setBlock(pos, newState, Block.UPDATE_ALL);
                 data.setDirty();
                 return true;

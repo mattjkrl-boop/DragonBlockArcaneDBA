@@ -11,7 +11,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Curse Ground Shatter Entity — Physical 3D Tectonic Fissure Trenches, Erupting Obsidian Debris Slabs,
+ * Curse Ground Shatter Entity: Physical 3D Tectonic Fissure Trenches, Erupting Obsidian Debris Slabs,
  * and Shockwave Impact Disks triggered by Abyssal Eclipse max-charge ground slams.
  */
 public class CurseGroundShatterEntity extends Projectile {

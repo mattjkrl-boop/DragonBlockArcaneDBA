@@ -89,21 +89,53 @@ public class ErasureChargeOrbEntity extends Projectile {
                     }
                 }
 
-                // Theme particles (T5): sparks gather around the orb as it
-                // charges, denser and tighter as the charge ratio rises. The
-                // orb emitted no particles before.
-                if (this.level() instanceof ServerLevel serverLevel && this.tickCount % 2 == 0) {
+                // Layered charge particles (spectacle pass): this orb is the
+                // group's only real build-up, so its particles climb with the
+                // charge level in three layers. Core motes churn inside the
+                // orb, mid sparks gather inward on a tightening spiral while
+                // drifting up, and an outer dust wisp layer rings the whole
+                // apparatus. Past 0.75 charge the hot layer the renderer's
+                // shell shift promises actually appears as embers.
+                if (this.level() instanceof ServerLevel serverLevel) {
                     float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
                     if (density > 0f) {
                         float charge = getChargeRatio();
+                        net.minecraft.util.RandomSource rand = serverLevel.getRandom();
+
+                        // Core: motes inside the orb, denser as charge rises.
+                        int coreCount = Math.max(1, Math.round((1f + charge * 2f) * density));
+                        serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                            this.getX(), this.getY(), this.getZ(), coreCount,
+                            0.20 + charge * 0.30, 0.20 + charge * 0.30, 0.20 + charge * 0.30, 0.02);
+
+                        // Mid: gathering sparks, count and inward pull both
+                        // scale with charge, emitted every tick now.
                         double gatherRadius = 0.9 - charge * 0.45;
-                        double sparkAngle = serverLevel.getRandom().nextDouble() * Math.PI * 2.0;
+                        double sparkAngle = rand.nextDouble() * Math.PI * 2.0;
+                        int midCount = Math.max(1, Math.round((1f + charge * 4f) * density));
                         serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                             this.getX() + Math.cos(sparkAngle) * gatherRadius,
-                            this.getY() + (serverLevel.getRandom().nextDouble() - 0.5) * 0.6,
+                            this.getY() + (rand.nextDouble() - 0.5) * 0.6,
                             this.getZ() + Math.sin(sparkAngle) * gatherRadius,
-                            Math.max(1, Math.round((1f + charge * 3f) * density)),
-                            0.05, 0.05, 0.05, 0.01);
+                            midCount, 0.05, 0.10, 0.05, 0.02);
+
+                        // Outer: cyan dust wisps at a wider radius, every 2 ticks.
+                        if (this.tickCount % 2 == 0) {
+                            double wispAngle = rand.nextDouble() * Math.PI * 2.0;
+                            double wispRadius = 1.25 - charge * 0.35;
+                            serverLevel.sendParticles(com.dragonblockarcanedba.util.LayeredParticles.dust(0xFF37E6FF, 1.4f),
+                                this.getX() + Math.cos(wispAngle) * wispRadius,
+                                this.getY() + (rand.nextDouble() - 0.5) * 0.8,
+                                this.getZ() + Math.sin(wispAngle) * wispRadius,
+                                Math.max(1, Math.round(2f * density)), 0.06, 0.06, 0.06, 0.01);
+                        }
+
+                        // Hot layer: embers once the renderer shell goes hot.
+                        if (charge >= 0.75f && this.tickCount % 3 == 0) {
+                            serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                                this.getX(), this.getY(), this.getZ(),
+                                Math.max(1, Math.round(2f * density)), 0.25, 0.25, 0.25, 0.04);
+                        }
                     }
                 }
 

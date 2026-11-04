@@ -105,12 +105,20 @@ public class HollowAfterimageEntity extends Projectile {
                 }
             }
 
-            // Apply Dark Faded to all nearby enemies within 4 blocks
+            // Apply Dark Faded to all nearby enemies within 3 blocks. The ghost
+            // used to debuff for 60 ticks out to 4 blocks, outlasting and
+            // outreaching the dash that made it and the weapon's own melee
+            // (40 ticks). It now matches the melee's 40 ticks and hugs the
+            // body it haunts. Katana and Saber spawn this same entity through
+            // the (Level, Player) constructor, so their afterimages inherit
+            // these numbers; the constructor and synced data are unchanged.
             if (this.tickCount % 5 == 0) {
-                AABB auraBox = this.getBoundingBox().inflate(4.0);
+                AABB auraBox = this.getBoundingBox().inflate(3.0);
                 List<LivingEntity> enemies = serverLevel.getEntitiesOfClass(LivingEntity.class, auraBox, e -> e.isAlive() && e != this.getOwner());
                 for (LivingEntity enemy : enemies) {
-                    enemy.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 60, 0, false, true));
+                    // True radius, not the box: corner targets are not haunted.
+                    if (enemy.position().add(0, enemy.getBbHeight() * 0.5, 0).distanceTo(this.position().add(0, 1.0, 0)) > 3.25) continue;
+                    enemy.addEffect(new MobEffectInstance(DbaEffects.DARK_FADED_HOLDER, 40, 0, false, true));
                 }
             }
 

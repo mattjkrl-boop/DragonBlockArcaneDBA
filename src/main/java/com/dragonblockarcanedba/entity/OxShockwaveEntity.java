@@ -1,7 +1,14 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.config.DbaEffectsConfig;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.DebrisSpawner;
+import com.dragonblockarcanedba.util.FxEnvelope;
+import com.dragonblockarcanedba.util.GroundScar;
+import com.dragonblockarcanedba.util.LayeredParticles;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -9,6 +16,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -40,10 +48,9 @@ public class OxShockwaveEntity extends Projectile {
     private static final EntityDataAccessor<Float> CURRENT_RADIUS = SynchedEntityData.defineId(OxShockwaveEntity.class, EntityDataSerializers.FLOAT);
 
     private float damage = 400.0f;
-    private float maxRadius = 12.0f;
-    private int maxTicks = 20;
     private boolean hasSpawnedEcho1 = false;
     private boolean hasSpawnedEcho2 = false;
+    private List<BlockState> debrisPalette = null;
     private final Set<Integer> hitEntityIds = new HashSet<>();
 
     public OxShockwaveEntity(EntityType<? extends Projectile> entityType, Level level) {
@@ -64,14 +71,26 @@ public class OxShockwaveEntity extends Projectile {
         this.entityData.set(CHARGE_RATIO, clampedCharge);
         this.entityData.set(IS_SUB_WAVE, isSubWave);
         this.entityData.set(CURRENT_RADIUS, 0.5f);
+    }
 
-        // Max radius: 4 to 24 blocks (Tweak A)
-        this.maxRadius = 4.0f + (clampedCharge * 20.0f);
-        if (isSubWave) {
-            this.maxRadius *= 0.75f;
-        }
-        // Expand speed: approx 0.8 blocks per tick
-        this.maxTicks = Math.max(10, (int) (this.maxRadius * 1.3f));
+    /**
+     * Max radius derived ONLY from synced data: 4 to 24 blocks (Tweak A),
+     * x 0.75 for sub waves. Client copies built through the EntityType
+     * constructor used to keep plain field defaults (12.0 radius, 20 ticks)
+     * and recompute the synced current radius from those wrong values every
+     * client tick between server updates. Both sides now derive the same
+     * numbers from the synced charge ratio and sub wave flag, so the client
+     * can never overwrite the server's radius with a local guess.
+     */
+    public float computeMaxRadius() {
+        float clampedCharge = Math.max(0.05f, Math.min(1.0f, getChargeRatio()));
+        float radius = 4.0f + (clampedCharge * 20.0f);
+        return isSubWave() ? radius * 0.75f : radius;
+    }
+
+    /** Expand speed: approx 0.8 blocks per tick. Derived from synced data, like the radius. */
+    public int computeMaxTicks() {
+        return Math.max(10, (int) (computeMaxRadius() * 1.3f));
     }
 
     @Override
@@ -97,9 +116,11 @@ public class OxShockwaveEntity extends Projectile {
     public void tick() {
         super.tick();
 
-        float linear = Math.min(1.0f, (float) this.tickCount / (float) this.maxTicks);
+        float maxRadius = computeMaxRadius();
+        int maxTicks = computeMaxTicks();
+        float linear = Math.min(1.0f, (float) this.tickCount / (float) maxTicks);
         float progress = 1.0f - (1.0f - linear) * (1.0f - linear) * (1.0f - linear);
-        float currentRadius = 0.5f + (progress * (this.maxRadius - 0.5f));
+        float currentRadius = 0.5f + (progress * (maxRadius - 0.5f));
         this.entityData.set(CURRENT_RADIUS, currentRadius);
 
         if (!this.level().isClientSide() && this.level() instanceof ServerLevel serverLevel) {
@@ -107,6 +128,11 @@ public class OxShockwaveEntity extends Projectile {
             boolean subWave = isSubWave();
             Vec3 center = this.position();
             Entity owner = this.getOwner();
+
+            // Base dust where the strike meets the ground (point 3).
+            if (this.tickCount == 1) {
+                LayeredParticles.emitGroundBurst(serverLevel, center, 1.5f + charge * 2.0f, 0xFF7A1A);
+            }
 
             // Initial burst sound & explosion at start
             if (this.tickCount == 1 && !subWave) {
@@ -117,10 +143,10 @@ public class OxShockwaveEntity extends Projectile {
                     // Tweak C: Spawn temporary ground fissures radiating outward
                     for (int f = 0; f < 6; f++) {
                         double fAngle = (f * (Math.PI / 3.0)) + (serverLevel.getRandom().nextDouble() * 0.3);
-                        double fDist = 3.0 + serverLevel.getRandom().nextDouble() * (this.maxRadius * 0.6);
+                        double fDist = 3.0 + serverLevel.getRandom().nextDouble() * (maxRadius * 0.6);
                         double fx = center.x + Math.cos(fAngle) * fDist;
                         double fz = center.z + Math.sin(fAngle) * fDist;
-                        OxFissureEntity fissure = new OxFissureEntity(serverLevel, owner instanceof LivingEntity ? (LivingEntity) owner : null, new Vec3(fx, center.y, fz), 50.0f);
+                        OxFissureEntity fissure = new OxFissureEntity(serverLevel, owner instanceof LivingEntity ? (LivingEntity) owner : null, new Vec3(fx, center.y, fz), 150.0f);
                         // Point the crack radially away from the slam center; the
                         // renderer aligns its trench to this yaw. Without it all
                         // six fissures rendered in the same fixed direction.
@@ -146,18 +172,76 @@ public class OxShockwaveEntity extends Projectile {
                 }
             }
 
-            // Terrain destruction along wave path at max charge
-            if (charge >= 0.95f && !subWave) {
-                int destroyPoints = Math.max(8, (int) (currentRadius * 2));
-                for (int i = 0; i < destroyPoints; i++) {
-                    double angle = (i / (double) destroyPoints) * Math.PI * 2.0;
-                    double px = center.x + Math.cos(angle) * currentRadius;
-                    double pz = center.z + Math.sin(angle) * currentRadius;
-                    BlockPos bPos = BlockPos.containing(px, center.y, pz);
-                    checkAndDestroyWeakBlock(serverLevel, bPos);
-                    checkAndDestroyWeakBlock(serverLevel, bPos.above());
+            // Ground work along the wave path (main wave only): real destruction
+            // at max charge, temporary GroundScar scarring from half charge up.
+            if (charge >= 0.50f && !subWave) {
+                boolean destroy = charge >= 0.95f;
+                int baseY = (int) Math.floor(center.y);
+                // Honest ring coverage: step along the arc in sub-block steps
+                // (half a block of arc per step) and test every distinct block
+                // cell the ring passes through. The old sampling tested about
+                // 48 points around a 24 block ring, a spacing of about 3.1
+                // blocks, so roughly two of three ring blocks were never tested.
+                int ringSteps = Math.max(16, (int) Math.ceil(2.0 * Math.PI * currentRadius * 2.0));
+                int lastX = Integer.MIN_VALUE;
+                int lastZ = Integer.MIN_VALUE;
+                BlockPos.MutableBlockPos mPos = new BlockPos.MutableBlockPos();
+                RandomSource rand = serverLevel.getRandom();
+                for (int i = 0; i < ringSteps; i++) {
+                    double angle = (i / (double) ringSteps) * Math.PI * 2.0;
+                    int px = (int) Math.floor(center.x + Math.cos(angle) * currentRadius);
+                    int pz = (int) Math.floor(center.z + Math.sin(angle) * currentRadius);
+                    if (px == lastX && pz == lastZ) continue;
+                    lastX = px;
+                    lastZ = pz;
+
+                    if (destroy) {
+                        mPos.set(px, baseY, pz);
+                        checkAndDestroyWeakBlock(serverLevel, mPos);
+                        mPos.set(px, baseY + 1, pz);
+                        checkAndDestroyWeakBlock(serverLevel, mPos);
+                    }
+
+                    // Scar the surface cell of this column: the topmost solid
+                    // block in the wave's height window. Runs after destruction
+                    // in the same pass, so cells the wave just broke are air and
+                    // are skipped; tougher blocks stay standing but scorched.
+                    if (rand.nextFloat() < 0.55f) {
+                        for (int y = baseY + 1; y >= baseY - 2; y--) {
+                            mPos.set(px, y, pz);
+                            BlockState surface = serverLevel.getBlockState(mPos);
+                            if (!surface.isAir() && surface.isFaceSturdy(serverLevel, mPos, net.minecraft.core.Direction.UP)) {
+                                BlockState scarState = rand.nextFloat() < 0.4f
+                                    ? Blocks.MAGMA_BLOCK.defaultBlockState()
+                                    : Blocks.BASALT.defaultBlockState();
+                                GroundScar.scar(serverLevel, mPos, scarState, destroy ? 300 : 240);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
+
+            // Debris riding the wave (point 2, main wave only): real ground
+            // blocks lifted at the crest every few ticks, orbiting and raining
+            // back down inside DebrisEntity. The palette is sampled once.
+            if (!subWave && this.tickCount % 3 == 0) {
+                float density = DbaEffectsConfig.effectDensity();
+                int debrisCount = Math.round((2.0f + charge * 5.0f) * density);
+                if (debrisCount > 0) {
+                    if (this.debrisPalette == null) {
+                        this.debrisPalette = DebrisSpawner.sampleGroundPalette(serverLevel, center, Math.max(2.0, currentRadius));
+                    }
+                    DebrisSpawner.spawnField(serverLevel,
+                        owner instanceof LivingEntity livingOwner ? livingOwner : null,
+                        center, debrisCount, Math.max(1.5, currentRadius * 0.92),
+                        2.2 + charge * 1.6, 12 + (int) (charge * 8), this.debrisPalette);
+                }
+            }
+
+            // Layered crest particles (point 1): bright motes on the crest
+            // line, magma dust just inside it, ember wisps trailing behind.
+            emitCrestParticles(serverLevel, center, currentRadius, subWave);
 
             // Hit detection in current annular ring
             double innerR = Math.max(0.0, currentRadius - 1.8);
@@ -241,15 +325,60 @@ public class OxShockwaveEntity extends Projectile {
             }
 
             // Expiry
-            if (this.tickCount >= this.maxTicks) {
+            if (this.tickCount >= maxTicks) {
                 this.discard();
             }
+        }
+    }
+
+    /**
+     * Three particle layers riding the expanding crest (point 1), all scaled
+     * by the shared lifecycle envelope so the wave breathes instead of
+     * emitting flat out and stopping: bright KI motes on the crest line,
+     * theme magma dust just inside it, ember wisps trailing behind the front.
+     */
+    private void emitCrestParticles(ServerLevel level, Vec3 center, float radius, boolean subWave) {
+        float density = DbaEffectsConfig.effectDensity();
+        if (density <= 0f || radius < 1.0f) return;
+        float env = FxEnvelope.envelope(this.tickCount, computeMaxTicks());
+        if (env <= 0f) return;
+        RandomSource rand = level.getRandom();
+        float layerScale = subWave ? 0.6f : 1.0f;
+
+        int core = Math.round(radius * 0.55f * density * env * layerScale);
+        for (int i = 0; i < core; i++) {
+            double a = rand.nextDouble() * Math.PI * 2.0;
+            level.sendParticles(DbaParticles.KI_MOTE,
+                center.x + Math.cos(a) * radius, center.y + 0.3 + rand.nextDouble() * 0.9, center.z + Math.sin(a) * radius,
+                1, 0.02, 0.05, 0.02, 0.01);
+        }
+
+        DustParticleOptions midDust = LayeredParticles.dust(0xFF7A1A, 1.5f);
+        int mid = Math.round(radius * 0.40f * density * env * layerScale);
+        for (int i = 0; i < mid; i++) {
+            double a = rand.nextDouble() * Math.PI * 2.0;
+            double r = radius * 0.88;
+            level.sendParticles(midDust,
+                center.x + Math.cos(a) * r, center.y + 0.2 + rand.nextDouble() * 0.6, center.z + Math.sin(a) * r,
+                1, 0.03, 0.04, 0.03, 0.01);
+        }
+
+        int outer = Math.round(radius * 0.28f * density * env * layerScale);
+        for (int i = 0; i < outer; i++) {
+            double a = rand.nextDouble() * Math.PI * 2.0;
+            double r = radius * (0.55 + 0.25 * rand.nextDouble());
+            level.sendParticles(DbaParticles.EMBER,
+                center.x + Math.cos(a) * r, center.y + 0.25 + rand.nextDouble() * 0.5, center.z + Math.sin(a) * r,
+                1, 0.02, 0.03, 0.02, 0.01);
         }
     }
 
     private void checkAndDestroyWeakBlock(ServerLevel level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         if (state.isAir()) return;
+        // Never protected blocks (bedrock, spawners, chests, barrels and
+        // friends), enforced through the same check GroundScar uses.
+        if (GroundScar.isProtected(level, pos, state)) return;
 
         Block block = state.getBlock();
         // Check blast resistance <= 2.0 (dirt, grass, flowers, leaves, glass, ice, snow, etc.)

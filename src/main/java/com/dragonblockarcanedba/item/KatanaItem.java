@@ -40,9 +40,13 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Katana — Supreme Speed Weapon.
- * 
- * Ki Drain: 30% per minute (smooth).
+ * Katana: Supreme Speed Weapon.
+ *
+ * Plain swings deal attribute damage only and cost no Ki. Ki is spent by the
+ * two charged abilities: Flashdraw (left click) drains 40 percent per minute
+ * while charging, and Heaven Splitter (right click) drains 60 percent per
+ * minute while charging. If Ki runs out mid charge the ability cancels: it
+ * never fires and takes no cooldown.
  */
 public class KatanaItem extends Item implements com.dragonblockarcanedba.item.geo.DbaGeoWeapon {
     public static final int MAX_LEFT_CHARGE_TICKS = 100; // 5 seconds
@@ -52,6 +56,13 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
     public static final Map<UUID, KatanaChargeEntity> ACTIVE_CHARGE_MAP = new ConcurrentHashMap<>();
     // Track active aim guide KatanaAimGuideEntity per player
     public static final Map<UUID, KatanaAimGuideEntity> ACTIVE_AIM_MAP = new ConcurrentHashMap<>();
+
+    // Players whose Flashdraw charge died from Ki exhaustion. Their next
+    // release is swallowed instead of firing.
+    private static final Set<UUID> FLASHDRAW_KI_CANCELLED = ConcurrentHashMap.newKeySet();
+    // Players whose Heaven Splitter hold died from Ki exhaustion. Their
+    // releaseUsing call is swallowed instead of firing.
+    private static final Set<UUID> SPLITTER_KI_CANCELLED = ConcurrentHashMap.newKeySet();
 
     public KatanaItem(Properties properties) {
         super(properties.attributes(createModifiers()));
@@ -89,20 +100,26 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
         return builder.build();
     }
 
-    @Override
-    public void hurtEnemy(ItemStack stack, LivingEntity target, LivingEntity attacker) {
-        // Flashdraw and Heaven Splitter already pay. A vanilla connect used to
-        // spend ki again and add no cut of its own.
-    }
-
     // --- LEFT CLICK: Flashdraw (Multi-target Instant Dash Execution) ---
 
     public static void onLeftClickChargeTick(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
 
-        // Drain Ki: 30% per minute (smooth)
-        if (!WeaponDrainHelper.drainKiPerTick(player, 30.0)) {
-            onLeftClickRelease(player, stack, chargeTicks);
+        // A charge that already died from Ki exhaustion stays dead until the
+        // release arrives: no drain, no charge visual, no second chance.
+        if (FLASHDRAW_KI_CANCELLED.contains(player.getUUID())) {
+            if (chargeTicks <= 1) {
+                // A fresh charge is starting, so the old cancel is spent.
+                FLASHDRAW_KI_CANCELLED.remove(player.getUUID());
+            } else {
+                return;
+            }
+        }
+
+        // Drain Ki: 40% per minute (smooth). Running dry cancels the draw:
+        // Flashdraw does NOT fire on an empty tank.
+        if (!WeaponDrainHelper.drainKiPerTick(player, 40.0)) {
+            cancelFlashdrawCharge(player);
             return;
         }
         if (chargeTicks % 5 == 0) {
@@ -126,16 +143,34 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
         }
     }
 
+    /** Ends a Flashdraw charge without firing it: the stance dissolves, no cooldown. */
+    private static void cancelFlashdrawCharge(ServerPlayer player) {
+        ServerLevel level = (ServerLevel) player.level();
+        KatanaChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
+        if (chargeEntity != null && chargeEntity.isAlive()) {
+            chargeEntity.beginFadeOut();
+        }
+        FLASHDRAW_KI_CANCELLED.add(player.getUUID());
+        player.sendSystemMessage(Component.literal("§cOut of Ki! Flashdraw cancelled."), true);
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+            SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 0.6f, 0.9f);
+    }
+
     public static void onLeftClickRelease(ServerPlayer player, ItemStack stack, int chargeTicks) {
         ServerLevel level = (ServerLevel) player.level();
         PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-        // Discard active drawing charge entity
+        // Ki exhaustion during the charge cancels the release entirely:
+        // no dash, no damage, no cooldown.
+        boolean kiCancelled = FLASHDRAW_KI_CANCELLED.remove(player.getUUID());
+
+        // Fade the drawing stance out instead of discarding it mid-frame.
         KatanaChargeEntity chargeEntity = ACTIVE_CHARGE_MAP.remove(player.getUUID());
         if (chargeEntity != null && chargeEntity.isAlive()) {
-            chargeEntity.discard();
+            chargeEntity.beginFadeOut();
         }
 
+        if (kiCancelled) return;
         if (player.getCooldowns().isOnCooldown(stack)) return;
 
         // Charge matters: a tap fires at 55% power, a full 5 second draw at 130%,
@@ -143,11 +178,16 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
         float chargeRatio = Math.min(1.0f, chargeTicks / (float) MAX_LEFT_CHARGE_TICKS);
         float chargeDamageMult = 0.55f + 0.75f * chargeRatio;
 
-        // Find enemies within 16 blocks to chain through (up to 5 targets, Tweak A)
+        // Find living targets within 16 blocks to chain through (up to 5, Tweak A).
+        // The dash cuts anything living in its path; there is no faction filter.
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle();
 
         if (com.dragonblockarcanedba.util.MovementLimiterHelper.isMovementImmobilized(player)) {
+            // The move never fired, so the Ki spent charging is refunded.
+            double refund = com.dragonblockarcanedba.attribute.PlayerStats.getMaxKi(player)
+                * (40.0 / 100.0) * (chargeTicks / WeaponDrainHelper.TICKS_PER_MINUTE);
+            if (refund > 0) accessor.dba$addKi(refund);
             player.sendSystemMessage(Component.literal("§cImmobilized! Cannot flash thrust."), true);
             return;
         }
@@ -178,7 +218,9 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             chain.add(current);
             visited.add(current.getId());
 
-            // Chain to up to 4 more nearby enemies
+            // Chain to up to 4 more targets, nearest first, so the streak
+            // bonus, tilt, and scale progressions follow the path of the dash
+            // instead of the entity query order.
             for (int i = 0; i < 4; i++) {
                 AABB nearBox = current.getBoundingBox().inflate(12.0);
                 List<LivingEntity> nearby = level.getEntitiesOfClass(
@@ -186,7 +228,15 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
                     e -> e.isAlive() && e != player && !visited.contains(e.getId())
                 );
                 if (nearby.isEmpty()) break;
-                LivingEntity next = nearby.get(0);
+                LivingEntity next = null;
+                double bestDist = Double.MAX_VALUE;
+                for (LivingEntity cand : nearby) {
+                    double d = cand.distanceToSqr(current);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        next = cand;
+                    }
+                }
                 chain.add(next);
                 visited.add(next.getId());
                 current = next;
@@ -220,49 +270,45 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
                 float streakBonus = 1.0f + (i * 0.2f);
                 float damage = (500.0f + (float) (accessor.dba$getStrength() * 2.5f)) * streakBonus * chargeDamageMult;
 
-                final LivingEntity finalTarget = t;
-                final float finalDamage = damage;
-                // Delayed simultaneous strike 0.3s (6 ticks) later
-                level.getServer().execute(() -> {
-                    // The queued strike must not fire on a dead, removed, or dimension-changed target.
-                    if (!finalTarget.isAlive() || finalTarget.isRemoved() || finalTarget.level() != level) return;
-                    finalTarget.hurtServer(level, level.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (finalDamage)));
-                    if (targetIndex == 0) {
-                        com.dragonblockarcanedba.fx.DbaImpactFx.medium(level, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ());
-                        com.dragonblockarcanedba.fx.DbaImpactFx.burst(level, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ());
-                    }
+                // The crescent carries the strike: damage, impact burst, and
+                // sounds land at tick 4 + 2 per chain step inside the
+                // crescent's own life, as the cut opens on the target.
+                Vec3 impactPos = t.position().add(0, t.getBbHeight() * 0.5, 0);
+                float tiltAngle = (targetIndex % 2 == 0 ? 35.0f : -35.0f) + (targetIndex * 15.0f);
+                float slashScale = 1.0f + (targetIndex * 0.15f);
+                int variant = targetIndex % 2;
+                int strikeTick = 4 + targetIndex * 2;
+                float strikePitch = 1.5f + (targetIndex * 0.1f);
 
-                    // Spawn physical 3D Swift Crescent model & cross-cleave speed cuts on target
-                    Vec3 impactPos = finalTarget.position().add(0, finalTarget.getBbHeight() * 0.5, 0);
-                    float tiltAngle = (targetIndex % 2 == 0 ? 35.0f : -35.0f) + (targetIndex * 15.0f);
-                    float slashScale = 1.0f + (targetIndex * 0.15f);
-                    int variant = targetIndex % 2;
-
-                    SwiftCrescentEntity crescent = new SwiftCrescentEntity(
-                        level, player, impactPos,
-                        player.getYRot(), player.getXRot(),
-                        tiltAngle, slashScale, variant, 10
-                    );
-                    level.addFreshEntity(crescent);
-
-                    level.playSound(null, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ(),
-                        SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.PLAYERS, 1.6f, 1.5f + (targetIndex * 0.1f));
-                    level.playSound(null, finalTarget.getX(), finalTarget.getY(), finalTarget.getZ(),
-                        com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 1.6f, 1.5f + (targetIndex * 0.1f));
-                });
+                SwiftCrescentEntity crescent = new SwiftCrescentEntity(
+                    level, player, impactPos,
+                    player.getYRot(), player.getXRot(),
+                    tiltAngle, slashScale, variant, 16,
+                    t.getId(), damage, strikeTick, targetIndex == 0, strikePitch
+                );
+                level.addFreshEntity(crescent);
             }
         } else {
             // Freeform straight flash dash forward (scaled by CC / movement limiter, 8 to 14 blocks by charge)
             double dashDist = (8.0 + 6.0 * chargeRatio) * ccMult;
             Vec3 targetPos = startPos.add(look.scale(dashDist));
+
+            // Leave a ghost at the launch point, like the chained branch does
+            // at every step, and kick dust where the dash leaves and lands.
+            HollowAfterimageEntity dashGhost = new HollowAfterimageEntity(level, player);
+            dashGhost.setPos(startPos.x, startPos.y, startPos.z);
+            level.addFreshEntity(dashGhost);
+            com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(level, startPos, 1.0f, 0x9FE8FF);
+
             MovementPhysics.teleport(player, targetPos);
             level.playSound(null, startPos.x, startPos.y, startPos.z,
                 SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.4f, 1.7f);
+            com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(level, targetPos, 1.0f, 0x9FE8FF);
             for (int i = 1; i <= 3; i++) {
                 Vec3 trailPos = startPos.add(look.scale(dashDist * i / 4.0)).add(0, player.getBbHeight() * 0.5, 0);
                 SwiftCrescentEntity trail = new SwiftCrescentEntity(
                     level, player, trailPos, player.getYRot(), player.getXRot(),
-                    i % 2 == 0 ? 35.0f : -35.0f, 0.8f, i % 2, 8
+                    i % 2 == 0 ? 35.0f : -35.0f, 0.8f, i % 2, 12
                 );
                 level.addFreshEntity(trail);
             }
@@ -272,7 +318,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
             SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 1.0f, 1.8f);
 
-        player.getCooldowns().addCooldown(stack, 30);
+        player.getCooldowns().addCooldown(stack, 60); // 3-second cooldown
     }
 
     // --- RIGHT CLICK: Iaijutsu: Heaven Splitter ---
@@ -299,8 +345,11 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
     @Override
     public void onUseTick(Level level, LivingEntity living, ItemStack stack, int remainingTicks) {
         if (!level.isClientSide() && living instanceof ServerPlayer player) {
-            // Drain Ki: 30% per minute (smooth)
-            if (!WeaponDrainHelper.drainKiPerTick(player, 30.0)) {
+            // Drain Ki: 60% per minute (smooth). Running dry cancels the
+            // stance: stopUsingItem leads into releaseUsing, which sees the
+            // cancel flag and does NOT fire Heaven Splitter.
+            if (!WeaponDrainHelper.drainKiPerTick(player, 60.0)) {
+                SPLITTER_KI_CANCELLED.add(player.getUUID());
                 player.stopUsingItem();
                 return;
             }
@@ -312,14 +361,16 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             // Stationary stillness focus
             MovementPhysics.setVelocity(player, new Vec3(0, player.getDeltaMovement().y > 0 ? 0 : player.getDeltaMovement().y * 0.5, 0));
 
-            // Maintain sleek, physical 3D laser guide & geometric targeting beam up to 24 blocks
+            // Maintain the physical 3D laser guide, drawn to the exact dash
+            // distance for the current charge: 16 blocks at a tap, 24 at full.
             KatanaAimGuideEntity aimGuide = ACTIVE_AIM_MAP.get(player.getUUID());
             if (aimGuide == null || !aimGuide.isAlive()) {
-                aimGuide = new KatanaAimGuideEntity(serverLevel, player, 24.0f);
+                aimGuide = new KatanaAimGuideEntity(serverLevel, player, 16.0f);
                 serverLevel.addFreshEntity(aimGuide);
                 ACTIVE_AIM_MAP.put(player.getUUID(), aimGuide);
             }
             aimGuide.setChargeRatio(chargeRatio);
+            aimGuide.setMaxRange((float) (16.0 + chargeRatio * 8.0));
 
             if (heldTicks % 20 == 0) {
                 serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -336,16 +387,25 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             ServerLevel serverLevel = (ServerLevel) level;
             PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
 
-            // Discard active aim guide entity
+            // Fade the aim guide out instead of discarding it mid-frame.
             KatanaAimGuideEntity aimGuide = ACTIVE_AIM_MAP.remove(player.getUUID());
             if (aimGuide != null && aimGuide.isAlive()) {
-                aimGuide.discard();
+                aimGuide.beginFadeOut();
+            }
+
+            // Ki exhaustion during the hold cancels the move: no dash, no
+            // damage, no cooldown.
+            if (SPLITTER_KI_CANCELLED.remove(player.getUUID())) {
+                player.sendSystemMessage(Component.literal("§cOut of Ki! Heaven Splitter cancelled."), true);
+                return true;
             }
 
             int heldTicks = getUseDuration(stack, living) - timeLeft;
             float chargeRatio = Math.max(0.1f, Math.min(1.0f, heldTicks / (float) MAX_RIGHT_CHARGE_TICKS));
 
-            // Instant dash along aim line up to 24 blocks (Tweak B: snaps to nearest enemy)
+            // Dash straight along the aim line: 16 blocks at the tap floor,
+            // 24 at full charge. The end point is pure look direction; the
+            // cut hits whatever living targets the wall passes through.
             Vec3 start = player.position();
             Vec3 look = player.getLookAngle();
             double dashDist = 16.0 + (chargeRatio * 8.0);
@@ -359,46 +419,28 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             originAfterimage.setPos(start.x, start.y, start.z);
             serverLevel.addFreshEntity(originAfterimage);
 
-            // Hit entities along the line
-            AABB lineBox = new AABB(start, end).inflate(2.0 + chargeRatio * 2.0); // Tweak A: wider with charge
-            List<LivingEntity> targets = serverLevel.getEntitiesOfClass(
-                LivingEntity.class, lineBox,
-                e -> e.isAlive() && e != player
-            );
-
             // Teleport player to destination
             MovementPhysics.teleport(player, end);
 
-            // Heaven Splitter is the vertical cut. The white crescent stays on Flashdraw.
-
-            // Delayed massive vertical energy cut (0.5s / 10 ticks)
-            float baseDamage = 1000.0f + (chargeRatio * 1000.0f);
+            // The wall entity owns the cut: its damage lands at tick 10 of
+            // its 40 tick life, once the wall has fully risen, with falloff
+            // toward the far end of the path. Corridor half width grows with
+            // charge (Tweak A): 2.2 at the tap floor, 4.0 at full charge.
+            float baseDamage = 600.0f + (chargeRatio * 1400.0f);
             float strDamage = (float) (accessor.dba$getStrength() * 4.0f * chargeRatio);
             float totalDamage = baseDamage + strDamage;
+            float corridorHalf = 2.0f + chargeRatio * 2.0f;
 
-            if (!targets.isEmpty()) {
-                LivingEntity firstHit = targets.get(0);
-                com.dragonblockarcanedba.fx.DbaImpactFx.heavy(serverLevel, firstHit.getX(), firstHit.getY(), firstHit.getZ());
-            }
-
-            for (LivingEntity t : targets) {
-                t.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.CINEMATIC_TRACKING_HOLDER, 20, 0, false, false, false), player);
-                t.hurtServer(serverLevel, serverLevel.damageSources().playerAttack(player), com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage((float) (totalDamage)));
-
-                // Tweak C: If target dies, reset Flashdraw cooldown
-                if (!t.isAlive()) {
-                    player.getCooldowns().removeCooldown(com.dragonblockarcanedba.item.DbaItems.KATANA_KEY.identifier());
-                }
-            }
-
-            // Spawn towering physical 3D dimensional slash entity across raycast path
             HeavenSplitterEntity heavenSplitter = new HeavenSplitterEntity(
                 serverLevel, player, start.add(0, 0.5, 0), look,
-                (float) dashDist, 1.0f + chargeRatio * 0.5f, 20
+                (float) dashDist, 1.0f + chargeRatio * 0.5f, 40,
+                totalDamage, corridorHalf
             );
             serverLevel.addFreshEntity(heavenSplitter);
 
-            // Multi-layered audio feedback: origin cut sweep, speed strike, thunder crack, and katana sheathing ring
+            // Audio at the dash: origin cut sweep, speed strike, and katana
+            // sheathing ring. The thunder crack plays in the wall entity at
+            // the tick the cut lands.
             serverLevel.playSound(null, start.x, start.y, start.z,
                 SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.8f, 1.6f);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -406,13 +448,9 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 com.dragonblockarcanedba.sound.DbaSounds.BLADE_SHING, SoundSource.PLAYERS, 2.0f, 1.4f);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.PLAYERS, 2.0f, 1.8f);
-            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
-                com.dragonblockarcanedba.sound.DbaSounds.LIGHTNING_ZAP, SoundSource.PLAYERS, 2.0f, 1.8f);
-            serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ANVIL_LAND, SoundSource.PLAYERS, 0.9f, 1.9f);
 
-            player.getCooldowns().addCooldown(stack, 80); // 4-second cooldown
+            player.getCooldowns().addCooldown(stack, 120); // 6-second cooldown
         }
         return true;
     }
@@ -423,5 +461,7 @@ public class KatanaItem extends Item implements com.dragonblockarcanedba.item.ge
         if (e0 != null && e0.isAlive()) e0.discard();
         net.minecraft.world.entity.Entity e1 = ACTIVE_AIM_MAP.remove(playerUuid);
         if (e1 != null && e1.isAlive()) e1.discard();
+        FLASHDRAW_KI_CANCELLED.remove(playerUuid);
+        SPLITTER_KI_CANCELLED.remove(playerUuid);
     }
 }

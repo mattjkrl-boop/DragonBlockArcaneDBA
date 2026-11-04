@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.CurseChainEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -21,6 +23,12 @@ import org.joml.Matrix4f;
  * - 4 Floating, counter-rotating runic diamond sigils
  * - Undulating 3D helical void aura ribbons
  * - Pulsating demonic hex octahedron core
+ *
+ * The sigils, ribbons, and hex core were dead helpers for a long time (defined,
+ * never called); they are drawn now, layered under and over the solid links.
+ * Alpha runs a lifecycle envelope: the chain fades in over its first ticks and,
+ * once attached, fades out across the bind's last 12 ticks, which the entity
+ * syncs as ATTACH_REMAINING. Segment counts scale with camera distance.
  */
 public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseChainRenderer.CurseChainRenderState> {
 
@@ -34,6 +42,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         public int orbitIndex;
         public float yRot;
         public float xRot;
+        public float attachRemaining = -1;
     }
 
     @Override
@@ -46,6 +55,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         super.extractRenderState(entity, state, partialTicks);
         state.ageInTicks = entity.tickCount + partialTicks;
         state.isAttached = entity.isAttached();
+        state.attachRemaining = entity.getAttachRemaining();
         state.orbitIndex = entity.getOrbitIndex();
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
@@ -62,12 +72,25 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         int orbit = state.orbitIndex;
         float stretch = ease(Math.min(1.0f, age / 6.0f));
 
+        // Lifecycle envelope: fade in over the first 4 ticks of the chain's
+        // life, and once attached fade out over the bind's last 12 ticks
+        // (synced by the entity), so the chain never pops in or out.
+        final float ds = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        float fadeIn = FxEnvelope.smoothstep(Math.min(1.0f, age / 4.0f));
+        float fadeOut = 1.0f;
+        if (attached && state.attachRemaining >= 0) {
+            fadeOut = FxEnvelope.smoothstep(Math.min(1.0f, state.attachRemaining / 12.0f));
+        }
+        final float alphaMul = fadeIn * fadeOut;
+        final int linkSegs = FxEnvelope.segments(12, ds, 6);
+
         float baseScale = attached ? 0.55f : 0.46f;
         poseStack.scale(baseScale, baseScale, baseScale);
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            if (alphaMul <= 0.01f) return;
             Matrix4f matrix = pose.pose();
             float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.35f + orbit);
             int links = attached ? 7 : 6;
@@ -92,9 +115,9 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                     y = 0.0f;
                     z = -lag * 3.4f;
                 }
-                drawSpikedChainLink(matrix, buffer, x, y, z, (i % 2) == 1, pulse);
+                drawSpikedChainLink(matrix, buffer, x, y, z, (i % 2) == 1, pulse, linkSegs, alphaMul);
                 if (hasPrev) {
-                    drawChainSpine(matrix, buffer, prevX, prevY, prevZ, x, y, z);
+                    drawChainSpine(matrix, buffer, prevX, prevY, prevZ, x, y, z, alphaMul);
                 }
                 prevX = x;
                 prevY = y;
@@ -105,7 +128,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                 float snapIn = ease(Math.min(1.0f, age / 3.0f));
                 float snapOut = ease(Math.max(0.0f, 1.0f - Math.max(0.0f, age - 3.0f) / 5.0f));
                 float snap = snapIn * snapOut;
-                drawDemonicShackleCollar(matrix, buffer, 0, 0, 0, pulse * (0.7f + 0.3f * snapIn));
+                drawDemonicShackleCollar(matrix, buffer, 0, 0, 0, pulse * (0.7f + 0.3f * snapIn), alphaMul);
                 if (snap > 0.02f) {
                     float ring = 0.35f + 0.85f * snapIn;
                     int segs = 16;
@@ -118,9 +141,38 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                             (float) Math.cos(a2) * in, 0.0f, (float) Math.sin(a2) * in,
                             (float) Math.cos(a2) * ring, 0.0f, (float) Math.sin(a2) * ring,
                             (float) Math.cos(a1) * ring, 0.0f, (float) Math.sin(a1) * ring,
-                            1.0f, 0.85f, 0.95f, snap);
+                            1.0f, 0.85f, 0.95f, snap * alphaMul);
                     }
                 }
+            }
+
+            // Layered depth around the solid links: a bright hex curse core
+            // at the chain's heart, four runic glyphs riding the chain as the
+            // mid layer, and helical void aura ribbons as the wispy outer
+            // layer. All three helpers existed unused until now.
+            drawHexCore(matrix, buffer, 0, attached ? 0.05f : 0.0f, 0, (attached ? 0.34f : 0.24f) * pulse, alphaMul);
+            for (int g = 0; g < 4; g++) {
+                float gx, gy, gz;
+                if (attached) {
+                    double ga = age * 0.11 + g * (Math.PI * 0.5) + orbit * 0.7;
+                    gx = (float) Math.cos(ga) * 1.5f;
+                    gz = (float) Math.sin(ga) * 1.5f;
+                    gy = (float) Math.sin(age * 0.23 + g * 1.7) * 0.3f;
+                } else {
+                    gx = (float) Math.sin(age * 0.3 + g * 1.3) * 0.18f;
+                    gy = (float) Math.cos(age * 0.26 + g * 1.1) * 0.18f;
+                    gz = -(0.9f + g * 0.75f);
+                }
+                drawFloatingRunicGlyph(matrix, buffer, gx, gy, gz, age * 9.0f + g * 90.0f, pulse, alphaMul * 0.85f);
+            }
+            if (attached) {
+                drawAuraRibbons(matrix, buffer, age, orbit, pulse, alphaMul * 0.6f);
+            } else {
+                // In flight the chain trails along local -Z, so the ribbon
+                // column (built around Y) is rotated to lie along the trail
+                // and centered on the links.
+                Matrix4f flightMatrix = new Matrix4f(matrix).translate(0.0f, 0.0f, -1.7f).rotateX((float) (Math.PI / 2.0));
+                drawAuraRibbons(flightMatrix, buffer, age, orbit, pulse, alphaMul * 0.6f);
             }
         });
 
@@ -133,7 +185,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         return c * c * (3.0f - 2.0f * c);
     }
 
-    private static void drawSpikedChainLink(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, boolean rotated, float pulse) {
+    private static void drawSpikedChainLink(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, boolean rotated, float pulse, int segs, float alphaMul) {
         float outerR = 0.55f;
         float innerR = 0.32f;
         float thickness = 0.14f;
@@ -141,8 +193,6 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         // Colors: Charcoal Obsidian metal with Corrupted Violet & Blood Highlights
         float rBase = 0.12f, gBase = 0.08f, bBase = 0.16f;
         float rRune = 0.65f * pulse, gRune = 0.05f, bRune = 0.85f * pulse;
-
-        int segs = 12;
         for (int s = 0; s < segs; s++) {
             double a1 = (s / (double) segs) * Math.PI * 2.0;
             double a2 = ((s + 1) / (double) segs) * Math.PI * 2.0;
@@ -162,14 +212,14 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                     cx - thickness, cy + y2In, cz + x2In,
                     cx - thickness, cy + y2Out, cz + x2Out,
                     cx - thickness, cy + y1Out, cz + x1Out,
-                    rBase, gBase, bBase, 0.95f
+                    rBase, gBase, bBase, 0.95f * alphaMul
                 );
                 drawQuad(matrix, consumer,
                     cx + thickness, cy + y1Out, cz + x1Out,
                     cx + thickness, cy + y2Out, cz + x2Out,
                     cx + thickness, cy + y2In, cz + x2In,
                     cx + thickness, cy + y1In, cz + x1In,
-                    rRune, gRune, bRune, 0.95f
+                    rRune, gRune, bRune, 0.95f * alphaMul
                 );
                 // Top/Bottom bevels
                 drawQuad(matrix, consumer,
@@ -177,7 +227,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                     cx - thickness, cy + y2Out, cz + x2Out,
                     cx + thickness, cy + y2Out, cz + x2Out,
                     cx + thickness, cy + y1Out, cz + x1Out,
-                    0.25f, 0.05f, 0.35f, 0.98f
+                    0.25f, 0.05f, 0.35f, 0.98f * alphaMul
                 );
             } else {
                 // Link in X/Y plane
@@ -186,14 +236,14 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                     cx + x2In, cy + y2In, cz - thickness,
                     cx + x2Out, cy + y2Out, cz - thickness,
                     cx + x1Out, cy + y1Out, cz - thickness,
-                    rBase, gBase, bBase, 0.95f
+                    rBase, gBase, bBase, 0.95f * alphaMul
                 );
                 drawQuad(matrix, consumer,
                     cx + x1Out, cy + y1Out, cz + thickness,
                     cx + x2Out, cy + y2Out, cz + thickness,
                     cx + x2In, cy + y2In, cz + thickness,
                     cx + x1In, cy + y1In, cz + thickness,
-                    rRune, gRune, bRune, 0.95f
+                    rRune, gRune, bRune, 0.95f * alphaMul
                 );
                 // Outer Rim
                 drawQuad(matrix, consumer,
@@ -201,7 +251,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                     cx + x2Out, cy + y2Out, cz - thickness,
                     cx + x2Out, cy + y2Out, cz + thickness,
                     cx + x1Out, cy + y1Out, cz + thickness,
-                    0.25f, 0.05f, 0.35f, 0.98f
+                    0.25f, 0.05f, 0.35f, 0.98f * alphaMul
                 );
             }
 
@@ -220,21 +270,21 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                         cx - thickness * 0.8f, cy + my, cz + mx,
                         cx + thickness * 0.8f, cy + my, cz + mx,
                         cx, cy + tipY, cz + tipX,
-                        0.85f, 0.05f, 0.25f, 1.0f
+                        0.85f, 0.05f, 0.25f, 1.0f * alphaMul
                     );
                 } else {
                     drawSpikePyramid(matrix, consumer,
                         cx + mx, cy + my, cz - thickness * 0.8f,
                         cx + mx, cy + my, cz + thickness * 0.8f,
                         cx + tipX, cy + tipY, cz,
-                        0.85f, 0.05f, 0.25f, 1.0f
+                        0.85f, 0.05f, 0.25f, 1.0f * alphaMul
                     );
                 }
             }
         }
     }
 
-    private static void drawDemonicShackleCollar(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float pulse) {
+    private static void drawDemonicShackleCollar(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float pulse, float alphaMul) {
         int segs = 16;
         float rOut = 0.85f;
         float rIn = 0.65f;
@@ -255,7 +305,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                 cx + x2In, cy + halfH, cz + z2In,
                 cx + x2Out, cy + halfH, cz + z2Out,
                 cx + x1Out, cy + halfH, cz + z1Out,
-                0.22f, 0.05f, 0.32f, 0.95f
+                0.22f, 0.05f, 0.32f, 0.95f * alphaMul
             );
 
             // Outer Collar Rim
@@ -264,7 +314,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                 cx + x2Out, cy - halfH, cz + z2Out,
                 cx + x2Out, cy + halfH, cz + z2Out,
                 cx + x1Out, cy + halfH, cz + z1Out,
-                0.90f * pulse, 0.05f, 0.20f, 0.98f
+                0.90f * pulse, 0.05f, 0.20f, 0.98f * alphaMul
             );
 
             // 4 Demonic Horn Spikes protruding outwards from the collar
@@ -278,13 +328,13 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                     cx + x1Out, cy - halfH, cz + z1Out,
                     cx + x2Out, cy + halfH, cz + z2Out,
                     cx + hx, cy, cz + hz,
-                    1.0f, 0.10f, 0.35f, 1.0f
+                    1.0f, 0.10f, 0.35f, 1.0f * alphaMul
                 );
             }
         }
     }
 
-    private static void drawFloatingRunicGlyph(Matrix4f matrix, VertexConsumer consumer, float x, float y, float z, float rotDeg, float pulse) {
+    private static void drawFloatingRunicGlyph(Matrix4f matrix, VertexConsumer consumer, float x, float y, float z, float rotDeg, float pulse, float alpha) {
         float size = 0.22f * pulse;
         double rad = Math.toRadians(rotDeg);
         float cos = (float) Math.cos(rad) * size;
@@ -292,11 +342,11 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
 
         // 3D Diamond Octahedron
         float r = 0.75f * pulse, g = 0.05f, b = 1.0f;
-        drawDiamondQuad(matrix, consumer, x - cos, y, z - sin, x, y + size * 1.4f, z, x + cos, y, z + sin, x, y - size * 1.4f, z, r, g, b, 0.95f);
-        drawDiamondQuad(matrix, consumer, x - sin, y, z + cos, x, y + size * 1.4f, z, x + sin, y, z - cos, x, y - size * 1.4f, z, 1.0f, 0.15f, 0.45f, 0.95f);
+        drawDiamondQuad(matrix, consumer, x - cos, y, z - sin, x, y + size * 1.4f, z, x + cos, y, z + sin, x, y - size * 1.4f, z, r, g, b, 0.95f * alpha);
+        drawDiamondQuad(matrix, consumer, x - sin, y, z + cos, x, y + size * 1.4f, z, x + sin, y, z - cos, x, y - size * 1.4f, z, 1.0f, 0.15f, 0.45f, 0.95f * alpha);
     }
 
-    private static void drawAuraRibbons(Matrix4f matrix, VertexConsumer consumer, float age, int orbit, float pulse) {
+    private static void drawAuraRibbons(Matrix4f matrix, VertexConsumer consumer, float age, int orbit, float pulse, float alphaMul) {
         int steps = 14;
         float heightSpan = 2.4f;
         float ribbonR = 0.65f;
@@ -323,26 +373,26 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
                 float z2 = (float) Math.sin(a2) * (ribbonR + (float) Math.sin(p2 * Math.PI) * 0.3f);
 
                 float width = 0.09f * (float) Math.sin(p1 * Math.PI) * pulse;
-                renderBeam(matrix, consumer, x1, y1, z1, x2, y2, z2, width, rCol, gCol, bCol, 0.75f);
+                renderBeam(matrix, consumer, x1, y1, z1, x2, y2, z2, width, rCol, gCol, bCol, 0.75f * alphaMul);
             }
         }
     }
 
-    private static void drawHexCore(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float s) {
+    private static void drawHexCore(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float s, float alpha) {
         float[][] pts = { {s,0,0}, {0,0,s}, {-s,0,0}, {0,0,-s} };
         for (int i = 0; i < 4; i++) {
             int nxt = (i + 1) % 4;
             // Top pyramid
-            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.95f, 0.05f, 0.45f, 1.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.95f, 0.05f, 0.45f, 1.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx, cy + s * 1.5f, cz).setColor(1.0f, 0.9f, 1.0f, 1.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, cx, cy + s * 1.5f, cz).setColor(1.0f, 0.9f, 1.0f, 1.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.95f, 0.05f, 0.45f, 1.0f * alpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.95f, 0.05f, 0.45f, 1.0f * alpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx, cy + s * 1.5f, cz).setColor(1.0f, 0.9f, 1.0f, 1.0f * alpha).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
+            consumer.addVertex(matrix, cx, cy + s * 1.5f, cz).setColor(1.0f, 0.9f, 1.0f, 1.0f * alpha).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
 
             // Bottom pyramid
-            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.65f, 0.02f, 0.95f, 1.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.65f, 0.02f, 0.95f, 1.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, cx, cy - s * 1.5f, cz).setColor(1.0f, 0.9f, 1.0f, 1.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, cx, cy - s * 1.5f, cz).setColor(1.0f, 0.9f, 1.0f, 1.0f).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx + pts[i][0], cy, cz + pts[i][2]).setColor(0.65f, 0.02f, 0.95f, 1.0f * alpha).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx + pts[nxt][0], cy, cz + pts[nxt][2]).setColor(0.65f, 0.02f, 0.95f, 1.0f * alpha).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx, cy - s * 1.5f, cz).setColor(1.0f, 0.9f, 1.0f, 1.0f * alpha).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
+            consumer.addVertex(matrix, cx, cy - s * 1.5f, cz).setColor(1.0f, 0.9f, 1.0f, 1.0f * alpha).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         }
     }
 
@@ -400,7 +450,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         spanRibbon(matrix, consumer, mx, my, mz, mx - px * wake, my - py * wake, mz - pz * wake, wx, wy, wz, half * 0.3f, 0.01f, r, g, b, a * 0.45f, 0.0f);
     }
 
-    private static void drawChainSpine(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2) {
+    private static void drawChainSpine(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float alphaMul) {
         float dx = x2 - x1;
         float dy = y2 - y1;
         float dz = z2 - z1;
@@ -414,11 +464,11 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         float mx = (x1 + x2) * 0.5f + px * bow;
         float my = (y1 + y2) * 0.5f + bow * 0.35f;
         float mz = (z1 + z2) * 0.5f + pz * bow;
-        spanRibbon(matrix, consumer, x1, y1, z1, mx, my, mz, px, 0.0f, pz, 0.07f, 0.05f, 0.72f, 0.06f, 0.9f, 0.9f, 0.85f);
-        spanRibbon(matrix, consumer, mx, my, mz, x2, y2, z2, px, 0.0f, pz, 0.05f, 0.035f, 0.72f, 0.06f, 0.9f, 0.85f, 0.7f);
-        spanRibbon(matrix, consumer, x1, y1, z1, mx, my, mz, px, 0.0f, pz, 0.02f, 0.014f, 1.0f, 0.92f, 0.98f, 1.0f, 1.0f);
-        spanRibbon(matrix, consumer, mx, my, mz, x2, y2, z2, px, 0.0f, pz, 0.014f, 0.01f, 1.0f, 0.92f, 0.98f, 1.0f, 0.85f);
-        spanRibbon(matrix, consumer, mx, my, mz, mx - px * bow * 1.6f, my - bow * 0.2f, mz - pz * bow * 1.6f, px, 0.0f, pz, 0.04f, 0.008f, 0.55f, 0.04f, 0.8f, 0.4f, 0.0f);
+        spanRibbon(matrix, consumer, x1, y1, z1, mx, my, mz, px, 0.0f, pz, 0.07f, 0.05f, 0.72f, 0.06f, 0.9f, 0.9f * alphaMul, 0.85f * alphaMul);
+        spanRibbon(matrix, consumer, mx, my, mz, x2, y2, z2, px, 0.0f, pz, 0.05f, 0.035f, 0.72f, 0.06f, 0.9f, 0.85f * alphaMul, 0.7f * alphaMul);
+        spanRibbon(matrix, consumer, x1, y1, z1, mx, my, mz, px, 0.0f, pz, 0.02f, 0.014f, 1.0f, 0.92f, 0.98f, 1.0f * alphaMul, 1.0f * alphaMul);
+        spanRibbon(matrix, consumer, mx, my, mz, x2, y2, z2, px, 0.0f, pz, 0.014f, 0.01f, 1.0f, 0.92f, 0.98f, 1.0f * alphaMul, 0.85f * alphaMul);
+        spanRibbon(matrix, consumer, mx, my, mz, mx - px * bow * 1.6f, my - bow * 0.2f, mz - pz * bow * 1.6f, px, 0.0f, pz, 0.04f, 0.008f, 0.55f, 0.04f, 0.8f, 0.4f * alphaMul, 0.0f);
     }
 
     private static void spanRibbon(Matrix4f matrix, VertexConsumer consumer,

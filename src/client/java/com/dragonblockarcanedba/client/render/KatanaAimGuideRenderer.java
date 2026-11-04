@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.KatanaAimGuideEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -16,7 +18,11 @@ import org.joml.Matrix4f;
 /**
  * Entity Renderer for Katana Aim Guide in Minecraft 26.2.
  * Renders a sleek, physical 3D laser guide beam, calibrating reticle rings,
- * terminal target brackets, and traveling energy pulse nodes for Iaijutsu: Heaven Splitter.
+ * terminal target brackets, and traveling energy pulse nodes for Iaijutsu:
+ * Heaven Splitter. The beam length is the entity's synced max range, which
+ * the item keeps equal to the real dash distance at the current charge.
+ * Alpha fades in over the first 3 ticks and out over the entity's
+ * FADE_TICKS once the stance ends, so the beam never pops.
  */
 public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity, KatanaAimGuideRenderer.AimGuideRenderState> {
 
@@ -26,12 +32,14 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
 
     public static class AimGuideRenderState extends EntityRenderState {
         public float chargeRatio = 0.0f;
-        public float maxRange = 24.0f;
+        public float maxRange = 16.0f;
         public float yRot = 0;
         public float xRot = 0;
         public float age = 0;
         public boolean isFirstPersonOwner = false;
         public boolean onRight = true;
+        public int fadeStart = -1;
+        public double wx = 0, wy = 0, wz = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -57,6 +65,10 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
+        state.fadeStart = entity.getFadeStart();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null && 
@@ -77,7 +89,16 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         float range = state.maxRange;
         float age = state.age;
         float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.5f);
-        float alpha = (0.55f + charge * 0.45f) * pulse;
+        // Lifecycle: smoothstep fade in over 3 ticks, fade out over FADE_TICKS.
+        float alpha = (0.55f + charge * 0.45f) * pulse * FxEnvelope.smoothstep(Math.min(1.0f, age / 3.0f));
+        if (state.fadeStart >= 0) {
+            float fadeT = (age - state.fadeStart) / (float) KatanaAimGuideEntity.FADE_TICKS;
+            if (fadeT >= 1.0f) return;
+            alpha *= 1.0f - FxEnvelope.smoothstep(fadeT);
+        }
+        float distScale = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
+        int ringSegments = FxEnvelope.segments(24, distScale, 12);
+        int coreRingSegments = FxEnvelope.segments(20, distScale, 10);
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
@@ -100,7 +121,7 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
             // 2. Blinding White-Hot Razor Cutting Core
             float coreRadius = 0.012f + (charge * 0.008f);
             drawLaserBeam(matrix, buffer, zStart, range, coreRadius, 1.0f, 1.0f, 1.0f, alpha * 0.95f);
-            drawRingZ(matrix, buffer, zStart + 0.2f, 0.16f + charge * 0.10f, 0.10f + charge * 0.04f, 20, age * 28.0f, 1.0f, 1.0f, 1.0f, alpha);
+            drawRingZ(matrix, buffer, zStart + 0.2f, 0.16f + charge * 0.10f, 0.10f + charge * 0.04f, coreRingSegments, age * 28.0f, 1.0f, 1.0f, 1.0f, alpha);
 
             // 2b. Energy flow bands: brighter sheath segments travel down the
             // beam so the guide reads as flowing energy, not a static tube.
@@ -120,13 +141,13 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
                 if (state.isFirstPersonOwner && dist < 3.0f) continue;
                 float ringR = (0.18f + charge * 0.12f) * (1.0f + 0.1f * (float) Math.sin(age * 0.3f + s));
                 float ringRot = age * (15.0f + s * 10.0f);
-                drawRingZ(matrix, buffer, dist, ringR, ringR * 0.80f, 24, ringRot, 0.1f, 0.9f, 1.0f, alpha * 0.75f);
+                drawRingZ(matrix, buffer, dist, ringR, ringR * 0.80f, ringSegments, ringRot, 0.1f, 0.9f, 1.0f, alpha * 0.75f);
                 drawDiamondBracket(matrix, buffer, dist, ringR * 1.25f, 0.85f, 0.98f, 1.0f, alpha * 0.85f);
             }
 
             // 4. Terminal Aim Crosshair & Focusing Target Diamond at endpoint
             float endR = 0.30f + (charge * 0.20f);
-            drawRingZ(matrix, buffer, range, endR, endR * 0.82f, 24, -age * 40.0f, 0.0f, 0.95f, 1.0f, alpha * 0.90f);
+            drawRingZ(matrix, buffer, range, endR, endR * 0.82f, ringSegments, -age * 40.0f, 0.0f, 0.95f, 1.0f, alpha * 0.90f);
             drawDiamondBracket(matrix, buffer, range, endR * 1.35f, 1.0f, 1.0f, 1.0f, alpha);
             drawCrosshairSpokes(matrix, buffer, range, endR * 1.5f, 0.0f, 0.9f, 1.0f, alpha * 0.8f);
 
@@ -144,7 +165,7 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
             float endR = 0.30f + (charge * 0.20f);
-            drawRingZ(matrix, buffer, range, endR * 1.25f, endR * 0.95f, 24, -age * 40.0f, 0.0f, 0.95f, 1.0f, alpha * 0.20f);
+            drawRingZ(matrix, buffer, range, endR * 1.25f, endR * 0.95f, ringSegments, -age * 40.0f, 0.0f, 0.95f, 1.0f, alpha * 0.20f);
             drawLaserBeam(matrix, buffer, zStart, range, (0.035f + (charge * 0.025f)) * 1.9f, 0.0f, 0.85f, 1.0f, alpha * 0.10f);
         });
 

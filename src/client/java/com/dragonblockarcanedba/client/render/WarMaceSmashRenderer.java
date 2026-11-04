@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.WarMaceSmashEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -12,7 +14,13 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import org.joml.Matrix4f;
 
-/** A bowed shell in the ground. The lip rises and then settles. */
+/**
+ * A bowed shell in the ground, now one layer of three: an anchor glow disc
+ * grounds it, three counter rotating LayeredRender bands carry the dust ring
+ * at the shell's edge, and the original bronze shell stays as the bright core
+ * on top. Everything runs the shared FxEnvelope, so the shell builds in over
+ * the first ticks instead of appearing at full alpha, peaks, and settles.
+ */
 public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, WarMaceSmashRenderer.SmashState> {
     public WarMaceSmashRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -22,6 +30,9 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         public float age;
         public boolean heavy;
         public float radius;
+        public double ex;
+        public double ey;
+        public double ez;
     }
 
     public boolean shouldRender(WarMaceSmashEntity entity, net.minecraft.client.renderer.culling.Frustum frustum, double cameraX, double cameraY, double cameraZ) {
@@ -43,29 +54,33 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         state.age = entity.tickCount + partialTick;
         state.heavy = entity.isHeavy();
         state.radius = entity.radiusAt(state.age);
+        state.ex = entity.getX();
+        state.ey = entity.getY();
+        state.ez = entity.getZ();
     }
 
     @Override
     public void submit(SmashState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         float life = state.heavy ? 14.0f : 10.0f;
-        float fade = ease(Math.max(0.0f, 1.0f - state.age / life));
-        float bow = (state.heavy ? 1.35f : 0.72f) * (0.35f + 0.65f * fade);
+        float env = FxEnvelope.envelope(state.age, life, 0.15f, 0.35f);
+        float bow = (state.heavy ? 1.35f : 0.72f) * (0.35f + 0.65f * env);
+        float distScale = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
+        float bandsHeight = state.heavy ? 1.7f : 1.05f;
         RenderType type = KiRenderHelper.kiRenderType();
         collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            drawShell(buffer, matrix, pose, state.radius, bow, fade, state.heavy);
+            LayeredRender.drawAnchorGlow(pose, buffer, state.radius * 1.02f, 0.05f,
+                1.0f, 0.78f, 0.38f, 0.55f * env, distScale);
+            LayeredRender.drawVortexBands(pose, buffer, state.radius * 0.82f, bandsHeight, state.age,
+                0.85f, 0.62f, 0.28f, env, distScale);
+            drawShell(buffer, matrix, pose, state.radius, bow, env, state.heavy, distScale);
         });
         super.submit(state, poseStack, collector, cameraState);
     }
 
-    private static float ease(float t) {
-        float c = Math.max(0.0f, Math.min(1.0f, t));
-        return c * c * (3.0f - 2.0f * c);
-    }
-
     private static void drawShell(VertexConsumer buffer, Matrix4f matrix, PoseStack.Pose pose,
-                                  float radius, float bow, float fade, boolean heavy) {
-        int around = 22;
+                                  float radius, float bow, float fade, boolean heavy, float distScale) {
+        int around = FxEnvelope.segments(22, distScale, 12);
         int bands = 5;
         float inner = radius * 0.62f;
         for (int i = 0; i < around; i++) {

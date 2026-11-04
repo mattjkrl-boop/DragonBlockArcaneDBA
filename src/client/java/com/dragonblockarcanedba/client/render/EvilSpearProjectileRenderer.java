@@ -62,6 +62,9 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
     public void submit(EvilSpearRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         RenderType renderType = KiRenderHelper.kiRenderType();
         float age = state.age;
+        // Distance scaling (standard point 1): distant throws step their
+        // segment counts down instead of costing full geometry.
+        final float ds = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
@@ -71,9 +74,12 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         float fpScale = (state.isFirstPersonOwner && state.age < 5.0f) ? (0.60f + (state.age / 5.0f) * 0.40f) : 1.0f;
         poseStack.scale(fpScale, fpScale, fpScale);
 
-        // The throw holds, then eases out over the last part of the flight.
+        // The throw builds in over its first 3 ticks, holds, then eases out
+        // over the last part of the flight. Nothing pops in at full alpha.
+        float spawnT = Math.min(1.0f, age / 3.0f);
+        float spawnFade = spawnT * spawnT * (3.0f - 2.0f * spawnT);
         float endT = age > 32.0f ? Math.min(1.0f, (age - 32.0f) / 8.0f) : 0.0f;
-        final float bodyFade = 1.0f - endT * endT * (3.0f - 2.0f * endT);
+        final float bodyFade = spawnFade * (1.0f - endT * endT * (3.0f - 2.0f * endT));
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
@@ -101,7 +107,7 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
             drawFin(matrix, buffer, -0.35f, 0, 1.2f, 0.7f, 1.0f, 0.1f, 0.25f, 0.95f * bodyFade);
 
             // Mach cone around the head. Pale at the tip, crimson at the mouth, with a thin rim.
-            int coneSegments = 28;
+            int coneSegments = com.dragonblockarcanedba.util.FxEnvelope.segments(28, ds, 14);
             float coneTipZ = 2.85f;
             float coneBaseZ = coneTipZ - 2.55f;
             float coneRadius = 0.92f;
@@ -115,16 +121,23 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
                 drawTriangle(matrix, buffer, 0, 0, coneTipZ, x1, y1, coneBaseZ, x2, y2, coneBaseZ,
                     1.0f, 0.12f, 0.24f, 0.42f * bodyFade);
             }
-            drawRing(matrix, buffer, 0, 0, coneBaseZ, coneRadius * 1.06f, coneRadius * 0.84f, 24,
+            drawRing(matrix, buffer, 0, 0, coneBaseZ, coneRadius * 1.06f, coneRadius * 0.84f,
+                com.dragonblockarcanedba.util.FxEnvelope.segments(24, ds, 12),
                 1.0f, 0.72f, 0.78f, 0.55f * bodyFade);
 
-            // Blood ribbon trailing the throw. Width sits across the helix.
+            // Blood ribbons trailing the throw: two dense strands plus a
+            // third wide, faint wisp so the trail has layered depth (core,
+            // mid, outer) instead of two equal ribbons. Width sits across
+            // the helix.
             int ribbonSteps = 14;
             float trailStart = -2.0f;
             float trailLength = 4.2f;
 
-            for (int strand = 0; strand < 2; strand++) {
-                float strandOffset = strand * (float) Math.PI;
+            for (int strand = 0; strand < 3; strand++) {
+                boolean wispy = strand == 2;
+                float strandOffset = strand * (float) Math.PI * (wispy ? 0.5f : 1.0f);
+                float strandRadiusMul = wispy ? 1.35f : 1.0f;
+                float strandAlphaMul = wispy ? 0.32f : 1.0f;
                 for (int s = 0; s < ribbonSteps; s++) {
                     float t1 = s / (float) ribbonSteps;
                     float t2 = (s + 1) / (float) ribbonSteps;
@@ -132,8 +145,8 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
                     float z1 = trailStart - (t1 * trailLength);
                     float z2 = trailStart - (t2 * trailLength);
 
-                    float r1 = (0.25f + t1 * 0.95f);
-                    float r2 = (0.25f + t2 * 0.95f);
+                    float r1 = (0.25f + t1 * 0.95f) * strandRadiusMul;
+                    float r2 = (0.25f + t2 * 0.95f) * strandRadiusMul;
 
                     double ang1 = strandOffset + (t1 * Math.PI * 2.2) + (age * 0.3);
                     double ang2 = strandOffset + (t2 * Math.PI * 2.2) + (age * 0.3);
@@ -157,7 +170,7 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
                         rx1 + px1, ry1 + py1, z1,
                         rx2 + px2, ry2 + py2, z2,
                         rx2 - px2, ry2 - py2, z2,
-                        1.0f, 0.10f + t1 * 0.25f, 0.22f, 0.85f * tail * bodyFade
+                        1.0f, 0.10f + t1 * 0.25f, 0.22f, 0.85f * tail * bodyFade * strandAlphaMul
                     );
                 }
             }
@@ -302,23 +315,4 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         }
     }
 
-    private static void drawBeam(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float radius, float r, float g, float b, float a) {
-        float nx = radius;
-        float ny = radius;
-
-        drawQuad(matrix, consumer,
-            x1 - nx, y1, z1,
-            x1 + nx, y1, z1,
-            x2 + nx, y2, z2,
-            x2 - nx, y2, z2,
-            r, g, b, a
-        );
-        drawQuad(matrix, consumer,
-            x1, y1 - ny, z1,
-            x1, y1 + ny, z1,
-            x2, y2 + ny, z2,
-            x2, y2 - ny, z2,
-            r, g, b, a
-        );
-    }
 }

@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SaberSlashEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -32,6 +34,9 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
         public float xRot = 0;
         public float age = 0;
         public int maxLifetime = 10;
+        public double ex = 0;
+        public double ey = 0;
+        public double ez = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -59,6 +64,9 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
         state.xRot = entity.getXRot();
         state.age = entity.tickCount + partialTicks;
         state.maxLifetime = entity.getMaxLifetime();
+        state.ex = entity.getX();
+        state.ey = entity.getY();
+        state.ez = entity.getZ();
     }
 
     @Override
@@ -74,7 +82,10 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
         float chord = 0.92f * scale * (0.70f + 0.30f * open);
         float trail = (0.22f + 0.70f * smooth(Math.min(1.0f, progress / 0.7f))) * scale;
         boolean strong = state.isStrong;
-        int segments = 28;
+        // Segment count steps down with camera distance (standard point 1):
+        // near views keep the full 28 segment crescent, distant ones cost less.
+        float ds = LayeredRender.distScale(cameraState, state.ex, state.ey, state.ez);
+        int segments = FxEnvelope.segments(28, ds, 12);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -84,6 +95,9 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
+            // Wispy outer layer at the standard outer band alpha, so the cut
+            // reads core, mid, edge instead of a single flat mesh crescent.
+            drawVolumetricCrescent(matrix, buffer, span * 1.16f, chord * 1.10f, 0.060f, trail * 1.30f, segments, 0.0f, 0.75f, 1.0f, LayeredRender.ALPHA_OUTER * fade);
             drawVolumetricCrescent(matrix, buffer, span, chord, 0.048f, trail, segments, 0.0f, 0.75f, 1.0f, 0.86f * fade);
             drawVolumetricCrescent(matrix, buffer, span * 0.80f, chord * 0.80f, 0.016f, trail * 0.22f, segments, 1.0f, 1.0f, 1.0f, fade);
             drawTipSpurs(matrix, buffer, span, chord, 0.11f * scale, fade);
@@ -107,34 +121,6 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
     private static float strike(float progress) {
         if (progress <= 0.22f || progress >= 0.55f) return 0.0f;
         return (float) Math.sin(((progress - 0.22f) / 0.33f) * Math.PI);
-    }
-
-    /** One thin thrust: cyan rails, white core, a wake behind the point, a tip flash that ends. */
-    private static void drawLunge(Matrix4f matrix, VertexConsumer consumer, float reach, float trail, float fade, float impact) {
-        float half = 0.035f;
-        float tall = 0.16f;
-        consumer.addVertex(matrix, -half, -tall, -trail).setColor(0.80f, 0.95f, 1.0f, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, -half, tall, -trail).setColor(0.80f, 0.95f, 1.0f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, -half, tall, reach).setColor(0.0f, 0.86f, 1.0f, 0.92f * fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-        consumer.addVertex(matrix, -half, -tall, reach).setColor(0.0f, 0.86f, 1.0f, 0.92f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-
-        consumer.addVertex(matrix, half, -tall, reach).setColor(0.0f, 0.86f, 1.0f, 0.92f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, half, tall, reach).setColor(0.0f, 0.86f, 1.0f, 0.92f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, half, tall, -trail).setColor(0.80f, 0.95f, 1.0f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, half, -tall, -trail).setColor(0.80f, 0.95f, 1.0f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-
-        consumer.addVertex(matrix, 0.0f, -tall * 0.45f, 0).setColor(1.0f, 1.0f, 1.0f, 0.0f).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, 0.0f, tall * 0.45f, 0).setColor(1.0f, 1.0f, 1.0f, 0.0f).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, 0.0f, tall * 0.45f, reach).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, 0.0f, -tall * 0.45f, reach).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-
-        if (impact > 0.02f) {
-            float s = 0.16f * impact;
-            consumer.addVertex(matrix, -s, 0, reach).setColor(1.0f, 1.0f, 1.0f, impact).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, 0, s, reach).setColor(0.80f, 0.96f, 1.0f, impact).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, s, 0, reach).setColor(1.0f, 1.0f, 1.0f, impact).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, 0, -s, reach).setColor(0.80f, 0.96f, 1.0f, impact).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
     }
 
     private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {

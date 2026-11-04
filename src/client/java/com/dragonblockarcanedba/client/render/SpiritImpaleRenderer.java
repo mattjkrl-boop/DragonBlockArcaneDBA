@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.SpiritImpaleEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -28,7 +30,7 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
     public static class SpiritImpaleRenderState extends EntityRenderState {
         public float scale = 1.0f;
         public float age = 0;
-        public int maxLifetime = 28;
+        public int maxLifetime = 40;
         public long seed = 0;
     }
 
@@ -62,9 +64,18 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
 
         float age = state.age;
         float scale = state.scale;
-        float fade = age > 20.0f ? Math.max(0.0f, (state.maxLifetime - age) / 8.0f) : 1.0f;
+        // Shared envelope over the full 40 tick life (standard point 5):
+        // builds with the slam, holds, then dissipates across the last
+        // 28 percent, replacing the old hold-then-linear fade keyed to 28.
+        float fade = FxEnvelope.envelope(age, state.maxLifetime, 0.12f, 0.28f);
         float slam = Math.min(1.0f, age / 4.0f);
         float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.4f);
+        float distScale = LayeredRender.distScale(cameraState, state.x, state.y, state.z);
+        int ringSegsOuter = FxEnvelope.segments(32, distScale, 12);
+        int ringSegsMid = FxEnvelope.segments(24, distScale, 10);
+        int ringSegsInner = FxEnvelope.segments(16, distScale, 8);
+        int pillarSides = FxEnvelope.segments(12, distScale, 6);
+        int pillarCoreSides = FxEnvelope.segments(8, distScale, 5);
 
         RenderType renderType = KiRenderHelper.kiRenderType();
 
@@ -76,18 +87,18 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
             float baseRadius = 2.4f * scale * slam;
             if (fade > 0.02f) {
                 // Outer Cyan Script Ring
-                drawGroundRing(matrix, buffer, 0, 0.03f, 0, baseRadius, baseRadius * 0.82f, 32, age * 22.0f, 0.0f, 0.90f, 1.0f, fade * 0.85f);
+                drawGroundRing(matrix, buffer, 0, 0.03f, 0, baseRadius, baseRadius * 0.82f, ringSegsOuter, age * 22.0f, 0.0f, 0.90f, 1.0f, fade * 0.85f);
                 // Middle Golden Lotus Ring
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 0.68f, baseRadius * 0.48f, 24, -age * 30.0f, 1.0f, 0.82f, 0.15f, fade * 0.90f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 0.68f, baseRadius * 0.48f, ringSegsMid, -age * 30.0f, 1.0f, 0.82f, 0.15f, fade * 0.90f);
                 // Inner White Flash Disk
-                drawGroundRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.35f * pulse, 0.0f, 16, age * 15.0f, 1.0f, 1.0f, 1.0f, fade * 0.95f);
+                drawGroundRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.35f * pulse, 0.0f, ringSegsInner, age * 15.0f, 1.0f, 1.0f, 1.0f, fade * 0.95f);
             }
 
             // 2. Ascending Vertical Divine Ki Pillar & Helical Aura Ribbons
             float pillarHeight = 6.0f * slam;
             float pillarRadius = 0.65f * scale * pulse;
-            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius, pillarHeight, 12, 0.0f, 0.92f, 1.0f, fade * 0.60f);
-            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius * 0.42f, pillarHeight * 1.05f, 8, 1.0f, 1.0f, 1.0f, fade * 0.90f);
+            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius, pillarHeight, pillarSides, 0.0f, 0.92f, 1.0f, fade * 0.60f);
+            drawCylinderPillar(matrix, buffer, 0, 0, pillarRadius * 0.42f, pillarHeight * 1.05f, pillarCoreSides, 1.0f, 1.0f, 1.0f, fade * 0.90f);
 
             // Helical Aura Ribbons around the pillar
             drawAscendingHelices(matrix, buffer, age, pillarHeight, pillarRadius * 1.25f, fade);
@@ -155,9 +166,17 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
             float haloPillarHeight = 6.0f * slam;
             collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
                 Matrix4f matrix = pose.pose();
-                drawGroundRing(matrix, buffer, 0, 0.03f, 0, haloRadius * 1.06f, haloRadius * 0.80f, 32, age * 22.0f, 0.0f, 0.90f, 1.0f, fade * 0.20f);
-                drawGroundRing(matrix, buffer, 0, 0.04f, 0, haloRadius * 0.68f, haloRadius * 0.46f, 24, -age * 30.0f, 1.0f, 0.82f, 0.15f, fade * 0.16f);
-                drawCylinderPillar(matrix, buffer, 0, 0, haloPillarRadius, haloPillarHeight, 12, 0.0f, 0.92f, 1.0f, fade * 0.14f);
+                drawGroundRing(matrix, buffer, 0, 0.03f, 0, haloRadius * 1.06f, haloRadius * 0.80f, ringSegsOuter, age * 22.0f, 0.0f, 0.90f, 1.0f, fade * 0.20f);
+                drawGroundRing(matrix, buffer, 0, 0.04f, 0, haloRadius * 0.68f, haloRadius * 0.46f, ringSegsMid, -age * 30.0f, 1.0f, 0.82f, 0.15f, fade * 0.16f);
+                drawCylinderPillar(matrix, buffer, 0, 0, haloPillarRadius, haloPillarHeight, pillarSides, 0.0f, 0.92f, 1.0f, fade * 0.14f);
+                // Wispy outer layer and ground anchor (point 1): three
+                // counter rotating shared bands wrap the pillar so the
+                // array has a dissolving outer shell, and an anchor glow
+                // grounds it to the floor it erupted from.
+                LayeredRender.drawVortexBands(pose, buffer, 1.05f * scale, haloPillarHeight, age,
+                    0.0f, 0.90f, 1.0f, fade * 0.8f, distScale);
+                LayeredRender.drawAnchorGlow(pose, buffer, 2.6f * scale * slam, 0.02f,
+                    0.0f, 0.90f, 1.0f, 0.5f * fade, distScale);
             });
         }
     }

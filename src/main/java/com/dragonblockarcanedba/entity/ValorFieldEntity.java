@@ -27,17 +27,36 @@ import java.util.UUID;
 
 /**
  * Valor Field Entity — Mobile protective golden dome summoned by Grand Sword (Right Click).
- * 
+ *
  * Features:
  * - 9.0-block radius protective energy field that follows the player (Tweak C).
- * - Ally Buffs: Strength II & Resistance II.
- * - Caster Buffs: Strength III, Resistance III, and Haste II / Attack Speed boost (Tweak B).
- * - Enemy Debuff: Slowness II.
- * - Projectile Stasis: Enemy projectiles entering the field hang suspended in mid-air for up to 4s.
- *   Detonates on contact; resumes trajectory if the field moves away.
+ * - Buffs, refreshed every 10 ticks for 40 ticks: the caster gets Valor III
+ *   plus Strength III, Resistance III and Haste II; allies get Valor II plus
+ *   Strength II and Resistance II. (The Valor effect itself grants attack
+ *   damage, attack speed, armor and armor toughness per level; the vanilla
+ *   effects are applied alongside it so the promised buffs are real.)
+ * - Enemy Debuff: Valor Stun II plus Slowness II, and pressure damage while
+ *   the caster is a player.
+ * - Projectile Stasis: Enemy projectiles entering the field hang suspended in
+ *   mid-air for up to 10s (200 ticks). Detonates on contact; resumes
+ *   trajectory if the field moves away.
+ * - Ki Drain: 90% of max Ki per minute (1.5% per second, smooth), drained by
+ *   this entity while the field is up.
+ * - Lifecycle: the dome rises over 10 ticks on spawn and fades out over
+ *   FADE_OUT_TICKS on every removal path (release, Ki exhaustion, caster
+ *   death, disconnect). It never discards at full brightness.
  */
 public class ValorFieldEntity extends Projectile {
     public static final float FIELD_RADIUS = 9.0f;
+    public static final int FADE_OUT_TICKS = 12;
+
+    private static final net.minecraft.network.syncher.EntityDataAccessor<Integer> FADE_START =
+        SynchedEntityData.defineId(ValorFieldEntity.class, net.minecraft.network.syncher.EntityDataSerializers.INT);
+    private static final net.minecraft.network.syncher.EntityDataAccessor<String> SUSPENDED_IDS =
+        SynchedEntityData.defineId(ValorFieldEntity.class, net.minecraft.network.syncher.EntityDataSerializers.STRING);
+
+    private boolean suspendedDirty = true;
+    private static final int VALOR_GOLD_ARGB = 0xFFD833;
 
     private static class SuspendedProjData {
         Vec3 origVelocity;
@@ -69,10 +88,65 @@ public class ValorFieldEntity extends Projectile {
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        builder.define(FADE_START, -1);
+        builder.define(SUSPENDED_IDS, "");
     }
 
     public LivingEntity getCaster() {
         return this.getOwner() instanceof LivingEntity living ? living : null;
+    }
+
+    /** Tick at which the fade out began, or -1 while the field is fully up. Synced for the renderer. */
+    public int getFadeStart() {
+        return this.entityData.get(FADE_START);
+    }
+
+    public boolean isFadingOut() {
+        return this.getFadeStart() >= 0;
+    }
+
+    /**
+     * Network ids of the projectiles this field actually suspended, synced so
+     * the renderer draws stasis cages only around those projectiles. (The
+     * renderer used to cage anything slow inside the radius.)
+     */
+    public java.util.Set<Integer> getSuspendedIds() {
+        String raw = this.entityData.get(SUSPENDED_IDS);
+        if (raw == null || raw.isEmpty()) return java.util.Set.of();
+        java.util.Set<Integer> ids = new java.util.HashSet<>();
+        for (String part : raw.split(",")) {
+            try {
+                ids.add(Integer.parseInt(part));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * Begin the fade out: suspended projectiles resume immediately, the dome
+     * renders its 12 tick dissipation, then the entity discards. Every
+     * removal path goes through here; nothing discards the field directly.
+     */
+    public void beginFadeOut() {
+        if (this.isFadingOut()) return;
+        this.entityData.set(FADE_START, this.tickCount);
+        if (this.level() instanceof ServerLevel serverLevel) {
+            releaseAllSuspended(serverLevel);
+        }
+    }
+
+    private void syncSuspendedIds(ServerLevel serverLevel) {
+        StringBuilder sb = new StringBuilder();
+        for (UUID uuid : suspendedMap.keySet()) {
+            Entity e = serverLevel.getEntity(uuid);
+            if (e != null) {
+                if (sb.length() > 0) sb.append(',');
+                sb.append(e.getId());
+            }
+        }
+        this.entityData.set(SUSPENDED_IDS, sb.toString());
+        this.suspendedDirty = false;
     }
 
     @Override
@@ -82,10 +156,29 @@ public class ValorFieldEntity extends Projectile {
         if (this.level() instanceof ServerLevel serverLevel) {
             LivingEntity caster = getCaster();
 
-            // Check caster validity
+            // Fade out in progress: no buffs, no stasis, no drain. The dome
+            // follows a living caster, rains theme sparks as it dissipates,
+            // and discards only after FADE_OUT_TICKS.
+            if (this.isFadingOut()) {
+                if (caster != null && caster.isAlive()) {
+                    this.setPos(caster.getX(), caster.getY(), caster.getZ());
+                }
+                if (this.suspendedDirty) {
+                    syncSuspendedIds(serverLevel);
+                }
+                com.dragonblockarcanedba.util.LayeredParticles.emitRain(serverLevel, this.position(),
+                    FIELD_RADIUS * 0.8f, 4.0f, 19f, 20f,
+                    com.dragonblockarcanedba.particle.DbaParticles.SPARK);
+                if (this.tickCount - this.getFadeStart() >= FADE_OUT_TICKS) {
+                    this.discard();
+                }
+                return;
+            }
+
+            // Check caster validity: every failure fades the field out
+            // instead of discarding the dome in one tick.
             if (caster == null || !caster.isAlive() || caster.isRemoved()) {
-                releaseAllSuspended(serverLevel);
-                this.discard();
+                beginFadeOut();
                 return;
             }
 
@@ -94,17 +187,16 @@ public class ValorFieldEntity extends Projectile {
                 boolean isHolding = player.getMainHandItem().getItem() instanceof GrandSwordItem ||
                                     player.getOffhandItem().getItem() instanceof GrandSwordItem;
                 if (!isHolding || (this.tickCount > 5 && !player.isUsingItem())) {
-                    releaseAllSuspended(serverLevel);
-                    this.discard();
+                    beginFadeOut();
                     return;
                 }
 
                 // Continuous Ki drain: 90% per minute (smooth)
                 if (!WeaponDrainHelper.drainKiPerTick(player, 90.0)) {
-                    // Out of Ki: cancel field
+                    // Out of Ki: cancel the use; releaseUsing and this call
+                    // both route the field into its fade out.
                     player.stopUsingItem();
-                    releaseAllSuspended(serverLevel);
-                    this.discard();
+                    beginFadeOut();
                     return;
                 }
                 if (this.tickCount % 5 == 0) {
@@ -125,24 +217,31 @@ public class ValorFieldEntity extends Projectile {
                     serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
                         center.x, center.y + 1.0, center.z, Math.round(36 * density), 3.5, 1.2, 3.5, 0.25);
                 }
+                com.dragonblockarcanedba.util.LayeredParticles.emitGroundBurst(serverLevel, center,
+                    FIELD_RADIUS * 0.7f, VALOR_GOLD_ARGB);
             }
 
-            // Theme particles: gold sparks drift slowly around the dome rim
-            // so the field volume reads even where the shell is faint.
-            if (this.tickCount % 4 == 0) {
-                float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-                if (density > 0f) {
-                    serverLevel.sendParticles(com.dragonblockarcanedba.particle.DbaParticles.SPARK,
-                        center.x, center.y + 0.6, center.z,
-                        Math.max(1, Math.round(4f * density)),
-                        FIELD_RADIUS * 0.65, 1.2, FIELD_RADIUS * 0.65, 0.02);
-                }
+            // Theme particles: the shared layered vortex (bright core motes,
+            // gold mid band, wispy outer sparks) fills the dome volume. The
+            // old code scattered about 4 SPARK every 4 ticks across the whole
+            // 9 block radius, leaving the interior near empty. Age is capped
+            // so the envelope holds at peak for the field's open ended life.
+            if (this.tickCount % 2 == 0) {
+                com.dragonblockarcanedba.util.LayeredParticles.emitVortex(serverLevel, center,
+                    FIELD_RADIUS * 0.85f, 3.2f, Math.min(this.tickCount, 20), 28,
+                    VALOR_GOLD_ARGB, com.dragonblockarcanedba.particle.DbaParticles.SPARK);
             }
 
             // 1. Buffs and Debuffs (Applied every 10 ticks)
             if (this.tickCount % 10 == 0) {
-                // Caster receives Tier 3 Valor (Level III / Amplifier 2)
+                // Caster receives Tier 3 Valor (Level III / Amplifier 2), plus
+                // the vanilla buffs the field promises: Strength III,
+                // Resistance III and Haste II. The header used to promise
+                // these while the code applied none of them.
                 caster.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.VALOR_HOLDER, 40, 2, false, false, true));
+                caster.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.STRENGTH, 40, 2, false, false, true));
+                caster.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE, 40, 2, false, false, true));
+                caster.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.HASTE, 40, 1, false, false, true));
 
                 AABB fieldBox = new AABB(
                     center.x - FIELD_RADIUS, center.y - FIELD_RADIUS, center.z - FIELD_RADIUS,
@@ -155,11 +254,15 @@ public class ValorFieldEntity extends Projectile {
                     double dist = Math.sqrt(entity.distanceToSqr(center));
                     if (dist <= FIELD_RADIUS) {
                         if (isAlly(caster, entity)) {
-                            // Allies receive Tier 2 Valor (Level II / Amplifier 1)
+                            // Allies receive Tier 2 Valor (Level II / Amplifier 1),
+                            // plus the promised Strength II and Resistance II.
                             entity.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.VALOR_HOLDER, 40, 1, false, false, true));
+                            entity.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.STRENGTH, 40, 1, false, false, true));
+                            entity.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.RESISTANCE, 40, 1, false, false, true));
                         } else {
-                            // Enemy Debuff: Valor Stun
+                            // Enemy Debuff: Valor Stun II plus the promised Slowness II.
                             entity.addEffect(new MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.VALOR_STUN_HOLDER, 40, 1, false, false, true));
+                            entity.addEffect(new MobEffectInstance(net.minecraft.world.effect.MobEffects.SLOWNESS, 40, 1, false, false, true));
 
                             // Continuous golden energy field pressure damage & cinematic tracking
                             if (caster instanceof Player playerCaster) {
@@ -201,6 +304,7 @@ public class ValorFieldEntity extends Projectile {
                     if (!suspendedMap.containsKey(pUuid)) {
                         Vec3 curVel = p.getDeltaMovement();
                         suspendedMap.put(pUuid, new SuspendedProjData(curVel, p.isNoGravity()));
+                        this.suspendedDirty = true;
                         p.setNoGravity(true);
                         p.setDeltaMovement(0, 0, 0);
 
@@ -220,6 +324,7 @@ public class ValorFieldEntity extends Projectile {
                 Entity entity = serverLevel.getEntity(pUuid);
                 if (!(entity instanceof Projectile p) || !p.isAlive()) {
                     it.remove();
+                    this.suspendedDirty = true;
                     continue;
                 }
 
@@ -230,6 +335,7 @@ public class ValorFieldEntity extends Projectile {
                     p.setDeltaMovement(data.origVelocity);
                     com.dragonblockarcanedba.util.DbaCompat.markHurt(p);
                     it.remove();
+                    this.suspendedDirty = true;
                     continue;
                 }
 
@@ -266,6 +372,7 @@ public class ValorFieldEntity extends Projectile {
                     }
                     p.discard();
                     it.remove();
+                    this.suspendedDirty = true;
                     continue;
                 }
 
@@ -274,7 +381,12 @@ public class ValorFieldEntity extends Projectile {
                     serverLevel.playSound(null, p.getX(), p.getY(), p.getZ(), SoundEvents.ITEM_BREAK.value(), SoundSource.PLAYERS, 0.8f, 1.2f);
                     p.discard();
                     it.remove();
+                    this.suspendedDirty = true;
                 }
+            }
+
+            if (this.suspendedDirty) {
+                syncSuspendedIds(serverLevel);
             }
         }
     }
@@ -289,12 +401,13 @@ public class ValorFieldEntity extends Projectile {
             }
         }
         suspendedMap.clear();
+        this.suspendedDirty = true;
     }
 
     private static boolean isAlly(LivingEntity caster, LivingEntity other) {
-        if (caster instanceof Player && other instanceof Player) {
-            return true; // Players are treated as allies
-        }
+        // Real alliance only (same team). This used to return true for ANY
+        // player versus player pair, so an opposing player standing in the
+        // field was buffed instead of debuffed and pressure damaged.
         return caster.isAlliedTo(other);
     }
 }

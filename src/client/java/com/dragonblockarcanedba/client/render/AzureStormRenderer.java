@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.AzureStormEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -33,6 +35,8 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
         public float radius = 12.0f;
         public float age = 0;
         public long seed = 0;
+        public int lifeTicks = 220;
+        public double wx, wy, wz;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -56,6 +60,10 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
         state.radius = entity.getRadius();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.lifeTicks = entity.getLifeTicks();
+        state.wx = entity.getX();
+        state.wy = entity.getY();
+        state.wz = entity.getZ();
     }
 
     @Override
@@ -66,20 +74,26 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
         float age = state.age;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
-        // Lifetime fade envelope: the storm lives 220 ticks and used to have no
-        // lifetime term at all, so a 30 block domain popped in and out at full
-        // presence. In over the first 20 ticks, out over the last 40.
-        float fadeIn = Math.min(1.0f, age / 20.0f);
-        float fadeOut = age <= 180.0f ? 1.0f : Math.max(0.0f, 1.0f - (age - 180.0f) / 40.0f);
-        fadeIn = fadeIn * fadeIn * (3.0f - 2.0f * fadeIn);
-        fadeOut = fadeOut * fadeOut * (3.0f - 2.0f * fadeOut);
-        float fade = fadeIn * fadeOut;
+        // Distance scale: far storms step their segment counts down.
+        float ds = LayeredRender.distScale(cameraState, state.wx, state.wy, state.wz);
+
+        // Lifetime fade envelope from the shared FxEnvelope: in over the first
+        // 20 ticks, out over the last 40, of whatever life this storm was
+        // summoned with. The old constants assumed a fixed 220 tick life.
+        float life = Math.max(20.0f, state.lifeTicks);
+        float buildFrac = Math.min(0.45f, 20.0f / life);
+        float decayFrac = Math.min(0.45f, 40.0f / life);
+        float fade = FxEnvelope.envelope(age, life, buildFrac, decayFrac);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
+            // Ground anchor glow: a soft disc grounding the dome to the world.
+            LayeredRender.drawAnchorGlow(pose, buffer, radius * 0.92f, 0.07f,
+                0.20f, 0.75f, 1.0f, 0.35f * fade, ds);
+
             // 1. Quad-Tier Ground Whirlpool & Wave Surges (4 counter-rotating wind bands)
-            int groundSegments = 48;
+            int groundSegments = FxEnvelope.segments(48, ds, 16);
             for (int band = 0; band < 4; band++) {
                 float rOuter = radius * (0.30f + band * 0.23f);
                 float rInner = rOuter * 0.84f;
@@ -98,7 +112,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
 
             // Layer A: Outer Massive Rotating Cyclone Dome
             int domeLatitudes = 12;
-            int domeLongitudes = 36;
+            int domeLongitudes = FxEnvelope.segments(36, ds, 12);
             for (int lat = 0; lat < domeLatitudes; lat++) {
                 float latProgress1 = lat / (float) domeLatitudes;
                 float latProgress2 = (lat + 1) / (float) domeLatitudes;
@@ -109,7 +123,9 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                 float r1 = radius * (float) Math.cos(latProgress1 * (Math.PI / 2.0));
                 float r2 = radius * (float) Math.cos(latProgress2 * (Math.PI / 2.0));
 
-                float domeAlpha = (0.38f + (latProgress1 * 0.30f)) * fade;
+                // Alpha is densest low on the dome and thins toward the rim,
+                // a heavy base with wispy edges instead of brightening upward.
+                float domeAlpha = (0.42f - (latProgress1 * 0.20f)) * fade;
                 float red = 0.02f;
                 float green = 0.22f + (latProgress1 * 0.55f);
                 float blue = 0.55f + (latProgress1 * 0.45f);
@@ -133,9 +149,50 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                 }
             }
 
+            // Layer B: Inner Core Dome. The class header has always promised a
+            // double layered dome and only Layer A existed; this second shell
+            // sits at 0.8 of the radius and 0.85 of the height, brighter, and
+            // counter rotates against the outer dome.
+            int innerLatitudes = 10;
+            int innerLongitudes = domeLongitudes;
+            float innerHeight = domeHeight * 0.85f;
+            for (int lat = 0; lat < innerLatitudes; lat++) {
+                float lp1 = lat / (float) innerLatitudes;
+                float lp2 = (lat + 1) / (float) innerLatitudes;
+
+                float iy1 = 2.0f + (float) Math.sin(lp1 * (Math.PI / 2.0)) * innerHeight;
+                float iy2 = 2.0f + (float) Math.sin(lp2 * (Math.PI / 2.0)) * innerHeight;
+
+                float ir1 = radius * 0.8f * (float) Math.cos(lp1 * (Math.PI / 2.0));
+                float ir2 = radius * 0.8f * (float) Math.cos(lp2 * (Math.PI / 2.0));
+
+                float innerAlpha = (0.30f - (lp1 * 0.12f)) * fade;
+                float iRed = 0.10f;
+                float iGreen = 0.45f + (lp1 * 0.40f);
+                float iBlue = 1.0f;
+
+                for (int lon = 0; lon < innerLongitudes; lon++) {
+                    double angleOffset = -(age * (6.0f + lat * 2.0f)) * (Math.PI / 180.0);
+                    double a1 = ((lon / (double) innerLongitudes) * Math.PI * 2.0) + angleOffset;
+                    double a2 = (((lon + 1) / (double) innerLongitudes) * Math.PI * 2.0) + angleOffset;
+
+                    float x1 = (float) Math.cos(a1) * ir1;
+                    float z1 = (float) Math.sin(a1) * ir1;
+                    float x2 = (float) Math.cos(a2) * ir1;
+                    float z2 = (float) Math.sin(a2) * ir1;
+
+                    float x3 = (float) Math.cos(a2) * ir2;
+                    float z3 = (float) Math.sin(a2) * ir2;
+                    float x4 = (float) Math.cos(a1) * ir2;
+                    float z4 = (float) Math.sin(a1) * ir2;
+
+                    drawQuad(matrix, buffer, x1, iy1, z1, x2, iy1, z2, x3, iy2, z3, x4, iy2, z4, iRed, iGreen, iBlue, innerAlpha);
+                }
+            }
+
             // 3. Physical Geometric Rain Shafts & Downburst Streamlines
             Random rainRng = new Random(state.seed + 777);
-            int shaftCount = 14;
+            int shaftCount = Math.max(6, Math.round(14 * ds));
             for (int i = 0; i < shaftCount; i++) {
                 double shaftAngle = rainRng.nextDouble() * Math.PI * 2.0 + (age * 0.05);
                 float shaftR = radius * (0.25f + rainRng.nextFloat() * 0.65f);
@@ -194,7 +251,7 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
 
             // 5. Volumetric Atmospheric Lightning Discharges within Storm Boundary
             Random rng = new Random(state.seed + ((long) (age / 3.0f) * 1000));
-            int arcCount = 4;
+            int arcCount = Math.max(2, Math.round(4 * ds));
             for (int a = 0; a < arcCount; a++) {
                 double startAngle = rng.nextDouble() * Math.PI * 2.0;
                 float arcR = radius * (0.25f + rng.nextFloat() * 0.65f);

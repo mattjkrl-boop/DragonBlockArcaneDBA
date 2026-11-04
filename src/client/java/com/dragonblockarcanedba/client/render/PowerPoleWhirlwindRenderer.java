@@ -34,7 +34,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         public float range = 25.0f;
         public float coneAngle = 35.0f;
         public float age = 0.0f;
-        public int maxLifetime = 8;
+        public int decayStart = -1;
         public boolean isFirstPersonOwner = false;
         public boolean onRight = true;
     }
@@ -62,7 +62,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         state.range = entity.getRange();
         state.coneAngle = entity.getConeAngle();
         state.age = entity.tickCount + partialTicks;
-        state.maxLifetime = entity.getMaxLifetime();
+        state.decayStart = entity.getDecayStart();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null && 
@@ -84,21 +84,44 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         if (range < 1.0f) return;
 
         float age = state.age;
-        float maxLife = (float) state.maxLifetime;
 
-        float lifeT = maxLife <= 0.0f ? 1.0f : Math.min(1.0f, age / maxLife);
+        // Lifecycle envelope: the SAME phase math the entity runs server side
+        // (PowerPoleWhirlwindEntity.currentEnvelope), so mesh alpha, particle
+        // counts, the damage window, and the vortex forces all agree. The
+        // funnel is one sustained event now: build over BUILD_TICKS, full
+        // while the spin is held, dissipate over DECAY_TICKS after DECAY_START.
+        // The old 8 tick envelope restarted forever because the entity was
+        // respawned every 6 ticks.
         float alphaMult;
-        if (lifeT < 0.25f) {
-            float t = lifeT / 0.25f;
-            alphaMult = t * t * (3.0f - 2.0f * t);
-        } else if (lifeT > 0.6f) {
-            float t = (lifeT - 0.6f) / 0.4f;
-            alphaMult = 1.0f - t * t * (3.0f - 2.0f * t);
+        if (state.decayStart >= 0) {
+            // Decay falls from whatever height the build had reached when the
+            // spin stopped (an interrupted build never jumps up to full).
+            float peak = state.decayStart < PowerPoleWhirlwindEntity.BUILD_TICKS
+                ? com.dragonblockarcanedba.util.FxEnvelope.smoothstep(
+                    state.decayStart / (float) PowerPoleWhirlwindEntity.BUILD_TICKS)
+                : 1.0f;
+            alphaMult = age <= state.decayStart
+                ? peak
+                : peak * (1.0f - com.dragonblockarcanedba.util.FxEnvelope.smoothstep(
+                    (age - state.decayStart) / (float) PowerPoleWhirlwindEntity.DECAY_TICKS));
+        } else if (age < PowerPoleWhirlwindEntity.BUILD_TICKS) {
+            alphaMult = com.dragonblockarcanedba.util.FxEnvelope.smoothstep(
+                age / (float) PowerPoleWhirlwindEntity.BUILD_TICKS);
         } else {
             alphaMult = 1.0f;
         }
+        if (alphaMult <= 0.01f) return;
 
         final float finalAlpha = alphaMult;
+        // The funnel swells as it builds and tightens as it dies.
+        final float swell = 0.55f + 0.45f * alphaMult;
+        final float coneTan = (float) Math.tan(Math.toRadians(state.coneAngle));
+        // Distance scaling (standard point 1): far funnels step their segment
+        // counts down instead of costing full geometry.
+        final float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
+            cameraState, state.x, state.y, state.z);
+        final int segCount = com.dragonblockarcanedba.util.FxEnvelope.segments(28, distScale, 12);
+        final int ribbonStepCount = com.dragonblockarcanedba.util.FxEnvelope.segments(24, distScale, 10);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         poseStack.pushPose();
@@ -112,21 +135,20 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
 
             // 1. Staff Origin Kinetic Whirling Sweep Disc (Rapid staff spinning plane at base)
             float spinRot = age * 65.0f * (float) (Math.PI / 180.0);
-            float discR1 = 2.2f * fpScale;
-            drawOriginDisc(matrix, buffer, 0.4f, discR1, 28, spinRot, 0.0f, 1.0f, 0.75f, 0.70f * finalAlpha);
+            float discR1 = 2.2f * fpScale * swell;
+            drawOriginDisc(matrix, buffer, 0.4f, discR1, segCount, spinRot, 0.0f, 1.0f, 0.75f, 0.70f * finalAlpha);
 
             // 2. Multi-Tiered Conical Aerodynamic Hurricane Vortex Tunnel
             int tiers = 12;
-            int segments = 28;
-            float coneTan = (float) Math.tan(Math.toRadians(state.coneAngle));
+            int segments = segCount;
 
             // Layer A: Dense Inner Wind Sheath (Cyan-White)
             for (int t = 0; t < tiers; t++) {
                 float z1 = (t / (float) tiers) * range + 0.3f;
                 float z2 = ((t + 1) / (float) tiers) * range + 0.3f;
 
-                float r1 = z1 * coneTan * 0.65f;
-                float r2 = z2 * coneTan * 0.65f;
+                float r1 = z1 * coneTan * 0.65f * swell;
+                float r2 = z2 * coneTan * 0.65f * swell;
 
                 float tierAlpha = 0.55f * (1.0f - (t / (float) tiers) * 0.45f) * finalAlpha;
                 float twist1 = spinRot + (z1 * 0.35f);
@@ -174,8 +196,8 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
                 float z1 = (t / (float) tiers) * range + 0.5f;
                 float z2 = ((t + 1) / (float) tiers) * range + 0.5f;
 
-                float r1 = z1 * coneTan * 0.95f;
-                float r2 = z2 * coneTan * 0.95f;
+                float r1 = z1 * coneTan * 0.95f * swell;
+                float r2 = z2 * coneTan * 0.95f * swell;
 
                 float tierAlpha = 0.40f * (1.0f - (t / (float) tiers) * 0.4f) * finalAlpha;
                 float twist1 = -spinRot * 0.8f + (z1 * 0.25f);
@@ -220,7 +242,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
 
             // 3. Quad Counter-Rotating Helical Wind Ribbons
             int ribbons = 4;
-            int ribbonSteps = 24;
+            int ribbonSteps = ribbonStepCount;
             for (int r = 0; r < ribbons; r++) {
                 float ribbonOffset = (r / (float) ribbons) * (float) (Math.PI * 2.0);
                 boolean isCyan = (r % 2 == 0);
@@ -235,8 +257,8 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
                     float z1 = t1 * range + 0.4f;
                     float z2 = t2 * range + 0.4f;
 
-                    float rad1 = z1 * coneTan * 0.85f;
-                    float rad2 = z2 * coneTan * 0.85f;
+                    float rad1 = z1 * coneTan * 0.85f * swell;
+                    float rad2 = z2 * coneTan * 0.85f * swell;
 
                     double ang1 = ribbonOffset + spinRot + (t1 * Math.PI * 3.5);
                     double ang2 = ribbonOffset + spinRot + (t2 * Math.PI * 3.5);
@@ -268,7 +290,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
             for (int b = 0; b < bladeCount; b++) {
                 float bProgress = ((b / (float) bladeCount) + (age * 0.18f)) % 1.0f;
                 float bZ = bProgress * range + 0.6f;
-                float bRadius = bZ * coneTan * 0.82f;
+                float bRadius = bZ * coneTan * 0.82f * swell;
                 double bAngle = (b / (float) bladeCount) * Math.PI * 2.0 + (spinRot * 1.5) + (bProgress * Math.PI * 2.5);
                 float bx = (float) Math.cos(bAngle) * bRadius;
                 float by = (float) Math.sin(bAngle) * bRadius;
@@ -328,24 +350,43 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
                 float waveProgress = ((age * 0.30f) + (w / (float) shockWaves)) % 1.0f;
                 float waveEase = waveProgress * waveProgress * (3.0f - 2.0f * waveProgress);
                 float waveZ = 0.5f + waveEase * Math.max(0.2f, range - 0.8f);
-                float waveR = waveZ * coneTan * 0.92f;
+                float waveR = waveZ * coneTan * 0.92f * swell;
                 float waveAlpha = (float) Math.sin(waveProgress * (float) Math.PI) * 0.65f * finalAlpha;
-                drawRingAt(matrix, buffer, waveZ, waveR * 0.86f, waveR, 0.55f, 1.0f, 0.92f, waveAlpha);
+                drawRingAt(matrix, buffer, waveZ, waveR * 0.86f, waveR, 0.55f, 1.0f, 0.92f, waveAlpha, segCount);
             }
 
-            // One ring travels to the mouth of the cone and fades there.
-            float mouth = lifeT * lifeT * (3.0f - 2.0f * lifeT);
+            // One ring keeps traveling to the mouth of the cone and fading
+            // there for as long as the funnel lives; the lifecycle envelope
+            // above owns the build and the dissipation, not this ring. (It used
+            // to key off lifeT, which only made sense for the 8 tick entity.)
+            float mouthProgress = (age * 0.12f) % 1.0f;
+            float mouth = mouthProgress * mouthProgress * (3.0f - 2.0f * mouthProgress);
             float mouthZ = 0.6f + mouth * Math.max(0.2f, range - 0.8f);
-            float mouthR = mouthZ * coneTan * 0.95f;
-            float mouthA = (float) Math.sin(Math.min(1.0f, lifeT) * Math.PI) * 0.55f * finalAlpha;
-            drawRingAt(matrix, buffer, mouthZ, mouthR * 0.82f, mouthR, 0.85f, 1.0f, 0.95f, mouthA);
+            float mouthR = mouthZ * coneTan * 0.95f * swell;
+            float mouthA = (float) Math.sin(mouthProgress * (float) Math.PI) * 0.55f * finalAlpha;
+            drawRingAt(matrix, buffer, mouthZ, mouthR * 0.82f, mouthR, 0.85f, 1.0f, 0.95f, mouthA, segCount);
         });
+
+        // Shared layered vortex bands (standard point 1): three counter
+        // rotating layers (bright core, theme emerald mid, wispy outer) laid
+        // along the cone axis. The band frame is turned so the wide bright
+        // base sits at the cone mouth and the column tightens back toward
+        // the staff, the funnel silhouette of the reference storm.
+        poseStack.pushPose();
+        poseStack.translate(0.0f, 0.0f, range * 0.98f);
+        poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(-90.0f)));
+        final float bandRadius = range * coneTan * 0.55f * swell;
+        final float bandHeight = range * 0.92f;
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            com.dragonblockarcanedba.client.render.ki.LayeredRender.drawVortexBands(
+                pose, buffer, bandRadius, bandHeight, age, 0.15f, 1.0f, 0.65f, finalAlpha, distScale);
+        });
+        poseStack.popPose();
 
         poseStack.popPose();
     }
 
-    private static void drawRingAt(Matrix4f matrix, VertexConsumer buffer, float z, float innerR, float outerR, float r, float g, float b, float a) {
-        int segments = 28;
+    private static void drawRingAt(Matrix4f matrix, VertexConsumer buffer, float z, float innerR, float outerR, float r, float g, float b, float a, int segments) {
         for (int i = 0; i < segments; i++) {
             double a1 = (i / (double) segments) * Math.PI * 2.0;
             double a2 = ((i + 1) / (double) segments) * Math.PI * 2.0;
@@ -389,14 +430,4 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         buffer.addVertex(matrix, x4, y4, z4).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
-    private static void drawTriangle(Matrix4f matrix, VertexConsumer buffer,
-                                     float x1, float y1, float z1,
-                                     float x2, float y2, float z2,
-                                     float x3, float y3, float z3,
-                                     float r, float g, float b, float a) {
-        buffer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        buffer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        buffer.addVertex(matrix, x3, y3, z3).setColor(r, g, b, a).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        buffer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-    }
 }

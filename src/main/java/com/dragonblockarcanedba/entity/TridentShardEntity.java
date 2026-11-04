@@ -21,6 +21,17 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
     private LivingEntity target = null;
     private int lifeTime = 0;
     private float health = 15000.0f; // 150 * 100 damage
+    /** Ticks until this shard may hit again. A shard dives, hits, recoils, and dives again. */
+    private int hitCooldown = 0;
+    /** Remaining recoil ticks after a hit, flying back out along recoilDir. */
+    private int recoilTicks = 0;
+    private Vec3 recoilDir = Vec3.ZERO;
+    /** Where this shard entered the world; it flies out from here over its first ticks. */
+    private Vec3 emergeFrom = null;
+    /** Ticks the deploy emerge takes; staggered per shard index so the swarm builds up. */
+    private static final int EMERGE_BASE_TICKS = 8;
+    /** Crimson of the blade, as a dust color for the trail layers. */
+    private static final int TRAIL_ARGB = 0xFFFF3319;
 
     public TridentShardEntity(EntityType<? extends Projectile> entityType, Level level) {
         super(entityType, level);
@@ -200,17 +211,38 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
             return;
         }
 
-        // Theme particles (redesign T5): each shard sheds a slow ember so the
-        // orbiting swarm reads as burning blades, not silent knives.
-        if (this.tickCount % 3 == 0 && this.level() instanceof ServerLevel serverLevel) {
+        // Layered trail (standard point 1): a bright mote core on the blade, a
+        // crimson dust mid layer, and ember wisps shedding off it, every tick,
+        // so ten shards read as one burning swarm instead of ten silent knives.
+        // Attack dives shed double motes: speed you can see.
+        if (this.level() instanceof ServerLevel serverLevel) {
             float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
-            if (density > 0f) {
+            if (density > 0f && (density >= 0.5f || this.tickCount % 2 == 0)) {
+                boolean diving = this.target != null && this.recoilTicks <= 0;
                 serverLevel.sendParticles(
-                    com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                    com.dragonblockarcanedba.particle.DbaParticles.KI_MOTE,
+                    this.getX(), this.getY(), this.getZ(),
+                    Math.max(1, Math.round((diving ? 2f : 1f) * density)),
+                    0.06, 0.06, 0.06, 0.01);
+                serverLevel.sendParticles(
+                    com.dragonblockarcanedba.util.LayeredParticles.dust(TRAIL_ARGB, 1.1f),
                     this.getX(), this.getY(), this.getZ(),
                     Math.max(1, Math.round(1f * density)),
-                    0.08, 0.08, 0.08, 0.01);
+                    0.12, 0.12, 0.12, 0.01);
+                if (this.tickCount % 3 == 0) {
+                    serverLevel.sendParticles(
+                        com.dragonblockarcanedba.particle.DbaParticles.EMBER,
+                        this.getX(), this.getY(), this.getZ(),
+                        Math.max(1, Math.round(1f * density)),
+                        0.10, 0.10, 0.10, 0.01);
+                }
             }
+        }
+        if (this.hitCooldown > 0) {
+            this.hitCooldown--;
+        }
+        if (this.emergeFrom == null) {
+            this.emergeFrom = this.position();
         }
         if (recalling) {
             if (!owner.isAlive()) {
@@ -228,45 +260,80 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
         // AI behavior is managed by DevilTridentItem.manageShardSwarm, which sets `target`
         if (target != null && target.isAlive()) {
             Vec3 targetPos = target.position().add(0, target.getBbHeight() / 2, 0);
-            
-            // Move towards target smoothly but fast
-            Vec3 currentPos = this.position();
-            Vec3 dir = targetPos.subtract(currentPos);
-            if (dir.lengthSqr() > 0.1) {
-                Vec3 move = dir.normalize().scale(2.5); // Very fast attack speed
-                updateHeading(move);
-                this.setPos(currentPos.x + move.x, currentPos.y + move.y, currentPos.z + move.z);
-            }
 
-            // Damage if close
-            if (this.distanceToSqr(target) < 4.0) {
-                net.minecraft.world.damagesource.DamageSource shardSource = this.getOwner() instanceof LivingEntity livingOwner
-                    ? this.level().damageSources().mobProjectile(this, livingOwner)
-                    : this.level().damageSources().magic();
-                // Shard damage scales with the owner's Strength (100 + Strength x 0.5).
-                float dealt = this.getOwner() instanceof Player ownerPlayer
-                    ? com.dragonblockarcanedba.item.DevilTridentItem.shardDamage(ownerPlayer)
-                    : 100.0f;
-                target.hurtServer((ServerLevel) this.level(), shardSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(dealt));
-                target.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 60, 0, false, false), this.getOwner());
-                this.level().playSound(null, target.getX(), target.getY(), target.getZ(),
-                    net.minecraft.sounds.SoundEvents.TRIDENT_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 0.7f, 1.1f);
+            if (this.recoilTicks > 0) {
+                // Just hit: burst back out of the target before the next dive, so
+                // the swarm reads as ten blades swooping, not one parked blender.
+                this.recoilTicks--;
+                Vec3 out = this.recoilDir.scale(1.15);
+                updateHeading(out);
+                this.setPos(this.getX() + out.x, this.getY() + out.y, this.getZ() + out.z);
+            } else {
+                // Move towards target smoothly but fast
+                Vec3 currentPos = this.position();
+                Vec3 dir = targetPos.subtract(currentPos);
+                if (dir.lengthSqr() > 0.1) {
+                    Vec3 move = dir.normalize().scale(2.5); // Very fast attack speed
+                    updateHeading(move);
+                    this.setPos(currentPos.x + move.x, currentPos.y + move.y, currentPos.z + move.z);
+                }
 
-                // Recoil / degradation: the swarm health budget is spent in damage dealt.
-                this.health -= dealt;
-                this.updateHealthState();
-                if (this.health <= 0) {
-                    this.returnHome();
+                // Damage if close, at most one hit per 6 ticks per shard.
+                if (this.hitCooldown <= 0 && this.distanceToSqr(target) < 4.0) {
+                    net.minecraft.world.damagesource.DamageSource shardSource = this.getOwner() instanceof LivingEntity livingOwner
+                        ? this.level().damageSources().mobProjectile(this, livingOwner)
+                        : this.level().damageSources().magic();
+                    // Shard damage scales with the owner's Strength (100 + Strength x 0.5).
+                    float dealt = this.getOwner() instanceof Player ownerPlayer
+                        ? com.dragonblockarcanedba.item.DevilTridentItem.shardDamage(ownerPlayer)
+                        : 100.0f;
+                    target.hurtServer((ServerLevel) this.level(), shardSource, com.dragonblockarcanedba.config.DbaEffectsConfig.capDamage(dealt));
+                    target.addEffect(new MobEffectInstance(DbaEffects.DEVILS_HANDS_HOLDER, 60, 0, false, false), this.getOwner());
+                    this.level().playSound(null, target.getX(), target.getY(), target.getZ(),
+                        net.minecraft.sounds.SoundEvents.TRIDENT_HIT, net.minecraft.sounds.SoundSource.HOSTILE, 0.7f, 1.1f);
+
+                    // Hit feedback: a crimson spark burst at the bite point, so a
+                    // swarm chewing a target is visible across the arena.
+                    if (this.level() instanceof ServerLevel hitLevel) {
+                        float density = com.dragonblockarcanedba.config.DbaEffectsConfig.effectDensity();
+                        if (density > 0f) {
+                            hitLevel.sendParticles(
+                                com.dragonblockarcanedba.particle.DbaParticles.SPARK,
+                                targetPos.x, targetPos.y, targetPos.z,
+                                Math.max(2, Math.round(5f * density)), 0.3, 0.3, 0.3, 0.10);
+                            hitLevel.sendParticles(
+                                com.dragonblockarcanedba.util.LayeredParticles.dust(TRAIL_ARGB, 1.2f),
+                                targetPos.x, targetPos.y, targetPos.z,
+                                Math.max(1, Math.round(3f * density)), 0.35, 0.35, 0.35, 0.04);
+                        }
+                    }
+
+                    // Swoop cycle: recoil out for 4 ticks, next hit allowed at tick 6.
+                    this.hitCooldown = 6;
+                    this.recoilTicks = 4;
+                    Vec3 away = this.position().subtract(targetPos);
+                    this.recoilDir = (away.lengthSqr() > 0.01 ? away.normalize() : new Vec3(0, 1, 0))
+                        .add(0, 0.45, 0).normalize();
+
+                    // Recoil / degradation: the swarm health budget is spent in damage dealt.
+                    this.health -= dealt;
+                    this.updateHealthState();
+                    if (this.health <= 0) {
+                        this.returnHome();
+                    }
                 }
             }
         } else {
-            // Orbit owner with zero delay
-            double orbitRadius = 2.2;
-            double speed = this.lifeTime * 0.4;
+            // Orbit owner with zero delay. Each shard flies its own shell: three
+            // radii, alternating directions, staggered heights, so the idle swarm
+            // has volume instead of one flat ring of identical blades.
+            double orbitRadius = 2.2 + (shardIndex % 3) * 0.5;
+            double dirSign = (shardIndex % 2 == 0) ? 1.0 : -0.85;
+            double speed = this.lifeTime * 0.4 * dirSign;
             double angle = speed + (shardIndex * (Math.PI * 2 / 10.0));
-            
+
             double offsetX = Math.cos(angle) * orbitRadius;
-            double offsetY = Math.sin(angle * 1.5) * 0.75 + 0.3; // Gentle vertical wave
+            double offsetY = Math.sin(angle * 1.5 + shardIndex) * 0.75 + 0.3 + (shardIndex % 4) * 0.22 - 0.33;
             double offsetZ = Math.sin(angle) * orbitRadius;
 
             Vec3 nextPos = new Vec3(owner.getX() + offsetX, owner.getY() + owner.getBbHeight() * 0.5 + offsetY, owner.getZ() + offsetZ);
@@ -274,6 +341,17 @@ public class TridentShardEntity extends Projectile implements ITrackedSwarmEntit
             updateHeading(motion);
 
             this.setPos(nextPos.x, nextPos.y, nextPos.z);
+        }
+
+        // Deploy emerge (standard point 5): a fresh shard flies OUT from where it
+        // entered the world to its assigned place, staggered by index, instead of
+        // snapping straight onto its orbit or target line at full size.
+        int emergeTicks = EMERGE_BASE_TICKS + this.shardIndex * 2;
+        if (this.lifeTime <= emergeTicks && this.emergeFrom != null) {
+            float f = com.dragonblockarcanedba.util.FxEnvelope.smoothstep(this.lifeTime / (float) emergeTicks);
+            Vec3 now = this.position();
+            Vec3 blended = this.emergeFrom.add(now.subtract(this.emergeFrom).scale(f));
+            this.setPos(blended.x, blended.y, blended.z);
         }
     }
 }

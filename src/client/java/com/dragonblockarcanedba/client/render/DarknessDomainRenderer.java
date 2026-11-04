@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.DarknessDomainEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -12,8 +14,6 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import org.joml.Matrix4f;
 
-import java.util.Random;
-
 /**
  * Entity Renderer for Darkness Sword (World of Darkness & Abyssal Eclipse) in Minecraft 26.2.
  * Completely replaces vanilla dust/particle spam with a monumental 3D supernatural environment:
@@ -21,7 +21,10 @@ import java.util.Random;
  * - Quad-tier counter-rotating corrupted demonic ground whirlpools
  * - 16 Orbiting 3D jagged obsidian void spires
  * - Central vertical cyclonic vortex updraft column
- * - Atmospheric 3D void lightning discharges across the dome interior
+ * Lightning is no longer drawn here: the domain entity fires real branched
+ * BoltEntity strikes, which have their own renderer. Every alpha in this
+ * renderer is multiplied by the entity's synced lifecycle fade, and segment
+ * counts scale with camera distance through the shared standard.
  */
 public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity, DarknessDomainRenderer.DarknessDomainRenderState> {
 
@@ -32,6 +35,8 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
     public static class DarknessDomainRenderState extends EntityRenderState {
         public float radius = 8.0f;
         public float age = 0;
+        public float fade = 0;
+        public double px = 0, py = 0, pz = 0;
         public long seed = 0;
     }
 
@@ -55,6 +60,10 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
         super.extractRenderState(entity, state, partialTicks);
         state.radius = entity.getRadius();
         state.age = entity.tickCount + partialTicks;
+        state.fade = entity.getFade();
+        state.px = entity.getX();
+        state.py = entity.getY();
+        state.pz = entity.getZ();
         state.seed = entity.getUUID().getMostSignificantBits();
     }
 
@@ -64,13 +73,22 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
 
         float radius = state.radius;
         float age = state.age;
+        // Lifecycle fade from the entity (point 5): the dome builds in and
+        // dissipates, it never pops. Distance scale (point 1) steps segment
+        // counts down and softens alpha far away.
+        final float fade = Math.max(0.0f, Math.min(1.0f, state.fade));
+        if (fade <= 0.01f) {
+            return;
+        }
+        final float ds = LayeredRender.distScale(cameraState, state.px, state.py, state.pz);
+        final float aMul = fade * (float) Math.sqrt(ds);
         RenderType renderType = KiRenderHelper.kiRenderType();
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. Quad-Tier Counter-Rotating Ground Whirlpools (4 dark corrupted energy bands)
-            int groundSegments = 48;
+            int groundSegments = FxEnvelope.segments(48, ds, 20);
             for (int band = 0; band < 4; band++) {
                 float rOuter = radius * (0.30f + band * 0.23f);
                 float rInner = rOuter * 0.83f;
@@ -81,7 +99,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                 float green = 0.02f;
                 float blue = band % 2 == 0 ? 0.95f : 0.45f;
 
-                drawRotatingRing(matrix, buffer, 0, 0.08f + (band * 0.05f), 0, rOuter, rInner, groundSegments, age * rotSpeed, red, green, blue, bandAlpha);
+                drawRotatingRing(matrix, buffer, 0, 0.08f + (band * 0.05f), 0, rOuter, rInner, groundSegments, age * rotSpeed, red, green, blue, bandAlpha * aMul);
             }
 
             // 2. Volumetric Double-Layered Void Cyclone Dome (Massive Physical Void-Sphere)
@@ -89,7 +107,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
 
             // Layer A: Outer Massive Rotating Void Cloud Dome
             int domeLatitudes = 12;
-            int domeLongitudes = 36;
+            int domeLongitudes = FxEnvelope.segments(36, ds, 16);
             for (int lat = 0; lat < domeLatitudes; lat++) {
                 float latProgress1 = lat / (float) domeLatitudes;
                 float latProgress2 = (lat + 1) / (float) domeLatitudes;
@@ -120,13 +138,13 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                     float x4 = (float) Math.cos(a1) * r2;
                     float z4 = (float) Math.sin(a1) * r2;
 
-                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, red, green, blue, domeAlpha);
+                    drawQuad(matrix, buffer, x1, y1, z1, x2, y1, z2, x3, y2, z3, x4, y2, z4, red, green, blue, domeAlpha * aMul);
                 }
             }
 
             // Layer B: Inner Turbulent Demonic Stratus Ceiling (Counter-Rotating)
             int innerLats = 6;
-            int innerLons = 24;
+            int innerLons = FxEnvelope.segments(24, ds, 12);
             float innerDomeHeight = domeHeight * 0.75f;
             float innerRadius = radius * 0.85f;
 
@@ -163,7 +181,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                     float x4 = (float) Math.cos(a1) * ir2;
                     float z4 = (float) Math.sin(a1) * ir2;
 
-                    drawQuad(matrix, buffer, x1, iy1, z1, x2, iy1, z2, x3, iy2, z3, x4, iy2, z4, inR, inG, inB, alpha);
+                    drawQuad(matrix, buffer, x1, iy1, z1, x2, iy1, z2, x3, iy2, z3, x4, iy2, z4, inR, inG, inB, alpha * aMul);
                 }
             }
 
@@ -193,14 +211,14 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                     sx - tx, sy, sz - tz,
                     sx + tx, sy, sz + tz,
                     sx + leanX, sy + spireHeight, sz + leanZ,
-                    0.08f, 0.0f, 0.16f, 0.95f,
-                    0.75f, 0.05f, 0.95f, 1.0f
+                    0.08f, 0.0f, 0.16f, 0.95f * aMul,
+                    0.75f, 0.05f, 0.95f, aMul
                 );
             }
 
             // 4. Central Abyssal Vortex Funnel Column (Towering vertical cyclonic vortex)
             int eyeLevels = 8;
-            int eyeSegments = 16;
+            int eyeSegments = FxEnvelope.segments(16, ds, 8);
             float eyeRadius = Math.max(1.8f, radius * 0.16f);
             for (int lvl = 0; lvl < eyeLevels; lvl++) {
                 float ey1 = (lvl / (float) eyeLevels) * domeHeight;
@@ -230,35 +248,12 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                     float x4 = (float) Math.cos(a1) * er2;
                     float z4 = (float) Math.sin(a1) * er2;
 
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, eyeR, eyeG, eyeB, 0.45f);
+                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, eyeR, eyeG, eyeB, 0.45f * aMul);
                 }
             }
 
-            drawRotatingRing(matrix, buffer, 0, 1.05f, 0, radius * 0.98f, radius * 0.93f, 48, age * 5.0f, 0.72f, 0.05f, 0.95f, 0.50f);
-            drawRotatingRing(matrix, buffer, 0, 0.55f, 0, radius * 0.86f, radius * 0.78f, 40, age * 5.0f - 20.0f, 0.35f, 0.02f, 0.70f, 0.20f);
-
-            // 5. Atmospheric 3D Void Lightning Discharges
-            Random rng = new Random(state.seed + ((long) (age / 3.0f) * 1000));
-            int arcCount = 4;
-            for (int a = 0; a < arcCount; a++) {
-                double startAngle = rng.nextDouble() * Math.PI * 2.0;
-                float arcR = radius * (0.30f + rng.nextFloat() * 0.60f);
-                float sx = (float) Math.cos(startAngle) * arcR;
-                float sz = (float) Math.sin(startAngle) * arcR;
-                float sy = 6.0f + rng.nextFloat() * 10.0f;
-
-                float curX = sx, curY = sy, curZ = sz;
-                int arcSteps = 5;
-                for (int s = 0; s < arcSteps; s++) {
-                    float nxtX = curX + (rng.nextFloat() - 0.5f) * 3.2f;
-                    float nxtY = curY - (1.2f + rng.nextFloat() * 1.6f);
-                    float nxtZ = curZ + (rng.nextFloat() - 0.5f) * 3.2f;
-
-                    drawBoltRibbon(matrix, buffer, curX, curY, curZ, nxtX, nxtY, nxtZ, 0.16f, 0.65f, 0.05f, 0.95f, 0.90f);
-
-                    curX = nxtX; curY = nxtY; curZ = nxtZ;
-                }
-            }
+            drawRotatingRing(matrix, buffer, 0, 1.05f, 0, radius * 0.98f, radius * 0.93f, FxEnvelope.segments(48, ds, 20), age * 5.0f, 0.72f, 0.05f, 0.95f, 0.50f * aMul);
+            drawRotatingRing(matrix, buffer, 0, 0.55f, 0, radius * 0.86f, radius * 0.78f, FxEnvelope.segments(40, ds, 16), age * 5.0f - 20.0f, 0.35f, 0.02f, 0.70f, 0.20f * aMul);
         });
 
         // T1 plus T6: one additive pass holding a halo shell around the
@@ -270,7 +265,7 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
             float glowDomeHeight = Math.min(26.0f, radius * 1.35f);
             float glowEyeRadius = Math.max(1.8f, radius * 0.16f) * 1.45f;
             int glowLevels = 8;
-            int glowSegments = 16;
+            int glowSegments = FxEnvelope.segments(16, ds, 8);
 
             for (int lvl = 0; lvl < glowLevels; lvl++) {
                 float ey1 = (lvl / (float) glowLevels) * glowDomeHeight;
@@ -293,11 +288,18 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
                     float x4 = (float) Math.cos(a1) * er2;
                     float z4 = (float) Math.sin(a1) * er2;
 
-                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.35f, 0.03f, 0.50f, 0.15f);
+                    drawQuad(matrix, buffer, x1, ey1, z1, x2, ey1, z2, x3, ey2, z3, x4, ey2, z4, 0.35f, 0.03f, 0.50f, 0.15f * aMul);
                 }
             }
 
-            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, radius * 0.50f, 0.0f, 48, age * 10.0f, 0.30f, 0.02f, 0.45f, 0.10f);
+            drawRotatingRing(matrix, buffer, 0, 0.06f, 0, radius * 0.50f, 0.0f, FxEnvelope.segments(48, ds, 20), age * 10.0f, 0.30f, 0.02f, 0.45f, 0.10f * aMul);
+
+            // Shared layered bands around the funnel (point 1): a bright
+            // core, a theme mid band, and a wispy outer band, counter
+            // rotating, all driven by the same fade as the rest of the dome.
+            LayeredRender.drawVortexBands(pose, buffer,
+                Math.max(1.8f, radius * 0.16f) * 1.05f, glowDomeHeight, age,
+                0.45f, 0.05f, 0.85f, fade, ds);
         });
     }
 
@@ -338,64 +340,6 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
         consumer.addVertex(matrix, tipX, tipY, tipZ).setColor(rTip, gTip, bTip, aTip).setUv(0.5f, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x2, y2, z2).setColor(rBase, gBase, bBase, aBase).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
         consumer.addVertex(matrix, x1, y1, z1).setColor(rBase, gBase, bBase, aBase).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-    }
-
-    /** A bowed arc kink with a sheath, a pale core, and a wake. The dome is unchanged. */
-    private static void drawBoltRibbon(Matrix4f matrix, VertexConsumer consumer,
-                                       float x1, float y1, float z1, float x2, float y2, float z2,
-                                       float radius, float r, float g, float b, float a) {
-        float dx = x2 - x1;
-        float dy = y2 - y1;
-        float dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.001f || a < 0.02f) {
-            return;
-        }
-        float px = -dz / len;
-        float pz = dx / len;
-        float bow = Math.min(radius * 2.6f, len * 0.32f);
-        float mx = (x1 + x2) * 0.5f + px * bow;
-        float my = (y1 + y2) * 0.5f + bow * 0.35f;
-        float mz = (z1 + z2) * 0.5f + pz * bow;
-        boltHalf(matrix, consumer, x1, y1, z1, mx, my, mz, radius, radius * 0.6f, r, g, b, a, a * 0.85f);
-        boltHalf(matrix, consumer, mx, my, mz, x2, y2, z2, radius * 0.6f, radius * 0.25f, r, g, b, a * 0.85f, a * 0.5f);
-        boltHalf(matrix, consumer, x1, y1, z1, mx, my, mz, radius * 0.26f, radius * 0.14f, 0.95f, 0.75f, 1.0f, a, a);
-        boltHalf(matrix, consumer, mx, my, mz, x2, y2, z2, radius * 0.14f, radius * 0.05f, 0.95f, 0.75f, 1.0f, a, a * 0.6f);
-        boltHalf(matrix, consumer, mx, my, mz, mx - px * bow * 1.4f, my - bow * 0.2f, mz - pz * bow * 1.4f, radius * 0.4f, 0.01f, r, g, b, a * 0.35f, 0.0f);
-    }
-
-    private static void boltHalf(Matrix4f matrix, VertexConsumer consumer,
-                                 float x1, float y1, float z1, float x2, float y2, float z2,
-                                 float w1, float w2, float r, float g, float b, float a1, float a2) {
-        float dx = x2 - x1;
-        float dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + (y2 - y1) * (y2 - y1) + dz * dz);
-        if (len < 0.001f) {
-            return;
-        }
-        float nx = -dz / len;
-        float nz = dx / len;
-        consumer.addVertex(matrix, x1 - nx * w1, y1, z1 - nz * w1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1 + nx * w1, y1, z1 + nz * w1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 + nx * w2, y2, z2 + nz * w2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x2 - nx * w2, y2, z2 - nz * w2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, x1, y1 - w1, z1).setColor(r, g, b, a1).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, x1, y1 + w1, z1).setColor(r, g, b, a1).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, x2, y2 + w2, z2).setColor(r, g, b, a2).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        consumer.addVertex(matrix, x2, y2 - w2, z2).setColor(r, g, b, a2).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-    }
-
-    private static void renderBeam(Matrix4f matrix, VertexConsumer consumer, float x1, float y1, float z1, float x2, float y2, float z2, float radius, float r, float g, float b, float a) {
-        float dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 0.001f) return;
-
-        float nx = -dz / len * radius;
-        float nz = dx / len * radius;
-        float ny = radius;
-
-        drawQuad(matrix, consumer, x1 - nx, y1, z1 - nz, x1 + nx, y1, z1 + nz, x2 + nx, y2, z2 + nz, x2 - nx, y2, z2 - nz, r, g, b, a);
-        drawQuad(matrix, consumer, x1, y1 - ny, z1, x1, y1 + ny, z1, x2, y2 + ny, z2, x2, y2 - ny, z2, r, g, b, a);
     }
 
     private static void drawQuad(Matrix4f matrix, VertexConsumer consumer,

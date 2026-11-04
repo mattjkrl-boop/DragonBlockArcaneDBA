@@ -77,6 +77,14 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
         float scale = state.scale;
         RenderType renderType = KiRenderHelper.kiRenderType();
 
+        // Distance scaling (standard point 1): the burst steps its segment
+        // counts down at range instead of costing full geometry.
+        final float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
+            cameraState, state.x, state.y, state.z);
+        final int ringSegments = com.dragonblockarcanedba.util.FxEnvelope.segments(36, distScale, 14);
+        final int crimsonSegments = com.dragonblockarcanedba.util.FxEnvelope.segments(30, distScale, 12);
+        final int domeSegments = com.dragonblockarcanedba.util.FxEnvelope.segments(24, distScale, 10);
+
         poseStack.pushPose();
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
         poseStack.mulPose(new org.joml.Matrix4f().rotation(Axis.XP.rotationDegrees(state.xRot)));
@@ -94,16 +102,16 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
 
             // Outer Golden Shockwave Ring (radial gradient: white-gold hot inner
             // edge cooling to full gold at the rim)
-            drawShockRingGradient(matrix, buffer, 0, innerR, outerR, 36,
+            drawShockRingGradient(matrix, buffer, 0, innerR, outerR, ringSegments,
                 1.0f, 0.97f, 0.75f, fade * 0.85f,
                 1.0f, 0.85f, 0.15f, fade * 0.85f);
-            drawShockRingGradient(matrix, buffer, 0.03f, outerR * 0.96f, outerR * 1.08f, 36,
+            drawShockRingGradient(matrix, buffer, 0.03f, outerR * 0.96f, outerR * 1.08f, ringSegments,
                 1.0f, 1.0f, 0.92f, fade * 0.7f,
                 1.0f, 0.78f, 0.25f, fade * 0.15f);
 
             // Inner Crimson Compression Ring
             float crimsonR = outerR * 0.55f;
-            drawShockRing(matrix, buffer, 0.05f, crimsonR * 0.6f, crimsonR, 30,
+            drawShockRing(matrix, buffer, 0.05f, crimsonR * 0.6f, crimsonR, crimsonSegments,
                 0.90f, 0.08f, 0.12f, fade * 0.75f);
 
             // 4. Detonation Starburst Spikes
@@ -127,7 +135,7 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
             // 2. Kinetic Compression Shockwave Dome
             float domeR = scale * (0.4f + shockProgress * 1.1f);
             int domeLat = 8;
-            int domeLon = 24;
+            int domeLon = domeSegments;
             for (int lat = 0; lat < domeLat; lat++) {
                 float phi1 = (lat / (float) domeLat) * (float) (Math.PI * 0.5);
                 float phi2 = ((lat + 1) / (float) domeLat) * (float) (Math.PI * 0.5);

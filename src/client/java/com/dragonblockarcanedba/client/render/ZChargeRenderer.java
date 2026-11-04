@@ -29,6 +29,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         public float chargeRatio = 0.0f;
         public float age = 0;
         public long seed = 0;
+        public int fadeTicks = -1;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -52,6 +53,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         state.chargeRatio = entity.getChargeRatio();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.fadeTicks = entity.getFadeTicks();
     }
 
     @Override
@@ -59,11 +61,16 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         RenderType renderType = KiRenderHelper.kiRenderType();
         float charge = state.chargeRatio;
         float age = state.age;
+        float dist = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(cameraState, state.x, state.y, state.z);
 
         float baseRadius = 1.2f + (charge * 2.2f);
         // Spawn fade-in over the first 4 ticks so the charge construct does not
-        // pop in at full brightness.
-        float baseAlpha = (0.70f + (charge * 0.30f)) * Math.min(1.0f, age / 4.0f);
+        // pop in at full brightness, and a matching fade out over the entity's
+        // FADE_LENGTH ticks on release: the construct used to vanish in one
+        // tick at full alpha when the item discarded it.
+        float fadeOut = state.fadeTicks < 0 ? 1.0f
+            : Math.max(0.0f, 1.0f - state.fadeTicks / (float) ZChargeEntity.FADE_LENGTH);
+        float baseAlpha = (0.70f + (charge * 0.30f)) * Math.min(1.0f, age / 4.0f) * fadeOut;
         float tremble = (float) Math.sin(age * 3.5f) * (0.02f + charge * 0.08f);
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
@@ -71,7 +78,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
             Random rng = new Random(state.seed);
 
             // 1. Radiating Divine Ground Seal Mandala & Sacred Pressure Spokes
-            int groundSegments = 48;
+            int groundSegments = com.dragonblockarcanedba.util.FxEnvelope.segments(48, dist, 20);
             drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.05f, baseRadius * 0.94f, groundSegments, age * 8.0f,
                 1.0f, 0.85f, 0.15f, baseAlpha * 0.85f);
             drawRotatingRing(matrix, buffer, 0, 0.05f, 0, baseRadius * 0.68f, baseRadius * 0.56f, groundSegments, age * -14.0f,
@@ -89,7 +96,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
 
             // 2. Physical 3D Geometric Golden Vortex Funnel (drawing into sword hilt)
             int funnelArms = 4;
-            int funnelSteps = 16;
+            int funnelSteps = com.dragonblockarcanedba.util.FxEnvelope.segments(16, dist, 8);
             float funnelHeight = 2.4f + charge * 1.4f;
             float coreY = 1.0f; // Sword position
 
@@ -124,7 +131,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
             }
 
             // 3. Multi-Tier Counter-Rotating Concentric 3D Celestial Energy Rings
-            int ringSegments = 32;
+            int ringSegments = com.dragonblockarcanedba.util.FxEnvelope.segments(32, dist, 14);
             // Ring 1 (Tilted outer golden ring)
             drawInclinedRing(matrix, buffer, 0, coreY + 0.3f, 0, baseRadius * 0.90f, 0.08f, ringSegments, age * 16.0f, 25.0f,
                 1.0f, 0.75f, 0.05f, baseAlpha * 0.85f);
@@ -152,8 +159,12 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
                 float pSize = 0.15f + rng.nextFloat() * 0.15f + charge * 0.10f;
                 float pHeight = 0.25f + rng.nextFloat() * 0.20f + charge * 0.15f;
 
+                // Each prism tumbles on its own axis at its own speed; they used
+                // to sit axis aligned on the ring, rotating only with the ring.
+                float tumble = age * (0.5f + (r % 5) * 0.17f) + r * 1.7f;
+
                 // 3D Octahedron Crystal Geometry (upper and lower pyramid facets)
-                drawCrystalOctahedron(matrix, buffer, px, py, pz, pSize, pHeight,
+                drawCrystalOctahedron(matrix, buffer, px, py, pz, pSize, pHeight, tumble,
                     1.0f, 0.90f, 0.30f, baseAlpha * 0.95f,
                     1.0f, 1.0f, 0.90f, baseAlpha
                 );
@@ -179,9 +190,11 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         // outer celestial ring so the charge blooms and anchors to the ground.
         collector.submitCustomGeometry(poseStack, KiRenderHelper.kiAdditiveType(), (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
-            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.18f, baseRadius * 1.02f, 48, age * 8.0f,
+            drawRotatingRing(matrix, buffer, 0, 0.04f, 0, baseRadius * 1.18f, baseRadius * 1.02f,
+                com.dragonblockarcanedba.util.FxEnvelope.segments(48, dist, 20), age * 8.0f,
                 1.0f, 0.85f, 0.15f, baseAlpha * 0.15f);
-            drawInclinedRing(matrix, buffer, 0, 1.3f, 0, baseRadius * 0.90f, 0.10f, 32, age * 16.0f, 25.0f,
+            drawInclinedRing(matrix, buffer, 0, 1.3f, 0, baseRadius * 0.90f, 0.10f,
+                com.dragonblockarcanedba.util.FxEnvelope.segments(32, dist, 14), age * 16.0f, 25.0f,
                 1.0f, 0.75f, 0.05f, baseAlpha * 0.16f);
         });
 
@@ -263,23 +276,32 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         consumer.addVertex(matrix, x2, y2 - width * 0.5f, z2).setColor(r, g, b, a).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
     }
 
-    private static void drawCrystalOctahedron(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float size, float height,
+    private static void drawCrystalOctahedron(Matrix4f matrix, VertexConsumer consumer, float cx, float cy, float cz, float size, float height, float rotRad,
                                               float rBase, float gBase, float bBase, float aBase,
                                               float rTip, float gTip, float bTip, float aTip) {
         float half = size * 0.5f;
         float halfH = height * 0.5f;
+        // Equatorial corners rotated around the vertical axis by the tumble angle.
+        float cos = (float) Math.cos(rotRad), sin = (float) Math.sin(rotRad);
+        float[] ex = new float[4], ez = new float[4];
+        float[] cornerX = {-half, half, half, -half};
+        float[] cornerZ = {-half, -half, half, half};
+        for (int i = 0; i < 4; i++) {
+            ex[i] = cx + cornerX[i] * cos - cornerZ[i] * sin;
+            ez[i] = cz + cornerX[i] * sin + cornerZ[i] * cos;
+        }
 
         // Top Pyramid (4 faces)
-        drawTriangle(matrix, consumer, cx - half, cy, cz - half, cx + half, cy, cz - half, cx, cy + halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
-        drawTriangle(matrix, consumer, cx + half, cy, cz - half, cx + half, cy, cz + half, cx, cy + halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
-        drawTriangle(matrix, consumer, cx + half, cy, cz + half, cx - half, cy, cz + half, cx, cy + halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
-        drawTriangle(matrix, consumer, cx - half, cy, cz + half, cx - half, cy, cz - half, cx, cy + halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
+        for (int i = 0; i < 4; i++) {
+            int j = (i + 1) % 4;
+            drawTriangle(matrix, consumer, ex[i], cy, ez[i], ex[j], cy, ez[j], cx, cy + halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
+        }
 
-        // Bottom Pyramid (4 faces)
-        drawTriangle(matrix, consumer, cx + half, cy, cz - half, cx - half, cy, cz - half, cx, cy - halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
-        drawTriangle(matrix, consumer, cx + half, cy, cz + half, cx + half, cy, cz - half, cx, cy - halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
-        drawTriangle(matrix, consumer, cx - half, cy, cz + half, cx + half, cy, cz + half, cx, cy - halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
-        drawTriangle(matrix, consumer, cx - half, cy, cz - half, cx - half, cy, cz + half, cx, cy - halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
+        // Bottom Pyramid (4 faces, reversed winding)
+        for (int i = 0; i < 4; i++) {
+            int j = (i + 1) % 4;
+            drawTriangle(matrix, consumer, ex[j], cy, ez[j], ex[i], cy, ez[i], cx, cy - halfH, cz, rBase, gBase, bBase, aBase, rTip, gTip, bTip, aTip);
+        }
     }
 
     private static void drawTriangle(Matrix4f matrix, VertexConsumer consumer,

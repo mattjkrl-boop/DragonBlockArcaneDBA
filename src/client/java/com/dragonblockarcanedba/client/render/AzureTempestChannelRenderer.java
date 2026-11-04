@@ -29,6 +29,8 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
         public float age = 0;
         public long seed = 0;
         public boolean isFirstPersonOwner = false;
+        public boolean releasing = false;
+        public int releaseAge = 0;
     }
 
     // 26.2 signature. No @Override: 26.3 added a float parameter to the vanilla method.
@@ -52,6 +54,8 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
         state.chargeRatio = entity.getChargeRatio();
         state.age = entity.tickCount + partialTicks;
         state.seed = entity.getUUID().getMostSignificantBits();
+        state.releasing = entity.isReleasing();
+        state.releaseAge = entity.getReleaseAge();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null && 
@@ -71,7 +75,12 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
         // pop in at partial alpha the tick the channel starts.
         float intro = Math.min(1.0f, age / 5.0f);
         intro = intro * intro * (3.0f - 2.0f * intro);
-        float baseAlpha = ((state.isFirstPersonOwner ? 0.35f : 0.55f) + (charge * 0.35f)) * intro;
+        // Release fade-out: on release the entity collapses over
+        // RELEASE_TICKS instead of vanishing in one tick at full alpha.
+        float outro = state.releasing
+            ? Math.max(0.0f, 1.0f - state.releaseAge / (float) AzureTempestChannelEntity.RELEASE_TICKS)
+            : 1.0f;
+        float baseAlpha = ((state.isFirstPersonOwner ? 0.35f : 0.55f) + (charge * 0.35f)) * intro * outro;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();

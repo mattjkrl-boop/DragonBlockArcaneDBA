@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.ki.LayeredRender;
 import com.dragonblockarcanedba.entity.OxStanceAuraEntity;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -61,14 +63,31 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
 
         float intensity = Math.min(1.0f, held / 100.0f);
         float pulse = 0.92f + 0.08f * (float) Math.sin(age * 0.45f);
-        float alpha = 0.70f + (intensity * 0.25f);
+        // Lifecycle (point 5): the aura used to pop in at a minimum alpha of
+        // 0.70 on frame one. It now builds in over the first 8 ticks. (It
+        // still ends when the stance ends; a release at 10+ ticks is covered
+        // by the slam, and shorter holds simply stop, which matches the item.)
+        float fadeIn = FxEnvelope.smoothstep(Math.min(1.0f, age / 8.0f));
+        float alpha = (0.70f + (intensity * 0.25f)) * fadeIn;
+        float distScale = FxEnvelope.distScale(Math.sqrt(state.distanceToCameraSq));
+
+        // Layered depth (point 1): an anchor glow grounds the 12 block
+        // boundary, and three counter-rotating vortex bands wrap the titan so
+        // the stance reads as moving heat, not a static statue.
+        collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
+            LayeredRender.drawAnchorGlow(pose, buffer, 11.8f, 0.06f,
+                1.0f, 0.62f, 0.10f, LayeredRender.ALPHA_MID * fadeIn, distScale);
+            LayeredRender.drawVortexBands(pose, buffer, 2.8f, 3.4f, age,
+                1.0f, isPeak ? 0.85f : 0.58f, isPeak ? 0.30f : 0.08f,
+                fadeIn * (0.45f + intensity * 0.55f), distScale);
+        });
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             Matrix4f matrix = pose.pose();
 
             // 1. 12-Block Battlefield Denial Repulsion Boundary Disc on the Ground
             float auraR = 12.0f;
-            int groundSegments = 48;
+            int groundSegments = FxEnvelope.segments(48, distScale, 20);
             float cycle = (age * 0.18f) % 1.0f;
             float eased = cycle * cycle * (3.0f - 2.0f * cycle);
             float repulseWave = eased * auraR;
@@ -133,7 +152,7 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
             drawAegisPlate(matrix, buffer, 0, 1.2f, -0.67f, avatarW * 0.44f, 0.8f, 1.0f, coreG, coreB, alpha * 0.85f);
 
             // 3. 3D Swirling Molten Heat Dome & Upward Energy Helices
-            int domeSegments = 32;
+            int domeSegments = FxEnvelope.segments(32, distScale, 14);
             float domeR = (2.2f + intensity * 0.8f) * pulse;
             drawHeatDome(matrix, buffer, 0, 0.1f, 0, domeR, avatarH * 0.85f, domeSegments, age * 16.0f,
                 rCol, gCol, bCol, alpha * 0.40f);

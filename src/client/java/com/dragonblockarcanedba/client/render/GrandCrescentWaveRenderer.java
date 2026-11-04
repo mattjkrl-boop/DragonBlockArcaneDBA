@@ -32,6 +32,7 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         public float yRot = 0;
         public float xRot = 0;
         public float ageInTicks = 0;
+        public int hitTick = -1;
         public boolean isFirstPersonOwner = false;
     }
 
@@ -56,6 +57,7 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
         state.yRot = entity.getYRot();
         state.xRot = entity.getXRot();
         state.ageInTicks = entity.tickCount + partialTicks;
+        state.hitTick = entity.getHitTick();
 
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         state.isFirstPersonOwner = (mc.player != null && 
@@ -67,11 +69,19 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
     public void submit(GrandCrescentWaveRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
         RenderType renderType = KiRenderHelper.kiRenderType();
 
-        // The entity flies and pierces for up to 80 ticks; the fade used to end
-        // at 50, leaving up to 30 ticks of invisible damage.
-        float maxLife = 80.0f;
+        // Lifecycle runs on the shared envelope: the crescent opens over its
+        // first ticks, peaks, and dissipates across the last 35 percent of
+        // its 80 tick life. A block strike starts a separate 12 tick fade
+        // from the hit tick, so the wave never vanishes at full brightness.
+        float maxLife = GrandCrescentWaveEntity.MAX_LIFE_TICKS;
         float progress = Math.min(1.0f, state.ageInTicks / maxLife);
-        float fade = 1.0f - smooth(progress);
+        float fade = com.dragonblockarcanedba.util.FxEnvelope.envelope(
+            state.ageInTicks, maxLife, 0.04f, 0.35f);
+        if (state.hitTick >= 0) {
+            float hitFade = 1.0f - smooth(Math.min(1.0f,
+                (state.ageInTicks - state.hitTick) / (float) GrandCrescentWaveEntity.DISSIPATE_TICKS));
+            fade = Math.min(fade, hitFade);
+        }
         float open = smooth(Math.min(1.0f, state.ageInTicks / 12.0f));
         float impact = strike(progress);
 
@@ -84,7 +94,11 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
             : 1.0f;
         float span = 4.8f * fpScale * (0.80f + 0.20f * open);
         float chord = 1.55f * fpScale * (0.80f + 0.20f * open);
-        int segments = 32;
+        // Distance scaling (standard point 1): distant waves step their
+        // segment count down instead of costing full geometry.
+        float distScale = com.dragonblockarcanedba.client.render.ki.LayeredRender.distScale(
+            cameraState, state.x, state.y, state.z);
+        int segments = com.dragonblockarcanedba.util.FxEnvelope.segments(32, distScale, 14);
         float age = state.ageInTicks;
 
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
@@ -118,66 +132,6 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
     private static float strike(float progress) {
         if (progress >= 0.16f) return 0.0f;
         return (float) Math.sin((progress / 0.16f) * Math.PI);
-    }
-
-    /** One point-first greatsword: gold blade, white-gold fuller, white edges, one wake, a launch flash. */
-    private static void drawFlyingSword(Matrix4f matrix, VertexConsumer consumer, float length, float fade, float impact, float open) {
-        int segments = 8;
-        float baseHalf = 0.46f;
-        for (int i = 0; i < segments; i++) {
-            float a1 = i / (float) segments;
-            float a2 = (i + 1) / (float) segments;
-            float h1 = baseHalf * (1.0f - a1 * 0.92f);
-            float h2 = baseHalf * (1.0f - a2 * 0.92f);
-            float z1 = a1 * length;
-            float z2 = a2 * length;
-            float thick = 0.07f;
-            consumer.addVertex(matrix, -h1, thick, z1).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, h1, thick, z1).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, h2, thick, z2).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, -h2, thick, z2).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            consumer.addVertex(matrix, -h2, -thick, z2).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, h2, -thick, z2).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, h1, -thick, z1).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-            consumer.addVertex(matrix, -h1, -thick, z1).setColor(1.0f, 0.82f, 0.15f, 0.92f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, -1, 0);
-
-            float f1 = h1 * 0.22f;
-            float f2 = h2 * 0.22f;
-            consumer.addVertex(matrix, -f1, thick + 0.015f, z1).setColor(1.0f, 0.98f, 0.80f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, f1, thick + 0.015f, z1).setColor(1.0f, 0.98f, 0.80f, fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, f2, thick + 0.015f, z2).setColor(1.0f, 0.98f, 0.80f, fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-            consumer.addVertex(matrix, -f2, thick + 0.015f, z2).setColor(1.0f, 0.98f, 0.80f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-            consumer.addVertex(matrix, -h1, -0.02f, z1).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-            consumer.addVertex(matrix, -h1, 0.02f, z1).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-            consumer.addVertex(matrix, -h2, 0.02f, z2).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-            consumer.addVertex(matrix, -h2, -0.02f, z2).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(-1, 0, 0);
-            consumer.addVertex(matrix, h1, 0.02f, z1).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-            consumer.addVertex(matrix, h1, -0.02f, z1).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-            consumer.addVertex(matrix, h2, -0.02f, z2).setColor(1.0f, 1.0f, 1.0f, fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-            consumer.addVertex(matrix, h2, 0.02f, z2).setColor(1.0f, 1.0f, 1.0f, fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(1, 0, 0);
-        }
-
-        float guard = 0.72f;
-        consumer.addVertex(matrix, -guard, 0.05f, 0.12f).setColor(1.0f, 0.90f, 0.30f, 0.9f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, guard, 0.05f, 0.12f).setColor(1.0f, 0.90f, 0.30f, 0.9f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, guard, -0.05f, 0.12f).setColor(1.0f, 0.90f, 0.30f, 0.9f * fade).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -guard, -0.05f, 0.12f).setColor(1.0f, 0.90f, 0.30f, 0.9f * fade).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        float wake = 1.15f * open;
-        consumer.addVertex(matrix, -0.08f, 0.03f, 0.0f).setColor(1.0f, 0.82f, 0.15f, 0.7f * fade).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, 0.08f, 0.03f, 0.0f).setColor(1.0f, 0.82f, 0.15f, 0.7f * fade).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, 0.02f, 0.0f, -wake).setColor(1.0f, 0.82f, 0.15f, 0.0f).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-        consumer.addVertex(matrix, -0.02f, 0.0f, -wake).setColor(1.0f, 0.82f, 0.15f, 0.0f).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 1, 0);
-
-        if (impact > 0.02f) {
-            float s = 0.4f * impact;
-            consumer.addVertex(matrix, -s, 0, 0.2f).setColor(1.0f, 0.98f, 0.8f, impact).setUv(0, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, 0, s, 0.2f).setColor(1.0f, 1.0f, 1.0f, impact).setUv(1, 0).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, s, 0, 0.2f).setColor(1.0f, 0.98f, 0.8f, impact).setUv(1, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-            consumer.addVertex(matrix, 0, -s, 0.2f).setColor(1.0f, 1.0f, 1.0f, impact).setUv(0, 1).setOverlay(KiRenderHelper.NO_OVERLAY).setLight(KiRenderHelper.FULL_BRIGHT).setNormal(0, 0, 1);
-        }
     }
 
     private static void drawVolumetricCrescent(Matrix4f matrix, VertexConsumer consumer, float span, float chord, float thickness, float trailLength, int segments, float r, float g, float b, float a) {
