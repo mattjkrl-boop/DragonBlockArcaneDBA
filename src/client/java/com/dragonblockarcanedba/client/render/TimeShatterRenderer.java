@@ -1,9 +1,12 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.TimeShatterEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -22,11 +25,25 @@ import java.util.Random;
 /**
  * Entity Renderer for Time Shatter in Minecraft 26.2.
  *
- * No-shapes conversion: this renderer submits no geometry. The old dial,
- * spokes, shards, and core survive only as seeded emission data. Glass dust
- * hangs in the burst volume and drifts back against the outward flow, denser
- * clusters follow the old crack lines and shard trajectories, and pale plasma
- * and soul motes carry the core. The dial's color split becomes two offset
+ * Complex pass: a layered composition on the shatter plane, which is the
+ * camera plane the existing crack spokes and dial ghost already use. The
+ * pieces layer is a frozen fan of five solid temporal glass shards
+ * (ComplexGeometry shardBurst calls, one shard per spoke, through
+ * submitSolid) plus a shader crackFan of temporal energy on the same
+ * plane through submitEnergy. Both builders run on one shared radial
+ * gradient, near-white at the heart to the ghost cyan 0x65D8FF at the
+ * tips, so the pieces present the old dial color split as a single
+ * continuous gradient instead of two offset copies. The fan is frozen:
+ * its angles, origins, and directions derive only from the synced seed,
+ * never from age, so there is no rotation, sway, or drift; only the
+ * envelope alpha and the travel-scaled size change, on the same travel
+ * curve the filler uses, and that curve saturates. The complex particle
+ * layer is SHARD_CHIP glass chips sampled along the old crack spoke
+ * lines. The material emission stays as filler, unchanged: glass dust
+ * hangs in the burst volume and drifts back against the outward flow
+ * with the gravity scale 0.1 suspension wiring, denser clusters follow
+ * the old crack lines and shard trajectories, pale plasma and soul
+ * motes carry the core, and the color split survives as two offset
  * glass dust streams in its cyan and near-white tones. Local world-space
  * distortion is not faked; the Phase 1 shader finding rules it out here.
  *
@@ -88,8 +105,69 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
 
     @Override
     public void submit(ShatterRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        submitPieces(state, poseStack, collector, cameraState);
         emitMaterials(state, cameraState);
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /**
+     * Pieces layer, class M, on the billboarded shatter plane. Vertex
+     * accounting at full detail: the frozen fan is 5 shards at 288
+     * vertices each (1440), and the crackFan is at most 11 cracks whose
+     * main walks emit 528 vertices plus at most 264 of fork vertices
+     * (792), for a worst case of 2232, inside the class M budget of
+     * 2500. The shardBurst count is 5 meshes in total, inside the 16
+     * mesh cap. Peak alphas are honest: 0.95 literal on the solid
+     * shards and 0.92 on the shader cracks, whose faintness gradient
+     * runs through color (white heart to cyan tips), never through a
+     * low constant alpha.
+     */
+    private void submitPieces(ShatterRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        if (state.maxLifetime <= 0) return;
+        float fade = FxEnvelope.envelope(state.age, (float) state.maxLifetime, 0.14f, 0.50f);
+        if (fade <= 0.01f) return;
+
+        float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
+        float travel = 1.0f - (1.0f - progress) * (1.0f - progress) * (1.0f - progress);
+        float scale = state.scale * (0.55f + travel * 0.85f);
+        float distScale = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+
+        final long pieceSeed = state.seed;
+        final float pieceFade = fade;
+        final float pieceDist = distScale;
+        final float fanUnit = scale * 0.90f;
+        final float crackRadius = scale * 1.80f;
+
+        // Frozen fan spokes: five seeded angles, fixed for the whole
+        // life of the entity. Nothing in the posing reads age, so the
+        // shards hang suspended exactly where the seed put them.
+        final int spokes = 5;
+        final double[] fanAngles = new double[spokes];
+        Random fanRandom = new Random(pieceSeed ^ 0xFA17L);
+        for (int i = 0; i < spokes; i++) {
+            fanAngles[i] = (i / (double) spokes) * Math.PI * 2.0 + (fanRandom.nextFloat() - 0.5f) * 0.55f;
+        }
+
+        poseStack.pushPose();
+        if (cameraState.orientation != null) {
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(
+                    new Quaternionf(cameraState.orientation).conjugate()));
+        }
+        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
+            for (int i = 0; i < fanAngles.length; i++) {
+                Vec3 dir = new Vec3(Math.cos(fanAngles[i]), Math.sin(fanAngles[i]), 0.0);
+                ComplexGeometry.shardBurst(pose, buffer, pieceSeed ^ (0x5A1DL + i * 131L),
+                        Vec3.ZERO, dir, 14f, fanUnit, 1,
+                        0xFFFFFF, 0x65D8FF, 0.95f, pieceFade, pieceDist);
+            }
+        });
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+            PoseStack.Pose flat = pose.copy();
+            flat.rotate(Axis.XP.rotation((float) (-Math.PI / 2.0)));
+            ComplexGeometry.crackFan(flat, buffer, pieceSeed ^ 0xC4ACEL,
+                    crackRadius, 0xFFFFFF, 0x65D8FF, 0.92f, pieceFade, pieceDist);
+        });
+        poseStack.popPose();
     }
 
     private void emitMaterials(ShatterRenderState state, CameraRenderState cameraState) {
@@ -169,6 +247,18 @@ public class TimeShatterRenderer extends EntityRenderer<TimeShatterEntity, TimeS
                 shardSource(center, scale, travel, seed, palette),
                 count(2, fade, distanceScale));
         }
+
+        // Complex particle layer: SHARD_CHIP glass chips along the same
+        // eight crack spoke lines the crack dust uses, in the camera
+        // plane of the pieces. The chips ride the crack source velocity
+        // (a slow inward drift), so they hang with the suspended dust
+        // instead of spraying out. Two per emission tick is 2 per burst
+        // event, inside the class M burst budget of 30, and at most 40
+        // per second at the 20 tick emission rate, inside the
+        // continuous cap as well.
+        burst(level, MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.003f),
+            crackSource(center, right, up, forward, scale, seed ^ 0xC41CEL),
+            count(2, fade, distanceScale));
 
         // Core accents: pale plasma and a softer soul tone in a tight volume
         // at the center, where the old radiant core sat.

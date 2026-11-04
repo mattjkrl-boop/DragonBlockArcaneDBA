@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -65,6 +66,12 @@ public class BladeGuardEffect extends MobEffect {
 
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0xFFFFFF, 1.4f, entity.getId() * 31 + entity.tickCount),
+                px, py, pz,
+                1, 0.0, 0.04, 0.0, 0.01
+            );
+            // Complex layer: electric and guard SPARK_STREAK at the same tick point and rate as the steel glints.
+            level.sendParticles(
+                DbaParticles.SPARK_STREAK,
                 px, py, pz,
                 1, 0.0, 0.04, 0.0, 0.01
             );

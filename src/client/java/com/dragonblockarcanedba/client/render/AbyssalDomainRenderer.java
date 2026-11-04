@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.AbyssalDomainEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -14,15 +17,17 @@ import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * The Abyssal Tempest Domain as weather and cursed material, not a drawn
- * volume. The no-shapes conversion removes the dome, bands, spires, and bolt
- * geometry entirely: the domain volume is sampled as data and filled with
+ * The Abyssal Tempest Domain as a layered composition. The pieces layer is
+ * ten seeded rim tendrils lashing up the boundary through the shader, over a
+ * crackFan base web of curse energy in the ground. The complex particle
+ * layer is ash flakes falling through the volume. The material emission
+ * stays as filler: the domain volume is sampled as data and filled with
  * darkness, smoke, curse plasma, and ground dust through the shared material
- * emitters. A sparse shell source suggests the boundary with large vapor and
- * plasma sprites, interior strikes are plasma emitted along seeded paths,
- * and the bright opening at the top is a dense point emission. The envelope
- * still runs the forty tick build and the entity's thirty tick fade, and the
- * radius, colors, and lifecycle are unchanged.
+ * emitters, a sparse shell source suggests the boundary, interior strikes
+ * are plasma emitted along seeded paths, and the bright opening at the top
+ * is a dense point emission. The envelope still runs the forty tick build
+ * and the entity's thirty tick fade, and the radius, colors, and lifecycle
+ * are unchanged.
  */
 public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, AbyssalDomainRenderer.AbyssalDomainRenderState> {
 
@@ -107,6 +112,40 @@ public class AbyssalDomainRenderer extends EntityRenderer<AbyssalDomainEntity, A
             MaterialEmitters.sphereVolume(volumeCenter, radius * 0.80), 150f, delta, env);
         emit(level, MaterialEmitters.Preset.dust(0x6E625E, 1.15f, seed + 53, Vec3.ZERO, 0.020f),
             MaterialEmitters.groundArea(center, radius * 1.18, center.y + 0.06), 120f, delta, env);
+
+        // Pieces layer, class L at two builder types. The base web is a
+        // crackFan of curse energy wandering across the ground inside the
+        // rim, hot at the heart and crimson at the tips.
+        final long pieceSeed = state.seed;
+        final float pieceRadius = radius;
+        final float pieceAlpha = alpha;
+        final float pieceDs = ds;
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.crackFan(pose, buffer, pieceSeed ^ 0xC4AC1L, pieceRadius * 1.02f,
+                0xFFF2F7, 0xF20D33, 0.95f, pieceAlpha, pieceDs));
+
+        // Rim tendrils: ten seeded strands stood on the boundary circle,
+        // leaning inward as they climb, violet at the root and crimson at
+        // the tip, drawn on the tendril canvas through the shader.
+        final double tendrilHeight = height;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            float tendrilWidth = Math.min(1.3f, Math.max(0.45f, pieceRadius * 0.085f));
+            for (int i = 0; i < 10; i++) {
+                double ang = (i / 10.0) * Math.PI * 2.0 + (i % 3) * 0.21;
+                double cos = Math.cos(ang);
+                double sin = Math.sin(ang);
+                Vec3 from = new Vec3(cos * pieceRadius * 0.98, 0.10, sin * pieceRadius * 0.98);
+                Vec3 control = new Vec3(cos * pieceRadius * 1.09, tendrilHeight * 0.34, sin * pieceRadius * 1.09);
+                Vec3 to = new Vec3(cos * pieceRadius * 0.86, tendrilHeight * (0.52 + 0.10 * (i % 4) / 3.0), sin * pieceRadius * 0.86);
+                ComplexGeometry.tendril(pose, buffer, pieceSeed + i * 7919L, from, control, to,
+                    tendrilWidth, 0x8C1AF2, 0xF20D33, 0.92f, pieceAlpha, pieceDs * 0.7f);
+            }
+        });
+
+        // Complex particle layer: ash flakes drifting down through the
+        // storm volume, the physical fallout the curse burns off.
+        emit(level, MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, new Vec3(0, -0.018, 0), 0.010f),
+            MaterialEmitters.sphereVolume(volumeCenter, radius * 0.92), 34f, delta, env);
 
         // The boundary is only suggested: sparse large vapor and plasma
         // sprites sampled on the dome shell, never a drawn shell.

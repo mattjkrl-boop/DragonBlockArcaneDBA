@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DevilSlamShockwaveEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -18,16 +21,22 @@ import java.util.UUID;
 
 /**
  * Entity Renderer for Devil Slam Shockwave in Minecraft 26.2.
- * No-shapes pass: the renderer draws no geometry at all. The seal disk,
- * crack webs, erupting shard fans, rim bands, and plume column are gone;
- * in their place the slam is carried by MaterialEmitters over the same
- * ground area and column volume: ground dust and brimstone smoke across
- * the seal, hellfire flame and dark plasma scattered over the disk where
- * the cracks burned, a dense core cluster at the heart, a rising flame,
- * plasma, and ember column while the pillar envelope lasts, and a dust
- * front at the traveling follow radius. All radii, growth, fade, and
- * pillar timing math are the values the geometry version used; only the
- * material changed.
+ * Complex pass: layered composition at class L, built to the reference
+ * picture of this slam. The pieces layer carries the structure: a solid
+ * fracturePlates brimstone fan over the crater (submitSolid), a crackFan
+ * magma web glowing through it on the shader (submitEnergy), and
+ * flameTongues rising from the crater ring on the shader with the flame
+ * canvas. These are the fast near field structure: the entity already
+ * spawns a DebrisSpawner field server side for the big physical chunks.
+ * The complex particle layer is an EMBER_FRAGMENT and SHARD_CHIP burst
+ * at ground contact (age 1, matching the server burst) and an ASH_FLAKE
+ * burst later as the slam settles. The material emission stays as the
+ * filler layer, unchanged: ground dust and brimstone smoke across the
+ * seal, hellfire flame and dark plasma scattered over the disk, a dense
+ * core cluster at the heart, a rising flame, plasma, and ember column
+ * while the pillar envelope lasts, and a dust front at the traveling
+ * follow radius. All radii, growth, fade, and pillar timing math are
+ * the values the earlier versions used.
  */
 public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwaveEntity, DevilSlamShockwaveRenderer.DevilSlamRenderState> {
 
@@ -41,6 +50,14 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
     private static final int BRIMSTONE = 0x14060A;
     /** Ground dust color, dark scorched earth. */
     private static final int SCORCH_DUST = 0x4A2417;
+    /** Molten heart color of the crack web, pale magma. */
+    private static final int MAGMA_HOT = 0xFFCE7A;
+    /** Hot face color at the center of a fracture plate. */
+    private static final int PLATE_HOT = 0x8A2E10;
+    /** Dark brimstone rock color at the rim of a fracture plate. */
+    private static final int PLATE_DARK = 0x1E0D08;
+    /** White hot base color of the crater flame tongues. */
+    private static final int TONGUE_HOT = 0xFFF0C0;
 
     public DevilSlamShockwaveRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -120,14 +137,44 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
         emission.followR = followR;
         float dist = MaterialEmitters.distanceScale(emission.center);
         emission.tick(age, fade * grow * dist, pillarAlpha * dist, followA * dist);
+
+        // Pieces layer, in local space (pose origin is the slam center at
+        // ground level). Vertex estimate at distScale 1.0: fracturePlates
+        // about 410 (10 plates, seeded gaps, 48 vertices each at most),
+        // crackFan about 560 (9 to 11 cracks plus forks), flameTongues
+        // 432 (9 tongues, 6 segments). Total about 1400, inside the class
+        // L budget of 6000, with three builder types.
+        if (fade > 0.01f && grow > 0.01f && shockR > 0.1f && dist > 0.01f) {
+            final long geoSeed = state.seed;
+            final float pieceEnv = fade;
+            final float pieceDs = dist;
+            // Telegraph honesty for the pieces too: plates reach at most
+            // 1.10 times their fan radius and cracks walk about their
+            // radius, so the fan is sized at 0.90 of the seal radius and
+            // the web at 0.95, keeping every piece inside the hit edge.
+            final float plateR = shockR * 0.90f;
+            final float flameH = 1.5f + pillarHeight * 0.25f;
+            final float sway = age * 0.45f;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xB21DL,
+                    plateR, 0.42f, PLATE_HOT, PLATE_DARK, 0.97f, pieceEnv, pieceDs));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
+                    shockR * 0.95f, MAGMA_HOT, HOT, 0.95f, pieceEnv, pieceDs));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                ComplexGeometry.flameTongues(pose, buffer, geoSeed ^ 0xF1A7L,
+                    new Vec3(0, 0.06, 0), plateR * 1.05f, flameH, 9,
+                    TONGUE_HOT, HOT, 0.95f, pieceEnv, sway, pieceDs));
+        }
     }
 
     /**
      * Per slam emitter set. The sources are data only: they read the
      * slam's current center, seal radius, column size, and follow radius
      * at sample time and hand MaterialEmitters points across the ground
-     * area, inside the column volume, and on the follow front. Nothing
-     * here draws anything.
+     * area, inside the column volume, and on the follow front. The tick
+     * also fires the guarded one shot complex sprite bursts. Geometry
+     * lives in submit, not here.
      */
     private static final class Emission {
         final ClientLevel level;
@@ -138,6 +185,8 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
         float followR = 1f;
         float lastAge = Float.NaN;
         long lastSeenNanos = System.nanoTime();
+        boolean impactBurstDone = false;
+        boolean ashBurstDone = false;
         final MaterialEmitters.Emitter dustDisk;
         final MaterialEmitters.Emitter flameDisk;
         final MaterialEmitters.Emitter plasmaDisk;
@@ -227,6 +276,45 @@ public class DevilSlamShockwaveRenderer extends EntityRenderer<DevilSlamShockwav
             float delta = Math.min(0.25f, Math.max(0f, (age - lastAge) / 20f));
             lastAge = age;
             if (delta <= 0f) return;
+            // Complex particle layer: one shot bursts, guarded per slam.
+            // The impact burst fires at ground contact (age 1, the same
+            // tick the server side ground burst and debris field fire);
+            // the ash burst fires later, as the slam settles. Counts are
+            // inside the class L burst budget of 60 per burst event.
+            if (!impactBurstDone && age >= 1.0f && shockR > 0.1f) {
+                impactBurstDone = true;
+                MaterialEmitters.Source burstSource = random -> {
+                    double ang = random.nextDouble() * Math.PI * 2.0;
+                    double rr = this.shockR * 0.85 * Math.sqrt(random.nextDouble());
+                    Vec3 pos = new Vec3(this.center.x + Math.cos(ang) * rr, this.center.y + 0.20,
+                        this.center.z + Math.sin(ang) * rr);
+                    Vec3 vel = new Vec3(Math.cos(ang) * (0.18 + random.nextDouble() * 0.25),
+                        0.28 + random.nextDouble() * 0.30,
+                        Math.sin(ang) * (0.18 + random.nextDouble() * 0.25));
+                    return new MaterialEmitters.Sample(pos, vel);
+                };
+                MaterialEmitters.burst(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT, Vec3.ZERO, 0.16f),
+                    burstSource, 30);
+                MaterialEmitters.burst(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.20f),
+                    burstSource, 24);
+            }
+            if (!ashBurstDone && age >= 16.0f && shockR > 0.1f) {
+                ashBurstDone = true;
+                MaterialEmitters.Source ashSource = random -> {
+                    double ang = random.nextDouble() * Math.PI * 2.0;
+                    double rr = this.shockR * Math.sqrt(random.nextDouble());
+                    Vec3 pos = new Vec3(this.center.x + Math.cos(ang) * rr, this.center.y + 0.30,
+                        this.center.z + Math.sin(ang) * rr);
+                    Vec3 vel = new Vec3(Math.cos(ang) * 0.04, 0.06 + random.nextDouble() * 0.05,
+                        Math.sin(ang) * 0.04);
+                    return new MaterialEmitters.Sample(pos, vel);
+                };
+                MaterialEmitters.burst(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, Vec3.ZERO, 0.05f),
+                    ashSource, 20);
+            }
             if (diskEnvelope > 0.01f && shockR > 0.1f) {
                 dustDisk.tick(delta, diskEnvelope);
                 flameDisk.tick(delta, diskEnvelope);

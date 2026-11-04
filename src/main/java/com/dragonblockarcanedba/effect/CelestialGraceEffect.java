@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -74,6 +75,12 @@ public class CelestialGraceEffect extends MobEffect {
 
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.SOUL, 0x00FFFF, 1.3f, entity.getId() * 31 + entity.tickCount), // Cyan
+                px, py, pz,
+                1, 0.0, 0.04, 0.0, 0.01
+            );
+            // Complex layer: soul and valor WISP_CURL at the same tick point and rate as the soul emission.
+            level.sendParticles(
+                DbaParticles.WISP_CURL,
                 px, py, pz,
                 1, 0.0, 0.04, 0.0, 0.01
             );

@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.AzureTempestChannelEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -21,15 +24,18 @@ import java.util.Random;
 /**
  * Entity Renderer for Call of the Tempest Channeling in Minecraft 26.2.
  *
- * No-shapes pass: this renderer draws no geometry and no tunnel surface.
- * The channel is moving material: vapor and plasma rising through the
- * channel volume with tangential swirl velocities, mist drifting at the
- * boundary, ground dust pulled around the base, and lightning plasma
- * emitted along seeded jagged arc paths once the charge passes a quarter.
- * The old orbiting wind blades are now streams of vapor and plasma riding
- * the same orbit through their sample velocities. The arc paths are data
- * only; nothing is rendered from them. Charge scaling, the spawn fade-in,
- * and the release fade-out are unchanged from the bespoke build.
+ * Complex pass: the channel is a layered composition. The pieces
+ * layer is three ComplexGeometry tendrils whose control points step
+ * around the axis and inward, so each strand spirals from the tunnel
+ * rim at the base to near the axis at the top, rotating with the
+ * channel age. The complex particle layer is SPARK_STREAK sprites
+ * rising through the channel volume. The material emission from the
+ * no-shapes pass stays as filler: vapor and plasma rising through
+ * the channel volume with tangential swirl velocities, mist drifting
+ * at the boundary, ground dust pulled around the base, and lightning
+ * plasma emitted along seeded jagged arc paths once the charge
+ * passes a quarter. Charge scaling, the spawn fade-in, and the
+ * release fade-out are unchanged from the bespoke build.
  */
 public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChannelEntity, AzureTempestChannelRenderer.ChannelRenderState> {
 
@@ -222,6 +228,10 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
                         MaterialEmitters.Preset.dust(0x7E8A8F, 1.1f, seed ^ 0xD057,
                                 Vec3.ZERO, 0.02f),
                         groundSwirl(frame), 50f, 80),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK,
+                                new Vec3(0.0, 0.30, 0.0), 0.02f),
+                        rising(frame, 0.85f, 0.22f, 0.14f), 26f, 40),
         };
         emission.arcCyan = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(0x00D9FF, 1.3f, seed ^ 0xA2C5,
@@ -283,6 +293,35 @@ public class AzureTempestChannelRenderer extends EntityRenderer<AzureTempestChan
                 float arcEnvelope = envelope * Math.min(1.0f, charge * 1.6f);
                 emission.arcCyan.tick(delta, arcEnvelope);
                 emission.arcWhite.tick(delta, arcEnvelope);
+            }
+
+            // Pieces layer: three tendrils spiraling inward. Each
+            // strand starts at the tunnel rim, its control point steps
+            // about 60 degrees around the axis at half radius and half
+            // height, and it ends near the axis at the top, so the
+            // bezier itself is the helix. The whole triad rotates with
+            // the channel age, in the same direction as the swirl
+            // velocities the filler particles carry.
+            final float geoR = tunnelRadius;
+            final float geoH = tunnelHeight;
+            final float geoAge = age;
+            final float geoEnv = envelope;
+            final float geoDs = MaterialEmitters.distanceScale(center);
+            final float geoWidth = 0.26f + charge * 0.18f;
+            final long geoSeed = state.seed;
+            if (geoEnv > 0.01f && geoDs > 0.01f) {
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                    for (int i = 0; i < 3; i++) {
+                        double a0 = i * (Math.PI * 2.0 / 3.0) + geoAge * 0.06;
+                        double a1 = a0 + 1.05;
+                        double a2 = a0 + 2.10;
+                        Vec3 from = new Vec3(Math.cos(a0) * geoR * 1.12, 0.15, Math.sin(a0) * geoR * 1.12);
+                        Vec3 control = new Vec3(Math.cos(a1) * geoR * 0.55, geoH * 0.52, Math.sin(a1) * geoR * 0.55);
+                        Vec3 to = new Vec3(Math.cos(a2) * geoR * 0.16, geoH * 0.94, Math.sin(a2) * geoR * 0.16);
+                        ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0x7E00L + i * 0x101L),
+                                from, control, to, geoWidth, 0x4DF2FF, 0xFFFFFF, 0.90f, geoEnv, geoDs);
+                    }
+                });
             }
         }
 

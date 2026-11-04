@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -71,6 +72,13 @@ public class MovementCurseEffect extends MobEffect {
                     1, 0.0, 0.02, 0.0, 0.01
                 );
             }
+
+            // Complex layer: darkness and void ASH_FLAKE, one per gated block (not per loop iteration, so the complex rate stays inside the class S budget).
+            level.sendParticles(
+                DbaParticles.ASH_FLAKE,
+                entity.getX(), entity.getY() + height * 0.5, entity.getZ(),
+                1, width * 0.3, height * 0.2, width * 0.3, 0.02
+            );
 
             // Dark smoke if heavily cursed
             if (stacks >= 7) {

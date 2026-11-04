@@ -1,7 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.VoidRiftEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -11,6 +15,7 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
@@ -30,6 +35,16 @@ import java.util.Map;
  * alpha windows (body first, then rim, then seam, shards collapsing
  * earliest), and the distance scaling are unchanged from the spectacle
  * pass, and the seed is still the entity UUID.
+ *
+ * Complex pass: the tear gains a ring of solid void shards and two
+ * energy tendrils streaming inward, drawn in the same billboard plane
+ * the emission basis uses. Five shardBurst calls at rim anchors (one
+ * shard each, faceted solid pieces through submitSolid) ring the mouth,
+ * and two tendrils run from the top and bottom rim to the throat through
+ * the tendril canvas. The shards follow the shard collapse window and
+ * the tendrils follow the rim window of the implosion choreography.
+ * ASH_FLAKE sprites drift on the rim as the complex particle layer. The
+ * material emission stays as filler.
  */
 public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRenderer.RiftRenderState> {
     private static final int SHARDS = 7;
@@ -84,6 +99,7 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
         final MaterialEmitters.Emitter rim;
         final MaterialEmitters.Emitter seam;
         final MaterialEmitters.Emitter shards;
+        final MaterialEmitters.Emitter ash;
         long lastNanos = 0L;
         long lastSeenNanos = 0L;
         Vec3 center = Vec3.ZERO;
@@ -165,6 +181,18 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
                         .add(view.scale(shardZ[i] + (random.nextDouble() * 2.0 - 1.0) * radius * 0.02));
                     return new MaterialEmitters.Sample(p, towardCenter(p, suck * 0.6));
                 }, 70f, 84);
+            // Complex particle layer: ash flakes drifting on the rim
+            // ellipse with a slow tangential drift.
+            this.ash = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, Vec3.ZERO, 0.06f),
+                random -> {
+                    double ang = random.nextDouble() * Math.PI * 2.0;
+                    Vec3 p = center.add(right.scale(Math.cos(ang) * bellyX * bandScale * 1.16))
+                        .add(up.scale(Math.sin(ang) * halfH * bandScale * 1.05))
+                        .add(view.scale((random.nextDouble() * 2.0 - 1.0) * depthBase * 0.4));
+                    Vec3 tangent = right.scale(-Math.sin(ang)).add(up.scale(Math.cos(ang))).scale(0.12);
+                    return new MaterialEmitters.Sample(p, tangent);
+                }, 26f, 34);
         }
     }
 
@@ -285,9 +313,64 @@ public class VoidRiftRenderer extends EntityRenderer<VoidRiftEntity, VoidRiftRen
             s.shardZ[i] = z;
         }
 
+        // Pieces layer, in the billboard plane: the pose is rotated by
+        // the conjugate camera orientation, the same basis the emission
+        // streams are built from, so local X and Y are the tear's right
+        // and up. Five shardBurst shards at rim anchors (5 times 288
+        // vertices) plus two inward tendrils (768 vertices) totals 2208,
+        // inside the class M budget of 2500. The pieces follow the same
+        // implosion windows as their emission partners: shards collapse
+        // with the body window, tendrils with the rim window.
+        float shardPieceEnv = state.isImploding ? fade * (1.0f - clamp01(implodeT / 0.70f)) : env;
+        float tendrilPieceEnv = state.isImploding
+            ? fade * (1.0f - clamp01((implodeT - 0.50f) / 0.36f)) : env;
+        if ((shardPieceEnv > 0.02f || tendrilPieceEnv > 0.02f) && ds > 0.05f) {
+            final float bellyL = s.bellyX;
+            final float halfHL = s.halfH;
+            final float bandL = s.bandScale;
+            final float radiusL = radius;
+            final long pseed = state.seed;
+            final float geoDist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            poseStack.pushPose();
+            if (cameraState.orientation != null) {
+                poseStack.mulPose(new Matrix4f().rotation(
+                    new Quaternionf(cameraState.orientation).conjugate()));
+            }
+            if (shardPieceEnv > 0.02f && open > 0.04f) {
+                final float sEnv = shardPieceEnv;
+                ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
+                    for (int i = 0; i < 5; i++) {
+                        double ang = i * Math.PI * 2.0 / 5.0 + 0.35;
+                        Vec3 radial = new Vec3(Math.cos(ang), Math.sin(ang), 0);
+                        Vec3 origin = new Vec3(Math.cos(ang) * bellyL * bandL * 1.16,
+                            Math.sin(ang) * halfHL * bandL * 1.05, 0);
+                        ComplexGeometry.shardBurst(pose, buffer, pseed ^ (0xE11L + i * 131L),
+                            origin, radial, 24f, radiusL * 0.38f, 1,
+                            0x2E004D, 0x9905F2, 0.95f, sEnv, geoDist);
+                    }
+                });
+            }
+            if (tendrilPieceEnv > 0.02f) {
+                final float tEnv = tendrilPieceEnv;
+                final float twidth = 0.14f + radiusL * 0.035f;
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xE22L,
+                        new Vec3(bellyL * 0.30, halfHL * 0.98, 0),
+                        new Vec3(bellyL * 0.85, halfHL * 0.45, 0),
+                        new Vec3(0, 0, 0), twidth, 0x9905F2, 0xD9B8FF, 0.90f, tEnv, geoDist);
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xE33L,
+                        new Vec3(-bellyL * 0.30, -halfHL * 0.98, 0),
+                        new Vec3(-bellyL * 0.85, -halfHL * 0.45, 0),
+                        new Vec3(0, 0, 0), twidth, 0x9905F2, 0xD9B8FF, 0.90f, tEnv, geoDist);
+                });
+            }
+            poseStack.popPose();
+        }
+
         if (fade > 0.02f) {
             s.halo.tick(delta, fade * 0.30f);
             s.rim.tick(delta, rimA);
+            s.ash.tick(delta, rimA * 0.8f);
         }
         if (bodyA > 0.02f) {
             s.inward.tick(delta, bodyA);

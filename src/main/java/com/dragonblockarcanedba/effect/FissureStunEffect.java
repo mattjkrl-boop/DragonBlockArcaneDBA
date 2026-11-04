@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -45,6 +46,12 @@ public class FissureStunEffect extends MobEffect {
         if (entity.tickCount % 3 == 0) {
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.DUST, 0xEBE8E0, 1.0f, entity.getId() * 31 + entity.tickCount),
+                entity.getX(), entity.getY() + 0.2, entity.getZ(),
+                2, entity.getBbWidth() * 0.3, 0.1, entity.getBbWidth() * 0.3, 0.02
+            );
+            // Complex layer: earth and stone SHARD_CHIP at the same tick point, count and spread as the tremor dust.
+            level.sendParticles(
+                DbaParticles.SHARD_CHIP,
                 entity.getX(), entity.getY() + 0.2, entity.getZ(),
                 2, entity.getBbWidth() * 0.3, 0.1, entity.getBbWidth() * 0.3, 0.02
             );

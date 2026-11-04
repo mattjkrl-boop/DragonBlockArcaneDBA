@@ -1,7 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.HollowChargeEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -25,6 +29,12 @@ import java.util.Map;
  * the old ribbon paths, a dense plasma core at the singularity point, and
  * violet dust crawling across the ground the rings used to anchor. The
  * charge ratio still drives every rate and radius, on the same curve.
+ *
+ * Complex pass: five tendrilFan strands run inward from the gathering
+ * ring to the core on the dissolve shader, violet at the rim and cyan at
+ * the core, tightening as the charge ratio climbs, and a WISP_CURL
+ * stream converges with the plasma gather. The material emission stays
+ * as filler between the strands.
  */
 public class HollowChargeRenderer extends EntityRenderer<HollowChargeEntity, HollowChargeRenderer.ChargeRenderState> {
 
@@ -70,6 +80,7 @@ public class HollowChargeRenderer extends EntityRenderer<HollowChargeEntity, Hol
         final MaterialEmitters.Emitter core;
         final MaterialEmitters.Emitter coreWhite;
         final MaterialEmitters.Emitter ground;
+        final MaterialEmitters.Emitter wisp;
         long lastNanos = 0L;
         long lastSeenNanos = 0L;
         Vec3 center = Vec3.ZERO;
@@ -146,6 +157,21 @@ public class HollowChargeRenderer extends EntityRenderer<HollowChargeEntity, Hol
                     return new MaterialEmitters.Sample(new Vec3(
                         center.x + Math.cos(ang) * rr, center.y + 0.05, center.z + Math.sin(ang) * rr), Vec3.ZERO);
                 }, 34f, 40);
+            // Complex particle layer: wisp curls riding the same inward
+            // gather path as the plasma stream.
+            this.wisp = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.02f),
+                random -> {
+                    Vec3 c = core();
+                    double orbit = (2.2 - charge * 0.7) * pulse * (0.55 + 0.45 * random.nextDouble());
+                    double theta = random.nextDouble() * Math.PI * 2.0;
+                    double yOff = (random.nextDouble() * 2.0 - 1.0) * 1.1;
+                    Vec3 p = new Vec3(c.x + Math.cos(theta) * orbit, c.y + yOff, c.z + Math.sin(theta) * orbit);
+                    Vec3 toCore = c.subtract(p);
+                    double len = toCore.length();
+                    Vec3 vel = len < 1e-4 ? Vec3.ZERO : toCore.scale((0.55 + charge * 0.85) / len);
+                    return new MaterialEmitters.Sample(p, vel);
+                }, 30f, 36);
         }
     }
 
@@ -185,7 +211,38 @@ public class HollowChargeRenderer extends EntityRenderer<HollowChargeEntity, Hol
         s.baseRadius = 1.4f + charge * 1.6f;
         s.pulse = 0.88f + 0.12f * (float) Math.sin(state.age * 0.45f);
 
+        // Pieces layer: a fan of five strands rooted on the gathering
+        // ring and aimed at the core, one tendrilFan call per strand so
+        // each strand keeps the fan builder's own curled control point.
+        // Five tendrils at full spine samples is 1920 vertices, inside
+        // the class M budget of 2500. The ring rotates slowly with age
+        // and tightens on the same radius curve the gather stream uses.
+        float pieceEnv = (0.30f + 0.70f * charge);
+        if (pieceEnv > 0.02f) {
+            final Vec3 coreL = new Vec3(0, 0.9, 0);
+            final float ringR = s.baseRadius * 0.95f;
+            final float pwidth = 0.20f + 0.10f * charge;
+            final long pseed = state.seed;
+            final float page = state.age;
+            final float penv = pieceEnv;
+            final float pds = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                for (int i = 0; i < 5; i++) {
+                    double ang = i * Math.PI * 2.0 / 5.0 + page * 0.06 + (pseed & 63L) / 63.0 * 0.6;
+                    double yOff = ((i * 37) % 100) / 100.0 * 1.7 - 0.55;
+                    Vec3 from = new Vec3(Math.cos(ang) * ringR, 0.9 + yOff, Math.sin(ang) * ringR);
+                    Vec3 dir = coreL.subtract(from);
+                    double len = dir.length();
+                    if (len < 0.05) continue;
+                    ComplexGeometry.tendrilFan(pose, buffer, pseed ^ (0xC21L + i * 131L),
+                        from, dir.scale(1.0 / len), 4f, (float) len, 1,
+                        pwidth, 0xA60DF2, 0x26E6FF, 0.92f, penv, pds);
+                }
+            });
+        }
+
         s.gather.tick(delta, (0.30f + 0.70f * charge) * ds);
+        s.wisp.tick(delta, (0.30f + 0.70f * charge) * ds);
         s.dark.tick(delta, (0.50f + 0.50f * charge) * ds);
         s.swirl.tick(delta, ds);
         s.core.tick(delta, ds);

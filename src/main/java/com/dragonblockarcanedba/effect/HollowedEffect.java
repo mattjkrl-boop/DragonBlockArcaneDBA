@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -37,6 +38,22 @@ public class HollowedEffect extends MobEffect {
 
     @Override
     public boolean applyEffectTick(ServerLevel level, LivingEntity entity, int amplifier) {
+
+        // Complex layer: darkness and void ASH_FLAKE. This effect has no
+        // server tick emission of its own (its material is the ambient
+        // constructor particle, left unchanged), so the layer uses the
+        // 2 tick cadence the sibling auras in this family set use.
+        if (entity.tickCount % 2 == 0) {
+            double px = entity.getX() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
+            double py = entity.getY() + level.getRandom().nextDouble() * entity.getBbHeight();
+            double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
+
+            level.sendParticles(
+                DbaParticles.ASH_FLAKE,
+                px, py, pz,
+                1, 0.0, 0.02, 0.0, 0.01
+            );
+        }
 
         // Suppress mob targeting if player is hollowed
         if (entity instanceof Player) {

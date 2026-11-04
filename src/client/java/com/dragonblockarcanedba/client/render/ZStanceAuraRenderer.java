@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.ZStanceAuraEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -18,14 +21,18 @@ import java.util.Map;
 /**
  * Entity Renderer for Z-Sword Katchin Weight and Gravity Stance in Minecraft 26.2.
  *
- * No-shapes pass: the stance draws no geometry. The gravity well is a
- * volume of violet plasma and pale vapor pulled toward the axis and
- * downward. The old monolith ring is not rebuilt as slabs or ribbons:
- * each anchor position carries a dense falling column of stone dust,
- * deep gravity plasma, and gold glints at its top, so the anchors read
- * as heavy material hanging in the well rather than as objects. Ground
- * dust gathers inward under the caster, and the singularity stays a
- * tight bright plasma concentration at the center.
+ * Complex pass: layered composition. The pieces layer is a tendril
+ * fan of rising wisps: six strands lashing upward from the base in a
+ * narrow cone, deep violet at the root to pale violet at the tip,
+ * drawn as soft veil pieces through submitVeil with the tendril
+ * canvas, so they read as gravity strands curling through the well
+ * rather than as solid shapes. The complex particle layer is
+ * WISP_CURL sprites drifting in the same well volume. The filler
+ * layer is unchanged: violet plasma and pale vapor pulled toward the
+ * axis and downward, dense falling columns of stone dust, deep
+ * gravity plasma, and gold glints at the old monolith anchors, ground
+ * dust gathering inward, and the tight bright plasma singularity at
+ * the center.
  */
 public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStanceAuraRenderer.ZStanceRenderState> {
 
@@ -119,6 +126,21 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
         emission.columnPlasma.tick(delta, envelope * 0.92f);
         emission.glints.tick(delta, envelope * 0.90f);
         emission.eye.tick(delta, envelope);
+        emission.wisps.tick(delta, envelope * 0.85f);
+
+        // Pieces layer: rising wisp tendrils. Six strands at the
+        // toolkit segment count stay inside the class M vertex budget.
+        float geoEnv = baseAlpha * emission.frame.pulse;
+        if (geoEnv > 0.02f) {
+            long geoSeed = state.seed;
+            float len = emission.frame.funnelHeight;
+            float envF = Math.min(1.0f, geoEnv);
+            float distF = dist;
+            ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0x7D31L,
+                    new Vec3(0.0, 0.15, 0.0), new Vec3(0.0, 1.0, 0.0), 38.0f, len, 6,
+                    0.17f, DEEP_VIOLET, PALE_VIOLET, 0.78f, envF, distF));
+        }
 
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -171,6 +193,7 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
         final MaterialEmitters.Emitter columnPlasma;
         final MaterialEmitters.Emitter glints;
         final MaterialEmitters.Emitter eye;
+        final MaterialEmitters.Emitter wisps;
         long lastSeenNanos = System.nanoTime();
         long lastTickNanos = 0L;
 
@@ -240,6 +263,9 @@ public class ZStanceAuraRenderer extends EntityRenderer<ZStanceAuraEntity, ZStan
             eye = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(EYE, 1.55f, baseSeed ^ 0xE7E1, Vec3.ZERO, 0.085f),
                 eyeSource, 44.0f, 105);
+            wisps = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.02f),
+                well, 24.0f, 32);
         }
 
         float nextDelta() {

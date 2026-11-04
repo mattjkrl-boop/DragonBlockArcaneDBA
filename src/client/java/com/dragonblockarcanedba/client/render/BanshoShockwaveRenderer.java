@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.BanshoShockwaveEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -18,13 +19,22 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Material presentation for Bansho Fan shockwaves. The renderer draws no
- * geometry and uses no disc, ring, cone, fan, or arc construction. Cone
- * waves become a rushing vapor front with a pale plasma core, launch dust,
- * and mist. Radial waves become a vapor front sampled across the expanding
- * area, a center vapor wash, ground dust, and real block chunks where the
- * burst is close enough to a captured ground block. The 14 tick progress
- * and exit envelope are unchanged.
+ * Layered presentation for Bansho Fan shockwaves (class M). The pieces
+ * layer is a ComplexGeometry crackFan web plus light fracturePlates at
+ * a small lift, read as wind scour rather than rock heave: the cracks
+ * glow in the wave colors through the shader submit helper and the
+ * plates submit solid with facet shading. Radial waves draw them flat
+ * in the world XZ plane at the origin; cone and orient-to-impact waves
+ * draw them under the same yaw and pitch rotation the emission frame
+ * uses. The complex particle layer is a few SHARD_CHIP sprites at the
+ * wave front. The material emission from the no-shapes pass stays as
+ * filler: cone waves are a rushing vapor front with a pale plasma core,
+ * launch dust, and mist; radial waves are a vapor front sampled across
+ * the expanding area, a center vapor wash, ground dust, and real block
+ * chunks where the burst is close enough to a captured ground block.
+ * The 14 tick progress and exit envelope are unchanged, and the piece
+ * seeds come from the entity id and max radius, the same synced state
+ * the emission already used.
  */
 public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntity, BanshoShockwaveRenderer.ShockwaveRenderState> {
 
@@ -65,6 +75,7 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
         private MaterialEmitters.Emitter center;
         private MaterialEmitters.Emitter groundDust;
         private MaterialEmitters.Emitter debris;
+        private MaterialEmitters.Emitter chips;
         private BlockState debrisGround;
 
         Emission(ShockwaveRenderState state) {
@@ -91,6 +102,7 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
             tick(center, delta, envelope);
             tick(groundDust, delta, envelope);
             tick(debris, delta, envelope);
+            tick(chips, delta, envelope);
         }
 
         private static void tick(MaterialEmitters.Emitter emitter, float delta, float envelope) {
@@ -106,6 +118,15 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
             this.debris = null;
             this.debrisGround = null;
             int seed = (int) state.seed;
+            // Complex particle layer: a few shard chips riding the wave
+            // front, cone or radial, under the continuous budget.
+            chips = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                            Vec3.ZERO, 0.05f),
+                    random -> state.isCone
+                            ? coneSample(state, random, false)
+                            : radialFrontSample(state, random),
+                    16.0f, 30);
             if (state.isCone) {
                 vapor = new MaterialEmitters.Emitter(level,
                         MaterialEmitters.Preset.vapor(0x26FFA6, 1.20f,
@@ -229,11 +250,40 @@ public class BanshoShockwaveRenderer extends EntityRenderer<BanshoShockwaveEntit
             state.coreRadius = Math.max(0.1f, (state.maxRadius * 0.3f) * (1.0f - progress));
         }
 
+        float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
         ClientLevel level = Minecraft.getInstance().level;
         if (level != null && alpha > 0.01f) {
             if (state.emission == null) state.emission = new Emission(state);
-            float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
             state.emission.tick(level, alpha * distanceScale);
+        }
+
+        // Pieces layer: crackFan web plus light fracturePlates sized to
+        // the wave's current radius, at a 0.12 lift so they read as wind
+        // scour lifting the surface, not a slam crater. Vertex count at
+        // full distance scale: the crack fan stays under its 900 vertex
+        // budget and the plates under about 480, for a total under 1400,
+        // inside the class M budget of 2500.
+        if (alpha > 0.01f && distanceScale > 0.01f) {
+            final float scourRadius = state.isCone
+                    ? Math.max(0.4f, state.coneRadius)
+                    : state.currentRadius;
+            final float plateRadius = scourRadius * (state.isCone ? 0.85f : 0.92f);
+            final long geoSeed = state.seed;
+            final float geoEnv = alpha * distanceScale;
+            final float geoDs = distanceScale;
+            poseStack.pushPose();
+            if (state.isCone || state.orientToImpact) {
+                poseStack.mulPose(new org.joml.Matrix4f()
+                        .rotationY((float) Math.toRadians(-state.yaw))
+                        .rotateX((float) Math.toRadians(state.pitch)));
+            }
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0x5C09L,
+                            plateRadius, 0.12f, 0x9FFFE0, 0x2F6B4F, 0.96f, geoEnv, geoDs));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4ACL,
+                            scourRadius * 1.05f, 0xCFFFEF, 0x26FFA6, 0.95f, geoEnv, geoDs));
+            poseStack.popPose();
         }
         super.submit(state, poseStack, collector, cameraState);
     }

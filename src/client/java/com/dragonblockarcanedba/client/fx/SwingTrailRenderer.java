@@ -1,9 +1,14 @@
 package com.dragonblockarcanedba.client.fx;
 
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.RandomSource;
@@ -19,15 +24,26 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Emits material along the swing paths listed in WeaponTrailProfiles.
+ * Draws and emits along the swing paths listed in WeaponTrailProfiles.
  *
- * The samples are emission data only. Nothing in this class draws a ribbon
- * or any other geometry: the old trail surface is now plasma and vapor
- * particles spawned along the recorded hilt and tip path by the shared
- * MaterialEmitters accumulator, in the profile color, with a near-white
- * plasma core along the leading half of the blade. The profile table has
- * not changed, and neither have its colors, reach, sweep, fade ticks, or
- * tip behavior. Purely client side.
+ * Complex pass: the trail is a layered composition built from the same
+ * recorded samples. The pieces layer is a chain of ComplexGeometry
+ * tendrils whose quadratic bezier spines run through the sampled path
+ * points: one chain along the blade tip arc and one along the mid blade,
+ * submitted through submitEnergy with the tendril canvas, so each strand
+ * coils in 3D, twists along its length, and tears at the builder's
+ * seeded pinch windows and at every chain joint near the arc ends. The
+ * complex particle layer is SPARK_STREAK sprites shed along the tip
+ * fifth of the blade for blade profiles (the steel themes). The material
+ * layer is unchanged filler: plasma and vapor particles spawned along
+ * the recorded hilt and tip path by the shared MaterialEmitters
+ * accumulator, in the profile color, with a near-white plasma core along
+ * the leading half of the blade. The pieces are drawn from the level
+ * render collect-submits event in camera relative space, anchored on the
+ * oldest surviving sample so the geometry and the emission sit on the
+ * exact same path. The profile table has not changed, and neither have
+ * its colors, reach, sweep, fade ticks, or tip behavior. Purely client
+ * side.
  */
 public final class SwingTrailRenderer {
     private SwingTrailRenderer() {}
@@ -47,6 +63,7 @@ public final class SwingTrailRenderer {
         MaterialEmitters.Emitter plasma;
         MaterialEmitters.Emitter core;
         MaterialEmitters.Emitter vapor;
+        MaterialEmitters.Emitter streaks;
     }
 
     private static final Map<UUID, Trail> TRAILS = new HashMap<>();
@@ -54,6 +71,7 @@ public final class SwingTrailRenderer {
 
     public static void register() {
         ClientTickEvents.END_CLIENT_TICK.register(SwingTrailRenderer::tick);
+        LevelRenderEvents.COLLECT_SUBMITS.register(SwingTrailRenderer::collectSubmits);
     }
 
     private static float alpha(WeaponTrailProfiles.Profile p, Sample s) {
@@ -129,6 +147,126 @@ public final class SwingTrailRenderer {
         trail.plasma.tick(TICK_SECONDS, envelope);
         trail.core.tick(TICK_SECONDS, envelope);
         trail.vapor.tick(TICK_SECONDS, envelope * 0.7f);
+        if (trail.streaks != null) trail.streaks.tick(TICK_SECONDS, envelope);
+    }
+
+    /**
+     * Pieces layer, drawn once per frame from the level render submit
+     * pass. The pose stack there is camera relative, so each trail is
+     * anchored on its oldest surviving tip sample: the stack is pushed,
+     * translated to that anchor minus the camera, and the tendril chains
+     * are submitted in anchor local space, then the stack is popped, the
+     * same pattern vanilla uses for block entity submits.
+     */
+    private static void collectSubmits(LevelRenderContext context) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || TRAILS.isEmpty()) return;
+        if (context.levelState() == null || context.levelState().cameraRenderState == null) return;
+        Vec3 cam = context.levelState().cameraRenderState.pos;
+        if (cam == null) return;
+        PoseStack poseStack = context.poseStack();
+        for (Trail trail : TRAILS.values()) {
+            drawTrailPieces(context, poseStack, cam, trail);
+        }
+    }
+
+    private static void drawTrailPieces(LevelRenderContext context, PoseStack poseStack, Vec3 cam, Trail trail) {
+        WeaponTrailProfiles.Profile p = trail.profile;
+        if (p == null || trail.samples.isEmpty()) return;
+        List<Sample> samples = new ArrayList<>(trail.samples);
+        float envelope = 0f;
+        for (Sample s : samples) envelope = Math.max(envelope, alpha(p, s));
+        Sample newest = samples.get(samples.size() - 1);
+        float ds = MaterialEmitters.distanceScale(newest.tip());
+        envelope *= ds;
+        if (envelope <= 0.01f) return;
+        float profileScale = (float) Math.max(0.75, Math.min(1.5, p.reach() / 2.0));
+        final float env = envelope;
+        final int rootColor = p.color();
+        final int tipColor = coreColor(p);
+        final long seedBase = trail.seedBase;
+
+        poseStack.pushPose();
+        try {
+            if (p.kind() == WeaponTrailProfiles.Kind.FLASH || samples.size() == 1) {
+                // A blaster shot records one hilt to tip line: one tendril
+                // along the shot, its curl supplied by the builder.
+                Sample shot = newest;
+                Vec3 anchor = shot.hilt();
+                poseStack.translate(anchor.x - cam.x, anchor.y - cam.y, anchor.z - cam.z);
+                Vec3 from = Vec3.ZERO;
+                Vec3 to = shot.tip().subtract(anchor);
+                Vec3 control = from.lerp(to, 0.5);
+                float width = 0.13f * profileScale;
+                ComplexGeometry.submitEnergy(context.submitNodeCollector(), poseStack, ComplexTextures.TENDRIL,
+                        (pose, buffer) -> ComplexGeometry.tendril(pose, buffer, seedBase ^ 0xF1A5L,
+                                from, control, to, width, rootColor, tipColor, 0.95f, env, ds));
+                return;
+            }
+            List<Vec3> tipPts = bladePoints(samples, 1.0);
+            List<Vec3> midPts = bladePoints(samples, 0.55);
+            Vec3 anchor = tipPts.get(0);
+            poseStack.translate(anchor.x - cam.x, anchor.y - cam.y, anchor.z - cam.z);
+            List<Vec3> tipLocal = localTo(tipPts, anchor);
+            List<Vec3> midLocal = localTo(midPts, anchor);
+            float tipWidth = 0.20f * profileScale;
+            float midWidth = 0.15f * profileScale;
+            ComplexGeometry.submitEnergy(context.submitNodeCollector(), poseStack, ComplexTextures.TENDRIL,
+                    (pose, buffer) -> {
+                        tendrilChain(pose, buffer, seedBase ^ 0x7E1DL, tipLocal, tipWidth, rootColor, tipColor, env, ds);
+                        tendrilChain(pose, buffer, seedBase ^ 0x7E2DL, midLocal, midWidth, rootColor, tipColor, env, ds);
+                    });
+        } finally {
+            poseStack.popPose();
+        }
+    }
+
+    /** Points along the recorded path at one blade fraction, decimated to at most nine controls. */
+    private static List<Vec3> bladePoints(List<Sample> samples, double blade) {
+        List<Vec3> pts = new ArrayList<>();
+        int n = samples.size();
+        int want = Math.min(n, 9);
+        for (int i = 0; i < want; i++) {
+            int idx = want == 1 ? 0 : Math.round(i * (n - 1) / (float) (want - 1));
+            Sample s = samples.get(idx);
+            pts.add(s.hilt().lerp(s.tip(), blade));
+        }
+        return pts;
+    }
+
+    private static List<Vec3> localTo(List<Vec3> pts, Vec3 anchor) {
+        List<Vec3> out = new ArrayList<>(pts.size());
+        for (Vec3 pt : pts) out.add(pt.subtract(anchor));
+        return out;
+    }
+
+    /**
+     * One tendril per pair of path intervals, each taking three
+     * consecutive path points as its bezier from, control, and to, so the
+     * strand follows the sampled swing exactly and narrows at every joint.
+     */
+    private static void tendrilChain(com.mojang.blaze3d.vertex.PoseStack.Pose pose,
+                                     com.mojang.blaze3d.vertex.VertexConsumer buffer,
+                                     long seed, List<Vec3> pts, float width,
+                                     int rootColor, int tipColor, float env, float ds) {
+        if (pts.size() < 2) return;
+        if (pts.size() == 2) {
+            Vec3 mid = pts.get(0).lerp(pts.get(1), 0.5);
+            ComplexGeometry.tendril(pose, buffer, seed, pts.get(0), mid, pts.get(1),
+                    width, rootColor, tipColor, 0.95f, env, ds);
+            return;
+        }
+        int last = 0;
+        for (int i = 0; i + 2 < pts.size(); i += 2) {
+            ComplexGeometry.tendril(pose, buffer, seed + i * 7919L, pts.get(i), pts.get(i + 1), pts.get(i + 2),
+                    width, rootColor, tipColor, 0.95f, env, ds);
+            last = i + 2;
+        }
+        if (last < pts.size() - 1) {
+            int n = pts.size();
+            ComplexGeometry.tendril(pose, buffer, seed + 0x3D09L, pts.get(n - 3), pts.get(n - 2), pts.get(n - 1),
+                    width, rootColor, tipColor, 0.95f, env, ds);
+        }
     }
 
     private static void ensureEmitters(ClientLevel level, Trail trail) {
@@ -149,6 +287,13 @@ public final class SwingTrailRenderer {
                 MaterialEmitters.Preset.material(DbaMaterialOptions.VAPOR, p.color(),
                         profileScale * 1.3f, trail.seedBase ^ 0x9A70, Vec3.ZERO, 0.03f),
                 blade, 85f, 130);
+        // Complex particle layer: spark streaks shed along the tip fifth
+        // of the blade. Blade profiles only: a FLASH profile is a blaster
+        // shot, not steel, and keeps its existing spark burst instead.
+        trail.streaks = p.kind() == WeaponTrailProfiles.Kind.FLASH ? null
+                : new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.05f),
+                        trailPathSource(trail, 0.85, 1.0, 0.30), 30f, 48);
         trail.emitterProfile = p;
         trail.emitterLevel = level;
     }

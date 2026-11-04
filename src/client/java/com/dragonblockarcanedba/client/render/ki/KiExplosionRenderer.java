@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render.ki;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KiExplosionEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -17,14 +18,21 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * No-shapes pass: this renderer draws no geometry. A ki explosion is
- * technique-colored plasma filling the blast volume, a white-hot plasma
- * concentration in the inner 0.38 of the radius, vapor blowing off the
- * boundary, smoke rising and lingering, and a ground ring of impact dust
- * racing outward at the old ring radius. The lifecycle is unchanged: it
- * eases open over 8 ticks and fades out across 36 ticks, squared, with
- * the same early out below a fade of 0.02. Seeded per blast from the
- * synced seed, so no two explosions churn the same way.
+ * Complex pass: layered composition, class L, with three builder types.
+ * The pieces layer is fracturePlates plus a crackFan at the blast center
+ * (the plates through submitSolid in technique tints, the cracks through
+ * submitEnergy) and short flameTongues in technique colors through
+ * submitEnergy with the flame canvas. The complex particle layer is
+ * SHARD_CHIP sprites blown through the blast volume. The no-shapes
+ * emission stays as filler only: technique-colored plasma filling the
+ * blast volume, a white-hot plasma concentration in the inner 0.38 of
+ * the radius, vapor blowing off the boundary, smoke rising and
+ * lingering, and a ground ring of impact dust racing outward at the old
+ * ring radius. The lifecycle is unchanged: it eases open over 8 ticks
+ * and fades out across 36 ticks, squared, with the same early out below
+ * a fade of 0.02. Seeded per blast from the synced seed, so no two
+ * explosions churn the same way. The crater itself stays the entity
+ * destruction code; nothing here touches it.
  */
 public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExplosionRenderer.ExplosionRenderState> {
 
@@ -103,6 +111,25 @@ public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExp
         };
     }
 
+    /** The synced technique color mixed toward white, for hot piece cores. */
+    private static int glowColor(int color) {
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+        r += (int) ((255 - r) * 0.65f);
+        g += (int) ((255 - g) * 0.65f);
+        b += (int) ((255 - b) * 0.65f);
+        return (r << 16) | (g << 8) | b;
+    }
+
+    /** The synced technique color darkened, for plate rims. */
+    private static int darkColor(int color) {
+        int r = (int) (((color >> 16) & 0xFF) * 0.30f);
+        int g = (int) (((color >> 8) & 0xFF) * 0.30f);
+        int b = (int) ((color & 0xFF) * 0.30f);
+        return (r << 16) | (g << 8) | b;
+    }
+
     private static void updateFrame(Frame frame, ExplosionRenderState state, float easedRadius, float ring) {
         frame.center = new Vec3(state.wx, state.wy, state.wz);
         frame.radius = Math.max(0.05f, easedRadius);
@@ -133,6 +160,9 @@ public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExp
                         MaterialEmitters.Preset.smoke(state.color, 3.4f, seed ^ 0x05107,
                                 new Vec3(0.0, 0.07, 0.0), 0.03f),
                         blastVolume(frame, 0.95, 0.03), 65f + r * 16f, 160),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.20f),
+                        blastVolume(frame, 1.0, 0.10), 34f, 40),
                 new MaterialEmitters.Emitter(level,
                         MaterialEmitters.Preset.dust(state.color, 2.2f, seed ^ 0x99,
                                 Vec3.ZERO, 0.03f),
@@ -178,6 +208,38 @@ public class KiExplosionRenderer extends EntityRenderer<KiExplosionEntity, KiExp
                 float env = i == emission.emitters.length - 1 ? ringEnvelope : envelope;
                 if (env > 0.01f) emission.emitters[i].tick(delta, env);
             }
+        }
+
+        // Pieces layer, in entity local space (the pose origin is the
+        // blast center, and the plates and cracks lie in the local XZ
+        // plane at the center height, the same plane the filler ground
+        // ring uses). Vertex estimate at distScale 1.0: fracturePlates
+        // about 480, crackFan about 700, flameTongues 336 (7 tongues at
+        // 48), for about 1500 of the class L budget of 6000, with three
+        // builder types. Piece sizes follow the eased blast radius, so
+        // the structure opens and fades with the lifecycle above.
+        if (distScale > 0.01f && radius > 0.1f) {
+            final long geoSeed = state.seed;
+            final int geoColor = state.color;
+            final int geoGlow = glowColor(state.color);
+            final int geoDark = darkColor(state.color);
+            final float pieceEnv = fade;
+            final float pieceDs = distScale;
+            final float plateR = radius * 0.90f;
+            final float crackR = radius * 0.95f;
+            final float tongueR = radius * 0.55f;
+            final float tongueH = Math.max(0.4f, radius * 0.70f);
+            final float sway = state.ageInTicks * 0.45f;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xB21DL,
+                            plateR, 0.35f, geoGlow, geoDark, 0.97f, pieceEnv, pieceDs));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
+                            crackR, 0xFFFFFF, geoColor, 0.95f, pieceEnv, pieceDs));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                    ComplexGeometry.flameTongues(pose, buffer, geoSeed ^ 0xF1A7L,
+                            new Vec3(0, 0.04, 0), tongueR, tongueH, 7,
+                            geoGlow, geoColor, 0.95f, pieceEnv, sway, pieceDs));
         }
 
         super.submit(state, poseStack, collector, cameraState);

@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SpiritCleaveEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -17,12 +19,14 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Renderer for the Spirit Sword cleave.
  *
- * No-shapes pass: the renderer draws no blade, arc, ribbon, fan, or halo.
- * The projectile was created by the swing and follows a real flight path;
- * soul material is emitted inside its moving volume and along the path it
- * has just traveled, with vapor and sparks dissolving behind it. The growth
- * curve, lifecycle envelope, colors, and synced seed carry over from the
- * bespoke pass.
+ * Complex pass: the cleave is a layered composition. The pieces layer is
+ * a ComplexGeometry tendril body bowed along the traveled path (a thick
+ * soul strand plus a thinner gold strand), through submitEnergy with the
+ * tendril canvas. The complex particle layer is WISP_CURL sprites shed
+ * along the same path. The no-shapes material emission stays as filler
+ * only: soul material inside the moving volume and along the path it has
+ * just traveled, with vapor and sparks dissolving behind it. The growth
+ * curve, lifecycle envelope, colors, and synced seed are unchanged.
  */
 public class SpiritCleaveRenderer extends EntityRenderer<SpiritCleaveEntity, SpiritCleaveRenderer.CleaveState> {
 
@@ -81,7 +85,8 @@ public class SpiritCleaveRenderer extends EntityRenderer<SpiritCleaveEntity, Spi
         float tipFlash = ease(Math.max(0.0f, 1.0f - Math.max(0.0f, state.age - 4.0f) / 4.0f));
         Vec3 origin = new Vec3(state.x, state.y, state.z);
         Vec3 direction = Vec3.directionFromRotation(state.xRot, state.yRot);
-        float emission = fade * MaterialEmitters.distanceScale(origin);
+        float distScale = MaterialEmitters.distanceScale(origin);
+        float emission = fade * distScale;
         float delta = frameDelta();
 
         Vec3 traveledFrom = origin.subtract(direction.scale(length * 1.35));
@@ -113,6 +118,40 @@ public class SpiritCleaveRenderer extends EntityRenderer<SpiritCleaveEntity, Spi
                 MaterialEmitters.sphereVolume(openingFront, 0.22),
                 165.0f, 200, delta, emission * tipFlash);
         }
+
+        // Complex particle layer: wisp curls shed along the traveled
+        // path, inside the 40 per second continuous budget.
+        emit(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, direction.scale(-0.050), 0.090f),
+            traveledPath, 26.0f, 40, delta, emission);
+
+        // Pieces layer, class M: a tendril body in entity local space,
+        // bowed sideways off the flight line so it reads as the cleave
+        // arc, through the normal depth tested shader path. Two tendrils
+        // at 384 vertices each stay at 768 of the 2500 class M budget.
+        Vec3 sideTmp = direction.cross(new Vec3(0.0, 1.0, 0.0));
+        if (sideTmp.lengthSqr() < 1.0e-6) sideTmp = new Vec3(1.0, 0.0, 0.0);
+        final Vec3 side = sideTmp.normalize();
+        final Vec3 lift = direction.cross(side).normalize();
+        final Vec3 bodyFrom = direction.scale(-length * 1.35);
+        final Vec3 bodyTo = direction.scale(length * 0.25);
+        final Vec3 bodyControl = direction.scale(-length * 0.55)
+            .add(side.scale(length * 0.38)).add(lift.scale(length * 0.10));
+        final Vec3 wakeFrom = bodyFrom.add(side.scale(-length * 0.12));
+        final Vec3 wakeTo = bodyTo.add(side.scale(-length * 0.12));
+        final Vec3 wakeControl = direction.scale(-length * 0.55)
+            .add(side.scale(-length * 0.22)).add(lift.scale(-length * 0.08));
+        final long geoSeed = state.seed;
+        final float geoEnv = fade;
+        final float geoDs = distScale;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0xC1EA1L,
+                bodyFrom, bodyControl, bodyTo, 0.52f,
+                CYAN, WHITE, 0.95f, geoEnv, geoDs);
+            ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0xC1EA2L,
+                wakeFrom, wakeControl, wakeTo, 0.26f,
+                GOLD, CYAN, 0.90f, geoEnv, geoDs);
+        });
     }
 
     private static void emit(ClientLevel level, MaterialEmitters.Preset preset, MaterialEmitters.Source source,

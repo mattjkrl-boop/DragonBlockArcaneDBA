@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SaberDimensionalLineSlashEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -19,13 +22,13 @@ import java.util.Map;
 /**
  * Entity Renderer for Saber Dimensional Line Slash in Minecraft 26.2.
  *
- * <p>No-shapes pass: the crossed ribbon beam, traveling bands, impact
- * ring, and shard ribs are no longer drawn as geometry. The renderer
- * emits void plasma densely along the cut path, a white plasma core on
- * the same path, spatial glass dust at the old rib stations and along
- * the cut, and darkness vapor hugging the path. The line is sampled as
- * data only. Cut growth, envelope fade, colors, and the strike window
- * are unchanged.</p>
+ * <p>Complex pass: a seeded tendril body now runs the full cut line
+ * with a second offset strand, drawn through the shader tendril
+ * canvas, with SHARD_CHIP and SPARK_STREAK complex sprites layered
+ * over it. The void plasma sheath, white core, spatial glass dust,
+ * and darkness vapor emission stays as the filler layer only. Cut
+ * growth, envelope fade, colors, and the strike window are
+ * unchanged.</p>
  */
 public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimensionalLineSlashEntity, SaberDimensionalLineSlashRenderer.LineSlashRenderState> {
 
@@ -122,6 +125,39 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
             MaterialEmitters.burst(level,
                 MaterialEmitters.Preset.glassDust(0xBFEFFF, 0.95f, (int) (state.seed ^ 0xFA11L), Vec3.ZERO, 0.55f),
                 MaterialEmitters.point(emission.origin), Math.max(4, Math.round(14 * ds)));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.50f),
+                MaterialEmitters.point(emission.origin), Math.max(3, Math.round(13 * ds)));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.55f),
+                MaterialEmitters.point(emission.origin), Math.max(3, Math.round(12 * ds)));
+        }
+
+        // Pieces layer: the pose frame is world aligned at the entity
+        // origin, so the synced line direction is used directly as
+        // local geometry. Two tendril strands, near 770 vertices,
+        // inside the class M budget of 2500.
+        float pieceEnv = cut * fade;
+        if (pieceEnv > 0.02f && ds > 0.05f && emission.halfLen > 0.10f) {
+            Vec3 dir = emission.dir;
+            Vec3 side = emission.side;
+            Vec3 up = emission.up;
+            float half = emission.halfLen;
+            float sc = emission.scale;
+            long seed = state.seed;
+            Vec3 from = dir.scale(-half);
+            Vec3 to = dir.scale(half);
+            Vec3 bow = side.scale(0.16 * sc).add(up.scale(0.10 * sc));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL,
+                (pose, buffer) -> {
+                    ComplexGeometry.tendril(pose, buffer, seed ^ 0x11E1L,
+                        from, bow, to,
+                        0.34f * sc, 0xFFFFFF, 0x4DD8FF, 0.95f, pieceEnv, ds);
+                    ComplexGeometry.tendril(pose, buffer, seed ^ 0x11E2L,
+                        from.add(up.scale(0.08 * sc)), bow.scale(-0.7).add(up.scale(0.08 * sc)),
+                        to.add(up.scale(0.08 * sc)),
+                        0.18f * sc, 0x4DD8FF, 0x3D1A78, 0.90f, pieceEnv, ds);
+                });
         }
 
         super.submit(state, poseStack, collector, cameraState);
@@ -202,7 +238,16 @@ public class SaberDimensionalLineSlashRenderer extends EntityRenderer<SaberDimen
                     glass, baseRate * 0.55f, Math.round(baseRate * 0.72f)),
                 new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.darkness(0x3D1A78, 1.35f * state.scale, seed ^ 0x19AC, Vec3.ZERO, 0.04f),
-                    darkness, baseRate * 0.35f, Math.round(baseRate * 0.46f))
+                    darkness, baseRate * 0.35f, Math.round(baseRate * 0.46f)),
+                // Complex particle layer: shard chips at the rib
+                // stations and spark streaks along the core. Rates stay
+                // at or under the 40 per second continuous budget.
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.12f),
+                    glass, 34.0f, 40),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.10f),
+                    core, 30.0f, 40)
             };
         }
 

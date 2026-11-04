@@ -1,8 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.DarknessShatterEntity;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -21,6 +23,12 @@ import net.minecraft.world.phys.Vec3;
  * ground area, hellish plasma is sampled along radial crack paths as
  * emission data, and the center carries an eruption of darkness, soul
  * vapor, and dust. The fixed 40 tick life and corrected fade are unchanged.
+ *
+ * Complex pass: the crack fan is now the shatter web itself, drawn as
+ * shader energy at the expanding shock radius, with dark fracture plates
+ * lifted over it as solid faceted slabs, purple hot at the center and
+ * near black at the rim. Shard chips ride the outward ground flow. The
+ * material emission stays as filler under and between the pieces.
  */
 public class DarknessShatterRenderer extends EntityRenderer<DarknessShatterEntity, DarknessShatterRenderer.ShatterRenderState> {
 
@@ -69,8 +77,36 @@ public class DarknessShatterRenderer extends EntityRenderer<DarknessShatterEntit
 
     @Override
     public void submit(ShatterRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        submitPieces(state, poseStack, collector);
         emitMaterials(state);
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void submitPieces(ShatterRenderState state, PoseStack poseStack, SubmitNodeCollector collector) {
+        float fade = Math.max(0.0f, 1.0f - state.age / (float) Math.max(1, state.lifetime));
+        if (fade <= 0.01f) {
+            return;
+        }
+        float build = smoothstep(Math.min(1.0f, state.age / 3.2f));
+        float envelope = fade * build;
+        if (envelope <= 0.01f) {
+            return;
+        }
+        float distScale = MaterialEmitters.distanceScale(new Vec3(state.px, state.py, state.pz));
+        float radius = shockRadius(state);
+        if (radius <= 0.05f) {
+            return;
+        }
+        long seed = state.seed;
+        // The shatter web itself: wandering energy cracks at the live
+        // shock radius, hot pink at the center cooling to purple tips.
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.crackFan(pose, buffer, seed ^ 0x5501L,
+                radius, 0xF21459, 0xA605F2, 0.95f, envelope, distScale));
+        // Dark fracture plates over the web: solid slabs, not glow.
+        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.fracturePlates(pose, buffer, seed ^ 0x5502L,
+                radius * 0.85f, 0.38f, 0x4C1D95, 0x12001F, 0.95f, envelope, distScale));
     }
 
     private static void emitMaterials(ShatterRenderState state) {
@@ -138,7 +174,10 @@ public class DarknessShatterRenderer extends EntityRenderer<DarknessShatterEntit
             new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.material(DbaMaterialOptions.DUST, 0x58415A, 2.60f,
                     seed ^ 0x5407, Vec3.ZERO, 0.016f),
-                columnSource(state, 0.165), 30.0f, 36)
+                columnSource(state, 0.165), 30.0f, 36),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, new Vec3(0.0, 0.06, 0.0), 0.10f),
+                groundSource(state, 0.14, 0.05), 30.0f, 36)
         };
     }
 

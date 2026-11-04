@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.AzureStormEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -22,16 +25,23 @@ import java.util.Random;
 /**
  * Entity Renderer for Azure Storm Domain in Minecraft 26.2.
  *
- * No-shapes pass: this renderer draws no geometry and no surfaces. The
- * storm domain is particle weather: mist volumes filling the zone,
- * vapor and suspended dust driven around the center by swirl velocities,
- * a bright eye updraft of vapor and plasma, and lightning plasma emitted
- * along seeded jagged arc paths inside the boundary. The arc paths are
- * data only; nothing is rendered from them. Rain inside the storm zone
- * stays the AtmosphereClient system's job, exactly as before: the storm
- * server keeps the zone open and that system renders the rain. All
- * emission takes the storm entity's synced render seed, and the lifetime
- * fade envelope is the shared one the bespoke build used.
+ * Complex pass: the storm is a layered composition. The pieces layer
+ * is two tendrilFan groups of wind lashes standing in the storm
+ * volume, offset to opposite sides of the eye and reseeded every
+ * eight ticks so the lashes keep moving, drawn through the shader
+ * submit helper with the tendril canvas. The complex particle layer
+ * is ASH_FLAKE grit and WISP_CURL wisps carried on the same swirl
+ * velocities as the filler. The material emission from the no-shapes
+ * pass stays as filler weather: mist volumes filling the zone, vapor
+ * and suspended dust driven around the center, a bright eye updraft
+ * of vapor and plasma, and lightning plasma emitted along seeded
+ * jagged arc paths inside the boundary. Rain inside the storm zone
+ * stays the AtmosphereClient system's job, exactly as before: the
+ * storm server keeps the zone open and that system renders the rain.
+ * The storm's bolts stay BoltEntity spawns from the shared system;
+ * this renderer owns the storm volume presentation only. All emission
+ * and piece seeds take the storm entity's synced render seed, and the
+ * lifetime fade envelope is the shared one the bespoke build used.
  */
 public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureStormRenderer.AzureStormRenderState> {
 
@@ -216,6 +226,14 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
                         MaterialEmitters.Preset.plasma(0xF2FFFF, 0.9f, seed ^ 0xC0DE,
                                 Vec3.ZERO, 0.005f),
                         arcPlasma(frame), 90f, 150),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE,
+                                Vec3.ZERO, 0.02f),
+                        cylinder(frame, 0.95f, 0.85f, 0.16f, 0.02f), 24f, 40),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL,
+                                Vec3.ZERO, 0.02f),
+                        cylinder(frame, 0.90f, 0.80f, 0.16f, 0.03f), 20f, 40),
         };
         return emission;
     }
@@ -263,5 +281,22 @@ public class AzureStormRenderer extends EntityRenderer<AzureStormEntity, AzureSt
         for (MaterialEmitters.Emitter emitter : emission.emitters) {
             emitter.tick(delta, envelope);
         }
+
+        // Pieces layer: wind lashes in the storm volume. Two fans stand
+        // on opposite sides of the eye, tilted with the swirl, and the
+        // seed bucket rolls every eight ticks so the strands re-lash
+        // instead of hanging frozen while the filler weather moves.
+        final float geoR = radius;
+        final float geoEnv = envelope;
+        final float geoDs = ds;
+        final long lashSeed = state.seed ^ 0x1A57L ^ ((long) (age / 8.0f) * 0x9E37L);
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            ComplexGeometry.tendrilFan(pose, buffer, lashSeed,
+                    new Vec3(geoR * 0.34, 1.0, -geoR * 0.18), new Vec3(-0.15, 1.0, 0.10),
+                    38f, geoR * 0.62f, 2, 0.34f, 0x9FD8E8, 0xD9FFFF, 0.88f, geoEnv, geoDs);
+            ComplexGeometry.tendrilFan(pose, buffer, lashSeed ^ 0x51EDL,
+                    new Vec3(-geoR * 0.30, 1.0, geoR * 0.26), new Vec3(0.12, 1.0, -0.15),
+                    38f, geoR * 0.62f, 2, 0.34f, 0x9FD8E8, 0xD9FFFF, 0.88f, geoEnv, geoDs);
+        });
     }
 }

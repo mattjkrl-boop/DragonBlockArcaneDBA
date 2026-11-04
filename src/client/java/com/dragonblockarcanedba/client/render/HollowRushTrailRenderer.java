@@ -1,7 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.HollowRushTrailEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -26,6 +30,13 @@ import java.util.Map;
  * region is sampled for a dense plasma cut with a white core, with no
  * arc mesh under it. First-person narrowing, lifetime, and the fade
  * curve are unchanged.
+ *
+ * Complex pass: the corridor gains a pieces layer of tendrils laid along
+ * the rush path itself on the dissolve shader, a thick cyan to violet
+ * core strand and a thinner offset strand on normal dashes, and two
+ * strands swept across the slash arc on the third dash. WISP_CURL
+ * sprites shed along the helical stream paths and across the arc as the
+ * complex particle layer. The material emission stays as filler.
  */
 public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntity, HollowRushTrailRenderer.TrailRenderState> {
 
@@ -91,6 +102,8 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
         final MaterialEmitters.Emitter arc;
         final MaterialEmitters.Emitter arcCore;
         final MaterialEmitters.Emitter arcVapor;
+        final MaterialEmitters.Emitter wispStream;
+        final MaterialEmitters.Emitter wispArc;
         long lastNanos = 0L;
         long lastSeenNanos = 0L;
         Vec3 start = Vec3.ZERO;
@@ -149,6 +162,23 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
             this.arcVapor = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(0x26F2FF, 1.8f, s ^ 0x77, Vec3.ZERO, 0.012f),
                 random -> new MaterialEmitters.Sample(arcPoint(random, 1.05), dir.scale(-0.08)), 60f, 70);
+            // Complex particle layer: wisp curls shed along the helical
+            // stream paths on normal dashes and across the arc on the
+            // third dash.
+            this.wispStream = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.03f),
+                random -> {
+                    double t = random.nextDouble();
+                    double strand = random.nextBoolean() ? 0.0 : Math.PI;
+                    double ang = strand + t * Math.PI * 3.0 + age * 0.3;
+                    double r = 0.56 * widthScale * (0.75 + 0.25 * Math.sin(t * Math.PI));
+                    Vec3 p = start.add(dir.scale(t * len))
+                        .add(right.scale(Math.cos(ang) * r)).add(up.scale(Math.sin(ang) * r));
+                    return new MaterialEmitters.Sample(p, dir.scale(0.10));
+                }, 30f, 36);
+            this.wispArc = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.03f),
+                random -> new MaterialEmitters.Sample(arcPoint(random, 1.05), dir.scale(-0.08)), 30f, 36);
         }
 
         private Vec3 arcPoint(net.minecraft.util.RandomSource random, double radiusScale) {
@@ -215,18 +245,84 @@ public class HollowRushTrailRenderer extends EntityRenderer<HollowRushTrailEntit
         s.age = state.age;
         s.progress = progress;
 
+        // Pieces layer: tendrils along the rush path, in local space (the
+        // pose sits at the trail origin, unrotated, so the synced dash
+        // direction is a plain offset). Two strands on a normal dash is
+        // 768 vertices at full spine samples, four on the third dash arc
+        // is 1536, both well inside the class M budget.
+        {
+            final Vec3 dirL = s.dir;
+            final Vec3 rightL = s.right;
+            final Vec3 upL = s.up;
+            final float lenL = s.len;
+            final float wsL = s.widthScale;
+            final long pseed = state.seed;
+            final float penv = alpha;
+            final float pds = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            if (state.isThirdDash) {
+                // The strands sweep the same arc the emission samples, on
+                // the emission's closing radius curve. The 225 degree
+                // sweep is drawn as two tendrils per arc meeting at the
+                // arc mid, each control pushed out to the midpoint
+                // matched distance (radius times 2 minus cos of the half
+                // sweep, about 1.44 here), so the spines hug the arc
+                // instead of cutting across it. Four tendrils at full
+                // spine samples is 1536 vertices, inside the budget.
+                float close = ease(progress);
+                double slashR = 1.15 * wsL * (0.72 + 0.28 * (1.0 - close));
+                Vec3 arcC = dirL.scale(lenL * 0.62);
+                double th = Math.PI * 0.625;
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                    for (int half = 0; half < 2; half++) {
+                        double a0 = half == 0 ? -th : 0.0;
+                        double a1 = half == 0 ? -th * 0.5 : th * 0.5;
+                        double a2 = half == 0 ? 0.0 : th;
+                        ComplexGeometry.tendril(pose, buffer, pseed ^ (0xB11L + half * 131L),
+                            arcPointLocal(arcC, rightL, upL, a0, slashR),
+                            arcPointLocal(arcC, rightL, upL, a1, slashR * 1.44),
+                            arcPointLocal(arcC, rightL, upL, a2, slashR),
+                            0.34f * wsL, 0xFFFFFF, 0x730DF2, 0.92f, penv, pds);
+                        ComplexGeometry.tendril(pose, buffer, pseed ^ (0xB31L + half * 131L),
+                            arcPointLocal(arcC, rightL, upL, a0, slashR * 0.88),
+                            arcPointLocal(arcC, rightL, upL, a1, slashR * 0.88 * 1.44),
+                            arcPointLocal(arcC, rightL, upL, a2, slashR * 0.88),
+                            0.18f * wsL, 0x26F2FF, 0x730DF2, 0.92f, penv, pds);
+                    }
+                });
+            } else {
+                Vec3 mid = dirL.scale(lenL * 0.5);
+                Vec3 end = dirL.scale(lenL);
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xB33L,
+                        Vec3.ZERO, mid.add(upL.scale(0.08 * wsL)), end, 0.30f * wsL,
+                        0x26E6FF, 0xBF1AFF, 0.92f, penv, pds);
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xB44L,
+                        rightL.scale(0.18 * wsL), mid.add(rightL.scale(0.10 * wsL)).add(upL.scale(-0.06 * wsL)),
+                        end.add(rightL.scale(-0.05 * wsL)), 0.16f * wsL,
+                        0x730DF2, 0x26F2FF, 0.92f, penv, pds);
+                });
+            }
+        }
+
         if (state.isThirdDash) {
             s.arc.tick(delta, env * 0.85f);
             s.arcCore.tick(delta, env);
             s.arcVapor.tick(delta, env * 0.6f);
+            s.wispArc.tick(delta, env * 0.8f);
         } else {
             s.corridor.tick(delta, env * 0.70f);
             s.core.tick(delta, env * 0.85f);
             s.stream.tick(delta, env);
+            s.wispStream.tick(delta, env * 0.85f);
             s.ends.tick(delta, env);
         }
 
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /** One point on the third dash arc in local space, matching the emission sampler's arc math. */
+    private static Vec3 arcPointLocal(Vec3 center, Vec3 right, Vec3 up, double theta, double radius) {
+        return center.add(right.scale(Math.cos(theta) * radius)).add(up.scale(Math.sin(theta) * radius));
     }
 
     private static float ease(float t) {

@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -31,6 +32,12 @@ public class MarkedByEvilEffect extends MobEffect {
 
         level.sendParticles(
             DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0xFF0033, 1.8f, entity.getId() * 31 + entity.tickCount),
+            px, py, pz,
+            1, 0, 0.05, 0, 0.01
+        );
+        // Complex layer: darkness and void ASH_FLAKE at the same orbiting tick point as the mark plasma.
+        level.sendParticles(
+            DbaParticles.ASH_FLAKE,
             px, py, pz,
             1, 0, 0.05, 0, 0.01
         );

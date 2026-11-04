@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.EvilSpearProjectileEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -20,14 +23,19 @@ import java.util.Map;
 /**
  * Entity renderer for the Evil Spear projectile in Minecraft 26.2.
  *
- * No-shapes pass: the thrown spear is spectral energy, so this renderer no
- * longer draws a spear body, head, barbs, sheath, trail ribbons, or wake
- * bands. It emits a dense material cluster at the projectile position and a
- * material trail along the actual movement segment: crimson plasma at the
- * core, darkness smoke in the wake, hellfire embers shed along the path,
- * flame at the leading cluster, and pale soul vapor through the cluster.
- * The projectile entity still owns its flight, pierce, vortex, impact
- * entities, sounds, and server side trail particles.
+ * Complex pass: a layered composition at class M. Two torn tendrils
+ * stream behind the projectile as its wake through the veil shader,
+ * crimson at the head and tearing into darkness at the tail, and a
+ * small cluster of flame tongues licks at the head through the additive
+ * shader. The complex particle layer is an EMBER_FRAGMENT trail shed
+ * along the flight segment. The material emission from the no-shapes
+ * pass stays as filler: a dense cluster at the projectile position and
+ * a trail along the actual movement segment, crimson plasma at the
+ * core, darkness smoke in the wake, hellfire embers, flame at the
+ * leading cluster, and pale soul vapor. The projectile entity still
+ * owns its flight, pierce, vortex, impact entities, sounds, and
+ * server side trail particles. No spear body is drawn: the projectile
+ * stays spectral, as the no-shapes pass settled.
  */
 public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProjectileEntity, EvilSpearProjectileRenderer.EvilSpearRenderState> {
 
@@ -94,6 +102,40 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
             float envelope = bodyFade * firstPersonFactor * MaterialEmitters.distanceScale(center);
 
             if (envelope > 0.01f) {
+                // Pieces layer, in local space (pose origin is the
+                // projectile position, axes unrotated). Direction comes
+                // from the real velocity, with rotation as fallback.
+                // Two wake tendrils at full spine samples are about 768
+                // vertices and four head tongues about 192, for roughly
+                // 960 total, inside the class M budget of 2500.
+                final Vec3 vel = state.velocity == null ? Vec3.ZERO : state.velocity;
+                final Vec3 dir = vel.lengthSqr() > 1.0e-4
+                        ? vel.normalize() : directionFromRot(state.yRot, state.xRot);
+                Vec3 sideRaw = dir.cross(new Vec3(0.0, 1.0, 0.0));
+                final Vec3 side = sideRaw.lengthSqr() < 1.0e-6
+                        ? new Vec3(1.0, 0.0, 0.0) : sideRaw.normalize();
+                final long pieceSeed = state.seed;
+                final float pieceEnv = bodyFade * firstPersonFactor;
+                final float pieceDs = MaterialEmitters.distanceScale(center);
+                final float sway = age * 0.50f;
+                ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                    ComplexGeometry.tendril(pose, buffer, pieceSeed ^ 0x5AE1L,
+                            dir.scale(0.30),
+                            dir.scale(-0.85).add(side.scale(0.30)),
+                            dir.scale(-1.95).add(side.scale(-0.15)), 0.34f,
+                            0xF20D33, 0x26030B, 0.92f, pieceEnv, pieceDs);
+                    ComplexGeometry.tendril(pose, buffer, pieceSeed ^ 0x5AE2L,
+                            dir.scale(0.10).add(side.scale(0.14)),
+                            dir.scale(-0.70).add(side.scale(-0.28)),
+                            dir.scale(-1.55).add(side.scale(0.22)), 0.17f,
+                            0xF20D33, 0x26030B, 0.88f, pieceEnv, pieceDs);
+                });
+                // Small flame tongues at the head of the projectile.
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                        ComplexGeometry.flameTongues(pose, buffer, pieceSeed ^ 0xF1B1L,
+                                dir.scale(0.38), 0.24f, 0.62f, 4,
+                                0xFFF3D6, 0xF20D33, 0.95f, pieceEnv, sway, pieceDs));
+
                 EmissionRig rig = rigFor(level, state.seed, center, age);
                 rig.tick(center, state.velocity, envelope, age);
             }
@@ -101,6 +143,15 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         }
 
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static Vec3 directionFromRot(float yRot, float xRot) {
+        double yaw = Math.toRadians(yRot);
+        double pitch = Math.toRadians(xRot);
+        return new Vec3(
+                -Math.sin(yaw) * Math.cos(pitch),
+                -Math.sin(pitch),
+                Math.cos(yaw) * Math.cos(pitch)).normalize();
     }
 
     private EmissionRig rigFor(ClientLevel level, long seed, Vec3 center, float age) {
@@ -138,6 +189,7 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
         private final MaterialEmitters.Emitter plasma;
         private final MaterialEmitters.Emitter darkness;
         private final MaterialEmitters.Emitter embers;
+        private final MaterialEmitters.Emitter emberFragments;
         private final MaterialEmitters.Emitter flame;
         private final MaterialEmitters.Emitter soul;
 
@@ -162,6 +214,11 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
             this.embers = new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.ember(Vec3.ZERO, 0.050f),
                     trail, 44f, 64);
+            // Complex particle layer: irregular ember fragments shed
+            // along the same flight segment as the round ember filler.
+            this.emberFragments = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT, Vec3.ZERO, 0.050f),
+                    trail, 30f, 38);
             this.flame = new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.flame(Vec3.ZERO, 0.020f),
                     cluster, 28f, 44);
@@ -182,6 +239,7 @@ public class EvilSpearProjectileRenderer extends EntityRenderer<EvilSpearProject
             plasma.tick(delta, envelope);
             darkness.tick(delta, envelope * 0.85f);
             embers.tick(delta, envelope);
+            emberFragments.tick(delta, envelope);
             flame.tick(delta, envelope * 0.80f);
             soul.tick(delta, envelope * 0.70f);
         }

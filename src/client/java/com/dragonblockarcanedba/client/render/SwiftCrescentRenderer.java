@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SwiftCrescentEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -112,6 +114,17 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
         anchor.trail = trail;
         anchor.variant = state.variant;
 
+        // Pieces layer: one torn tendril bowed along the crescent arc
+        // forms the wave body, tip to tip across the cut basis, bowed
+        // forward and dipped at the belly in the variant lip color.
+        int arcLip = state.variant == 1 ? 0x8CCCFF : 0x00DBFF;
+        Vec3 arcFrom = anchor.right.scale(-2.0 * baseScale).add(anchor.up.scale(0.38 * baseScale));
+        Vec3 arcTo = anchor.right.scale(2.0 * baseScale).add(anchor.up.scale(0.38 * baseScale));
+        Vec3 arcControl = anchor.forward.scale(1.05 * baseScale).add(anchor.up.scale(-0.62 * baseScale));
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendril(pose, buffer, state.seed ^ 0xC3E5, arcFrom, arcControl, arcTo,
+                0.36f * baseScale, 0xFFFFFF, arcLip, 0.92f, fade, dist));
+
         float delta = anchor.deltaSeconds(mc.isPaused());
         if (delta > 0f) {
             float envelope = fade * dist;
@@ -119,6 +132,7 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
             anchor.core.tick(delta, envelope);
             anchor.lip.tick(delta, envelope);
             anchor.vapor.tick(delta, envelope * 0.8f);
+            anchor.sparkStreaks.tick(delta, envelope);
             if (impact > 0.02f) anchor.sparks.tick(delta, impact * dist);
         }
 
@@ -138,6 +152,9 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
             MaterialEmitters.burst(mc.level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.24f),
                 MaterialEmitters.point(center), 16);
+            MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.22f),
+                MaterialEmitters.point(center), 12);
         }
         anchor.lastAge = state.age;
         super.submit(state, poseStack, collector, cameraState);
@@ -208,6 +225,7 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
         private final MaterialEmitters.Emitter lip;
         private final MaterialEmitters.Emitter vapor;
         private final MaterialEmitters.Emitter sparks;
+        private final MaterialEmitters.Emitter sparkStreaks;
 
         private Anchor(ClientLevel level, int seed, int variant) {
             this.level = level;
@@ -259,6 +277,11 @@ public class SwiftCrescentRenderer extends EntityRenderer<SwiftCrescentEntity, S
             this.sparks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.16f),
                 random -> new MaterialEmitters.Sample(center, Vec3.ZERO), 24f, 32);
+            // Complex particle layer: spark streaks shed across the cut
+            // volume at the rim, inside the 40 per second budget.
+            this.sparkStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.14f),
+                cutVolume, 26f, 34);
         }
 
         private float deltaSeconds(boolean paused) {

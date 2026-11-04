@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.AzureRushTrailEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -25,14 +27,18 @@ import java.util.Map;
  * Held azure rush wind. One wake follows the flyer's chest. Older puff
  * entities do not each stamp another wake.
  *
- * No-shapes pass: this renderer draws no geometry. The wake sampling,
- * centerline, and frame math are unchanged, but the wake itself is now
- * sprayed material along that centerline: a bright plasma core stream,
- * vapor shed through the old shell volume, rain sprayed off the moving
+ * Complex pass: the wake is a layered composition. The pieces layer
+ * is a chain of three ComplexGeometry tendrils laid along the wake
+ * centerline stations (head, middle, and tail sections, each a bezier
+ * through its stations), drawn through the shader submit helper with
+ * the tendril canvas. The complex particle layer is WISP_CURL sprites
+ * shed through the shell volume. The material emission from the
+ * no-shapes pass stays as filler: a bright plasma core stream, vapor
+ * shed through the old shell volume, rain sprayed off the moving
  * wake, and a brighter plasma stream inside the old shock lip station
- * window. The centerline and its radius profile are data only; nothing
- * is rendered from them. Seeds derive from the trail entity's synced
- * caster id, the same key the wake maps already use.
+ * window. The wake sampling, centerline, and frame math are unchanged.
+ * Seeds derive from the trail entity's synced caster id, the same key
+ * the wake maps already use.
  */
 public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity, AzureRushTrailRenderer.TrailRenderState> {
 
@@ -267,6 +273,10 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
                         MaterialEmitters.Preset.plasma(0xFFFFFF, 1.0f, seedInt ^ 0x11B0,
                                 Vec3.ZERO, 0.01f),
                         wake(frame, 2), 90f, 140),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL,
+                                Vec3.ZERO, 0.02f),
+                        wake(frame, 1), 26f, 40),
         };
         return emission;
     }
@@ -343,6 +353,29 @@ public class AzureRushTrailRenderer extends EntityRenderer<AzureRushTrailEntity,
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer: three tendrils chained along the centerline
+        // stations in local space, head to tail, so the wake has a torn
+        // strand body inside the sprayed filler. Width follows the
+        // trail scale and the first person narrowing the emission uses.
+        if (envelope > 0.01f) {
+            final Vec3[] pts = new Vec3[STATIONS];
+            for (int s = 0; s < STATIONS; s++) {
+                pts[s] = new Vec3(cx[s], cy[s], cz[s]);
+            }
+            final int shellColor = doubleRush ? 0x14FF94 : 0x05CCFF;
+            final float tendrilWidth = 0.42f * scale * (firstPerson ? 0.5f : 1.0f);
+            final float geoEnv = envelope;
+            final float geoDs = ds;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.tendril(pose, buffer, seed ^ 0x7E11L, pts[0], pts[3], pts[5],
+                        tendrilWidth, 0xC7FFFF, shellColor, 0.90f, geoEnv, geoDs);
+                ComplexGeometry.tendril(pose, buffer, seed ^ 0x7E22L, pts[5], pts[8], pts[10],
+                        tendrilWidth * 0.92f, 0xC7FFFF, shellColor, 0.90f, geoEnv, geoDs);
+                ComplexGeometry.tendril(pose, buffer, seed ^ 0x7E33L, pts[10], pts[13], pts[15],
+                        tendrilWidth * 0.80f, 0xC7FFFF, shellColor, 0.90f, geoEnv, geoDs);
+            });
         }
         super.submit(state, poseStack, collector, cameraState);
     }

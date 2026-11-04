@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.SaberDodgeSparkEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -19,12 +20,12 @@ import java.util.Map;
 /**
  * Entity Renderer for Saber Dodge Spark in Minecraft 26.2.
  *
- * <p>No-shapes pass: the clash rings, spike quads, flying diamond
- * shards, and core plume are no longer drawn as geometry. The burst is
- * emitted as gold void plasma, white plasma, spatial glass dust, and a
- * thin darkness vapor rim inside the burst volume, using the shared
- * material emitters. Build-in, growth, quadratic fade, colors, and the
- * bloom moment are carried by emission density and one opening burst.</p>
+ * <p>Complex pass: this is a class S burst, so no pieces layer is
+ * required. It gains a complex particle layer of SPARK_STREAK and
+ * SHARD_CHIP sprites over the existing gold void plasma, white
+ * plasma, spatial glass dust, and darkness vapor filler. Build-in,
+ * growth, quadratic fade, colors, and the bloom moment are carried
+ * by emission density and one opening burst, unchanged.</p>
  */
 public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntity, SaberDodgeSparkRenderer.DodgeSparkRenderState> {
 
@@ -104,6 +105,14 @@ public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntit
             MaterialEmitters.burst(level,
                 MaterialEmitters.Preset.glassDust(0xFFF3B0, 0.95f, (int) (state.seed ^ 0x54A2DL), Vec3.ZERO, 0.55f),
                 MaterialEmitters.point(emission.origin), Math.max(4, Math.round(14 * ds)));
+            // Complex burst: 10 complex sprites at full density,
+            // inside the class S burst budget of 12.
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.52f),
+                MaterialEmitters.point(emission.origin), Math.max(2, Math.round(6 * ds)));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.46f),
+                MaterialEmitters.point(emission.origin), Math.max(2, Math.round(4 * ds)));
         }
         if (strength > 0.01f) {
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
@@ -160,7 +169,16 @@ public class SaberDodgeSparkRenderer extends EntityRenderer<SaberDodgeSparkEntit
                     volume, 190.0f, 250),
                 new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.darkness(0x3D1A78, 1.30f * baseScale, seed ^ 0xBADD, Vec3.ZERO, 0.10f),
-                    volume, 80.0f, 120)
+                    volume, 80.0f, 120),
+                // Complex particle layer (class S requirement): spark
+                // streaks and shard chips inside the burst volume.
+                // Rates stay at or under the 40 per second budget.
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.22f),
+                    volume, 36.0f, 40),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.18f),
+                    volume, 30.0f, 40)
             };
         }
 

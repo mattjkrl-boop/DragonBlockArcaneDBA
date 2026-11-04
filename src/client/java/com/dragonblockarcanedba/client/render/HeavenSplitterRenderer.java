@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.HeavenSplitterEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -107,6 +109,27 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         anchor.scale = scale;
         anchor.wallHeight = 7.2f * scale * (0.12f + 0.88f * rise);
 
+        // Pieces layer, class L with two builders, both on the shader.
+        // One thick torn strand runs the split path at mid wall height,
+        // seeded sideways bow from the entity seed.
+        float strandY = anchor.wallHeight * 0.52f;
+        Vec3 strandFrom = up.scale(strandY);
+        Vec3 strandTo = forward.scale(state.dashLength).add(up.scale(strandY));
+        Vec3 strandControl = forward.scale(state.dashLength * 0.5)
+            .add(up.scale(anchor.wallHeight * 0.64f))
+            .add(right.scale(((anchor.seed & 7) - 3) * 0.14f * scale));
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendril(pose, buffer, state.seed ^ 0xBEEF, strandFrom, strandControl, strandTo,
+                0.55f * scale, 0xFFFFFF, 0x00D9FF, 0.95f, fade, dist));
+        // A crack fan spreads along the landing line at the path midpoint.
+        Vec3 crackMid = forward.scale(state.dashLength * 0.5);
+        poseStack.pushPose();
+        poseStack.translate(crackMid.x, 0.02, crackMid.z);
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.crackFan(pose, buffer, state.seed ^ 0xC4AC, state.dashLength * 0.52f,
+                0xFFFFFF, 0x00D9FF, 0.90f, fade, dist));
+        poseStack.popPose();
+
         float delta = anchor.deltaSeconds(mc.isPaused());
         if (delta > 0f) {
             float envelope = fade * dist;
@@ -115,7 +138,10 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
             anchor.core.tick(delta, envelope);
             anchor.vapor.tick(delta, envelope * 0.75f);
             anchor.groundVapor.tick(delta, envelope * 0.6f);
-            if (impact > 0.02f) anchor.sparks.tick(delta, impact * dist);
+            if (impact > 0.02f) {
+                anchor.sparks.tick(delta, impact * dist);
+                anchor.sparkStreaks.tick(delta, impact * dist);
+            }
         }
 
         float strikeAge = state.maxLifetime * 0.25f;
@@ -132,7 +158,14 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
                 MaterialEmitters.burst(mc.level,
                     MaterialEmitters.Preset.vapor(0xBFEFFF, 4.2f, anchor.seed ^ (0x71B0 + i), Vec3.ZERO, 0.16f),
                     MaterialEmitters.sphereVolume(at, 1.45 * scale), 8);
+                MaterialEmitters.burst(mc.level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.20f),
+                    MaterialEmitters.sphereVolume(at, 0.80 * scale), 8);
             }
+            Vec3 midAt = origin.add(forward.scale(state.dashLength * 0.5f));
+            MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.26f),
+                MaterialEmitters.point(midAt), 10);
         }
         anchor.lastAge = state.age;
         super.submit(state, poseStack, collector, cameraState);
@@ -184,6 +217,7 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
         private final MaterialEmitters.Emitter vapor;
         private final MaterialEmitters.Emitter sparks;
         private final MaterialEmitters.Emitter groundVapor;
+        private final MaterialEmitters.Emitter sparkStreaks;
 
         private Anchor(ClientLevel level, int seed) {
             this.level = level;
@@ -226,6 +260,12 @@ public class HeavenSplitterRenderer extends EntityRenderer<HeavenSplitterEntity,
             this.groundVapor = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(0x7FD8FF, 4.0f, seed ^ 0x4444, Vec3.ZERO, 0.018f),
                 ground, 22f, 30);
+            // Complex particle layer: spark streaks sprayed from the cut
+            // face at contact, inside the 40 per second budget. Shard
+            // chips join as a burst at the strike tick in submit.
+            this.sparkStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.18f),
+                cutVolume, 30f, 38);
         }
 
         private float deltaSeconds(boolean paused) {

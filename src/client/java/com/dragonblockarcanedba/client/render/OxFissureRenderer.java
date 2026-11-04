@@ -1,9 +1,12 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.OxFissureEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -16,18 +19,25 @@ import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Entity Renderer for Ox King's Ground Fissure in Minecraft 26.2.
- * No-shapes pass: this renderer draws no geometry. The trench is carried by
- * material sampled along the crack line as data: hot plasma glowing in the
- * crack, a white-hot core stream, ground dust, embers, and occasional
- * physical debris chunks of the actual ground block. The crack follows the
- * same yaw and the same 4.2 by 2.0 footprint the entity damages, and the
- * fade in, pulse, and fade out are unchanged from the bespoke build.
+ * Complex pass: a layered composition at class M. The pieces layer is two
+ * ComplexGeometry builders: a crackFan through submitEnergy on the
+ * dissolve shader, laid twice along the fissure line under the fissure
+ * yaw so the glowing web runs the length of the trench as its core, and
+ * fracturePlates through submitSolid as solid fractured ground at the
+ * origin. The complex particle layer is SHARD_CHIP sprites sampled along
+ * the crack line. The material filler stays as before: hot plasma glowing
+ * in the crack, a white-hot core stream, ground dust, embers, and
+ * occasional physical debris chunks of the actual ground block, all
+ * sampled along the crack line as data. The crack follows the same yaw
+ * and the same 4.2 by 2.0 footprint the entity damages, and the fade in,
+ * pulse, and fade out are unchanged from the bespoke build.
  */
 public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissureRenderer.OxFissureRenderState> {
     public OxFissureRenderer(EntityRendererProvider.Context context) {
@@ -132,6 +142,12 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
                         MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, ground),
                                 new Vec3(0.0, 0.20, 0.0), 0.06f),
                         crackLine(frame, 0.60f), 12f, 25),
+                // Complex particle layer: stone chips shed along the line,
+                // under the continuous rate cap.
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                                new Vec3(0.0, 0.18, 0.0), 0.06f),
+                        crackLine(frame, 0.60f), 24f, 36),
         };
         return emission;
     }
@@ -168,6 +184,35 @@ public class OxFissureRenderer extends EntityRenderer<OxFissureEntity, OxFissure
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer, in the local ground frame rotated by the fissure
+        // yaw, the same rotation the bespoke build used, so local +Z runs
+        // along the trench. Two crack fans centered a block either side of
+        // the origin lay the glowing web along the full line; solid plates
+        // sit at the origin where the ax struck.
+        if (fade > 0.01f) {
+            final long geoSeed = state.seed;
+            final float geoFade = fade;
+            final float geoDist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            poseStack.pushPose();
+            poseStack.mulPose(new Matrix4f().rotation(Axis.YP.rotationDegrees(-state.yRot)));
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0x9A7EL,
+                            1.55f, 0.26f, 0x8A6A44, 0x3A2C1E, 0.95f, geoFade, geoDist));
+            poseStack.pushPose();
+            poseStack.translate(0.0, 0.0, 0.95);
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
+                            1.35f, 0xFFD98A, 0xFF6A12, 0.95f, geoFade, geoDist));
+            poseStack.popPose();
+            poseStack.pushPose();
+            poseStack.translate(0.0, 0.0, -0.95);
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4B0L,
+                            1.35f, 0xFFD98A, 0xFF6A12, 0.95f, geoFade, geoDist));
+            poseStack.popPose();
+            poseStack.popPose();
         }
 
         super.submit(state, poseStack, collector, cameraState);

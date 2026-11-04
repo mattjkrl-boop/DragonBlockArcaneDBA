@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.SkyCracksEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.mojang.math.Axis;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -20,17 +23,23 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * The torn sky above the Cursed Tempest, carried by material instead of a
- * drawn crack network. The no-shapes conversion removes the branch bolts,
- * crack stars, and glow fan entirely. The fractures survive as emission
- * data: seven main jagged paths and a web of shorter ones, regenerated from
- * the entity's synced seed in the camera billboard plane on every frame, so
- * the tear is the same tear on every client. Glowing curse plasma and a
- * white hot core bleed along those paths, violet plasma fills the web, soul
- * wisps drift off the fractures, and a broad darkness emission behind the
- * paths reads as the shadow of the tear. No crack mesh, ribbon, or decal
- * quad is drawn. Alpha still runs the shared lifecycle envelope over the
- * entity's 100 tick life times the slow electrical flicker.
+ * The torn sky above the Cursed Tempest, as a layered composition whose
+ * centerpiece is a real crack plane. The pieces layer is two crackFans
+ * drawn on the rift plane itself: a wide crimson web at radius 21, hot
+ * white at the heart, and a tighter violet web inside it, both through the
+ * shader, on a pose billboarded to the camera and rotated so the crackFan
+ * ground plane becomes the billboard plane. Falling from the cracks are
+ * dark solid shards: three small shardBursts whose origins sit on the
+ * billboard plane at seeded offsets, aimed down in world space, cycling
+ * downward with age so the shards actually fall and respawn higher. The
+ * complex particle layer is wisp curls drifting off the fractures. The
+ * material emission stays as filler: seven main jagged paths and a web of
+ * shorter ones, regenerated from the entity's synced seed in the camera
+ * billboard plane on every frame, carry glowing curse plasma and a white
+ * hot core, violet plasma fills the web, soul wisps drift off the
+ * fractures, and a broad darkness emission behind the paths reads as the
+ * shadow of the tear. Alpha still runs the shared lifecycle envelope over
+ * the entity's 100 tick life times the slow electrical flicker.
  */
 public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracksRenderer.SkyCracksRenderState> {
 
@@ -93,6 +102,64 @@ public class SkyCracksRenderer extends EntityRenderer<SkyCracksEntity, SkyCracks
 
         List<List<Vec3>> paths = crackPaths(center, basisX, basisY, seed);
         MaterialEmitters.Source pathSource = pathsSource(paths);
+
+        // Pieces layer, part one: dark shards falling from the cracks. The
+        // burst origins sit on the billboard plane at seeded offsets,
+        // converted into entity local space through the camera basis, but
+        // the bursts themselves aim down in world space and cycle downward
+        // with age, so the fall is real motion and not a static cluster.
+        {
+            final long shardSeed = seed;
+            final float shardEnv = alpha;
+            final float shardDs = ds;
+            final float shardAge = state.age;
+            final Vector3f shardBasisX = basisX;
+            final Vector3f shardBasisY = basisY;
+            final double[][] planeSpots = {{6.0, 4.0}, {-8.0, -2.0}, {1.0, -9.0}};
+            final int[] burstCounts = {2, 2, 1};
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
+                for (int c = 0; c < planeSpots.length; c++) {
+                    double px = planeSpots[c][0];
+                    double py = planeSpots[c][1];
+                    double drop = (shardAge * 0.35 + c * 2.37) % 7.0;
+                    Vec3 origin = new Vec3(
+                        shardBasisX.x * px + shardBasisY.x * py,
+                        shardBasisX.y * px + shardBasisY.y * py - drop,
+                        shardBasisX.z * px + shardBasisY.z * py);
+                    ComplexGeometry.shardBurst(pose, buffer, shardSeed ^ (0x5A9DL + c * 131L), origin,
+                        new Vec3(0, -1, 0), 38f, 1.05f, burstCounts[c],
+                        0x14030A, 0x5A1230, 0.95f, shardEnv, shardDs);
+                }
+            });
+        }
+
+        // Pieces layer, part two: the crack plane itself. The pose is
+        // billboarded to the camera, and a copy rotated minus ninety
+        // degrees about X turns the crackFan ground plane into the
+        // billboard plane, exactly as the old crack stars were oriented.
+        {
+            final long crackSeed = seed;
+            final float crackEnv = alpha;
+            final float crackDs = ds;
+            poseStack.pushPose();
+            if (cameraState.orientation != null) {
+                poseStack.mulPose(new org.joml.Matrix4f().rotation(
+                    new Quaternionf(cameraState.orientation).conjugate()));
+            }
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+                PoseStack.Pose flat = pose.copy();
+                flat.rotate(Axis.XP.rotation((float) (-Math.PI / 2.0)));
+                ComplexGeometry.crackFan(flat, buffer, crackSeed ^ 0xC4ACCL, 21.0f,
+                    0xFFF7F7, 0xF20D33, 0.95f, crackEnv, crackDs);
+                ComplexGeometry.crackFan(flat, buffer, crackSeed ^ 0xF04CL, 13.0f,
+                    0xE9D5FF, 0x8C1AF2, 0.92f, crackEnv, crackDs * 0.7f);
+            });
+            poseStack.popPose();
+        }
+
+        // Complex particle layer: wisp curls curling off the fractures.
+        emit(level, MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.015f),
+            pathSource, 28f, delta, emitEnv);
 
         // The fractures themselves: crimson plasma bleeding along the paths,
         // a white hot core on the same paths, violet plasma through the web,

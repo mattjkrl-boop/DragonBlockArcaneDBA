@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -53,6 +54,12 @@ public class StormOfDarknessEffect extends MobEffect {
         if (entity.tickCount % 3 == 0) {
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.DARKNESS, 0x591A80, 1.0f, entity.getId() * 31 + entity.tickCount),
+                entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
+                3, entity.getBbWidth() * 0.4, entity.getBbHeight() * 0.3, entity.getBbWidth() * 0.4, 0.05
+            );
+            // Complex layer: darkness and void ASH_FLAKE at the same tick point, count and spread as the darkness emission.
+            level.sendParticles(
+                DbaParticles.ASH_FLAKE,
                 entity.getX(), entity.getY() + entity.getBbHeight() * 0.5, entity.getZ(),
                 3, entity.getBbWidth() * 0.4, entity.getBbHeight() * 0.3, entity.getBbWidth() * 0.4, 0.05
             );

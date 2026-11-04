@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DelayedLaunchEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -18,14 +21,19 @@ import java.util.Map;
 /**
  * Telegraph for the Z Sword delayed launch.
  *
- * No-shapes pass: the telegraph draws no geometry and uses no ring,
- * disc, or tick marks. Stone dust drifts across the full true slam
- * footprint for the whole countdown, while violet gravity plasma and
- * pale vapor are sampled inside the contracting radius and pulled
- * inward faster as the launch approaches. Gold plasma concentrations
- * at the four rotating cardinal data points replace the old rune
- * ticks. The true radius, true delay, pulse, and rotation behavior
- * carry over from the bespoke renderer.
+ * Complex pass: layered composition. The pieces layer is a crackFan
+ * telegraph web on the ground inside the contracting radius, gold
+ * hot at the center running out to violet at the tips, drawn on the
+ * shader through submitEnergy; in the last tenth of the countdown a
+ * tendril lash fans upward from the center as the launch fires. The
+ * complex particle layer is a one shot SPARK_STREAK burst in that
+ * same launch window. The filler layer is unchanged and uses no ring,
+ * disc, or tick marks: stone dust drifts across the full true slam
+ * footprint for the whole countdown, violet gravity plasma and pale
+ * vapor are sampled inside the contracting radius and pulled inward
+ * faster as the launch approaches, and gold plasma concentrations
+ * sit at the four rotating cardinal data points. The true radius,
+ * true delay, pulse, and rotation behavior carry over from before.
  */
 public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, DelayedLaunchRenderer.DelayedLaunchRenderState> {
 
@@ -100,6 +108,28 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
         emission.vapor.tick(delta, envelope * 0.58f);
         emission.gold.tick(delta, envelope * 0.92f);
 
+        // Pieces layer: the crack web telegraphs the contracting
+        // radius for the whole countdown.
+        long geoSeed = state.seed;
+        float webRadius = radius;
+        float webEnv = Math.min(1.0f, ringAlpha * 1.5f) * (0.45f + 0.55f * progress);
+        float distF = dist;
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC9ACL,
+                webRadius, GOLD, VIOLET, 0.92f, webEnv, distF));
+
+        // Launch window: the last tenth of the countdown fires the
+        // tendril lash and the spark streak burst, once per entity.
+        if (progress >= 0.90f) {
+            emission.burstLaunch();
+            float lashEnv = Math.min(1.0f, (progress - 0.90f) / 0.10f);
+            float lashLen = slamRadius * 0.55f;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0x1A57L,
+                    new Vec3(0.0, 0.10, 0.0), new Vec3(0.0, 1.0, 0.0), 55.0f, lashLen, 4,
+                    0.20f, VIOLET, GOLD, 0.95f, lashEnv, distF));
+        }
+
         super.submit(state, poseStack, collector, cameraState);
     }
 
@@ -125,6 +155,8 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
 
     private static final class Emission {
         final long seed;
+        final ClientLevel level;
+        boolean launchBurstDone = false;
         final Frame frame = new Frame();
         final MaterialEmitters.Emitter dust;
         final MaterialEmitters.Emitter plasma;
@@ -135,6 +167,7 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
 
         Emission(ClientLevel level, long seed) {
             this.seed = seed;
+            this.level = level;
             int baseSeed = (int) seed;
             Frame f = frame;
 
@@ -176,6 +209,28 @@ public class DelayedLaunchRenderer extends EntityRenderer<DelayedLaunchEntity, D
             gold = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(GOLD, 1.55f, baseSeed ^ 0x601D, Vec3.ZERO, 0.045f),
                 cardinal, 50.0f, 115);
+        }
+
+        /**
+         * One shot SPARK_STREAK burst in the launch window: streaks
+         * thrown up and outward from the contracting ring. Fires once
+         * per emission instance, so once per entity and seed.
+         */
+        void burstLaunch() {
+            if (launchBurstDone) return;
+            launchBurstDone = true;
+            Frame f = frame;
+            MaterialEmitters.Source launchSource = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double flat = Math.sqrt(random.nextDouble()) * f.currentRadius;
+                Vec3 pos = f.center.add(Math.cos(angle) * flat, 0.18, Math.sin(angle) * flat);
+                Vec3 outward = new Vec3(Math.cos(angle), 0.0, Math.sin(angle)).scale(0.10);
+                return new MaterialEmitters.Sample(pos,
+                    outward.add(0.0, 0.30 + random.nextDouble() * 0.22, 0.0));
+            };
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.16f),
+                launchSource, 24);
         }
 
         float nextDelta() {

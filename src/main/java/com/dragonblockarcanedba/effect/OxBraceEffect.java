@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -65,6 +66,12 @@ public class OxBraceEffect extends MobEffect {
 
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.DUST, 0xFF4500, 1.2f, entity.getId() * 31 + entity.tickCount),
+                px, py, pz,
+                1, 0.0, 0.02, 0.0, 0.01
+            );
+            // Complex layer: earth and stone SHARD_CHIP at the same tick point and rate as the brace dust.
+            level.sendParticles(
+                DbaParticles.SHARD_CHIP,
                 px, py, pz,
                 1, 0.0, 0.02, 0.0, 0.01
             );

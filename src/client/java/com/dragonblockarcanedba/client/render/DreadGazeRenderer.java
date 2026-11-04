@@ -2,9 +2,12 @@ package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
 import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.entity.DreadGazeEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -43,10 +46,23 @@ import java.util.UUID;
  * schedule (staggered, so some eyes are always open while others are
  * shut).
  *
- * The shroud is emitted through MaterialEmitters as DARKNESS and SMOKE
- * material sampled on a shell around the victim. It draws no geometry.
+ * The shroud is a layered composition (COMPLEX-STANDARD, class M).
+ * The pieces layer is five veil tendrils seeded from the victim seed,
+ * submitted through ComplexGeometry.submitVeil with the TENDRIL canvas:
+ * each strand starts low on the outer shell, wraps about a third of a
+ * turn around the victim as it rises past the top of the shroud, and
+ * drifts slowly around the ring with age. Their vertex colors are
+ * near-black (the darkness material color at the root, grading to a
+ * dark brimstone maroon or a dark violet at the tip on alternating
+ * strands), and their vertex alpha stays honest at 0.95: the strands
+ * are faint because their colors are near-black, never because a low
+ * alpha was fed to the shader. The complex particle layer is ASH_FLAKE
+ * drift sampled on the same shell. The filler layer is the existing
+ * emission: DARKNESS and SMOKE material sampled on a shell around the
+ * victim through MaterialEmitters.
  * The eyes are submitted as textured quad particle sprites on a layer
- * bound to the detailed eye texture, so this file writes no vertices.
+ * bound to the detailed eye texture; the eye sprites themselves stay
+ * exactly as they were, detailed physical sprites on that quad path.
  *
  * Positions anchor on the victim; the eye sprites face the viewer, so
  * from the victim's own view every pair stares straight at them, and
@@ -133,6 +149,43 @@ public class DreadGazeRenderer extends EntityRenderer<DreadGazeEntity, DreadGaze
             emitShroud(state, level, env);
         }
 
+        // Pieces layer: five veil tendrils curling through the shroud,
+        // in local space (the pose sits at the victim feet). At full
+        // detail each tendril is 24 spine samples at 16 vertices per
+        // segment, so the whole fan is 5 * 24 * 16 = 1920 vertices,
+        // inside the class M budget of 2500, and the builder scales
+        // the sample count down with the distance scale. The strands
+        // are seeded from the same victim seed as the ring and the
+        // emission, so every client draws the same curls.
+        float pieceDist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+        if (pieceDist > 0.05f) {
+            final long pieceSeed = seed ^ 0xD3AD5L;
+            final float shroudRadius = state.victimWidth * 0.5f + 0.5f;
+            final float shroudTop = Math.max(0.6f, state.victimHeight * 0.95f);
+            final float pieceEnv = env;
+            final float swirl = age * 0.008f;
+            ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.Rng pieceRng = new ComplexGeometry.Rng(pieceSeed);
+                for (int i = 0; i < 5; i++) {
+                    float baseAngle = (float) (i * (Math.PI * 2.0 / 5.0)) + pieceRng.signed() * 0.30f + swirl;
+                    double midAngle = baseAngle + 0.55 + pieceRng.nextFloat() * 0.25;
+                    double endAngle = baseAngle + 1.05 + pieceRng.nextFloat() * 0.30;
+                    Vec3 from = new Vec3(
+                        Math.cos(baseAngle) * shroudRadius * 1.28, 0.04,
+                        Math.sin(baseAngle) * shroudRadius * 1.28);
+                    Vec3 control = new Vec3(
+                        Math.cos(midAngle) * shroudRadius * 0.82, shroudTop * 0.52,
+                        Math.sin(midAngle) * shroudRadius * 0.82);
+                    Vec3 to = new Vec3(
+                        Math.cos(endAngle) * shroudRadius * 1.08, shroudTop * 1.06,
+                        Math.sin(endAngle) * shroudRadius * 1.08);
+                    int tipArgb = (i % 2 == 0) ? 0x2E0A16 : 0x1E0533;
+                    ComplexGeometry.tendril(pose, buffer, pieceSeed + i * 7919L,
+                        from, control, to, 0.24f, 0x0D0017, tipArgb, 0.95f, pieceEnv, pieceDist);
+                }
+            });
+        }
+
         if (cameraState.orientation == null || cameraState.pos == null) {
             super.submit(state, poseStack, collector, cameraState);
             return;
@@ -208,10 +261,12 @@ public class DreadGazeRenderer extends EntityRenderer<DreadGazeEntity, DreadGaze
     }
 
     /**
-     * The world shroud as material, not bands: DARKNESS and SMOKE
-     * particles sampled on a shell around the victim and given a slow
-     * tangential drift, in opposite directions per material, at the
-     * same radius and height the old bands wrapped. Emission runs on
+     * The world shroud filler and complex particle layers: DARKNESS
+     * and SMOKE material particles sampled on a shell around the
+     * victim and given a slow tangential drift, in opposite directions
+     * per material, at the same radius and height the old bands
+     * wrapped, plus ASH_FLAKE flakes drifting slowly down and around
+     * the same shell as the complex particle layer. Emission runs on
      * persistent per-anchor emitters so the rate stays frame-rate
      * independent and budgeted through the shared toolkit.
      */
@@ -256,6 +311,7 @@ public class DreadGazeRenderer extends EntityRenderer<DreadGazeEntity, DreadGaze
         private final long seed;
         private final MaterialEmitters.Emitter darkness;
         private final MaterialEmitters.Emitter smoke;
+        private final MaterialEmitters.Emitter ash;
         private Vec3 base = Vec3.ZERO;
         private float radius = 1.0f;
         private float top = 1.0f;
@@ -272,6 +328,13 @@ public class DreadGazeRenderer extends EntityRenderer<DreadGazeEntity, DreadGaze
             this.smoke = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.smoke(0x1A000A, 3.1f, seedBase ^ 0x5EED, new Vec3(0.0, 0.014, 0.0), 0.014f),
                 random -> sampleShell(random, 1.22f, -0.016f), 11.0f, 32);
+            // Complex particle layer: ash flakes on the shroud shell,
+            // drifting down while the shell sample carries them slowly
+            // around. Rate and budget both sit under the standard
+            // continuous cap of 40 per second per emitter.
+            this.ash = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, new Vec3(0.0, -0.006, 0.0), 0.008f),
+                random -> sampleShell(random, 1.10f, 0.010f), 20.0f, 40);
         }
 
         private void update(GazeRenderState state) {
@@ -303,6 +366,7 @@ public class DreadGazeRenderer extends EntityRenderer<DreadGazeEntity, DreadGaze
             lastSeenNanos = System.nanoTime();
             darkness.tick(delta, envelope);
             smoke.tick(delta, envelope * 0.85f);
+            ash.tick(delta, envelope * 0.90f);
         }
     }
 

@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SpikeFlailSpinEntity;
 import com.dragonblockarcanedba.item.SpikeFlailItem;
 import com.dragonblockarcanedba.particle.DbaParticles;
@@ -25,14 +27,23 @@ import java.util.Map;
 
 /**
  * Orbiting ball, then the outward crack when the channel lets go.
- * No-shapes pass: this renderer submits no effect geometry. The orbit reads
- * as air vapor and steel sparks shed along the ball's real path, sparse
- * vapor along the chain path, and warm dust at the ground contact. The
- * release reads as dust, vapor, and warm plasma material riding the
- * expanding crack edge, then a one-time burst of ground dust, vapor, steel
- * sparks, and physical block chunks on the tick the damage lands. The
- * physical Spike Flail item model in the holder's hand is untouched. Seeds
- * derive from the entity id, so every client emits the same variation.
+ * Complex pass: layered composition. The pieces layer is two tendril
+ * arcs through ComplexGeometry.submitEnergy with the tendril canvas,
+ * following the sampled head path exactly: from the previous ball
+ * sample to the current ball sample, with the control point on the
+ * orbit arc midway between them at the synced radius, so the strands
+ * coil and tear along the path the head actually travelled. The
+ * complex particle layer is SPARK_STREAK sprites shed along the head
+ * path, at the ground contact under the ball, and at the release
+ * crack contacts, plus a SPARK_STREAK burst in the crack burst. The
+ * material filler stays as before: air vapor and steel sparks along
+ * the ball's real path, sparse vapor along the chain path, and warm
+ * dust at the ground contact; the release reads as dust, vapor, and
+ * warm plasma material riding the expanding crack edge, then a
+ * one-time burst of ground dust, vapor, steel sparks, and physical
+ * block chunks on the tick the damage lands. The physical Spike
+ * Flail item model in the holder's hand is untouched. Seeds derive
+ * from the entity id, so every client emits the same variation.
  */
 public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity, SpikeFlailSpinRenderer.SpinState> {
     /** Warm steel dust, the flail's particle theme color. */
@@ -129,6 +140,8 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
         if (!state.releasing) {
             emission.crackBurstFired = false;
             float env = FxEnvelope.envelope(state.age, SpikeFlailItem.CHANNEL_TICKS) * fade * distScale;
+            submitPieces(state, poseStack, collector,
+                FxEnvelope.envelope(state.age, SpikeFlailItem.CHANNEL_TICKS) * fade, distScale);
             emission.tick(delta, env, 0.0f, 0.0f);
             return;
         }
@@ -136,16 +149,56 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
         if (state.releaseAge < SpikeFlailSpinEntity.RELEASE_TICKS) {
             emission.crackBurstFired = false;
             float crackEnv = fade * (0.55f + 0.45f * state.charge) * distScale;
+            submitPieces(state, poseStack, collector, fade * 0.45f, distScale);
             emission.tick(delta, orbitEnv, crackEnv, 0.0f);
         } else if (state.releaseAge == SpikeFlailSpinEntity.RELEASE_TICKS) {
+            submitPieces(state, poseStack, collector, fade * 0.45f, distScale);
             emission.tick(delta, orbitEnv, 0.0f, 0.0f);
             if (!emission.crackBurstFired) {
                 emission.crackBurstFired = true;
                 fireCrackBurst(level, state, distScale);
             }
         } else if (state.releaseAge <= SpikeFlailSpinEntity.RELEASE_TICKS + SpikeFlailSpinEntity.SETTLE_TICKS) {
+            submitPieces(state, poseStack, collector, fade * 0.225f, distScale);
             emission.tick(delta, orbitEnv * 0.5f, 0.0f, fade * distScale);
         }
+    }
+
+    /**
+     * Pieces layer: two tendril arcs in local space along the sampled
+     * head path. The endpoints are the previous and current ball
+     * samples minus the render origin; the control point sits on the
+     * orbit arc midway between them at the synced radius and at the
+     * ball height, so the bezier bows along the real orbit instead of
+     * cutting its chord. The two strands share that path and differ
+     * only by seed and width, so the builder curl reads as air tearing
+     * into strands around the head. Peak alphas are honest body
+     * alphas; faintness lives in the warm dust to near white colors.
+     */
+    private void submitPieces(SpinState state, PoseStack poseStack, SubmitNodeCollector collector,
+                              float envelope, float distScale) {
+        if (envelope <= 0.01f) {
+            return;
+        }
+        final Vec3 prevLocal = state.prevBall.subtract(state.center);
+        final Vec3 ballLocal = state.ball.subtract(state.center);
+        Vec3 sum = prevLocal.add(ballLocal);
+        double flatLen = Math.sqrt(sum.x * sum.x + sum.z * sum.z);
+        final Vec3 arcMid;
+        if (flatLen > 1.0e-4) {
+            arcMid = new Vec3(sum.x / flatLen * state.radius, ballLocal.y, sum.z / flatLen * state.radius);
+        } else {
+            arcMid = prevLocal.add(ballLocal).scale(0.5);
+        }
+        final float gEnv = envelope;
+        final float gDist = distScale;
+        final long gSeed = state.seed;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0xA11CL, prevLocal, arcMid, ballLocal,
+                0.32f, THEME_DUST, 0xFFF2CC, 0.92f, gEnv, gDist);
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0xA22CL, prevLocal, arcMid, ballLocal,
+                0.17f, 0xEDE8DA, 0xF5EFE0, 0.88f, gEnv, gDist);
+        });
     }
 
     private void fireCrackBurst(ClientLevel level, SpinState state, float distScale) {
@@ -161,6 +214,11 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
         MaterialEmitters.burst(level,
             MaterialEmitters.Preset.fixed(DbaParticles.SPARK, new Vec3(0.0, 0.10, 0.0), 0.18f),
             ground, Math.round((18.0f + 12.0f * state.charge) * distScale));
+        // Complex particle layer at the crack contact: streak slivers
+        // across the same ground area, inside the class M burst budget.
+        MaterialEmitters.burst(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, new Vec3(0.0, 0.10, 0.0), 0.18f),
+            ground, Math.round((12.0f + 8.0f * state.charge) * distScale));
         BlockState groundState = level.getBlockState(BlockPos.containing(state.center.x, state.center.y - 0.5, state.center.z));
         if (groundState.isAir()) {
             groundState = Blocks.GRAVEL.defaultBlockState();
@@ -196,11 +254,14 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
         final Frame frame = new Frame();
         final MaterialEmitters.Emitter orbitVapor;
         final MaterialEmitters.Emitter orbitSparks;
+        final MaterialEmitters.Emitter orbitStreaks;
         final MaterialEmitters.Emitter chainVapor;
         final MaterialEmitters.Emitter groundDust;
+        final MaterialEmitters.Emitter groundStreaks;
         final MaterialEmitters.Emitter edgeDust;
         final MaterialEmitters.Emitter edgeVapor;
         final MaterialEmitters.Emitter edgePlasma;
+        final MaterialEmitters.Emitter edgeStreaks;
         final MaterialEmitters.Emitter settleDust;
         float lastAge = Float.NaN;
         long lastSeenNanos = System.nanoTime();
@@ -230,12 +291,22 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
             this.orbitSparks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.12f),
                 ballPath, 58f, 90);
+            // Complex particle layer: steel streak slivers along the
+            // same sampled head path, inside the continuous cap.
+            this.orbitStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.12f),
+                ballPath, 26f, 34);
             this.chainVapor = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(0xDAD4C6, 1.00f, seed ^ 0xC4A1, Vec3.ZERO, 0.025f),
                 chainPath, 48f, 80);
             this.groundDust = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(THEME_DUST, 1.15f, seed ^ 0xD057, new Vec3(0.0, 0.015, 0.0), 0.050f),
                 groundBall, 38f, 65);
+            // Complex particle layer at the ground contact under the
+            // ball: sparse streak slivers kicked off the surface.
+            this.groundStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.08f),
+                groundBall, 15f, 22);
             this.edgeDust = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(THEME_DUST, 1.50f, seed ^ 0xE06E, Vec3.ZERO, 0.020f),
                 edge, 160f, 230);
@@ -245,6 +316,11 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
             this.edgePlasma = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(0xFFF2CC, 0.80f, seed ^ 0xCA1D, Vec3.ZERO, 0.015f),
                 edge, 72f, 115);
+            // Complex particle layer at the crack edge contacts: steel
+            // streak slivers riding the same expanding edge samples.
+            this.edgeStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.14f),
+                edge, 27f, 35);
             this.settleDust = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.dust(THEME_DUST, 1.05f, seed ^ 0x5E77, new Vec3(0.0, 0.010, 0.0), 0.040f),
                 disc, 38f, 65);
@@ -268,13 +344,16 @@ public class SpikeFlailSpinRenderer extends EntityRenderer<SpikeFlailSpinEntity,
             if (orbitEnvelope > 0.01f) {
                 orbitVapor.tick(delta, orbitEnvelope);
                 orbitSparks.tick(delta, orbitEnvelope);
+                orbitStreaks.tick(delta, orbitEnvelope);
                 chainVapor.tick(delta, orbitEnvelope * 0.80f);
                 groundDust.tick(delta, orbitEnvelope);
+                groundStreaks.tick(delta, orbitEnvelope);
             }
             if (crackEnvelope > 0.01f) {
                 edgeDust.tick(delta, crackEnvelope);
                 edgeVapor.tick(delta, crackEnvelope);
                 edgePlasma.tick(delta, crackEnvelope);
+                edgeStreaks.tick(delta, crackEnvelope);
             }
             if (settleEnvelope > 0.01f) {
                 settleDust.tick(delta, settleEnvelope);

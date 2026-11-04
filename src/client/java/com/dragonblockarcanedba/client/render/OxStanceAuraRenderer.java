@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.OxStanceAuraEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -18,13 +21,17 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Ox King's Colossal Stance Aura in Minecraft 26.2.
- * No-shapes pass: this renderer draws no geometry. There is no titan avatar,
- * no boundary band, and no dome. The stance reads as material under
- * pressure: plasma motes and vapor gathered around the caster, ground dust
- * across the 12 block denial field, sparse plasma motes drifting at the
- * boundary radius so the edge is sensed rather than drawn, rising embers,
- * and, in the peak window, radial plasma bursts. Radius, pulse, fade in,
- * and the peak window are unchanged from the bespoke build.
+ * Complex pass: a layered composition at class M. There is still no titan
+ * avatar, no boundary band, and no dome. The pieces layer is a tendrilFan
+ * through submitEnergy with the tendril canvas: five dust strands rising
+ * around the caster, torn filaments instead of a glow column. The complex
+ * particle layer is ASH_FLAKE sprites gathered in the body volume. The
+ * material filler stays as before: plasma motes and vapor gathered around
+ * the caster, ground dust across the 12 block denial field, sparse plasma
+ * motes drifting at the boundary radius so the edge is sensed rather than
+ * drawn, rising embers, and, in the peak window, radial plasma bursts.
+ * Radius, pulse, fade in, and the peak window are unchanged from the
+ * bespoke build.
  */
 public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxStanceAuraRenderer.OxStanceRenderState> {
 
@@ -85,6 +92,7 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
         MaterialEmitters.Emitter dust;
         MaterialEmitters.Emitter ember;
         MaterialEmitters.Emitter peak;
+        MaterialEmitters.Emitter ash;
         boolean peakState = false;
         float lastAge = -1f;
     }
@@ -179,6 +187,12 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
                 MaterialEmitters.Preset.plasma(0xFFEB59, 1.3f, seed ^ 0x591C,
                         Vec3.ZERO, 0.02f),
                 radialBurst(frame), 170f, 230);
+        // Complex particle layer: ash flakes drifting in the body volume,
+        // under the continuous rate cap.
+        emission.ash = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE,
+                        new Vec3(0.0, 0.05, 0.0), 0.03f),
+                gathering(frame), 22f, 36);
         return emission;
     }
 
@@ -215,10 +229,27 @@ public class OxStanceAuraRenderer extends EntityRenderer<OxStanceAuraEntity, OxS
             emission.boundary.tick(delta, envelope);
             emission.dust.tick(delta, envelope);
             emission.ember.tick(delta, envelope);
+            emission.ash.tick(delta, envelope);
             // Peak window overdrive only exists while the stance is at peak.
             if (isPeak) {
                 emission.peak.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer: rising dust strands. Five strands at the toolkit
+        // segment count stay inside the class M vertex budget. The strand
+        // color follows the stance body color, peak gold at peak.
+        float geoEnv = fadeIn * (0.45f + intensity * 0.55f) * pulse;
+        if (geoEnv > 0.02f) {
+            final long geoSeed = state.seed;
+            final float len = 3.6f * pulse;
+            final int tipColor = isPeak ? 0xFFEB59 : 0xFF7A1A;
+            final float envF = Math.min(1.0f, geoEnv);
+            final float distF = distScale;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                    ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0x7D31L,
+                            new Vec3(0.0, 0.12, 0.0), new Vec3(0.0, 1.0, 0.0), 34.0f, len, 5,
+                            0.17f, 0xA0825F, tipColor, 0.88f, envF, distF));
         }
 
         super.submit(state, poseStack, collector, cameraState);

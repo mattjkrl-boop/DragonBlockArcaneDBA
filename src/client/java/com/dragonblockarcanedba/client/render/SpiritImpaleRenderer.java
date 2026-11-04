@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SpiritImpaleEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -16,13 +19,19 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Entity renderer for Spirit Impale.
  *
- * No-shapes pass: the renderer draws no ground array, pillar, sword, crystal,
- * band, fan, or star geometry. Soul material fills the impact volume and
- * rises through the old pillar space, plasma concentrates where the six
- * plunging impacts were distributed, and vapor softens the perimeter. The
- * server-owned ground burst, debris, and self-restoring crystal scar remain
- * untouched. Envelope, slam timing, pulse, scale, colors, and the UUID seed
- * carry over from the bespoke pass.
+ * Complex pass: the impale is a layered composition. The pieces layer is
+ * a ComplexGeometry shard mesh as the central spirit spike body (soul
+ * gradient, submitSolid) with four smaller seeded ring shards around it,
+ * plus a two strand tendril wake curling up the pillar through
+ * submitEnergy with the tendril canvas. The complex particle layer is
+ * WISP_CURL sprites rising through the pillar volume. The no-shapes
+ * material emission stays as filler only: soul material fills the impact
+ * volume and rises through the old pillar space, plasma concentrates
+ * where the plunging impacts were distributed, and vapor softens the
+ * perimeter. The server-owned ground burst, debris field, and permanent
+ * crystal conversion remain untouched. Envelope, slam timing, pulse,
+ * scale, colors, and the UUID seed are unchanged, and all pieces draw
+ * through the normal depth tested path so wall occlusion is unchanged.
  */
 public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, SpiritImpaleRenderer.SpiritImpaleRenderState> {
 
@@ -81,7 +90,8 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
         float slam = Math.min(1.0f, age / 4.0f);
         float pulse = 0.85f + 0.15f * (float) Math.sin(age * 0.4f);
         Vec3 origin = new Vec3(state.x, state.y, state.z);
-        float emission = fade * MaterialEmitters.distanceScale(origin);
+        float distScale = MaterialEmitters.distanceScale(origin);
+        float emission = fade * distScale;
         float delta = frameDelta();
 
         float baseRadius = 2.4f * scale * slam;
@@ -124,6 +134,64 @@ public class SpiritImpaleRenderer extends EntityRenderer<SpiritImpaleEntity, Spi
             MaterialEmitters.volume(origin.add(new Vec3(0.0, pillarHeight * 0.45, 0.0)),
                 new Vec3(baseRadius * 0.72, Math.max(0.05, pillarHeight * 0.45), baseRadius * 0.72)),
             40.0f, 55, delta, emission);
+
+        // Complex particle layer: wisp curls rising through the pillar
+        // volume, inside the 40 per second continuous budget.
+        if (pillarHeight > 0.30f) {
+            emit(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, new Vec3(0.0, 0.040, 0.0), 0.050f),
+                MaterialEmitters.volume(origin.add(new Vec3(0.0, pillarHeight * 0.50, 0.0)),
+                    new Vec3(baseRadius * 0.55, Math.max(0.05, pillarHeight * 0.50), baseRadius * 0.55)),
+                24.0f, 40, delta, emission);
+        }
+
+        // Pieces layer, class M, in entity local space through the
+        // normal depth tested paths. Vertex count at distScale 1.0:
+        // five shards at 288 vertices (1440) plus two tendrils at 384
+        // (768), for 2208 of the 2500 class M budget.
+        if (slam > 0.05f && pillarHeight > 0.30f) {
+            final long geoSeed = state.seed;
+            final float geoEnv = fade;
+            final float geoDs = distScale;
+            final float spikeLength = pillarHeight;
+            final float spikeGirth = pillarRadius;
+            final float ringRadius = swordRingRadius;
+            final float ringLength = 1.85f * scale * slam;
+            final float ringGirth = 0.30f * scale;
+            final float wakeRadius = baseRadius * 0.55f;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
+                ComplexGeometry.shard(pose, buffer, geoSeed ^ 0x5AA1L,
+                    Vec3.ZERO, new Vec3(0.0, 1.0, 0.0), spikeLength, spikeGirth,
+                    CYAN, WHITE, 0.96f, geoEnv);
+                ComplexGeometry.Rng ringRng = new ComplexGeometry.Rng(geoSeed ^ 0xB161L);
+                float angleOffset = ringRng.nextFloat() * 0.6f;
+                for (int i = 0; i < 4; i++) {
+                    double ang = angleOffset + i * (Math.PI * 2.0 / 4.0);
+                    double cos = Math.cos(ang);
+                    double sin = Math.sin(ang);
+                    Vec3 ringPos = new Vec3(cos * ringRadius, 0.0, sin * ringRadius);
+                    Vec3 ringDir = new Vec3(-cos * 0.35, 1.0, -sin * 0.35).normalize();
+                    ComplexGeometry.shard(pose, buffer, geoSeed + i * 0x9E37L + 0x5AA2L,
+                        ringPos, ringDir, ringLength, ringGirth,
+                        GOLD, WHITE, 0.94f, geoEnv);
+                }
+            });
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                for (int s = 0; s < 2; s++) {
+                    double a0 = s * Math.PI + 0.7;
+                    double a1 = a0 + 0.9;
+                    double a2 = a0 + 1.6;
+                    Vec3 wakeFrom = new Vec3(Math.cos(a0) * wakeRadius, 0.05, Math.sin(a0) * wakeRadius);
+                    Vec3 wakeControl = new Vec3(Math.cos(a1) * wakeRadius * 0.70,
+                        spikeLength * 0.55, Math.sin(a1) * wakeRadius * 0.70);
+                    Vec3 wakeTo = new Vec3(Math.cos(a2) * spikeGirth * 0.40,
+                        spikeLength * 0.96, Math.sin(a2) * spikeGirth * 0.40);
+                    ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0xACE0L + s * 0x101L),
+                        wakeFrom, wakeControl, wakeTo, 0.30f * scale,
+                        CYAN, WHITE, 0.90f, geoEnv, geoDs);
+                }
+            });
+        }
     }
 
     private static void emit(ClientLevel level, MaterialEmitters.Preset preset, MaterialEmitters.Source source,

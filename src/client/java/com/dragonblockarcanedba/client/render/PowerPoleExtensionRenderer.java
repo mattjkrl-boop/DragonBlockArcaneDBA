@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.PowerPoleExtensionEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -19,14 +21,18 @@ import java.util.Map;
 /**
  * Entity Renderer for Power Pole Extension in Minecraft 26.2.
  *
- * No-shapes conversion: this renderer draws no geometry. The extending
- * strike is carried by material particles sampled along the pole path:
- * pale vapor displaced by the rush, crimson plasma in three heat bands
- * along the stream, a brighter core stream, and dust plus steel sparks at
- * the leading tip. The pole item model itself remains a physical object
- * in the hand; this entity is the extension effect, so its path, length,
- * and timing are data for the emitters and nothing here renders a shaft,
- * sheath, collar, dome, plume, wake, or glint shape.
+ * Complex pass: layered composition. The pieces layer is a wind strand
+ * along the extension path: a ComplexGeometry tendril in pale gold vapor
+ * colors running to crimson at the tip, plus a thinner crimson echo
+ * strand bowed to the other side of the path, both through the dissolve
+ * shader with the tendril canvas, so the rush of air around the pole
+ * reads as coiling strands with torn pinches instead of a glow tube.
+ * The complex particle layer is SPARK_STREAK sprites at the leading
+ * tip. The material filler stays as before: pale vapor displaced by
+ * the rush, crimson plasma in three heat bands along the stream, a
+ * brighter core stream, and dust plus steel sparks at the tip, all
+ * sampled along the pole path. The pole item model itself remains a
+ * physical object in the hand; this entity is the extension effect.
  *
  * Lifecycle math is unchanged from the bespoke renderer: ease out over
  * 3 ticks, hold, retract over the last 3 ticks, gone at tick 12.
@@ -142,6 +148,32 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         float envelope = alphaMult * distScale * Math.min(1.0f, 0.35f + currentLength / 18.0f);
         rig.tick(delta, envelope);
 
+        // Pieces layer: two tendril wind strands in local space, from
+        // the local start offset to the tip at the live extension
+        // length. The builder curl and pinch windows do the coiling;
+        // the caller only bows each strand to opposite sides of the
+        // path so they read as air wrapping the pole, not one line.
+        Vec3 localFrom = origin.subtract(new Vec3(state.x, state.y, state.z));
+        Vec3 localTo = localFrom.add(forward.scale(currentLength));
+        Vec3 right = rightVector(state.yRot);
+        Vec3 up = right.cross(forward).normalize();
+        Vec3 mid = localFrom.add(forward.scale(currentLength * 0.5));
+        final Vec3 gFrom = localFrom;
+        final Vec3 gTo = localTo;
+        final Vec3 gCtrl = mid.add(up.scale(currentLength * 0.05));
+        final Vec3 gFrom2 = localFrom.add(right.scale(0.10 * fpScale));
+        final Vec3 gTo2 = localTo.add(right.scale(0.10 * fpScale));
+        final Vec3 gCtrl2 = mid.add(right.scale(0.10 * fpScale)).add(up.scale(-currentLength * 0.04));
+        final float gEnv = alphaMult;
+        final float gDist = distScale;
+        final long gSeed = state.seed;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0x7E57L, gFrom, gCtrl, gTo, 0.30f,
+                0xF7D774, 0xFF3829, 0.92f, gEnv, gDist);
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0xE11DL, gFrom2, gCtrl2, gTo2, 0.15f,
+                0xFF5940, 0x94141C, 0.90f, gEnv, gDist);
+        });
+
         if (age >= 12.0f) {
             RIGS.remove(state.entityId);
         }
@@ -222,6 +254,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
         final MaterialEmitters.Emitter plasmaCore;
         final MaterialEmitters.Emitter tipDust;
         final MaterialEmitters.Emitter tipSparks;
+        final MaterialEmitters.Emitter tipStreaks;
         float lastAge = 0.0f;
         long lastSeenGameTime = 0L;
         boolean started = false;
@@ -251,6 +284,11 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             this.tipSparks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.30f),
                 tipSource(frame), 55.0f, 90);
+            // Complex particle layer: steel streak slivers at the tip,
+            // at the standard continuous rate cap for class M.
+            this.tipStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.18f),
+                tipSource(frame), 28.0f, 40);
         }
 
         float deltaFor(float age) {
@@ -273,6 +311,7 @@ public class PowerPoleExtensionRenderer extends EntityRenderer<PowerPoleExtensio
             plasmaCore.tick(delta, envelope);
             tipDust.tick(delta, envelope * frame.fpScale);
             tipSparks.tick(delta, envelope);
+            tipStreaks.tick(delta, envelope);
         }
     }
 }

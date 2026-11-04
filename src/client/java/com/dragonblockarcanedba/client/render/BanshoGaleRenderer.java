@@ -1,8 +1,12 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.BanshoGaleEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
+import org.joml.Matrix4f;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -14,11 +18,18 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Material presentation for the Bansho Fan gale. The renderer draws no
- * geometry. The fanPoint curve remains only as a sampling path: emerald
- * vapor is shed across the opening fan surface, pale plasma follows the
- * nine rib paths, airborne dust trails from the tips, and mist gathers near
- * the origin. The open, follow, and tip dissolve timing is unchanged.
+ * Layered presentation for the Bansho Fan gale (class M). The pieces
+ * layer is three ComplexGeometry tendrils laid along the fanPoint rib
+ * curves (the center rib and the two ribs at side plus and minus 2.3),
+ * so the fan has a torn strand body inside the spray, drawn through the
+ * shader submit helper with the tendril canvas under the same yaw and
+ * pitch rotation the emission frame uses. The complex particle layer is
+ * WISP_CURL sprites shed across the fan surface. The material emission
+ * from the no-shapes pass stays as filler: emerald vapor across the
+ * opening fan surface, pale plasma along the nine rib paths, airborne
+ * dust from the tips, and mist near the origin. The open, follow, and
+ * tip dissolve timing is unchanged, and the piece seeds come from the
+ * entity id, the same synced state the emission already used.
  */
 public class BanshoGaleRenderer extends EntityRenderer<BanshoGaleEntity, BanshoGaleRenderer.GaleState> {
     public BanshoGaleRenderer(EntityRendererProvider.Context context) {
@@ -48,6 +59,7 @@ public class BanshoGaleRenderer extends EntityRenderer<BanshoGaleEntity, BanshoG
         private MaterialEmitters.Emitter plasma;
         private MaterialEmitters.Emitter dust;
         private MaterialEmitters.Emitter mist;
+        private MaterialEmitters.Emitter wisps;
 
         Emission(GaleState state) {
             this.state = state;
@@ -68,6 +80,7 @@ public class BanshoGaleRenderer extends EntityRenderer<BanshoGaleEntity, BanshoG
             plasma.tick(delta, envelope);
             dust.tick(delta, envelope);
             mist.tick(delta, envelope);
+            wisps.tick(delta, envelope);
         }
 
         private void create(ClientLevel level) {
@@ -91,6 +104,12 @@ public class BanshoGaleRenderer extends EntityRenderer<BanshoGaleEntity, BanshoG
                     MaterialEmitters.Preset.mist(0x9FFFE0, 1.45f,
                             seed ^ 53, Vec3.ZERO, 0.006f),
                     random -> fanSample(state, random, 3), 35.0f, 55);
+            // Complex particle layer: wisp curls shed across the fan
+            // surface, under the 40 per second continuous budget.
+            wisps = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL,
+                            Vec3.ZERO, 0.02f),
+                    random -> fanSample(state, random, 0), 28.0f, 40);
         }
     }
 
@@ -132,16 +151,61 @@ public class BanshoGaleRenderer extends EntityRenderer<BanshoGaleEntity, BanshoG
         state.lift = 0.10f * open * (1.0f - follow * 0.45f);
         state.fade = fade;
 
+        float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
+        float envelope = fade * (0.30f + 0.70f * open) * distanceScale;
         if (fade > 0.01f) {
             ClientLevel level = Minecraft.getInstance().level;
             if (level != null) {
                 if (state.emission == null) state.emission = new Emission(state);
-                float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
-                float envelope = fade * (0.30f + 0.70f * open) * distanceScale;
                 state.emission.tick(level, envelope);
             }
         }
+
+        // Pieces layer: three tendrils along the fanPoint rib curves in
+        // the renderer's own local frame (x right, y up, z forward), the
+        // same frame localPoint builds for the emission. The center rib
+        // carries the body; the flanking ribs at side plus and minus 2.3
+        // give the fan its width. Vertex count at full distance scale:
+        // 3 tendrils times 24 samples times 16 vertices is 1152, inside
+        // the class M budget of 2500.
+        if (envelope > 0.01f && distanceScale > 0.01f) {
+            final Vec3 centerFrom = fanVec(state, 0.0f, 0.0f);
+            final Vec3 centerControl = fanVec(state, 0.0f, 0.5f);
+            final Vec3 centerTo = fanVec(state, 0.0f, 1.0f);
+            final Vec3 leftFrom = fanVec(state, -2.3f, 0.0f);
+            final Vec3 leftControl = fanVec(state, -2.3f, 0.5f);
+            final Vec3 leftTo = fanVec(state, -2.3f, 1.0f);
+            final Vec3 rightFrom = fanVec(state, 2.3f, 0.0f);
+            final Vec3 rightControl = fanVec(state, 2.3f, 0.5f);
+            final Vec3 rightTo = fanVec(state, 2.3f, 1.0f);
+            final long geoSeed = state.seed;
+            final float geoEnv = envelope;
+            final float geoDs = distanceScale;
+            poseStack.pushPose();
+            poseStack.mulPose(new Matrix4f()
+                    .rotationY((float) Math.toRadians(-state.yRot))
+                    .rotateX((float) Math.toRadians(state.xRot)));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x6A11L,
+                        centerFrom, centerControl, centerTo,
+                        0.34f, 0xD8FFF2, 0x26FFA6, 0.95f, geoEnv, geoDs);
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x6A22L,
+                        leftFrom, leftControl, leftTo,
+                        0.20f, 0x26FFA6, 0x9FFFE0, 0.90f, geoEnv, geoDs);
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x6A33L,
+                        rightFrom, rightControl, rightTo,
+                        0.20f, 0x26FFA6, 0x9FFFE0, 0.90f, geoEnv, geoDs);
+            });
+            poseStack.popPose();
+        }
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /** One fanPoint rib point in the renderer's local frame. */
+    private static Vec3 fanVec(GaleState state, float side, float t) {
+        float[] local = new float[3];
+        fanPoint(side, t, state.spread, state.open, 2.85f, 0.14f, state.lift, local);
+        return new Vec3(local[0], local[1], local[2]);
     }
 
     private static MaterialEmitters.Sample fanSample(GaleState state, RandomSource random, int mode) {

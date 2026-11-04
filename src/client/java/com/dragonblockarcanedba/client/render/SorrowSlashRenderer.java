@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SorrowSlashEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -21,13 +24,18 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Sorrow Slash in Minecraft 26.2.
- * No-shapes conversion: this renderer draws no geometry at all. The crescent
- * is gone as a rendered object; in its place the slash carries a swing-driven
- * material trail sampled across the volume the crescent swept: void plasma
- * for the crest and the cyan edge, soul wisps and darkness smoke dissolving
- * behind it, and a thin vapor wash. Emission follows the entity's real look
- * direction and reap tilt, and the lifecycle fade is the old crescent fade,
- * kept. The entity's own server trail particles are untouched.
+ * Complex pass: the slash gains a body again, as two shader tendrils
+ * swept along the crescent arc the old crescent traced: a thick violet
+ * to cyan-white strand on the crest arc and a thinner soul strand
+ * trailing behind it along the travel direction. WISP_CURL sprites
+ * sampled across the swept volume are the complex particle layer, with
+ * a wisp burst added to the impact pop. The material trail stays as
+ * filler only: void plasma for the crest and the cyan edge, soul wisps
+ * and darkness smoke dissolving behind it, and a thin vapor wash,
+ * sampled across the volume the crescent swept. Emission and pieces
+ * both follow the entity's real look direction and reap tilt, and the
+ * lifecycle fade is the old crescent fade, kept. The entity's own
+ * server trail particles are untouched.
  */
 public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, SorrowSlashRenderer.SorrowSlashRenderState> {
 
@@ -123,6 +131,11 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
             emitters.add(new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(0xBFEFFF, 2.2f, (int) (seed ^ 0x9A90L), Vec3.ZERO, 0.030f),
                 random -> bandSample(random, 0.90f, 0.90f, 1.20f), 25.0f, 35));
+            // Complex particle layer: wisp curls across the swept band,
+            // on the soul sampler, inside the 40 per second budget.
+            emitters.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.025f),
+                random -> bandSample(random, 1.05f, 1.10f, 1.40f), 30.0f, 40));
         }
 
         /**
@@ -226,6 +239,39 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
             float distScale = MaterialEmitters.distanceScale(center);
             float envelope = fade * distScale;
 
+            // Pieces layer, class M, in entity local space: the synced
+            // right, up, and forward axes are plain offsets here, the
+            // same basis the emission sampler uses, so the strands hug
+            // the swept volume and inherit the reap tilt. The crest
+            // strand runs end to end across the span with its control
+            // pushed up the arc; the soul strand repeats the arc
+            // trailing behind the travel direction. Two tendrils at
+            // full spine samples are 768 vertices worst case, inside
+            // the class M budget of 2500.
+            if (fade > 0.02f) {
+                final Vec3 rightL = right;
+                final Vec3 upL = up;
+                final Vec3 fwdL = forward;
+                final float spanL = rig.halfSpan;
+                final float heightL = rig.halfHeight;
+                final float scaleL = scale;
+                final float geoEnv = fade;
+                final float geoDs = distScale;
+                final long pseed = state.seed;
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                    Vec3 from = rightL.scale(-spanL * 0.95).add(upL.scale(-heightL * 0.35));
+                    Vec3 control = upL.scale(heightL * 0.95).add(fwdL.scale(0.10));
+                    Vec3 to = rightL.scale(spanL * 0.95).add(upL.scale(-heightL * 0.35));
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xD11L,
+                        from, control, to, 0.50f * scaleL, 0xCC0DD9, 0xE6FAFF, 0.95f, geoEnv, geoDs);
+                    Vec3 back = fwdL.scale(-0.40 * scaleL);
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ 0xD22L,
+                        from.add(back).add(upL.scale(-heightL * 0.12)),
+                        control.add(back), to.add(back).add(upL.scale(-heightL * 0.12)),
+                        0.28f * scaleL, 0xB84DFF, 0xCC0DD9, 0.90f, geoEnv, geoDs);
+                });
+            }
+
             // The impact burst keeps its opening pop, now as material bursts
             // instead of the old crossing crescent.
             if (state.isImpactBurst && !rig.burstDone) {
@@ -240,6 +286,9 @@ public class SorrowSlashRenderer extends EntityRenderer<SorrowSlashEntity, Sorro
                 MaterialEmitters.burst(level,
                     MaterialEmitters.Preset.darkness(0x140026, 2.4f, (int) (state.seed ^ 0xB1259L), Vec3.ZERO, 0.06f),
                     core, Math.max(1, Math.round(9.0f * envelope)));
+                MaterialEmitters.burst(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.08f),
+                    core, Math.max(1, Math.round(12.0f * envelope)));
             }
 
             float delta = rig.lastTickNanos == 0L ? 0.0f

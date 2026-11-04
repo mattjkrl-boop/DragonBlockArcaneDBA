@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.CurseChainEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -19,16 +22,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Curse Chain as cursed material in motion, not drawn hardware. The
- * no-shapes conversion removes the ribbon links, dome knots, collar bands,
- * glyphs, and aura ribbons entirely. The old link layout survives only as
- * emission data: the same seven link centers on the bind arc and six on the
- * flight trail, transformed into world space, with darkness smoke and curse
- * plasma emitted along the segments between them and soul wisps gathering at
- * the centers, glyph points, and core point. The collar is a ring of sampled
- * emission points at the bind, the attach snap is a material burst, and the
- * helical aura is two polylines of plasma emission. Fade in over four ticks
- * and the synced twelve tick fade out are unchanged, as are all seeds.
+ * Curse Chain as a layered composition. The pieces layer is one taut
+ * tendril run along the chain path itself: a quadratic bezier through the
+ * first, middle, and last link centers, so on the bind arc it follows the
+ * arc from one side of the target to the other and in flight it runs
+ * straight down the trail, with the tendril builder's own mid-spine curl
+ * kept small by the short chord. It is drawn under the same scale, yaw, and
+ * pitch transform the old link geometry used, on the tendril canvas
+ * through the shader. The complex particle layer is spark streaks shed at
+ * the link centers. The material emission stays as filler: the same seven
+ * link centers on the bind arc and six on the flight trail, transformed
+ * into world space, with darkness smoke and curse plasma emitted along the
+ * segments between them and soul wisps gathering at the centers, glyph
+ * points, and core point. The collar is a ring of sampled emission points
+ * at the bind, the attach snap is a material burst, and the helical aura is
+ * two polylines of plasma emission. Fade in over four ticks and the synced
+ * twelve tick fade out are unchanged, as are all seeds.
  */
 public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseChainRenderer.CurseChainRenderState> {
 
@@ -96,6 +105,7 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
         // old links used, now carried into world space as emission points.
         int links = attached ? 7 : 6;
         List<Vec3> centers = new ArrayList<>(links);
+        List<Vec3> localCenters = new ArrayList<>(links);
         for (int i = 0; i < links; i++) {
             float along = i / (float) (links - 1);
             float lag = along * (0.25f + 0.75f * stretch);
@@ -107,8 +117,35 @@ public class CurseChainRenderer extends EntityRenderer<CurseChainEntity, CurseCh
             } else {
                 local = new Vec3(0, 0, -lag * 3.4f);
             }
+            localCenters.add(local);
             centers.add(worldPoint(state, origin, local, baseScale));
         }
+
+        // Pieces layer: one taut tendril along the chain path, through the
+        // first, middle, and last link centers in the renderer's own local
+        // space, under the same pose transform as the emission layout.
+        {
+            final Vec3 tendrilFrom = localCenters.get(0);
+            final Vec3 tendrilControl = localCenters.get(localCenters.size() / 2);
+            final Vec3 tendrilTo = localCenters.get(localCenters.size() - 1);
+            final long tendrilSeed = state.seed;
+            final float tendrilAlpha = 0.95f * pulse;
+            final float tendrilEnv = alphaMul;
+            final float tendrilDs = ds;
+            final float tendrilWidth = attached ? 0.34f : 0.27f;
+            poseStack.pushPose();
+            poseStack.scale(baseScale, baseScale, baseScale);
+            poseStack.mulPose(new Matrix4f().rotationY((float) Math.toRadians(-state.yRot)));
+            poseStack.mulPose(new Matrix4f().rotationX((float) Math.toRadians(state.xRot)));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                ComplexGeometry.tendril(pose, buffer, tendrilSeed ^ 0x7E11L, tendrilFrom, tendrilControl, tendrilTo,
+                    tendrilWidth, 0xA60DD9, 0xF20D33, tendrilAlpha, tendrilEnv, tendrilDs));
+            poseStack.popPose();
+        }
+
+        // Complex particle layer: spark streaks flashing at the links.
+        emit(level, MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.030f),
+            pointsSource(centers), 30f, delta, env * pulse);
 
         // The chain body: darkness and violet plasma emitted along the
         // segment polyline, soul wisps gathering at the link centers.

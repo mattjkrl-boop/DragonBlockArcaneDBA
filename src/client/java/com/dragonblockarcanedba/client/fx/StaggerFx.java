@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.fx;
 
 import com.dragonblockarcanedba.network.BossStaggerPayload;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
@@ -54,6 +55,20 @@ public final class StaggerFx {
                 MaterialEmitters.Preset.plasma(0xFFCA6A, 0.9f, seed + 1, Vec3.ZERO, 0.22f),
                 MaterialEmitters.sphereVolume(center, radius),
                 6 + Math.round(6f * strength));
+        // Complex sprite layer (class S): spark streaks and shard chips
+        // in the same sphere volume as the material bursts above. The
+        // fixed presets carry no theme color, so this layer stays
+        // neutral exactly like the payload, which carries no theme.
+        // Each count is capped at 6, so the combined complex burst
+        // never exceeds the class S burst budget of 12.
+        MaterialEmitters.burst(client.level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.26f),
+                MaterialEmitters.sphereVolume(center, radius),
+                Math.min(6, 3 + Math.round(2f * strength)));
+        MaterialEmitters.burst(client.level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.20f),
+                MaterialEmitters.sphereVolume(center, radius),
+                Math.min(6, 3 + Math.round(2f * strength)));
     }
 
     public static void tick(Minecraft mc) {

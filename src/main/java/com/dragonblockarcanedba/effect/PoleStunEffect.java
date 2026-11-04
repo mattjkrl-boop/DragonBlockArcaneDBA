@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -53,6 +54,12 @@ public class PoleStunEffect extends MobEffect {
 
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0xFFD700, 1.3f, entity.getId() * 31 + entity.tickCount), // Gold
+                px, py, pz,
+                1, 0.0, 0.01, 0.0, 0.01
+            );
+            // Complex layer: electric and guard SPARK_STREAK at the same orbiting tick point as the dizzy plasma.
+            level.sendParticles(
+                DbaParticles.SPARK_STREAK,
                 px, py, pz,
                 1, 0.0, 0.01, 0.0, 0.01
             );

@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.BoltEntity;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
 import com.dragonblockarcanedba.particle.DbaParticles;
@@ -24,15 +25,26 @@ import java.util.Random;
 /**
  * Branched lightning for BoltEntity.
  *
- * The seeded branch path is emission data only. Nothing here draws a
- * ribbon, a polyline strip, or a ground disc: the strike is layered
- * plasma material emitted along the trunk and fork segments by the
+ * Complex pass: the strike is a layered composition. The pieces layer is
+ * one ComplexGeometry branchedLightning submitted through submitEnergy:
+ * a wide theme colored sheath and a narrow near-white core on the
+ * dissolve shader. The merge added the builder's polyline overload, so
+ * the geometry now draws over the exact seeded walk the emission uses:
+ * buildSegments is split back into its trunk and fork polylines and fed
+ * to the builder, which adds only seeded sub-branches, its taper and
+ * width jitter, and the two ribbon passes. Endpoints and path coincide
+ * with the plasma corona by construction, and both layers are driven by
+ * the same envelope and the same per tick flicker in submit, so they
+ * pulse as one bolt and the geometry reads as the bright core inside
+ * the plasma corona. The complex particle layer is SPARK plus
+ * SPARK_STREAK at the strike point. The material layer is unchanged
+ * filler: layered plasma along the trunk and fork segments from the
  * shared MaterialEmitters toolkit, in a theme colored sheath and a near
- * white core, with spark particles and a ground glow of plasma sprites
- * at the strike point. The path itself is still a pure function of the
- * synced seed, built with the exact random walk the old geometry used,
- * so every client emits along the same trunk and forks. Alpha timing is
- * the shared envelope times the same per tick flicker as before.
+ * white core, with a ground glow of plasma sprites at the strike point.
+ * The emission path is still a pure function of the synced seed, built
+ * with the exact random walk the old geometry used, so every client
+ * emits along the same trunk and forks. Alpha timing is the shared
+ * envelope times the same per tick flicker as before.
  */
 public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltState> {
 
@@ -154,6 +166,7 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
         final MaterialEmitters.Preset groundPreset;
         final MaterialEmitters.Preset groundCorePreset;
         final MaterialEmitters.Preset sparkPreset;
+        final MaterialEmitters.Preset streakPreset;
         final MaterialEmitters.Emitter strongSheath;
         final MaterialEmitters.Emitter strongCore;
         final MaterialEmitters.Emitter weakSheath;
@@ -161,6 +174,7 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
         final MaterialEmitters.Emitter ground;
         final MaterialEmitters.Emitter groundCore;
         final MaterialEmitters.Emitter sparks;
+        final MaterialEmitters.Emitter streaks;
         final float strongShare;
         final float weakShare;
         final float lengthFactor;
@@ -201,6 +215,8 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
                     0xFFFFFF, 1.25f, state.seed ^ 0x6A22, Vec3.ZERO, 0.01f);
             this.sparkPreset = MaterialEmitters.Preset.fixed(DbaParticles.SPARK,
                     new Vec3(0, 0.10, 0), 0.30f);
+            this.streakPreset = MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK,
+                    new Vec3(0, 0.10, 0), 0.30f);
 
             float sheathRate = 170f * pathScale;
             float coreRate = 300f * pathScale;
@@ -218,6 +234,8 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
                     42f, budget(42f));
             this.sparks = new MaterialEmitters.Emitter(level, sparkPreset,
                     MaterialEmitters.point(base), 90f, budget(90f));
+            this.streaks = new MaterialEmitters.Emitter(level, streakPreset,
+                    MaterialEmitters.point(base), 36f, budget(36f));
         }
 
         private static int budget(float rate) {
@@ -240,6 +258,8 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
                     Math.round(4f * strength));
             MaterialEmitters.burst(level, sparkPreset, MaterialEmitters.point(base),
                     Math.round(8f * strength));
+            MaterialEmitters.burst(level, streakPreset, MaterialEmitters.point(base),
+                    Math.round(6f * strength));
         }
 
         void tick(float deltaSeconds, float strength) {
@@ -250,6 +270,7 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
             ground.tick(deltaSeconds, strength * 0.8f);
             groundCore.tick(deltaSeconds, strength * 0.8f);
             sparks.tick(deltaSeconds, strength);
+            streaks.tick(deltaSeconds, strength);
         }
     }
 
@@ -292,6 +313,46 @@ public class BoltRenderer extends EntityRenderer<BoltEntity, BoltRenderer.BoltSt
             }
             emission.lastSeenNanos = now;
             if (state.age >= state.life) emissions.remove(state.entityId);
+        }
+
+        // Pieces layer: the geometry bolt on the dissolve shader, drawn
+        // over the same seeded walk the emission below uses. The walk
+        // splits back into polylines in local space: the first twelve
+        // segments chain into the trunk, the remaining segments chain
+        // into the fork polylines, and the builder draws those exact
+        // points (adding only seeded sub-branches), so the bright
+        // geometry core and the plasma corona are one path, sharing the
+        // flicker and envelope above.
+        if (strength > 0.01f) {
+            List<Seg> path = buildSegments(state);
+            if (path.size() > 11) {
+                Vec3 base = new Vec3(state.x, state.y, state.z);
+                List<Vec3> trunk = new ArrayList<>();
+                trunk.add(path.get(0).from().subtract(base));
+                for (int i = 0; i < 12; i++) trunk.add(path.get(i).to().subtract(base));
+                List<List<Vec3>> branches = new ArrayList<>();
+                List<Vec3> current = null;
+                Vec3 prevTo = null;
+                for (int i = 12; i < path.size(); i++) {
+                    Seg seg = path.get(i);
+                    if (current == null || !seg.from().equals(prevTo)) {
+                        current = new ArrayList<>();
+                        current.add(seg.from().subtract(base));
+                        branches.add(current);
+                    }
+                    current.add(seg.to().subtract(base));
+                    prevTo = seg.to();
+                }
+                final List<Vec3> trunkLine = List.copyOf(trunk);
+                final List<List<Vec3>> branchLines = List.copyOf(branches);
+                final float width = 0.30f * (float) Math.max(0.6, Math.min(1.6, state.length / 16.0));
+                final int core = coreColor(state.color);
+                final int glow = state.color;
+                final long boltSeed = state.seed;
+                ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                        ComplexGeometry.branchedLightning(pose, buffer, boltSeed,
+                                trunkLine, branchLines, width, core, glow, 0.95f, strength, dist));
+            }
         }
         super.submit(state, poseStack, collector, cameraState);
     }

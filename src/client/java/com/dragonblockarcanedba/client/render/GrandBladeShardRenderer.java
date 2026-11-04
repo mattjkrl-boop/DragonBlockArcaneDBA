@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.GrandBladeShardEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -19,16 +21,21 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Grand Blade Shard in Minecraft 26.2.
- * No-shapes conversion: this renderer draws no geometry. The flying shard
- * is carried by a dense valor plasma core, steel sparks, and stone dust
- * shed along its real flight path. The embedded hazard is carried by
- * ground dust, rising valor plasma, and sparse vapor at the impact point.
- * The entity, its damage, and its flight and embedded lifetimes are
- * unchanged; only the presentation moved to material emission.
+ * Complex effects redo: layered composition. The shard body is an
+ * irregular ComplexGeometry shard mesh in a steel gradient (submitSolid),
+ * with a torn tendril wake behind it in flight (submitEnergy, tendril
+ * canvas). Around the pieces, the existing material emission stays as
+ * filler: valor plasma, steel sparks, and stone dust along the flight
+ * path, and ground dust, rising plasma, and vapor for the embedded
+ * hazard. The complex sprite layer adds SPARK_STREAK and SHARD_CHIP shed
+ * in flight, and a one-shot streak and chip burst at the embedding
+ * moment, which is the shard's shatter-into-ground beat. The entity, its
+ * damage, and its flight and embedded lifetimes are unchanged.
  */
 public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntity, GrandBladeShardRenderer.BladeShardRenderState> {
 
     private final Map<String, Stream> streams = new HashMap<>();
+    private final java.util.Set<Integer> embedBurstsDone = new java.util.HashSet<>();
 
     public GrandBladeShardRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -105,6 +112,37 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                         new Vec3(0.0, 0.018, 0.0), 0.010f),
                     MaterialEmitters.sphereVolume(center.add(0.0, 0.45, 0.0), 0.92),
                     17f, 28, state.ageInTicks, envelope * 0.72f);
+
+                // Pieces layer, embedded: the same steel shard mesh, set back
+                // along its flight line so it reads as driven into the ground,
+                // plus one short valor tendril leaking up from its base.
+                Vec3 embedDir = directionFromRot(state.yRot, state.xRot);
+                float embedLife = pulse;
+                if (embedLife > 0.01f) {
+                    ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                        ComplexGeometry.shard(pose, buffer, state.seed ^ 0x5AA2DL,
+                            embedDir.scale(-0.60), embedDir, 1.7f, 0.30f,
+                            0x767F8C, 0xE9EDF3, 0.95f, embedLife));
+                    ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                        ComplexGeometry.tendril(pose, buffer, state.seed ^ 0x7EAD1L,
+                            new Vec3(0.0, 0.05, 0.0),
+                            new Vec3(0.22, 0.55, 0.10),
+                            new Vec3(-0.10, 1.05, -0.16), 0.20f,
+                            0xFFD833, 0xFFF3B0, 0.88f, embedLife, distScale));
+                }
+
+                // Complex sprite layer: the embedding moment is the shatter
+                // beat. One guarded burst per entity (tickCount resets to 0
+                // on embedding, so a low age here is that first moment).
+                if (state.ageInTicks < 3.0f && embedBurstsDone.add(state.entityId)) {
+                    if (embedBurstsDone.size() > 512) embedBurstsDone.clear();
+                    MaterialEmitters.burst(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.30f),
+                        MaterialEmitters.sphereVolume(center, 0.35), 16);
+                    MaterialEmitters.burst(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.22f),
+                        MaterialEmitters.sphereVolume(center, 0.30), 10);
+                }
             } else {
                 float buildIn = com.dragonblockarcanedba.util.FxEnvelope.smoothstep(state.ageInTicks / 3.0f);
                 float fadeOut = 1.0f;
@@ -130,10 +168,52 @@ public class GrandBladeShardRenderer extends EntityRenderer<GrandBladeShardEntit
                     MaterialEmitters.Preset.dust(0x8A7D68, 1.05f, seed ^ 0x570E,
                         Vec3.ZERO, 0.050f),
                     cloudSource, 42f, 64, state.ageInTicks, envelope * 0.85f);
+
+                // Complex sprite layer in flight: spark streaks streaming
+                // back along the path and a sparse shed of shard chips.
+                emit(level, base + "streak",
+                    MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, trailVelocity, 0.10f),
+                    cloudSource, 28f, 40, state.ageInTicks, envelope);
+                emit(level, base + "chip",
+                    MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, trailVelocity, 0.08f),
+                    cloudSource, 11f, 40, state.ageInTicks, envelope * 0.85f);
+
+                // Pieces layer in flight: steel shard mesh as the body,
+                // aligned to the real velocity (rotation as fallback), and
+                // a torn gold tendril wake streaming behind it.
+                float flightLife = buildIn * fadeOut;
+                if (flightLife > 0.01f) {
+                    Vec3 dir = state.velocity.lengthSqr() > 1.0e-4
+                        ? state.velocity.normalize()
+                        : directionFromRot(state.yRot, state.xRot);
+                    Vec3 side = dir.cross(new Vec3(0.0, 1.0, 0.0));
+                    side = side.lengthSqr() < 1.0e-6 ? new Vec3(1.0, 0.0, 0.0) : side.normalize();
+                    double sway = Math.sin(state.ageInTicks * 0.55f) * 0.16;
+                    Vec3 wakeFrom = dir.scale(-0.80);
+                    Vec3 wakeControl = dir.scale(-1.55).add(side.scale(0.28 + sway));
+                    Vec3 wakeTo = dir.scale(-2.35).add(side.scale(-0.18 + sway * 0.5));
+                    ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                        ComplexGeometry.shard(pose, buffer, state.seed ^ 0x5AA2DL,
+                            Vec3.ZERO, dir, 1.7f, 0.30f,
+                            0x767F8C, 0xE9EDF3, 0.95f, flightLife));
+                    ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                        ComplexGeometry.tendril(pose, buffer, state.seed ^ 0x7EAD1L,
+                            wakeFrom, wakeControl, wakeTo, 0.34f,
+                            0xFFD833, 0xFFF3B0, 0.90f, flightLife, distScale));
+                }
             }
         }
 
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static Vec3 directionFromRot(float yRot, float xRot) {
+        double yaw = Math.toRadians(yRot);
+        double pitch = Math.toRadians(xRot);
+        return new Vec3(
+            -Math.sin(yaw) * Math.cos(pitch),
+            -Math.sin(pitch),
+            Math.cos(yaw) * Math.cos(pitch)).normalize();
     }
 
     private void emit(ClientLevel level, String key, MaterialEmitters.Preset preset,

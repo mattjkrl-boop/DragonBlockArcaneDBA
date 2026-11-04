@@ -1,8 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DarknessDomainEntity;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -23,6 +26,12 @@ import net.minecraft.world.phys.Vec3;
  * central column of hellish plasma. The synced radius and lifecycle fade
  * still drive the whole presentation. Lightning remains with the real
  * BoltEntity strikes fired by the domain entity.
+ *
+ * Complex pass (class L, two builder types): six rim tendrils climb the
+ * dome boundary as alpha veil strands, and an energy crack fan webs the
+ * domain base through the shader path, hot pink at the center cooling
+ * to hellish purple at the tips. Ash flakes fall inside the volume. The
+ * material emission stays as filler behind and between the pieces.
  */
 public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity, DarknessDomainRenderer.DarknessDomainRenderState> {
 
@@ -71,8 +80,42 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
 
     @Override
     public void submit(DarknessDomainRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        submitPieces(state, poseStack, collector);
         emitMaterials(state);
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void submitPieces(DarknessDomainRenderState state, PoseStack poseStack, SubmitNodeCollector collector) {
+        float fade = Math.max(0.0f, Math.min(1.0f, state.fade));
+        if (fade <= 0.01f) {
+            return;
+        }
+        float distScale = MaterialEmitters.distanceScale(new Vec3(state.px, state.py, state.pz));
+        float envelope = fade;
+        float radius = Math.max(1.0f, state.radius);
+        float height = domeHeight(state);
+        long seed = state.seed;
+        // Rim tendrils through the veil path: strands rooted at the base
+        // rim, climbing and curling inward as they rise along the old
+        // dome profile, dark at the root and purple at the tip.
+        ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            for (int i = 0; i < 6; i++) {
+                double angle = i * Math.PI * 2.0 / 6.0 + (seed & 63L) / 63.0 * 0.5;
+                double cos = Math.cos(angle);
+                double sin = Math.sin(angle);
+                Vec3 from = new Vec3(cos * radius * 0.98, 0.15, sin * radius * 0.98);
+                Vec3 control = new Vec3(cos * radius * 1.03 - sin * radius * 0.10, height * 0.34,
+                    sin * radius * 1.03 + cos * radius * 0.10);
+                Vec3 to = new Vec3(cos * radius * 0.86, height * 0.62, sin * radius * 0.86);
+                ComplexGeometry.tendril(pose, buffer, seed ^ (0xD500L + i * 131L),
+                    from, control, to, 0.55f, 0x1E0033, 0x8C0DF2, 0.90f, envelope, distScale);
+            }
+        });
+        // Crack fan at the domain base: the second builder type, drawn
+        // as shader energy so the web glows in the ground at full radius.
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.crackFan(pose, buffer, seed ^ 0xD100L,
+                radius, 0xF21459, 0x8C0DF2, 0.95f, envelope, distScale));
     }
 
     private static void emitMaterials(DarknessDomainRenderState state) {
@@ -146,7 +189,10 @@ public class DarknessDomainRenderer extends EntityRenderer<DarknessDomainEntity,
             new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0xF21459, 1.50f,
                     seed ^ 0xD008, Vec3.ZERO, 0.006f),
-                columnSource(state, 0.09, 0.165), 92.0f, 105)
+                columnSource(state, 0.09, 0.165), 92.0f, 105),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, new Vec3(0.0, -0.05, 0.0), 0.015f),
+                domeVolumeSource(state, 0.012, 0.0), 32.0f, 38)
         };
     }
 

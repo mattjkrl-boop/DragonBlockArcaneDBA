@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.LavaGeyserEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -20,9 +23,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The geyser pillar is a sampled column of material data. Flame and
- * embers rise through it, ash spreads at its base, and smoke and heat
- * vapor leave from the upper column as the eruption burns down.
+ * The geyser pillar is a layered composition at class M. The pieces
+ * layer is a crown of flame tongues at the top of the column, rising
+ * and falling with the same height curve the emission samples, drawn
+ * on the additive shader with the flame canvas. The complex particle
+ * layer is EMBER_FRAGMENT rising through the column. The material
+ * emission from the no-shapes pass stays as filler only: flame and
+ * embers rising through the column, ash at its base, and smoke and
+ * heat vapor leaving from the upper column as the eruption burns down.
  */
 public class LavaGeyserRenderer extends EntityRenderer<LavaGeyserEntity, LavaGeyserRenderer.GeyserState> {
     private final Map<Integer, Emission> emissions = new HashMap<>();
@@ -79,6 +87,23 @@ public class LavaGeyserRenderer extends EntityRenderer<LavaGeyserEntity, LavaGey
                 emissions.put(state.entityId, emission);
             }
             emission.update(state, env * distance, height);
+
+            // Pieces layer, in local space (pose origin is the geyser
+            // base). The crown base rides at the current column height,
+            // so the tongues grow with the pillar. Seven tongues at six
+            // segments are about 336 vertices, inside the class M
+            // budget of 2500.
+            final long pieceSeed = state.seed;
+            final float pieceEnv = env;
+            final float pieceDs = distance;
+            final float sway = state.age * 0.60f;
+            final float crownY = height;
+            if (pieceEnv > 0.01f) {
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                        ComplexGeometry.flameTongues(pose, buffer, pieceSeed ^ 0xF1A1L,
+                                new Vec3(0.0, crownY, 0.0), 0.85f, 1.15f, 7,
+                                0xFFF2B0, 0xFF5A00, 0.95f, pieceEnv, sway, pieceDs));
+            }
         }
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -103,6 +128,12 @@ public class LavaGeyserRenderer extends EntityRenderer<LavaGeyserEntity, LavaGey
             emitters.add(new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.ember(Vec3.ZERO, 0.030f),
                     random -> sampleColumn(random, 0.0, 1.0, 1.25), 340f, 430));
+            // Complex particle layer: irregular ember fragments rising
+            // through the same column as the round ember filler, at the
+            // standard continuous cap for complex sprites.
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT, Vec3.ZERO, 0.045f),
+                    random -> sampleColumn(random, 0.0, 1.0, 1.25), 34f, 40));
             emitters.add(new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.ash(new Vec3(0.0, 0.010, 0.0), 0.026f),
                     this::sampleBase, 105f, 140));

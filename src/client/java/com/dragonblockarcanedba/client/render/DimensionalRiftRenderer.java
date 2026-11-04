@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DimensionalRiftEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -21,15 +24,18 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Dimensional Rift in Minecraft 26.2.
- * No-shapes conversion: this renderer draws no geometry at all. The rift is
- * carried entirely by the shared material system: darkness smoke filling the
- * volume, soul wisps streaming inward with the pull, void plasma in the tall
- * fissure column and the singularity core, and orbiting soul and darkness
- * particle clusters where the bespoke pass placed shard fans. The clusters
- * are emission points only; nothing solid is rendered. Lifecycle envelope,
- * radius, pulse, and collapse timing are the spectacle pass values, kept.
- * The ground scar, debris field, and server vortex particles stay in the
- * entity, untouched.
+ * Complex pass: a layered composition. The pieces layer is a solid
+ * shardBurst of void shards at the tear, mid fissure, plus three shader
+ * tendrils streaming inward from the rim to the tear heart, following
+ * the same orbit phase the emission clusters use. The complex particle
+ * layer is WISP_CURL sprites streaming inward with the soul stream. The
+ * shared material system stays as filler only: darkness smoke filling
+ * the volume, soul wisps streaming inward with the pull, void plasma in
+ * the tall fissure column and the singularity core, and orbiting soul
+ * and darkness particle clusters. Lifecycle envelope, radius, pulse,
+ * and collapse timing are the spectacle pass values, kept. The ground
+ * scar, debris field, and server vortex particles stay in the entity,
+ * untouched.
  */
 public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntity, DimensionalRiftRenderer.DimensionalRiftRenderState> {
 
@@ -118,6 +124,11 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
             emitters.add(new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.glassDust(0xCCF2FF, 1.4f, (int) (seed ^ 0x61A55L), Vec3.ZERO, 0.030f),
                 this::coreSample, 20.0f, 30));
+            // Complex particle layer: wisp curls riding the inward soul
+            // stream, inside the 40 per second continuous budget.
+            emitters.add(new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.020f),
+                random -> volumeSample(random, true), 30.0f, 40));
         }
 
         /** Points inside the rift volume, drifting with swirl and, for the soul stream, the pull itself. */
@@ -238,6 +249,45 @@ public class DimensionalRiftRenderer extends EntityRenderer<DimensionalRiftEntit
                 for (MaterialEmitters.Emitter emitter : rig.emitters) {
                     emitter.tick(delta, envelope);
                 }
+            }
+
+            // Pieces layer, class M, in entity local space: the tear
+            // heart sits mid fissure, where the fissure column emission
+            // samples. Vertex accounting at full detail: the shard burst
+            // is 5 shards at 288 vertices (1440), and the three inward
+            // tendrils run at reduced detail scale (17 spine samples,
+            // 272 vertices each, 816), for a worst case of 2256, inside
+            // the class M budget of 2500. The burst and the tendrils
+            // follow the same lifecycle fade as the emission, and the
+            // tendril rims follow the same orbit phase as the clusters.
+            if (fade > 0.02f) {
+                final float geoEnv = fade;
+                final float geoDs = com.dragonblockarcanedba.util.FxEnvelope.distScale(
+                    Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+                final float tearY = rig.height * 0.5f;
+                final float rimR = rig.radius;
+                final float rimH = rig.height;
+                final float orbit = rig.orbitAngle;
+                final long pseed = state.seed;
+                ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.shardBurst(pose, buffer, pseed ^ 0x5A17L,
+                        new Vec3(0.0, tearY, 0.0), new Vec3(0.0, 1.0, 0.0), 100f, 0.80f, 5,
+                        0x24053D, 0xB84DFF, 0.95f, geoEnv, geoDs));
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                    Vec3 heart = new Vec3(0.0, tearY, 0.0);
+                    for (int i = 0; i < 3; i++) {
+                        double ang = orbit + i * 2.399963229728653 + (pseed & 7) * 0.11;
+                        double cosA = Math.cos(ang);
+                        double sinA = Math.sin(ang);
+                        Vec3 rim = new Vec3(cosA * rimR * 0.88, 0.40 + i * rimH * 0.24, sinA * rimR * 0.88);
+                        Vec3 tangent = new Vec3(-sinA, 0.0, cosA);
+                        Vec3 control = rim.lerp(heart, 0.5)
+                            .add(tangent.scale(rimR * 0.20)).add(new Vec3(0.0, 0.30, 0.0));
+                        ComplexGeometry.tendril(pose, buffer, pseed ^ (0x7EA5L + i * 131L),
+                            rim, control, heart,
+                            0.22f, 0x9900E6, 0xE633FF, 0.92f, geoEnv, geoDs * 0.70f);
+                    }
+                });
             }
             pruneRigs(now);
         }

@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render.ki;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KiBeamEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -17,13 +18,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * No-shapes pass: this renderer draws no geometry. A ki beam is dense
+ * Complex pass: layered composition, class L. The pieces layer is a
+ * chained two strand ComplexGeometry tendril core along the beam path
+ * plus a six strand tendrilFan of impact lashes at the terminus, both
+ * through submitEnergy with the tendril canvas in the synced technique
+ * color. The complex particle layer is SPARK_STREAK sprites at the
+ * terminus. The no-shapes emission stays as filler only: dense
  * technique-colored plasma emitted along the beam path, a brighter white
  * plasma concentration near the caster, vapor drifting off the path, and
- * an impact plume of plasma and smoke where the beam ends. The path is
- * data sampled by the emitters; nothing is rendered from it. Lifecycle
- * fade (in over the first ticks, out across the 20 tick life) is unchanged
- * from the bespoke build.
+ * an impact plume of plasma and smoke where the beam ends. Lifecycle
+ * fade (in over the first ticks, out across the 20 tick life) is
+ * unchanged from the bespoke build.
  */
 public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.BeamRenderState> {
 
@@ -112,6 +117,9 @@ public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.
                         MaterialEmitters.Preset.smoke(state.color, 2.8f * scale, seed ^ 0x05107,
                                 new Vec3(0.0, 0.05, 0.0), 0.07f),
                         random -> new MaterialEmitters.Sample(frame.to, frame.dir.scale(0.10)), 55f, 80),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.26f),
+                        random -> new MaterialEmitters.Sample(frame.to, frame.dir.scale(0.26)), 30f, 40),
         };
         return emission;
     }
@@ -142,6 +150,54 @@ public class KiBeamRenderer extends EntityRenderer<KiBeamEntity, KiBeamRenderer.
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer, in entity local space (the pose origin is the
+        // beam origin). Vertex count at distScale 1.0: the core chain is
+        // at most four segments times two strands times 384 vertices
+        // (3072), plus the impact fan at six tendrils times 384 (2304),
+        // for 5376 of the class L budget of 6000.
+        if (envelope > 0.01f) {
+            Vec3 dir = lookDir(state.yRot, state.xRot);
+            Vec3 perpTmp = dir.cross(new Vec3(0, 1, 0));
+            if (perpTmp.lengthSqr() < 1e-6) perpTmp = new Vec3(1, 0, 0);
+            final Vec3 perpA = perpTmp.normalize();
+            final Vec3 perpB = dir.cross(perpA).normalize();
+            final Vec3 geoEnd = dir.scale(state.length);
+            final Vec3 geoDir = dir;
+            final long geoSeed = state.seed;
+            final int geoColor = state.color;
+            final float geoEnv = envelope;
+            final float geoDs = distScale;
+            final float geoScale = Math.max(0.2f, state.scale);
+            final int coreSegments = state.length <= 12f ? 2 : state.length <= 24f ? 3 : 4;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                for (int strand = 0; strand < 2; strand++) {
+                    float strandWidth = (strand == 0 ? 0.58f : 0.30f) * geoScale;
+                    int strandRoot = strand == 0 ? 0xFFFFFF : geoColor;
+                    int strandTip = strand == 0 ? geoColor : 0xFFFFFF;
+                    float strandAlpha = strand == 0 ? 0.95f : 0.90f;
+                    Vec3 strandOffset = perpA.scale(strand == 0 ? 0.0 : 0.15 * geoScale)
+                            .add(perpB.scale(strand == 0 ? 0.0 : -0.10 * geoScale));
+                    for (int i = 0; i < coreSegments; i++) {
+                        float t0 = i / (float) coreSegments;
+                        float t1 = (i + 1) / (float) coreSegments;
+                        Vec3 segFrom = geoEnd.scale(t0).add(strandOffset);
+                        Vec3 segTo = geoEnd.scale(t1).add(strandOffset);
+                        float bowSign = (i % 2 == 0 ? 1.0f : -1.0f) * (strand == 0 ? 1.0f : -1.0f);
+                        Vec3 segControl = segFrom.lerp(segTo, 0.5)
+                                .add(perpA.scale(bowSign * 0.22 * geoScale))
+                                .add(perpB.scale(bowSign * 0.10 * geoScale));
+                        ComplexGeometry.tendril(pose, buffer,
+                                geoSeed ^ (0xBEA1L + strand * 0x101L + i * 7919L),
+                                segFrom, segControl, segTo, strandWidth,
+                                strandRoot, strandTip, strandAlpha, geoEnv, geoDs);
+                    }
+                }
+                ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0xFA11L,
+                        geoEnd, geoDir, 56.0f, 2.4f * geoScale, 6,
+                        0.32f * geoScale, geoColor, 0xFFFFFF, 0.92f, geoEnv, geoDs);
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

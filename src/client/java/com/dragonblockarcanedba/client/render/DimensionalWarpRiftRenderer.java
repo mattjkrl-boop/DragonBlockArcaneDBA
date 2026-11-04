@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DimensionalWarpRiftEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -15,9 +18,13 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Dimensional Warp Rift in Minecraft 26.2.
- * No-shapes conversion: this renderer draws no geometry at all. The rift
- * follows the standard's rift method, carried entirely by material
- * particles emitted through the shared MaterialEmitters toolkit:
+ * Complex pass: a layered composition. The pieces layer carries three
+ * builders: a solid shardBurst fan of spatial glass shards at the tear,
+ * two shader tendrils streaming inward from the rim to the heart, and a
+ * shader crackFan on the rift's ground plane at the same radius as the
+ * marked disk. The complex particle layer is WISP_CURL sprites pulled
+ * inward with the stream. The material emission stays as filler only,
+ * following the standard's rift method:
  * - Void plasma and darkness streaming inward from the rim toward the
  *   tear, matching the pull the entity's VortexPhysics applies
  * - A dense white and magenta plasma cluster at the tear's heart where
@@ -27,10 +34,9 @@ import net.minecraft.world.phys.Vec3;
  * - Darkness vapor drifting at the boundary, suggesting the torn volume
  * Screen-space distortion stays where it already honestly lives: the
  * entity's own DbaImpactFx burst call at the destination. The renderer
- * adds no fake local refraction and no shard, fan, band, or ribbon
- * geometry. Lifecycle shaping (entrance ease, expansion, pulse, tear open
- * and shut) is the same math the geometry version used; only the
- * presentation material changed.
+ * adds no fake local refraction. Lifecycle shaping (entrance ease,
+ * expansion, pulse, tear open and shut) is the same math the geometry
+ * version used.
  */
 public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpRiftEntity, DimensionalWarpRiftRenderer.WarpRiftRenderState> {
 
@@ -166,6 +172,13 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
             MaterialEmitters.sphereVolume(base.add(0.0, 1.5, 0.0), radius * 0.95),
             90f * radiusFactor, 140).tick(delta, envelope);
 
+        // Complex particle layer: wisp curls pulled inward with the
+        // stream, inside the 40 per second continuous budget.
+        new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.03f),
+            inwardStream(base, radius * 0.95, 3.0, 0.30),
+            30f, 40).tick(delta, envelope);
+
         // Ground cracks: spatial glass dust and violet plasma flecks across
         // the marked disk, at the same radius the fissure work covered.
         // The crack mark itself stays the entity's real permanent disk.
@@ -177,6 +190,45 @@ public class DimensionalWarpRiftRenderer extends EntityRenderer<DimensionalWarpR
             MaterialEmitters.Preset.plasma(0x8C1AFF, 0.90f, seed ^ 0x6910, new Vec3(0.0, 0.02, 0.0), 0.02f),
             MaterialEmitters.groundArea(base, radius * 0.80, state.y + 0.05),
             90f * radiusFactor, 140).tick(delta, envelope);
+
+        // Pieces layer, class M with three builders, drawn in entity
+        // local space (the heart sits at local y 1.4, as in the emission).
+        // Vertex accounting at full detail: the shard fan is 4 shards at
+        // 288 vertices (1152), the two inward tendrils are at most 384
+        // each (768), and the crack fan runs at reduced detail scale as
+        // the third builder (at most about 450), for a worst case near
+        // 2370, inside the class M budget of 2500. The shard fan follows
+        // the tear open and shut shaping; the tendrils and cracks follow
+        // the shared lifecycle envelope.
+        float geoEnv = env;
+        float tearGeoEnv = env * openTear;
+        float crackRadius = radius * 1.02f;
+        float crackDetail = distScale * 0.70f;
+        if (tearGeoEnv > 0.02f) {
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.shardBurst(pose, buffer, seed ^ 0x5A17L,
+                    new Vec3(0.0, 1.4, 0.0), new Vec3(0.0, 1.0, 0.0), 68f, 0.70f, 4,
+                    0x1A0533, 0xE8CCFF, 0.95f, tearGeoEnv, distScale));
+        }
+        if (geoEnv > 0.02f) {
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                Vec3 heartLocal = new Vec3(0.0, 1.4, 0.0);
+                for (int i = 0; i < 2; i++) {
+                    double ang = 0.6 + i * 2.35 + (seed & 7) * 0.13;
+                    double cosA = Math.cos(ang), sinA = Math.sin(ang);
+                    Vec3 rim = new Vec3(cosA * radius * 0.85, 0.35 + i * 1.05, sinA * radius * 0.85);
+                    Vec3 tangent = new Vec3(-sinA, 0.0, cosA);
+                    Vec3 control = rim.lerp(heartLocal, 0.5)
+                        .add(tangent.scale(radius * 0.22)).add(new Vec3(0.0, 0.35, 0.0));
+                    ComplexGeometry.tendril(pose, buffer, seed ^ (0x7EA5L + i * 131L),
+                        rim, control, heartLocal,
+                        0.20f, 0x990DE6, 0xFF26D9, 0.92f, geoEnv, distScale);
+                }
+            });
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.crackFan(pose, buffer, seed ^ 0xC4ACL,
+                    crackRadius, 0xFFFFFF, 0x8C1AFF, 0.90f, geoEnv, crackDetail));
+        }
 
         super.submit(state, poseStack, collector, cameraState);
     }

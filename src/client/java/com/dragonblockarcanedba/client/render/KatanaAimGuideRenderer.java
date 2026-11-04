@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.KatanaAimGuideEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -137,6 +140,17 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         anchor.zStart = zStart;
         anchor.stationCount = (int) (range / 6.0f);
 
+        // Pieces layer: thin gathering filaments converged at the blade
+        // origin and running tight along the guide path toward the
+        // terminal point. Local pose space starts at the entity origin,
+        // so the fan starts at the same local offset the emission uses.
+        Vec3 localStart = guideOrigin.subtract(base).add(forward.scale(zStart));
+        float fanLength = (float) Math.max(1.0, range - zStart) * 0.85f;
+        float fanEnvelope = alpha;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendrilFan(pose, buffer, state.seed ^ 0xA17DL, localStart, forward,
+                7.0f, fanLength, 5, 0.09f, 0x00D9FF, 0xFFFFFF, 0.92f, fanEnvelope, dist));
+
         float delta = anchor.deltaSeconds(mc.isPaused());
         if (delta > 0f) {
             float envelope = alpha * dist;
@@ -144,6 +158,7 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
             anchor.core.tick(delta, envelope);
             anchor.vapor.tick(delta, envelope * 0.7f);
             anchor.terminal.tick(delta, envelope);
+            anchor.sparkStreaks.tick(delta, envelope);
             if (anchor.stationCount > 0) anchor.stations.tick(delta, envelope * 0.8f);
         }
         super.submit(state, poseStack, collector, cameraState);
@@ -187,6 +202,7 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
         private final MaterialEmitters.Emitter vapor;
         private final MaterialEmitters.Emitter terminal;
         private final MaterialEmitters.Emitter stations;
+        private final MaterialEmitters.Emitter sparkStreaks;
 
         private Anchor(ClientLevel level, int seed) {
             this.level = level;
@@ -206,6 +222,11 @@ public class KatanaAimGuideRenderer extends EntityRenderer<KatanaAimGuideEntity,
             this.stations = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(0xD9FAFF, 1.20f, seed ^ 0x4444, Vec3.ZERO, 0.013f),
                 volumeSource(false), 34f, 46);
+            // Complex particle layer: steel spark streaks drifting in
+            // along the guide path, inside the 40 per second budget.
+            this.sparkStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.05f),
+                pathSource(0.090), 24f, 32);
         }
 
         private Vec3 start() {

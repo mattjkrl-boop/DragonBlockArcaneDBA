@@ -1,11 +1,17 @@
 package com.dragonblockarcanedba.client.wish;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.network.WishRitualStartPayload;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.dragonblockarcanedba.wish.DragonWishRitual;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
@@ -15,11 +21,20 @@ import java.util.List;
 
 /**
  * Balls travel onto a floating heptagon, then a rising material column and
- * circular emission fronts gather until the dragon appears. The presentation
- * is material emission only: plasma and soul clusters mark the ball paths,
- * plasma, soul, and vapor rise through the column, and mist and plasma fronts
- * replace the old ring and burst geometry. Ritual timing and mechanics are
- * unchanged.
+ * circular emission fronts gather until the dragon appears. The material
+ * emission is the filler layer: plasma and soul clusters mark the ball
+ * paths, plasma, soul, and vapor rise through the column, and mist and
+ * plasma fronts mark the ground, gate, and arrival fronts.
+ *
+ * Complex pass: a pieces layer and a complex particle layer sit over that
+ * filler. Five golden tendrilFan strands rise from the ritual center
+ * around the dragon balls on the dissolve shader while the column envelope
+ * runs, small golden flameTongues crown the arrival core at the ritual
+ * peak (the burst window at DRAGON_AT), and WISP_CURL sprites ride the
+ * ball cluster and the rising soul stream, with one burst of curls at the
+ * peak. Piece seeds derive from the same synced ritual seed as the
+ * emission, and every envelope is a phase value the emission already
+ * reads. Ritual timing and mechanics are unchanged.
  */
 public final class WishRitualVisuals {
     private static final float MAX_AGE = DragonWishRitual.SCREEN_AT + 40.0f;
@@ -84,7 +99,67 @@ public final class WishRitualVisuals {
                 continue;
             }
             emit(level, ritual, age);
+            submitPieces(context, ritual, age);
         }
+    }
+
+    /**
+     * Pieces layer, drawn in a pose translated to the ritual center so the
+     * builders work in local coordinates. Vertex accounting at distScale
+     * 1.0: five tendrils at 384 vertices each is 1920, and six flame
+     * tongues at 48 vertices each is 288, for 2208 total, inside the
+     * class M per submit budget of 2500 even when both layers overlap at
+     * the ritual peak. Peak alpha is an honest 0.95 on both builders; the
+     * envelopes carry the fade, never a low constant alpha.
+     */
+    private static void submitPieces(LevelRenderContext context, Ritual ritual, float age) {
+        float tendrilEnv = ritual.tendrilEnvelope;
+        float flameEnv = ritual.flameEnvelope;
+        if (tendrilEnv <= 0.02f && flameEnv <= 0.02f) {
+            return;
+        }
+        if (context.poseStack() == null || context.submitNodeCollector() == null
+                || context.levelState().cameraRenderState == null
+                || !context.levelState().cameraRenderState.initialized
+                || context.levelState().cameraRenderState.pos == null) {
+            return;
+        }
+        Vec3 cam = context.levelState().cameraRenderState.pos;
+        Palette palette = ritual.namek ? Palette.NAMEK : Palette.EARTH;
+        float distScale = FxEnvelope.distScale(cam.distanceTo(ritual.center));
+        PoseStack stack = context.poseStack();
+        SubmitNodeCollector collector = context.submitNodeCollector();
+        stack.pushPose();
+        stack.translate(ritual.center.x - cam.x, ritual.center.y - cam.y, ritual.center.z - cam.z);
+        if (tendrilEnv > 0.02f) {
+            // Golden strands rising around the dragon balls: rooted at the
+            // column base, aimed up, spread wide enough that the strand
+            // tips reach the ball ring radius at ring height.
+            final long seed = ritual.seed + 0x51D15EA5EL;
+            final float env = tendrilEnv;
+            final int rootColor = palette.ringColor;
+            final int tipColor = palette.soulColor;
+            final float length = (float) (DragonWishRitual.RING_LIFT + 2.5);
+            ComplexGeometry.submitEnergy(collector, stack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                    ComplexGeometry.tendrilFan(pose, buffer, seed,
+                            new Vec3(0.0, -0.5, 0.0), new Vec3(0.0, 1.0, 0.0),
+                            26.0f, length, 5, 0.34f,
+                            rootColor, tipColor, 0.95f, env, distScale));
+        }
+        if (flameEnv > 0.02f) {
+            // Small golden tongues at the ritual peak, based on the same
+            // arrival core center the burst soul emission already uses.
+            final long seed = ritual.seed + 0xF1A3E5L;
+            final float env = flameEnv;
+            final float sway = ritual.columnPhase;
+            final Vec3 base = ritual.burstCoreCenter.subtract(ritual.center);
+            final int coolColor = palette.ringColor;
+            ComplexGeometry.submitEnergy(collector, stack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                    ComplexGeometry.flameTongues(pose, buffer, seed,
+                            base, 1.15f, 2.3f, 6,
+                            0xFFF5D1, coolColor, 0.95f, env, sway, distScale));
+        }
+        stack.popPose();
     }
 
     private static void emit(ClientLevel level, Ritual ritual, float age) {
@@ -116,6 +191,8 @@ public final class WishRitualVisuals {
             ritual.columnEnvelope = 0.0f;
             ritual.gateEnvelope = 0.0f;
             ritual.burstEnvelope = 0.0f;
+            ritual.tendrilEnvelope = 0.0f;
+            ritual.flameEnvelope = 0.0f;
             tickEmitters(level, ritual, palette);
             return;
         }
@@ -134,6 +211,9 @@ public final class WishRitualVisuals {
                 ? smooth((summonT - 0.2f) / 0.8f) * ritual.columnEnvelope
                 : 0.0f;
         ritual.gateRadius = 3.4f + summonT * 1.4f;
+        // The tendril strands live and fade on the column envelope itself,
+        // so the pieces and the column filler always agree.
+        ritual.tendrilEnvelope = ritual.columnEnvelope;
 
         float burstAge = age - DragonWishRitual.DRAGON_AT;
         if (burstAge >= 0.0f && burstAge < 18.0f) {
@@ -146,6 +226,9 @@ public final class WishRitualVisuals {
         } else {
             ritual.burstEnvelope = 0.0f;
         }
+        // The flame tongues burn only at the ritual peak, on the burst
+        // envelope the arrival front and core already use.
+        ritual.flameEnvelope = ritual.burstEnvelope;
         tickEmitters(level, ritual, palette);
     }
 
@@ -171,6 +254,16 @@ public final class WishRitualVisuals {
         tick(ritual.burstFrontPlasma, delta, ritual.burstEnvelope * distScale);
         tick(ritual.burstFrontMist, delta, ritual.burstEnvelope * distScale);
         tick(ritual.burstCoreSoul, delta, ritual.burstEnvelope * distScale);
+        tick(ritual.ballWisp, delta, ritual.ballEnvelope * distScale);
+        tick(ritual.columnWisp, delta, ritual.columnEnvelope * distScale);
+        if (ritual.burstEnvelope > 0.0f && !ritual.wispBurstFired) {
+            // One burst of curls at the ritual peak, inside the class M
+            // burst budget of 30.
+            ritual.wispBurstFired = true;
+            MaterialEmitters.burst(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.06f),
+                    burstCoreSource(ritual), 24);
+        }
     }
 
     private static void tick(MaterialEmitters.Emitter emitter, float delta, float envelope) {
@@ -241,6 +334,17 @@ public final class WishRitualVisuals {
                 MaterialEmitters.Preset.soul(0xFFF0C7, 1.50f, seed + 1409,
                         new Vec3(0.0, 0.030, 0.0), 0.020f),
                 burstCoreSource(ritual), 145.0f, 190);
+        // Complex particle layer: wisp curls on the ball cluster and on
+        // the rising soul stream path through the column. Both rates sit
+        // under the continuous cap of 40 per second per emitter.
+        ritual.ballWisp = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL,
+                        new Vec3(0.0, 0.040, 0.0), 0.015f),
+                ballSource(ritual), 22.0f, 30);
+        ritual.columnWisp = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL,
+                        new Vec3(0.0, 0.050, 0.0), 0.020f),
+                columnSource(ritual, 1), 30.0f, 40);
     }
 
     private static int seedBase(Ritual ritual) {
@@ -418,6 +522,9 @@ public final class WishRitualVisuals {
         float burstFrontRadius;
         Vec3 burstCoreCenter;
         float burstCoreRadius;
+        float tendrilEnvelope;
+        float flameEnvelope;
+        boolean wispBurstFired;
         long lastEmitNanos;
         ClientLevel emitterLevel;
         MaterialEmitters.Emitter ballPlasma;
@@ -434,6 +541,8 @@ public final class WishRitualVisuals {
         MaterialEmitters.Emitter burstFrontPlasma;
         MaterialEmitters.Emitter burstFrontMist;
         MaterialEmitters.Emitter burstCoreSoul;
+        MaterialEmitters.Emitter ballWisp;
+        MaterialEmitters.Emitter columnWisp;
 
         Ritual(boolean namek, long startGameTime, Vec3 center, Vec3[] from, int[] slots, long seed) {
             this.namek = namek;

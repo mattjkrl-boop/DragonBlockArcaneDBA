@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.ValorFieldEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -23,13 +25,18 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Grand Sword's Valor Field in Minecraft 26.2.
- * No-shapes conversion: this renderer draws no geometry. The field reads
- * as a living volume of valor plasma motes, sparse large vapor sprites
- * sampled at its boundary, ground dust across its base, and steel spark
- * accents. Suspended projectiles are marked by dense plasma motes around
- * their actual positions instead of a cage. The field radius, rise, fade
- * out, buffs, pressure, and projectile stasis are unchanged; only the
- * presentation moved to material emission.
+ * Complex effects redo: layered composition at class L (two builder
+ * types, full budget, shader treatment on the energy pieces). Vertical
+ * tendrils lash at the field rim (submitEnergy on the tendril canvas),
+ * and slow steel shard meshes hang suspended in the volume, with one
+ * more shard mesh marking each actually suspended projectile, matching
+ * the field's projectile stasis identity. WISP_CURL sprites drift in
+ * the volume and SPARK_STREAK bursts fire when a projectile newly
+ * suspends. The existing material emission stays as filler: valor
+ * plasma motes, boundary vapor, ground dust, and steel spark accents,
+ * plus dense plasma motes around suspended projectiles. The field
+ * radius, rise, fade out, buffs, pressure, projectile stasis, and the
+ * damage attribution exception in the entity are unchanged.
  */
 public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFieldRenderer.ValorFieldRenderState> {
 
@@ -42,6 +49,7 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
     private static final long SEED_LIP = 0x1115L;
 
     private final Map<String, Stream> streams = new HashMap<>();
+    private final Map<Integer, Integer> lastSuspendedCounts = new HashMap<>();
 
     public ValorFieldRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -157,6 +165,76 @@ public class ValorFieldRenderer extends EntityRenderer<ValorFieldEntity, ValorFi
                     random -> sampleSuspended(random, center, suspended),
                     135f, 180, age, envelope);
             }
+
+            // Complex sprite layer: wisp curls drifting through the volume.
+            emit(level, base + "wisp",
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, new Vec3(0.0, 0.020, 0.0), 0.010f),
+                MaterialEmitters.sphereVolume(center.add(0.0, domeHeight * 0.45, 0.0), radius * 0.85),
+                22f, 40, age, envelope);
+
+            // Complex sprite layer: a spark streak burst each time the
+            // suspended count grows, at the newly suspended positions.
+            int suspendedCount = state.suspendedRelPositions.size();
+            Integer lastCount = lastSuspendedCounts.put(state.entityId, suspendedCount);
+            if (lastCount != null && suspendedCount > lastCount) {
+                for (int i = lastCount; i < suspendedCount; i++) {
+                    Vec3 at = center.add(state.suspendedRelPositions.get(i));
+                    MaterialEmitters.burst(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.16f),
+                        MaterialEmitters.point(at), 10);
+                }
+            }
+            if (lastSuspendedCounts.size() > 256) lastSuspendedCounts.clear();
+
+            // Pieces layer (class L, two builder types). One submit holds
+            // six vertical rim tendrils that sway as the field ages; one
+            // solid submit holds three slow steel shard meshes suspended
+            // in the volume, plus one small shard at each suspended
+            // projectile (capped so the class L vertex budget holds:
+            // 6 tendrils at 384 plus 5 shards at 288 is 3744 of 6000).
+            final float fieldLife = rise * fadeOut;
+            final float rimRadius = radius * 0.92f;
+            final float rimHeight = domeHeight * 0.88f;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                int verts = 0;
+                for (int i = 0; i < 6; i++) {
+                    double ang = (Math.PI * 2.0 * i / 6.0) + 0.35;
+                    double sway = Math.sin(age * 0.11 + i * 1.7) * 0.55;
+                    Vec3 basePos = new Vec3(Math.cos(ang) * rimRadius, 0.05, Math.sin(ang) * rimRadius);
+                    Vec3 tangent = new Vec3(-Math.sin(ang), 0.0, Math.cos(ang));
+                    Vec3 control = basePos.add(0.0, rimHeight * 0.52, 0.0)
+                        .add(tangent.scale(sway))
+                        .add(new Vec3(Math.cos(ang), 0.0, Math.sin(ang)).scale(-0.35));
+                    Vec3 top = basePos.add(0.0, rimHeight, 0.0)
+                        .add(tangent.scale(sway * 0.4))
+                        .add(new Vec3(Math.cos(ang), 0.0, Math.sin(ang)).scale(-0.85));
+                    verts += ComplexGeometry.tendril(pose, buffer, SEED_RAYS + i * 7919L,
+                        basePos, control, top, 0.42f,
+                        0xFFD833, 0xFFF3B0, 0.92f, fieldLife, distScale);
+                }
+                return;
+            });
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
+                for (int i = 0; i < 3; i++) {
+                    double ang = i * 2.35 + 0.6;
+                    double rr = radius * (0.34 + 0.13 * i);
+                    double bob = Math.sin(age * 0.07 + i * 2.1) * 0.30;
+                    Vec3 at = new Vec3(Math.cos(ang) * rr, 1.9 + i * 0.85 + bob, Math.sin(ang) * rr);
+                    double spin = age * 0.03 + i * 1.9;
+                    Vec3 dir = new Vec3(Math.cos(spin) * 0.45, -0.35, Math.sin(spin) * 0.45).normalize();
+                    ComplexGeometry.shard(pose, buffer, SEED_DOME + i * 104729L,
+                        at, dir, 1.15f, 0.30f, 0x767F8C, 0xFFD833, 0.95f, fieldLife);
+                }
+                int marked = Math.min(2, state.suspendedRelPositions.size());
+                for (int i = 0; i < marked; i++) {
+                    Vec3 rel = state.suspendedRelPositions.get(i);
+                    double spin = age * 0.05 + i * 2.4;
+                    Vec3 dir = new Vec3(Math.cos(spin) * 0.4, -0.5, Math.sin(spin) * 0.4).normalize();
+                    ComplexGeometry.shard(pose, buffer, SEED_RING_OUTER + i * 31337L,
+                        rel.add(0.0, 0.55, 0.0), dir, 0.75f, 0.20f,
+                        0x8A93A6, 0xFFF3B0, 0.95f, fieldLife);
+                }
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

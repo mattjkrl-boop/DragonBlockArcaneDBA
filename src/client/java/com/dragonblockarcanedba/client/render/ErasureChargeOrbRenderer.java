@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.ErasureChargeOrbEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -18,18 +20,26 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Entity Renderer for Erasure Cannon Muzzle Charge Orb in MC 26.2.
- * No-shapes pass: this renderer draws no geometry. The orb is a dense,
- * churning cluster of ki plasma particles at the muzzle: a white-hot
+ * Complex pass: layered composition, class M. The pieces layer is a
+ * tendrilFan of five lashes rooted at the orb center through
+ * submitEnergy with the tendril canvas, white-hot at the root to the
+ * body cyan at the tips, whose fan axis orbits around the aim
+ * direction with age so the lashes sweep around the orb instead of
+ * sitting as a fixed fan. The lashes are the structured body; the
+ * no-shapes cluster stays as filler only underneath them: a dense,
+ * churning cluster of ki plasma particles at the muzzle, a white-hot
  * core volume, a cyan plasma body, vapor drifting at the boundary,
  * and gathering motes streamed inward from the old intake radius so
  * the charge still reads as contained energy being pulled in. Past
  * 0.75 charge the cluster sheds embers and its hot layer shifts
- * toward red-hot, carrying the old shell color journey. Emission
- * runs through persistent per-entity MaterialEmitters Emitter
- * channels, so the accumulator and per-second budgets survive across
- * frames; the channels rebuild only when the charge bucket changes.
- * Position, scale, pulse, and charge growth are unchanged; the
- * entity's own server charge particles are untouched.
+ * toward red-hot, carrying the old shell color journey. The complex
+ * particle layer adds SPARK_STREAK sprites in the body volume and
+ * WISP_CURL sprites at the boundary. Emission runs through persistent
+ * per-entity MaterialEmitters Emitter channels, so the accumulator
+ * and per-second budgets survive across frames; the channels rebuild
+ * only when the charge bucket changes. Position, scale, pulse, and
+ * charge growth are unchanged; the entity's own server charge
+ * particles are untouched.
  */
 public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEntity, ErasureChargeOrbRenderer.ErasureChargeRenderState> {
     private static final Map<Integer, Emission> EMISSIONS = new ConcurrentHashMap<>();
@@ -137,6 +147,24 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         em.intakeRadius = orbRadius * (2.3f - chargeEase * 0.95f);
         em.pull = 0.07 + charge * 0.09;
 
+        // Pieces layer, in entity local space: the orb center relative
+        // to the entity origin (zero in third person, the hand offset
+        // in first person). Five tendrils at full spine samples is
+        // 1920 vertices, inside the class M budget of 2500. The fan
+        // axis is a unit vector in the synced right and up basis
+        // rotating with age, so the lash cone orbits the aim line.
+        final Vec3 geoCenter = center.subtract(state.origin);
+        final Vec3 orbitDir = state.right.scale(Math.cos(age * 0.85f))
+            .add(state.up.scale(Math.sin(age * 0.85f))).normalize();
+        final float geoLength = orbRadius * (2.0f + chargeEase * 0.80f);
+        final float geoWidth = Math.max(0.09f, orbRadius * 0.30f);
+        final float geoEnv = 0.25f + chargeEase * 0.75f;
+        final long geoSeed = state.seed;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0x0B17L,
+                geoCenter, orbitDir, 128.0f, geoLength, 5, geoWidth,
+                0xFFFFFF, 0x37E6FF, 0.92f, geoEnv, distScale));
+
         float delta;
         if (Float.isNaN(em.lastAge) || age < em.lastAge) {
             delta = 1.0f / 60.0f;
@@ -205,6 +233,15 @@ public class ErasureChargeOrbRenderer extends EntityRenderer<ErasureChargeOrbEnt
         out.add(new MaterialEmitters.Emitter(level,
             MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.07f),
             bodyVolume, 55f + charge * 105f, 190));
+        // Complex particle layer: spark streaks thrown through the body
+        // volume and wisp curls drifting at the boundary, both inside
+        // the 40 per second continuous budget for one emitter.
+        out.add(new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.09f),
+            bodyVolume, 18f + charge * 18f, 44));
+        out.add(new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.03f),
+            boundaryVolume, 14f + charge * 12f, 32));
         return out.toArray(new MaterialEmitters.Emitter[0]);
     }
 

@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.GrandClashSparkEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -19,15 +21,18 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Grand Clash Spark in Minecraft 26.2.
- * No-shapes conversion: this renderer draws no geometry. A projectile
- * deflection reads as a short material burst at the clash point: dense
- * white-gold valor plasma, steel sparks thrown outward, pale vapor, and a
- * little stone dust. The 24 tick life and the shared lifecycle envelope
- * are unchanged; only the presentation moved to material emission.
+ * Complex effects redo: layered composition. A projectile deflection
+ * reads as three short tendril lashes at the clash point (a seeded
+ * tendrilFan through submitEnergy on the tendril canvas), plus a
+ * one-shot SPARK_STREAK burst at the opening frames, with the existing
+ * material emission kept as filler: dense white-gold valor plasma, steel
+ * sparks thrown outward, pale vapor, and a little stone dust. The 24
+ * tick life and the shared lifecycle envelope are unchanged.
  */
 public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntity, GrandClashSparkRenderer.ClashRenderState> {
 
     private final Map<String, Stream> streams = new HashMap<>();
+    private final java.util.Set<Integer> streakBurstsDone = new java.util.HashSet<>();
 
     public GrandClashSparkRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -102,6 +107,28 @@ public class GrandClashSparkRenderer extends EntityRenderer<GrandClashSparkEntit
                 Vec3.ZERO, 0.11f),
             MaterialEmitters.sphereVolume(center, 0.62 * scale),
             54f, 76, state.age, envelope * 0.82f);
+
+        // Pieces layer: three short tendril lashes at the clash point. The
+        // fan axis is seeded from the entity, tilted up so the lashes lift
+        // off the clash instead of digging into the ground.
+        float distScale = MaterialEmitters.distanceScale(center);
+        ComplexGeometry.Rng axisRng = new ComplexGeometry.Rng(state.seed ^ 0xC1A5L);
+        double axisAng = axisRng.nextFloat() * Math.PI * 2.0;
+        final Vec3 fanAxis = new Vec3(Math.cos(axisAng) * 0.55, 0.85, Math.sin(axisAng) * 0.55).normalize();
+        final float lashLength = 1.15f * scale;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendrilFan(pose, buffer, state.seed ^ 0x1A5EL,
+                Vec3.ZERO, fanAxis, 68.0f, lashLength, 3, 0.24f,
+                0xFFD833, 0xFFF3B0, 0.95f, fade, distScale));
+
+        // Complex sprite layer: one guarded SPARK_STREAK burst in the
+        // opening frames (class M burst budget is 30; this fires 24).
+        if (state.age < 2.5f && streakBurstsDone.add(state.entityId)) {
+            if (streakBurstsDone.size() > 512) streakBurstsDone.clear();
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.34f),
+                MaterialEmitters.sphereVolume(center, 0.30 * scale), 24);
+        }
 
         super.submit(state, poseStack, collector, cameraState);
     }

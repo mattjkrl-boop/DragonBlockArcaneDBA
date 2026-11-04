@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.LavaEruptionEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -21,9 +24,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The eruption is sampled as material throughout the same frontal volume
- * its mechanics occupy. Flame and embers carry the front, ash rides the
- * ground, and smoke and heat vapor rise off the wave as it burns down.
+ * The eruption is a layered composition at class L, with two piece
+ * builders and shader treatment on every fire piece. The pieces layer
+ * is a full crown of nine flame tongues at the wave front, sized from
+ * the same reach and height the mechanics use, plus a crackFan web at
+ * the base pushed forward into the frontal cone so the ground breaks
+ * where the wave actually runs. The complex particle layer is
+ * EMBER_FRAGMENT through the cone and ASH_FLAKE along the ground. The
+ * material emission from the no-shapes pass stays as filler only:
+ * flame and embers carrying the front, ash on the ground, and smoke
+ * and heat vapor rising off the wave as it burns down. The entity
+ * already spawns a DebrisSpawner field for the big physical chunks.
  */
 public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, LavaEruptionRenderer.EruptState> {
     private final Map<Integer, Emission> emissions = new HashMap<>();
@@ -86,6 +97,40 @@ public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, Lav
                 emissions.put(state.entityId, emission);
             }
             emission.update(state, strength, height);
+
+            // Pieces layer, in local space (pose origin is the eruption
+            // origin at ground level, axes world aligned). The crown
+            // sits at the wave front inside the damage cone, and the
+            // crack web is centered forward of the origin at 0.30 of
+            // reach with a radius of 0.62 of reach, so its tips stay
+            // inside the cone reach. Vertex estimate at distScale 1.0:
+            // nine tongues about 432, crackFan about 560 to 700, for
+            // roughly 1100 total, inside the class L budget of 6000.
+            final long pieceSeed = state.seed;
+            final float pieceEnv = env;
+            final float pieceDs = distance;
+            final float sway = state.age * 0.50f;
+            if (pieceEnv > 0.01f && state.reach > 0.2f) {
+                double yaw = Math.toRadians(state.yRot);
+                Vec3 facingLocal = new Vec3(-Math.sin(yaw), 0.0, Math.cos(yaw));
+                final Vec3 crownBase = new Vec3(
+                        facingLocal.x * state.reach * 0.52, 0.05,
+                        facingLocal.z * state.reach * 0.52);
+                final float crownRadius = Math.max(0.5f, state.reach * 0.42f);
+                final float crownHeight = height * 1.25f + 0.35f;
+                final float crackRadius = state.reach * 0.62f;
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                        ComplexGeometry.flameTongues(pose, buffer, pieceSeed ^ 0xF1E1L,
+                                crownBase, crownRadius, crownHeight, 9,
+                                0xFFF2B0, 0xFF5A00, 0.95f, pieceEnv, sway, pieceDs));
+                poseStack.pushPose();
+                poseStack.translate(facingLocal.x * state.reach * 0.30, 0.0,
+                        facingLocal.z * state.reach * 0.30);
+                ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                        ComplexGeometry.crackFan(pose, buffer, pieceSeed ^ 0xC9E1L,
+                                crackRadius, 0xFFF2B0, 0xFF5A00, 0.95f, pieceEnv, pieceDs));
+                poseStack.popPose();
+            }
         }
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -119,6 +164,15 @@ public class LavaEruptionRenderer extends EntityRenderer<LavaEruptionEntity, Lav
             emitters.add(new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.ember(Vec3.ZERO, 0.026f),
                     random -> sampleCone(random, 0.05, 1.0), 360f, 460));
+            // Complex particle layer: irregular ember fragments through
+            // the cone and ash flakes along the ground, each at the
+            // standard continuous cap for complex sprites.
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT, Vec3.ZERO, 0.040f),
+                    random -> sampleCone(random, 0.05, 1.0), 36f, 40));
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, new Vec3(0.0, 0.012, 0.0), 0.024f),
+                    this::sampleGround, 22f, 30));
             emitters.add(new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.ash(new Vec3(0.0, 0.010, 0.0), 0.024f),
                     this::sampleGround, 110f, 150));

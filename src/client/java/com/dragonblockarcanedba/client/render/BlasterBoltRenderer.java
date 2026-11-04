@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.BlasterBoltEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -18,17 +20,24 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Entity Renderer for Blaster Bolt in MC 26.2.
- * No-shapes pass: this renderer draws no geometry. The bolt is a dense
- * cluster of ki plasma particles sampled along its real flight path,
- * with a white-hot plasma core near the nose, vapor shedding off the
- * tail, and steel sparks at the head. Emission runs through persistent
- * per-entity MaterialEmitters Emitter channels, so the accumulator
- * and per-second budgets survive across frames; the channels rebuild
- * only when the heat or size bucket changes. Size, heat palette,
- * pulse, and the impact collapse math are unchanged from the bespoke
- * pass; the collapse now drives emission density and particle scale
- * instead of mesh size. The entity's own server trail and impact
- * bursts are untouched.
+ * Complex pass: layered composition, class M. The pieces layer is a
+ * short tendril wake behind the bolt: two torn ComplexGeometry strands
+ * through submitEnergy with the tendril canvas, a main strand in the
+ * heat palette running from the tail to a near-white tip at the nose,
+ * and a thinner offset strand as its torn edge, both collapsing with
+ * the bolt on impact. The complex particle layer is a SPARK_STREAK
+ * burst at the nose on the impact transition. The no-shapes emission
+ * stays as filler only: a dense cluster of ki plasma particles sampled
+ * along the real flight path, with a white-hot plasma core near the
+ * nose, vapor shedding off the tail, and steel sparks at the head.
+ * Emission runs through persistent per-entity MaterialEmitters
+ * Emitter channels, so the accumulator and per-second budgets survive
+ * across frames; the channels rebuild only when the heat or size
+ * bucket changes. Size, heat palette, pulse, and the impact collapse
+ * math are unchanged; the collapse drives the tendril lengths and
+ * widths as well as emission density and particle scale. The entity's
+ * own server trail, impact bursts, and DebrisSpawner field are
+ * untouched.
  */
 public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, BlasterBoltRenderer.BlasterBoltRenderState> {
     private static final Map<Integer, Emission> EMISSIONS = new ConcurrentHashMap<>();
@@ -54,6 +63,7 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
     /** Per-entity emission channels plus the live frame they sample from. */
     private static final class Emission {
         float lastAge = Float.NaN;
+        int lastImpactAge = -1;
         String signature = "";
         MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
         Vec3 center = Vec3.ZERO;
@@ -142,6 +152,47 @@ public class BlasterBoltRenderer extends EntityRenderer<BlasterBoltEntity, Blast
         em.drawHead = drawHead;
         em.drawTail = drawTail;
         em.drawRadius = drawRadius;
+
+        // Pieces layer, in entity local space (Vec3.ZERO is the bolt
+        // center, the same frame the pose stack is translated into).
+        // Two tendrils at full spine samples is 768 vertices, inside
+        // the class M budget of 2500.
+        final Vec3 geoDir = state.direction;
+        Vec3 sideTmp = geoDir.cross(new Vec3(0, 1, 0));
+        final Vec3 geoSide = sideTmp.lengthSqr() < 1.0e-6 ? new Vec3(1, 0, 0) : sideTmp.normalize();
+        final Vec3 geoUp = geoDir.cross(geoSide).normalize();
+        final int geoBody = argb(r, g, b);
+        final float geoEnv = boltDie;
+        final float geoWidth = Math.max(0.16f, drawRadius * 1.05f);
+        final Vec3 wakeFrom = geoDir.scale(-drawTail * 0.90);
+        final Vec3 wakeControl = geoDir.scale((drawHead * 0.50f - drawTail * 0.90f) * 0.5f)
+            .add(geoSide.scale(drawRadius * 0.55f));
+        final Vec3 wakeTo = geoDir.scale(drawHead * 0.50f);
+        final Vec3 edgeFrom = geoDir.scale(-drawTail * 0.75).add(geoSide.scale(drawRadius * 0.45f));
+        final Vec3 edgeControl = geoDir.scale(-drawTail * 0.10f).add(geoUp.scale(-drawRadius * 0.60f));
+        final Vec3 edgeTo = geoDir.scale(drawHead * 0.35f).add(geoSide.scale(-drawRadius * 0.30f));
+        final long geoSeed = state.seed;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x7A11L,
+                wakeFrom, wakeControl, wakeTo, geoWidth,
+                geoBody, 0xFFF7D1, 0.95f, geoEnv, distScale);
+            ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0xED6EL,
+                edgeFrom, edgeControl, edgeTo, geoWidth * 0.55f,
+                geoBody, 0xFFF7D1, 0.88f, geoEnv, distScale);
+        });
+
+        // Complex particle layer: a SPARK_STREAK burst at the nose on
+        // the frame the synced impact age first turns non-negative,
+        // 18 to 26 sprites inside the class M burst budget of 30. The
+        // entity's own server side impact field stays untouched.
+        if (state.impactAge >= 0 && em.lastImpactAge < 0) {
+            Vec3 head = state.origin.add(state.direction.scale(drawHead * 0.55f));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.30f),
+                MaterialEmitters.sphereVolume(head, Math.max(0.10, drawRadius * 0.90)),
+                overcharged ? 26 : 18);
+        }
+        em.lastImpactAge = state.impactAge;
 
         float delta;
         if (Float.isNaN(em.lastAge) || age < em.lastAge) {

@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.WarMaceRiseEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -19,9 +20,15 @@ import java.util.Iterator;
 import java.util.Map;
 
 /**
- * The rising crescent, converted for the no-shapes realism pass. This
- * renderer draws no geometry at all. The crescent is a path, and a path is
- * data: bronze plasma is emitted along the same 250 degree arc, in the
+ * The rising crescent, rebuilt for the complex effects redo as a layered
+ * composition. At the rise point on the ground, a small fracturePlates
+ * fan of lifted stone slabs (submitSolid, faceted shading) sits under a
+ * crackFan of bronze energy cracks running through it on the shader
+ * (submitEnergy), and a SHARD_CHIP burst plus a short chip stream throw
+ * stone fragments off the base ring. Those pieces are the fast near
+ * field structure of the launch; everything below stays as the filler
+ * layer. The crescent itself is a path, and a path is data: bronze
+ * plasma is emitted along the same 250 degree arc, in the
  * same facing plane, climbing at the same 0.22 blocks per tick the hit
  * volume climbs, so what the target sees is still what hits it. The main
  * arc, the wider wisp, and the two lagging ghost arcs below are separate
@@ -139,6 +146,30 @@ public class WarMaceRiseRenderer extends EntityRenderer<WarMaceRiseEntity, WarMa
         float dist = MaterialEmitters.distanceScale(center);
         float ringEnv = state.age < 3.5f ? (1.0f - state.age / 3.5f) * 0.6f : 0.0f;
         emission.tick(delta, env * dist, ringEnv * dist);
+        if (fresh) {
+            // Complex particle layer, burst half: stone chips thrown off
+            // the base ring at the launch moment, inside the class M
+            // burst budget of 30.
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                    new Vec3(0.0, 0.32, 0.0), 0.18f),
+                baseRing(emission.frame), 20);
+        }
+
+        // Pieces layer at the rise point, in the local ground frame:
+        // small fractured plates lifted at the base, with a bronze crack
+        // fan glowing through and past them. Combined vertices stay well
+        // inside the class M budget: plates draw about 480 and the crack
+        // fan under 900 of the 2500 allowed.
+        final long geoSeed = state.seed;
+        final float geoEnv = env;
+        final float geoDist = dist;
+        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xF9A7L,
+                1.05f, 0.16f, GHOST_LOW, 0x4A3826, 0.92f, geoEnv, geoDist));
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC9ACL,
+                1.35f, WISP, GHOST_LOW, 0.95f, geoEnv, geoDist));
         pruneEmissions(state.entityId);
 
         super.submit(state, poseStack, collector, cameraState);
@@ -204,8 +235,9 @@ public class WarMaceRiseRenderer extends EntityRenderer<WarMaceRiseEntity, WarMa
     /**
      * The material emitter bundle for one rise: the main plasma arc, the
      * wide wisp arc, two ghost arcs below, a vapor wash along the main
-     * arc, sparse steel sparks shed off the arc, and the ground dust and
-     * vapor of the launch ring.
+     * arc, sparse steel sparks shed off the arc, the ground dust and
+     * vapor of the launch ring, and the stone chips of the complex
+     * particle layer off that same ring.
      */
     private static final class RiseEmission {
         private final ClientLevel level;
@@ -219,6 +251,7 @@ public class WarMaceRiseRenderer extends EntityRenderer<WarMaceRiseEntity, WarMa
         private final MaterialEmitters.Emitter arcSparks;
         private final MaterialEmitters.Emitter baseDust;
         private final MaterialEmitters.Emitter baseVapor;
+        private final MaterialEmitters.Emitter baseChips;
         private float lastAge = -1.0f;
         private long lastSeenNanos = System.nanoTime();
 
@@ -250,6 +283,13 @@ public class WarMaceRiseRenderer extends EntityRenderer<WarMaceRiseEntity, WarMa
             this.baseVapor = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(PALE, 2.1f, seed ^ 0xBA5F, Vec3.ZERO, 0.02f),
                 baseRing(frame), 60f, 90);
+            // Complex particle layer, continuous half: stone chips off
+            // the launch ring while it rolls outward, under the
+            // continuous cap of 40 per second per emitter.
+            this.baseChips = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                    new Vec3(0.0, 0.28, 0.0), 0.16f),
+                baseRing(frame), 26f, 36);
         }
 
         private void tick(float deltaSeconds, float envelope, float ringEnvelope) {
@@ -263,6 +303,7 @@ public class WarMaceRiseRenderer extends EntityRenderer<WarMaceRiseEntity, WarMa
             if (ringEnvelope > 0.01f) {
                 baseDust.tick(deltaSeconds, ringEnvelope);
                 baseVapor.tick(deltaSeconds, ringEnvelope);
+                baseChips.tick(deltaSeconds, ringEnvelope);
             }
         }
     }

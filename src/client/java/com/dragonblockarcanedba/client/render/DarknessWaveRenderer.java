@@ -1,8 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DarknessWaveEntity;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -21,6 +24,13 @@ import net.minecraft.world.phys.Vec3;
  * material sampled across the same moving volume the old visual occupied
  * and matched to the entity hitbox. The lifecycle math is unchanged:
  * opens over 5 ticks, full to tick 45, gone at tick 60.
+ *
+ * Complex pass: three tendril strands span the wave front as its body,
+ * built on the same forward, right, and up basis the emission samples,
+ * bowed forward at the center and torn by the tendril pinch windows.
+ * They submit through the veil path so the body reads as darkness smoke
+ * with a purple core gradient, not additive glow. Ember fragments shed
+ * from the front. The material emission stays as filler around them.
  */
 public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, DarknessWaveRenderer.DarknessWaveRenderState> {
 
@@ -77,8 +87,39 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
 
     @Override
     public void submit(DarknessWaveRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        submitPieces(state, poseStack, collector);
         emitMaterials(state);
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void submitPieces(DarknessWaveRenderState state, PoseStack poseStack, SubmitNodeCollector collector) {
+        float fade = waveFade(state);
+        if (fade <= 0.01f) {
+            return;
+        }
+        float distScale = MaterialEmitters.distanceScale(new Vec3(state.px, state.py, state.pz));
+        float envelope = fade;
+        long seed = state.seed;
+        Vec3 forward = forward(state);
+        Vec3 right = right(state, forward);
+        Vec3 up = right.cross(forward).normalize();
+        double span = waveSpan(state);
+        double centerY = waveHeight(state) * 0.35;
+        double[] laneOffset = {-0.55, 0.05, 0.60};
+        float[] laneWidth = {0.36f, 0.50f, 0.36f};
+        // Tendril body along the wave: one strand per lane across the
+        // front, endpoints at the rim and the control point bowed
+        // forward, so the front bulges the way the emission volume does.
+        ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            for (int i = 0; i < laneOffset.length; i++) {
+                Vec3 base = up.scale(centerY + laneOffset[i] * waveHeight(state) * 0.5);
+                Vec3 from = base.add(right.scale(-span)).add(forward.scale(0.10));
+                Vec3 to = base.add(right.scale(span)).add(forward.scale(0.10));
+                Vec3 control = base.add(forward.scale(0.65)).add(up.scale(i % 2 == 0 ? 0.14 : -0.14));
+                ComplexGeometry.tendril(pose, buffer, seed ^ (0xDA50L + i * 131L),
+                    from, control, to, laneWidth[i], 0x3B0764, 0xA605F2, 0.92f, envelope, distScale);
+            }
+        });
     }
 
     private static void emitMaterials(DarknessWaveRenderState state) {
@@ -137,7 +178,10 @@ public class DarknessWaveRenderer extends EntityRenderer<DarknessWaveEntity, Dar
             new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.material(DbaMaterialOptions.SOUL, 0xD8B4FE, 1.75f,
                     seed ^ 0xDA05, Vec3.ZERO, 0.015f),
-                frontSource(state, -1.15, 0.40, 0.50, 0.46, 0.018), 55.0f, 65)
+                frontSource(state, -1.15, 0.40, 0.50, 0.46, 0.018), 55.0f, 65),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT, Vec3.ZERO, 0.06f),
+                frontSource(state, -0.30, 0.50, 0.55, 0.50, 0.040), 28.0f, 34)
         };
     }
 

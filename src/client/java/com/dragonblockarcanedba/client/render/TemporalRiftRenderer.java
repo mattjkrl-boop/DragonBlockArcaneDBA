@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.TemporalRiftEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -12,6 +15,7 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -20,20 +24,23 @@ import java.util.Map;
 /**
  * Entity Renderer for Temporal Rift.
  *
- * No-shapes conversion: this renderer draws no geometry at all. The rift
- * is carried entirely by shared material particles emitted through
- * MaterialEmitters. Pale plasma and soul material stream inward through
- * the field volume, glass dust hangs in the volume and gathers on the
- * ground with the fractured temporal read, sparse mist suggests the field
- * boundary without drawing a shell, and darkness gathers at the core.
- * The old dome, bands, clock hands, steles, streams, rings, and crystal
- * caps are gone.
+ * Complex pass: a layered composition. The pieces layer is a solid
+ * shardBurst of temporal glass shards suspended at the tear heart,
+ * plus three shader tendrils streaming inward from the field rim to
+ * that heart through the tendril canvas. The complex particle layer
+ * is WISP_CURL sprites streaming inward with the soul stream. The
+ * shared material system stays as filler only: pale plasma and soul
+ * material stream inward through the field volume, glass dust hangs
+ * in the volume and gathers on the ground with the fractured temporal
+ * read, sparse mist suggests the field boundary without drawing a
+ * shell, and darkness gathers at the core. The old dome, bands, clock
+ * hands, steles, streams, rings, and crystal caps stay gone.
  *
  * Identity is preserved through the celestial cyan and silver palette,
  * the synced seed, the shared FxEnvelope lifecycle (build 15 percent,
  * peak, dissipate 35 percent), and the build phase radius unfold. The
- * radius unfold now scales the sampled emission volume and density
- * instead of a mesh.
+ * radius unfold scales the sampled emission volume and density, the
+ * shard cluster size, and the tendril rim distance alike.
  */
 public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, TemporalRiftRenderer.RiftRenderState> {
 
@@ -145,6 +152,48 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
         emission.tick(delta, env * dist, radius);
         pruneEmissions(state.entityId);
 
+        // Pieces layer, class M, in entity local space: the tear heart
+        // sits at the same core lift the core emission streams toward
+        // (height times 0.42), and the whole composition turns slowly
+        // around the field axis with age, so the shards hang in a
+        // suspended swirl instead of sitting static. Vertex accounting
+        // at full detail: the shard burst is 5 shards at 288 vertices
+        // (1440), and the three inward tendrils run at reduced detail
+        // scale (17 spine samples, 272 vertices each, 816), for a
+        // worst case of 2256, inside the class M budget of 2500. Both
+        // layers follow the same lifecycle envelope as the emission.
+        if (env > 0.02f) {
+            final float geoEnv = env;
+            final float geoDs = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            final float fieldH = radius * 1.05f;
+            final float tearY = fieldH * 0.42f;
+            final float rimR = radius * 0.88f;
+            final float shardUnit = Math.max(0.5f, radius * 0.09f);
+            final long pseed = state.seed;
+            poseStack.pushPose();
+            poseStack.mulPose(new Matrix4f().rotationY((float) Math.toRadians(age * 0.4f)));
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.shardBurst(pose, buffer, pseed ^ 0x7E42L,
+                    new Vec3(0.0, tearY, 0.0), new Vec3(0.0, 1.0, 0.0), 150f, shardUnit, 5,
+                    0x2F6DB3, 0xDDF7FF, 0.95f, geoEnv, geoDs));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                Vec3 heart = new Vec3(0.0, tearY, 0.0);
+                for (int i = 0; i < 3; i++) {
+                    double ang = i * 2.399963229728653 + (pseed & 7) * 0.11;
+                    double cosA = Math.cos(ang);
+                    double sinA = Math.sin(ang);
+                    Vec3 rim = new Vec3(cosA * rimR, tearY + (i - 1) * fieldH * 0.22, sinA * rimR);
+                    Vec3 tangent = new Vec3(-sinA, 0.0, cosA);
+                    Vec3 control = rim.lerp(heart, 0.5)
+                        .add(tangent.scale(rimR * 0.20)).add(new Vec3(0.0, fieldH * 0.06, 0.0));
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ (0x7EA5L + i * 131L),
+                        rim, control, heart,
+                        0.36f, 0x61C2FF, 0xEAF8FF, 0.92f, geoEnv, geoDs * 0.70f);
+                }
+            });
+            poseStack.popPose();
+        }
+
         super.submit(state, poseStack, collector, cameraState);
     }
 
@@ -227,8 +276,10 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
      * The material emitter bundle for one rift: pale plasma at the core,
      * celestial plasma through the field, soul material streaming inward,
      * glass dust in the volume and on the ground, sparse boundary mist,
-     * and darkness at the core. Every stream runs on the toolkit Emitter
-     * accumulator with its own hard per-second budget.
+     * and darkness at the core. One complex stream rides along: wisp curl
+     * sprites streaming inward with the soul stream. Every stream runs
+     * on the toolkit Emitter accumulator with its own hard per-second
+     * budget.
      */
     private static final class RiftEmission {
         private final ClientLevel level;
@@ -239,6 +290,7 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
         private final MaterialEmitters.Emitter plasmaCore;
         private final MaterialEmitters.Emitter plasmaField;
         private final MaterialEmitters.Emitter soul;
+        private final MaterialEmitters.Emitter wispCurl;
         private final MaterialEmitters.Emitter glassVolume;
         private final MaterialEmitters.Emitter groundGlass;
         private final MaterialEmitters.Emitter mist;
@@ -262,6 +314,12 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             this.soul = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.soul(0xCFF4FF, 1.0f, baseSeed ^ 0x37, new Vec3(0.0, 0.006, 0.0), 0.008f),
                 inwardVolume(volume, 0.30, 0.85, 0.85, 0.45), 105.0f, 160);
+            // Complex particle layer: wisp curls curling inward with
+            // the soul stream, inside the 40 per second continuous
+            // budget for complex sprites.
+            this.wispCurl = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.008f),
+                inwardVolume(volume, 0.28, 0.90, 0.90, 0.44), 32.0f, 40);
             this.glassVolume = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.glassDust(0xDDF7FF, 0.9f, baseSeed ^ 0x53, Vec3.ZERO, 0.006f),
                 inwardVolume(volume, 0.20, 0.95, 0.90, 0.42), 75.0f, 115);
@@ -282,6 +340,7 @@ public class TemporalRiftRenderer extends EntityRenderer<TemporalRiftEntity, Tem
             plasmaCore.tick(deltaSeconds, envelope);
             plasmaField.tick(deltaSeconds, envelope);
             soul.tick(deltaSeconds, envelope);
+            wispCurl.tick(deltaSeconds, envelope);
             glassVolume.tick(deltaSeconds, envelope);
             groundGlass.tick(deltaSeconds, envelope);
             mist.tick(deltaSeconds, envelope);

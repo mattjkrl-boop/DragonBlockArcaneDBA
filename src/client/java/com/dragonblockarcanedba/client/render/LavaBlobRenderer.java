@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.LavaBlobEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -20,9 +23,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The lava blob is presented as a dense cluster of living material rather
- * than a rendered body: flame flipbooks form the hot center, embers shed
- * along the flight path, and ash, smoke, and heat vapor drift off it.
+ * The lava blob is a layered composition at class M. The pieces layer is
+ * a cluster of torn flame tongues licking off the crown of the blob,
+ * drawn on the additive shader with the flame canvas. The complex
+ * particle layer is an EMBER_FRAGMENT trail shed along the flight path:
+ * irregular crust fragments around bright cores, not round sparks. The
+ * material emission from the no-shapes pass stays as filler only: a
+ * dense cluster of flame flipbooks at the hot center, embers along the
+ * path, and ash, smoke, and heat vapor drifting off it. No blob body is
+ * drawn as geometry.
  */
 public class LavaBlobRenderer extends EntityRenderer<LavaBlobEntity, LavaBlobRenderer.BlobState> {
     private final Map<Integer, Emission> emissions = new HashMap<>();
@@ -85,6 +94,18 @@ public class LavaBlobRenderer extends EntityRenderer<LavaBlobEntity, LavaBlobRen
                 emissions.put(state.entityId, emission);
             }
             emission.update(state, env * distance);
+
+            // Pieces layer, in local space (pose origin is the blob
+            // center). Five tongues at six segments are about 240
+            // vertices, inside the class M budget of 2500.
+            final long pieceSeed = state.seed;
+            final float pieceEnv = env;
+            final float pieceDs = distance;
+            final float sway = state.age * 0.55f;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                    ComplexGeometry.flameTongues(pose, buffer, pieceSeed ^ 0xF1B0L,
+                            new Vec3(0.0, 0.16, 0.0), 0.30f, 0.78f, 5,
+                            0xFFF2B0, 0xFF5A00, 0.95f, pieceEnv, sway, pieceDs));
         }
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -112,6 +133,12 @@ public class LavaBlobRenderer extends EntityRenderer<LavaBlobEntity, LavaBlobRen
             emitters.add(new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.ember(Vec3.ZERO, 0.030f),
                     this::sampleTrail, 78f, 110));
+            // Complex particle layer: irregular ember fragments shed
+            // along the same flight segment as the round ember filler,
+            // at the standard continuous cap for complex sprites.
+            emitters.add(new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT, Vec3.ZERO, 0.045f),
+                    this::sampleTrail, 30f, 38));
             emitters.add(new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.ash(new Vec3(0.0, 0.015, 0.0), 0.030f),
                     random -> sampleCluster(random, 0.40), 26f, 44));

@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SpikeFlailSwingEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -22,12 +24,22 @@ import java.util.Map;
 
 /**
  * Chain and spiked ball at the end of the swing. The entity sits on the ball.
- * No-shapes pass: this renderer submits no effect geometry. The swing reads
- * as air vapor and steel sparks shed along the real arc, hot plasma glints at
- * the moving head, sparse vapor along the chain path, and warm dust kicked
- * up under the low points of the arc. The physical Spike Flail item model in
- * the holder's hand is untouched. Seeds derive from the entity id, so every
- * client emits the same material variation.
+ * Complex pass: layered composition. The pieces layer is a tendril
+ * body through ComplexGeometry.submitEnergy with the tendril canvas,
+ * chained along the swing arc exactly as sampled: one strand from
+ * the first trail sample to the middle sample with the second
+ * sample as its control, a second strand from the middle sample to
+ * the ball with the fourth sample as its control, and a thinner
+ * echo strand over the whole arc with the middle sample as its
+ * control, so the body follows the same five points the emission
+ * samples and tears into strands along them. The complex particle
+ * layer is SPARK_STREAK sprites shed along the same trail path. The
+ * material filler stays as before: air vapor and steel sparks shed
+ * along the real arc, hot plasma glints at the moving head, sparse
+ * vapor along the chain path, and warm dust kicked up under the low
+ * points of the arc. The physical Spike Flail item model in the
+ * holder's hand is untouched. Seeds derive from the entity id, so
+ * every client emits the same material variation.
  */
 public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntity, SpikeFlailSwingRenderer.SwingState> {
     /** Trail samples behind the ball along its arc, oldest first; the last is the ball itself. */
@@ -123,9 +135,46 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
         emission.frame.hand = state.hand;
         emission.frame.center = state.center;
         emission.frame.groundY = state.groundY;
+        submitPieces(state, poseStack, collector, fade * (0.35f + 0.65f * open), distScale);
         float delta = emission.delta(state.age);
         float dustEnvelope = envelope * (state.center.y - state.groundY <= 1.25 ? 1.0f : 0.30f);
         emission.tick(delta, envelope, dustEnvelope);
+    }
+
+    /**
+     * Pieces layer: a tendril body in local space chained along the
+     * sampled swing arc. Local points are the trail samples minus
+     * the render origin (the ball, which is also the last sample).
+     * The first strand runs sample 0 to sample 2 controlled by
+     * sample 1, the second runs sample 2 to sample 4 controlled by
+     * sample 3, and a thinner echo runs the whole arc controlled by
+     * sample 2, so every strand is anchored on sampled points only
+     * and no new path is invented. Peak alphas are honest body
+     * alphas; the gradient runs warm dust at the tail to near white
+     * at the head, matching the existing plasma glint color.
+     */
+    private void submitPieces(SwingState state, PoseStack poseStack, SubmitNodeCollector collector,
+                              float envelope, float distScale) {
+        if (envelope <= 0.01f || state.trail.size() < TRAIL_POINTS) {
+            return;
+        }
+        final Vec3 origin = new Vec3(state.x, state.y, state.z);
+        final Vec3 p0 = state.trail.get(0).subtract(origin);
+        final Vec3 p1 = state.trail.get(1).subtract(origin);
+        final Vec3 p2 = state.trail.get(2).subtract(origin);
+        final Vec3 p3 = state.trail.get(3).subtract(origin);
+        final Vec3 p4 = state.trail.get(4).subtract(origin);
+        final float gEnv = envelope;
+        final float gDist = distScale;
+        final long gSeed = state.seed;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0x5A11L, p0, p1, p2,
+                0.30f, THEME_DUST, 0xEDE8DA, 0.92f, gEnv, gDist);
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0x5B22L, p2, p3, p4,
+                0.28f, 0xEDE8DA, 0xFFF6D8, 0.92f, gEnv, gDist);
+            ComplexGeometry.tendril(pose, buffer, gSeed ^ 0x5C33L, p0, p2, p4,
+                0.15f, 0xEDE8DA, 0xFFF6D8, 0.88f, gEnv, gDist);
+        });
     }
 
     private void pruneEmissions() {
@@ -155,6 +204,7 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
         final Frame frame = new Frame();
         final MaterialEmitters.Emitter trailVapor;
         final MaterialEmitters.Emitter trailSparks;
+        final MaterialEmitters.Emitter trailStreaks;
         final MaterialEmitters.Emitter corePlasma;
         final MaterialEmitters.Emitter chainVapor;
         final MaterialEmitters.Emitter groundDust;
@@ -178,6 +228,11 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
             this.trailSparks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.14f),
                 trailPath, 65f, 100);
+            // Complex particle layer: steel streak slivers shed along
+            // the same sampled trail path, inside the continuous cap.
+            this.trailStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.14f),
+                trailPath, 26f, 34);
             this.corePlasma = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(0xFFF6D8, 0.65f, seed ^ 0xC09E, Vec3.ZERO, 0.050f),
                 ballPoint, 70f, 110);
@@ -206,6 +261,7 @@ public class SpikeFlailSwingRenderer extends EntityRenderer<SpikeFlailSwingEntit
             }
             trailVapor.tick(delta, envelope);
             trailSparks.tick(delta, envelope);
+            trailStreaks.tick(delta, envelope);
             corePlasma.tick(delta, envelope);
             chainVapor.tick(delta, envelope * 0.80f);
             groundDust.tick(delta, dustEnvelope);

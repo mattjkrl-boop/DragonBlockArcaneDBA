@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.OxChargeEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -23,12 +25,17 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Ox King's Groundbreaker Charging in Minecraft 26.2.
- * No-shapes pass: this renderer draws no geometry. The charge reads as
- * material being pulled in and compressed: plasma motes drifting toward the
- * brace point, ground dust across the shatter radius, vapor, rising ember
- * tendrils above 25 percent charge, and occasional physical debris chunks
- * of the actual ground block knocked loose by the pressure. Radius growth,
- * the fade in, and the charge envelope are unchanged from the bespoke build.
+ * Complex pass: a layered composition at class M. The pieces layer is a
+ * tendrilFan through submitEnergy with the tendril canvas: three clusters
+ * on the charge ring each fan two dust strands inward toward the brace
+ * point, so the pull reads as torn filaments, not a glow. The complex
+ * particle layer is SHARD_CHIP sprites on the same inward gathering path
+ * as the plasma, chips dragged in by the pressure. The material filler
+ * stays as before: plasma motes drifting toward the brace point, ground
+ * dust across the shatter radius, vapor, rising embers above 25 percent
+ * charge, and occasional physical debris chunks of the actual ground
+ * block knocked loose by the pressure. Radius growth, the fade in, and
+ * the charge envelope are unchanged from the bespoke build.
  */
 public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRenderer.OxChargeRenderState> {
 
@@ -85,6 +92,7 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
         MaterialEmitters.Emitter dust;
         MaterialEmitters.Emitter ember;
         MaterialEmitters.Emitter chunks;
+        MaterialEmitters.Emitter chips;
         float lastAge = -1f;
     }
 
@@ -149,6 +157,12 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
                 MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, ground),
                         new Vec3(0.0, 0.24, 0.0), 0.08f),
                 disc(frame, 0.95f, 0.05f, 0.05f), 20f, 40);
+        // Complex particle layer: stone chips on the gathering path,
+        // pulled inward with the plasma, under the continuous rate cap.
+        emission.chips = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                        Vec3.ZERO, 0.02f),
+                gathering(frame), 26f, 40);
         return emission;
     }
 
@@ -184,10 +198,40 @@ public class OxChargeRenderer extends EntityRenderer<OxChargeEntity, OxChargeRen
             emission.vapor.tick(delta, envelope);
             emission.dust.tick(delta, envelope);
             emission.chunks.tick(delta, envelope);
+            emission.chips.tick(delta, envelope);
             // Rising heat tendrils only exist above 25 percent charge, as before.
             if (charge >= 0.25f) {
                 emission.ember.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer: inward tendril fan. Three clusters sit on the
+        // charge ring and each fans two strands toward the brace point
+        // the filler emission already converges on. Six tendrils at the
+        // toolkit segment count stay inside the class M vertex budget.
+        float geoEnv = fadeIn * (0.25f + 0.75f * chargeEase);
+        if (geoEnv > 0.02f) {
+            final long geoSeed = state.seed;
+            final float ringR = baseRadius;
+            final float width = 0.11f + charge * 0.10f;
+            final float rot = age * 0.10f;
+            final float coreY = 0.55f + chargeEase * 0.65f;
+            final float envF = Math.min(1.0f, geoEnv);
+            final float distF = distScale;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.Rng rng = new ComplexGeometry.Rng(geoSeed ^ 0x7C4A21L);
+                Vec3 core = new Vec3(0.0, coreY, 0.0);
+                for (int cluster = 0; cluster < 3; cluster++) {
+                    double ang = rot + cluster * (Math.PI * 2.0 / 3.0) + rng.nextFloat() * 0.6;
+                    double r = ringR * (0.88 + rng.nextFloat() * 0.22);
+                    Vec3 origin = new Vec3(Math.cos(ang) * r, 0.20 + cluster * 0.26, Math.sin(ang) * r);
+                    Vec3 dir = core.subtract(origin).normalize();
+                    double len = origin.distanceTo(core) * 1.05;
+                    ComplexGeometry.tendrilFan(pose, buffer, geoSeed + cluster * 104729L,
+                            origin, dir, 16.0f, (float) len, 2, width, 0xA0825F, 0xFF7A1A,
+                            0.90f, envF, distF);
+                }
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

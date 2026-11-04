@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -61,6 +62,12 @@ public class SorrowRiftEffect extends MobEffect {
 
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.SOUL, 0x8A2BE2, 1.2f, entity.getId() * 31 + entity.tickCount),
+                px, py, pz,
+                1, 0.0, -0.02, 0.0, 0.01
+            );
+            // Complex layer: soul and valor WISP_CURL at the same tick point and rate as the soul tears.
+            level.sendParticles(
+                DbaParticles.WISP_CURL,
                 px, py, pz,
                 1, 0.0, -0.02, 0.0, 0.01
             );

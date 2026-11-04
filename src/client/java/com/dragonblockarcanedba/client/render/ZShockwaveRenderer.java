@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.ZShockwaveEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
@@ -22,14 +24,20 @@ import java.util.Map;
 /**
  * Entity Renderer for Z-Sword Massive Kinetic Shockwave in Minecraft 26.2.
  *
- * No-shapes pass: the wave draws no geometry. Its span, chord, and
- * height survive only as emission data in the entity orientation
- * frame. Dense gold gravity plasma carries the front, a narrower
- * near-white plasma stream carries the hot center, pale vapor trails
- * in the wake, and stone dust is compressed along the lower edge. The
- * old apex burst becomes a short plasma concentration at the chord
- * point on the strike envelope. Fade, growth, first-person scaling,
- * orientation, and seed behavior carry over from the bespoke renderer.
+ * Complex pass: layered composition. The pieces layer sits at the
+ * wave origin on the ground plane: a small fracturePlates fan in
+ * stone colors through submitSolid plus a crackFan web through
+ * submitEnergy, near white at the center running out to gold. Both
+ * ride the strike envelope and are gone by about tick 40, so the
+ * ground reads as fracturing where the wave breaks loose instead of
+ * carrying plates for its whole travel. The complex particle layer
+ * is SHARD_CHIP sprites shed along the lower edge with the dust.
+ * The filler layer is unchanged: dense gold gravity plasma carries
+ * the front, a narrower near-white plasma stream carries the hot
+ * center, pale vapor trails in the wake, and stone dust is compressed
+ * along the lower edge, all in the entity orientation frame. Fade,
+ * growth, first-person scaling, orientation, and seed behavior carry
+ * over from before.
  */
 public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockwaveRenderer.ZShockwaveRenderState> {
 
@@ -37,6 +45,7 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
     private static final int CORE = 0xFFFFEB;
     private static final int PALE_GOLD = 0xFFE9A8;
     private static final int STONE_DUST = 0x9A8668;
+    private static final int DARK_STONE = 0x77675A;
 
     private final Map<Integer, Emission> emissions = new HashMap<>();
 
@@ -140,6 +149,26 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         emission.wake.tick(delta, envelope * 0.78f);
         emission.dust.tick(delta, envelope * 0.72f);
         emission.apex.tick(delta, impact * envelope);
+        emission.chips.tick(delta, envelope * 0.90f);
+
+        // Pieces layer at the origin: small plates plus crack web,
+        // strong on the strike envelope and faded out by about tick 40.
+        float geoEnv = fade * (age <= 18.0f
+            ? 0.45f + 0.55f * impact
+            : Math.max(0.0f, 1.0f - (age - 18.0f) / 22.0f));
+        if (geoEnv > 0.02f) {
+            long geoSeed = state.seed;
+            float plateRadius = Math.min(3.4f, span * 0.36f);
+            float lift = 0.16f + charge * 0.18f;
+            float envF = geoEnv;
+            float distF = dist;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xF9A7L,
+                    plateRadius, lift, STONE_DUST, DARK_STONE, 0.96f, envF, distF));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC9ACL,
+                    plateRadius * 1.20f, CORE, GOLD, 0.95f, envF, distF));
+        }
 
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -175,6 +204,7 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
         final MaterialEmitters.Emitter wake;
         final MaterialEmitters.Emitter dust;
         final MaterialEmitters.Emitter apex;
+        final MaterialEmitters.Emitter chips;
         long lastSeenNanos = System.nanoTime();
         long lastTickNanos = 0L;
 
@@ -204,6 +234,9 @@ public class ZShockwaveRenderer extends EntityRenderer<ZShockwaveEntity, ZShockw
             apex = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(CORE, 2.05f, baseSeed ^ 0xA9E5, Vec3.ZERO, 0.16f),
                 apexSource, 126.0f, 260);
+            chips = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.05f),
+                dustSource, 22.0f, 30);
         }
 
         Vec3 local(double x, double y, double z) {

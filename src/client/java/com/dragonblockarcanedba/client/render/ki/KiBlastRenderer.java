@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render.ki;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KiBlastEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -18,12 +19,19 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * No-shapes pass: this renderer draws no geometry. A ki blast is a dense
- * cluster of technique-colored plasma around the bolt position, a smaller
- * white-hot cluster at its heart, and a material trail of plasma and
- * vapor streaming off the tail as it flies. The old pulse (1 + 0.12 sin
- * of age) still drives the cluster radius. Impact remains the entity's
- * own server burst, unchanged.
+ * Complex pass: layered composition, class M. The pieces layer is a
+ * tendril wake behind the bolt: a main ComplexGeometry strand in the
+ * synced technique color running from the tail to a white tip at the
+ * nose, plus a thinner offset strand as its torn edge, both through
+ * submitEnergy with the tendril canvas. The complex particle layer is
+ * SPARK_STREAK sprites shed at the nose; the renderer state carries no
+ * synced impact field, so the streaks stream continuously at the head
+ * rather than bursting, and the entity's own server burst stays the
+ * impact event. The no-shapes emission stays as filler only: a dense
+ * cluster of technique-colored plasma around the bolt position, a
+ * smaller white-hot cluster at its heart, and a material trail of
+ * plasma and vapor streaming off the tail as it flies. The old pulse
+ * (1 + 0.12 sin of age) still drives the cluster radius.
  */
 public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRenderer.BlastRenderState> {
 
@@ -144,6 +152,9 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
                         MaterialEmitters.Preset.vapor(state.color, 2.4f * scale, seed ^ 0x0BEEF,
                                 Vec3.ZERO, 0.03f),
                         trail(frame), 75f, 105),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.14f),
+                        cluster(frame, 0.7), 20f, 40),
         };
         return emission;
     }
@@ -170,6 +181,38 @@ public class KiBlastRenderer extends EntityRenderer<KiBlastEntity, KiBlastRender
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer, in entity local space (the pose origin is the
+        // bolt center). Two tendrils at full spine samples is 768
+        // vertices, inside the class M budget of 2500. The wake follows
+        // the same tail length the filler trail uses.
+        if (envelope > 0.01f) {
+            Vec3 dir = lookDir(state.yRot, state.xRot);
+            Vec3 perpTmp = dir.cross(new Vec3(0, 1, 0));
+            if (perpTmp.lengthSqr() < 1e-6) perpTmp = new Vec3(1, 0, 0);
+            final Vec3 perpA = perpTmp.normalize();
+            final Vec3 perpB = dir.cross(perpA).normalize();
+            final float geoScale = Math.max(0.2f, state.scale);
+            final float tail = 1.6f * geoScale;
+            final long geoSeed = state.seed;
+            final int geoColor = state.color;
+            final float geoEnv = envelope;
+            final float geoDs = distScale;
+            final Vec3 wakeFrom = dir.scale(-(0.25f + tail));
+            final Vec3 wakeControl = dir.scale(-tail * 0.45f).add(perpA.scale(0.20f * geoScale));
+            final Vec3 wakeTo = dir.scale(0.12f);
+            final Vec3 edgeFrom = dir.scale(-(0.20f + tail * 0.78f)).add(perpA.scale(0.13f * geoScale));
+            final Vec3 edgeControl = dir.scale(-tail * 0.35f).add(perpB.scale(-0.16f * geoScale));
+            final Vec3 edgeTo = dir.scale(0.05f).add(perpA.scale(-0.08f * geoScale));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x7A11L,
+                        wakeFrom, wakeControl, wakeTo, 0.32f * geoScale,
+                        geoColor, 0xFFFFFF, 0.95f, geoEnv, geoDs);
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0xED6EL,
+                        edgeFrom, edgeControl, edgeTo, 0.17f * geoScale,
+                        geoColor, 0xFFFFFF, 0.88f, geoEnv, geoDs);
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

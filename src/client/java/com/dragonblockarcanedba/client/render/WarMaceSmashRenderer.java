@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.WarMaceSmashEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -24,8 +25,21 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * The smash, converted for the no-shapes realism pass. This renderer draws
- * no geometry at all. What was a filled bronze dome shell is now material:
+ * The smash, rebuilt for the complex effects redo as a layered
+ * composition, the crater flagship of this weapon. The pieces layer is
+ * a fracturePlates fan at the builder's full plate budget (submitSolid,
+ * faceted shading), sized to the real crater the entity leaves (radius
+ * 3, or 4 on the heavy smash, plus its permanent fracture ring one
+ * wider) and drawn only while ground is near under the impact point, so
+ * the plates sit over that crater instead of floating under a heavy
+ * smash still riding its falling owner. A crackFan of bronze energy
+ * cracks runs through the plates on the shader (submitEnergy). The
+ * complex particle layer is a SHARD_CHIP burst at the impact bundle's
+ * first frame plus a continuous chip stream off the disc. These are the
+ * fast near field fragments: the entity already spawns a DebrisSpawner
+ * field server side for the big physical chunks. Under all of it, the
+ * material filler stays as the no-shapes pass left it: what was a filled
+ * bronze dome shell is material:
  * stone dust and shock vapor sampled through the squashed volume the shell
  * occupied, hot bronze plasma motes in the core volume, three swirling
  * dust layers at the rim where the counter rotating bands used to turn,
@@ -146,6 +160,40 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         float dist = MaterialEmitters.distanceScale(center);
         float plumeEnv = env * Math.max(0.0f, 1.0f - state.age / (life * 0.6f));
         emission.tick(delta, env * dist, plumeEnv * dist);
+        if (fresh) {
+            // Complex particle layer, burst half: stone chips off the
+            // impact disc on the bundle's first frame, inside the
+            // class L burst budget of 60.
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                    new Vec3(0.0, 0.38, 0.0), 0.22f),
+                disc(emission.frame, 0.9f, 0.04f, 0.12f), 48);
+        }
+
+        // Pieces layer, in the local ground frame, gated on ground
+        // actually being near under the impact point: a heavy smash
+        // rides its falling owner down, and plates drawn mid fall would
+        // float in the air with no crater under them. The plate radius
+        // follows the growing shock radius only up to the footprint the
+        // entity really breaks: crater radius 3 (4 heavy) plus the
+        // permanent fracture ring one block wider. Combined vertices
+        // stay well inside the class L budget: plates draw about 480
+        // and the crack fan under 900 of the 6000 allowed.
+        if (groundNear(level, center)) {
+            final long geoSeed = state.seed;
+            final float geoEnv = env;
+            final float geoDist = dist;
+            final float plateRadius = Math.min(state.radius, state.heavy ? 5.0f : 4.0f);
+            final float crackRadius = plateRadius * 1.08f;
+            final float plateLift = state.heavy ? 0.42f : 0.30f;
+            final int plateHot = state.heavy ? SHELL_HEAVY : SHELL_NORMAL;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0x9A7EL,
+                    plateRadius, plateLift, plateHot, 0x4A3826, 0.96f, geoEnv, geoDist));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
+                    crackRadius, HOT_CORE, BRONZE, 0.95f, geoEnv, geoDist));
+        }
         pruneEmissions(state.entityId);
 
         super.submit(state, poseStack, collector, cameraState);
@@ -246,6 +294,28 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         };
     }
 
+    /**
+     * True when solid ground is within about three blocks under the
+     * impact point, sampled at the center and at four points around it
+     * so a cratered center column or a slope does not fail the check.
+     * Depths reach past the crater bowl the entity digs (about two
+     * blocks at the center), while a heavy smash still high in its fall
+     * finds only air and draws no ground pieces yet.
+     */
+    private static boolean groundNear(ClientLevel level, Vec3 center) {
+        double[][] samples = {{0.0, 0.0}, {1.2, 0.0}, {-1.2, 0.0}, {0.0, 1.2}, {0.0, -1.2}};
+        for (double[] s : samples) {
+            for (double drop = 0.5; drop <= 3.5; drop += 1.0) {
+                BlockState below = level.getBlockState(
+                    BlockPos.containing(center.x + s[0], center.y - drop, center.z + s[1]));
+                if (!below.isAir()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static BlockState groundState(ClientLevel level, Vec3 center) {
         BlockState state = level.getBlockState(BlockPos.containing(center.x, center.y - 0.5, center.z));
         return state.isAir() ? Blocks.STONE.defaultBlockState() : state;
@@ -279,6 +349,7 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
         private final MaterialEmitters.Emitter sparks;
         private final MaterialEmitters.Emitter plumeDust;
         private final MaterialEmitters.Emitter plumeEmber;
+        private final MaterialEmitters.Emitter discChips;
         private float lastAge = -1.0f;
         private long lastSeenNanos = System.nanoTime();
 
@@ -344,6 +415,13 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
             this.plumeEmber = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.ember(new Vec3(0.0, 0.24, 0.0), 0.06f),
                 plume(frame, heavy ? 2.3f : 1.5f), 38f * big, 60);
+            // Complex particle layer, continuous half: stone chips off
+            // the impact disc for the life of the smash, under the
+            // continuous cap of 40 per second per emitter.
+            this.discChips = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                    new Vec3(0.0, 0.30, 0.0), 0.15f),
+                disc(frame, 0.9f, 0.04f, 0.12f), 36f, 50);
         }
 
         private void tick(float deltaSeconds, float envelope, float plumeEnvelope) {
@@ -362,6 +440,7 @@ public class WarMaceSmashRenderer extends EntityRenderer<WarMaceSmashEntity, War
             sparks.tick(deltaSeconds, envelope);
             plumeDust.tick(deltaSeconds, plumeEnvelope);
             plumeEmber.tick(deltaSeconds, plumeEnvelope);
+            discChips.tick(deltaSeconds, envelope);
         }
     }
 }

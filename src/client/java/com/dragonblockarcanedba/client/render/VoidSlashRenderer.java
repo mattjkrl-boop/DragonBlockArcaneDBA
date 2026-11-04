@@ -1,7 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.VoidSlashEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -24,6 +28,13 @@ import java.util.Map;
  * where the wake smears trailed. The open, close, and fade timing and the
  * radius derivation are unchanged, and the seed still comes from the
  * entity UUID.
+ *
+ * Complex pass: the cut gains a body again, as two tendrils swept along
+ * the crescent arc on the dissolve shader, a thick cyan to violet strand
+ * on the core arc and a thinner violet to cyan strand on the wider cut
+ * arc, so the slash reads as a torn strand of void rather than a cloud.
+ * WISP_CURL sprites shed along the arc as the complex particle layer.
+ * The material emission stays as filler around the strands.
  */
 public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlashRenderer.SlashRenderState> {
     public VoidSlashRenderer(EntityRendererProvider.Context context) {
@@ -74,6 +85,7 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
         final MaterialEmitters.Emitter core;
         final MaterialEmitters.Emitter edge;
         final MaterialEmitters.Emitter wake;
+        final MaterialEmitters.Emitter wisp;
         long lastNanos = 0L;
         long lastSeenNanos = 0L;
         Vec3 center = Vec3.ZERO;
@@ -108,6 +120,10 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
                         .add(axisB.scale((random.nextDouble() * 2.0 - 1.0) * radius * 1.3));
                     return new MaterialEmitters.Sample(p, forward.scale(-0.05));
                 }, 60f, 70);
+            // Complex particle layer: wisp curls shed along the cut arc.
+            this.wisp = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.02f),
+                random -> new MaterialEmitters.Sample(arcPoint(random, 1.10, 0.08), forward.scale(-0.08)), 30f, 36);
         }
     }
 
@@ -165,12 +181,59 @@ public class VoidSlashRenderer extends EntityRenderer<VoidSlashEntity, VoidSlash
         s.axisB = up.scale(cos).add(right.scale(-sin));
         s.radius = (1.45f + 0.40f * open) * (1.0f - 0.62f * close);
 
+        // Pieces layer: tendrils swept along the crescent arc, in local
+        // space (the pose sits at the slash center, unrotated, so the
+        // synced tilt axes are plain offsets).
+        {
+            final Vec3 axisAL = s.axisA;
+            final Vec3 axisBL = s.axisB;
+            final Vec3 fwdL = s.forward;
+            final float radL = s.radius;
+            final long pseed = state.seed;
+            final float penv = fade;
+            final float pds = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                // Each arc is drawn as two tendrils meeting at the arc
+                // mid. A single quadratic bezier across the whole 154
+                // degree sweep would cut inside the crescent; splitting
+                // at the mid and pushing each control point out to the
+                // midpoint matched distance (radius times 2 minus cos of
+                // the half sweep, about 1.22 here) keeps both spines on
+                // the arc the emission traces. Four tendrils at full
+                // spine samples is 1536 vertices, inside the budget.
+                double th = 1.35;
+                double ctrlCore = radL * 1.04 * 1.22;
+                double ctrlCut = radL * 1.16 * 1.22;
+                for (int half = 0; half < 2; half++) {
+                    double a0 = half == 0 ? -th : 0.0;
+                    double a1 = half == 0 ? -th * 0.5 : th * 0.5;
+                    double a2 = half == 0 ? 0.0 : th;
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ (0xD11L + half * 131L),
+                        arcLocal(axisAL, axisBL, a0, radL * 1.04),
+                        arcLocal(axisAL, axisBL, a1, ctrlCore),
+                        arcLocal(axisAL, axisBL, a2, radL * 1.04),
+                        0.17f * radL, 0x26EBFF, 0x9905F2, 0.94f, penv, pds);
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ (0xD31L + half * 131L),
+                        arcLocal(axisAL, axisBL, a0, radL * 1.16).add(fwdL.scale(-0.05)),
+                        arcLocal(axisAL, axisBL, a1, ctrlCut).add(fwdL.scale(-0.05)),
+                        arcLocal(axisAL, axisBL, a2, radL * 1.16).add(fwdL.scale(-0.05)),
+                        0.10f * radL, 0x9905F2, 0x26EBFF, 0.94f, penv, pds);
+                }
+            });
+        }
+
         s.cut.tick(delta, env * 0.95f);
         s.core.tick(delta, env);
         s.edge.tick(delta, env * (1.0f - close));
+        s.wisp.tick(delta, env * 0.8f);
         s.wake.tick(delta, env * 0.55f);
 
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    /** One point on the crescent arc in local space, matching the emission sampler's arc math. */
+    private static Vec3 arcLocal(Vec3 axisA, Vec3 axisB, double theta, double radius) {
+        return axisA.scale(Math.sin(theta) * radius).add(axisB.scale(Math.cos(theta) * radius));
     }
 
     private static float ease(float t) {

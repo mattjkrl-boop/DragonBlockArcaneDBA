@@ -1,8 +1,12 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.BanshoWindProjectileEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
+import org.joml.Matrix4f;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -14,11 +18,20 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Material presentation for the Bansho wind projectile. The renderer draws
- * no geometry. A dense emerald vapor cluster is sampled along the flight
- * path, a pale plasma core rides the axis, airborne dust trails behind,
- * and mist forms the wake. The age envelope and first-person owner scale
- * are unchanged; the old drill, scythe, helix, and wake meshes are gone.
+ * Layered presentation for the Bansho wind projectile (class M). The
+ * pieces layer is a double tendril spiral wake: two ComplexGeometry
+ * tendrils whose bezier control points sit on opposite sides of the
+ * flight axis and rotate with the same 0.80 spin phase the body
+ * sampling uses, so the pair twists around the axis behind the head,
+ * drawn through the shader submit helper with the tendril canvas under
+ * the same yaw and pitch rotation the emission frame uses. This is a
+ * pair of torn, pinched strands, not the deleted clean helix mesh. The
+ * complex particle layer is WISP_CURL sprites in the wake. The material
+ * emission from the no-shapes pass stays as filler: a dense emerald
+ * vapor cluster along the flight path, a pale plasma core on the axis,
+ * airborne dust behind, and mist in the wake. The age envelope and
+ * first-person owner scale are unchanged, and the piece seeds come
+ * from the entity id, the same synced state the emission already used.
  */
 public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProjectileEntity, BanshoWindProjectileRenderer.WindProjectileRenderState> {
 
@@ -47,6 +60,7 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
         private MaterialEmitters.Emitter plasma;
         private MaterialEmitters.Emitter dust;
         private MaterialEmitters.Emitter mist;
+        private MaterialEmitters.Emitter wisps;
 
         Emission(WindProjectileRenderState state) {
             this.state = state;
@@ -68,6 +82,7 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
             plasma.tick(delta, envelope);
             dust.tick(delta, envelope);
             mist.tick(delta, envelope);
+            wisps.tick(delta, envelope);
         }
 
         private void create(ClientLevel level) {
@@ -93,6 +108,12 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
                     MaterialEmitters.Preset.mist(0x9FFFE0, 1.35f * ownerScale,
                             seed ^ 67, Vec3.ZERO, 0.006f),
                     random -> mistSample(state, random), 26.0f, 45);
+            // Complex particle layer: wisp curls shed in the wake, under
+            // the 40 per second continuous budget.
+            wisps = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL,
+                            Vec3.ZERO, 0.02f),
+                    random -> dustTrailSample(state, random), 24.0f, 40);
         }
     }
 
@@ -142,13 +163,48 @@ public class BanshoWindProjectileRenderer extends EntityRenderer<BanshoWindProje
         float outT = age <= 42.0f ? 0.0f : Math.min(1.0f, (age - 42.0f) / 8.0f);
         float envelope = inEase * (1.0f - outT * outT * (3.0f - 2.0f * outT));
 
+        float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
         if (envelope > 0.01f) {
             ClientLevel level = Minecraft.getInstance().level;
             if (level != null) {
                 if (state.emission == null) state.emission = new Emission(state);
-                float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
                 state.emission.tick(level, envelope * distanceScale);
             }
+        }
+
+        // Pieces layer: the double tendril spiral wake in the renderer's
+        // local frame (x right, y up, z forward). Both strands run from
+        // the head at z 0.72 to the wake tail at z minus 2.05; their
+        // control points sit on opposite sides of the axis at the body
+        // sampling spin phase (age times 0.80), so the pair rotates
+        // around the axis as one twisting wake. Vertex count at full
+        // distance scale: 2 tendrils times 24 samples times 16 vertices
+        // is 768, inside the class M budget of 2500.
+        if (envelope > 0.01f && distanceScale > 0.01f) {
+            double spin = state.ageInTicks * 0.80;
+            final float ctrlX = (float) Math.cos(spin) * 0.30f * ownerScale;
+            final float ctrlY = (float) Math.sin(spin) * 0.30f * ownerScale;
+            final Vec3 head = new Vec3(0.0, 0.0, 0.72f * ownerScale);
+            final Vec3 tail = new Vec3(0.0, 0.0, -2.05f * ownerScale);
+            final Vec3 controlA = new Vec3(ctrlX, ctrlY, -0.55f * ownerScale);
+            final Vec3 controlB = new Vec3(-ctrlX, -ctrlY, -0.55f * ownerScale);
+            final long geoSeed = state.seed;
+            final float geoEnv = envelope * distanceScale;
+            final float geoDs = distanceScale;
+            final float geoWidth = 0.26f * ownerScale;
+            poseStack.pushPose();
+            poseStack.mulPose(new Matrix4f()
+                    .rotationY((float) Math.toRadians(-state.yRot))
+                    .rotateX((float) Math.toRadians(state.xRot)));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0xD411L,
+                        head, controlA, tail,
+                        geoWidth, 0xD8FFF2, 0x26FFA6, 0.92f, geoEnv, geoDs);
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0xD422L,
+                        head, controlB, tail,
+                        geoWidth, 0xD8FFF2, 0x26FFA6, 0.92f, geoEnv, geoDs);
+            });
+            poseStack.popPose();
         }
         super.submit(state, poseStack, collector, cameraState);
     }

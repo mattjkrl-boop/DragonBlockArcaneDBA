@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.TridentShardEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -19,12 +22,17 @@ import java.util.UUID;
 
 /**
  * Entity Renderer for Trident Shard in Minecraft 26.2.
- * No-shapes pass: the shard draws no geometry at all. The crossed crescent
- * head, collar barbs, and ribbon wake are gone; in their place the shard is
- * a dense hellfire plasma cluster carried by MaterialEmitters, with flame
- * and embers at the head position and a plasma trail shed along the flight
- * path behind it. Positions, pulse, spawn scale-in, and size steps are the
- * same ones the geometry version used; only the material changed.
+ * Complex pass: layered composition at class M. The shard body is back
+ * as a piece: one irregular ComplexGeometry shard mesh, a jagged
+ * hellfire fragment in a dark shell to hot core gradient (submitSolid),
+ * restoring the silhouette the no-shapes report flagged as lost, at
+ * complex piece quality rather than the old clean crescent. A torn
+ * tendril wake streams behind it on the shader. The complex particle
+ * layer sheds EMBER_FRAGMENT sprites along the wake. The material
+ * emission stays as filler: a dense hellfire plasma cluster at the
+ * head, flame and embers at the head position, and a plasma trail
+ * along the flight path. Positions, pulse, spawn scale-in, and size
+ * steps are the same ones the earlier versions used.
  */
 public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, TridentShardRenderer.ShardRenderState> {
 
@@ -85,16 +93,45 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
         float pulse = 0.85f + 0.15f * Mth.sin(state.ageInTicks * 0.35f);
         float bodyPulse = 0.93f + 0.07f * Mth.sin(state.ageInTicks * 0.35f);
         float spawnScale = 0.5f + 0.5f * Math.min(1.0f, state.ageInTicks / 5.0f);
-        float envelope = pulse * bodyPulse * spawnScale
-            * MaterialEmitters.distanceScale(emission.center);
+        float dist = MaterialEmitters.distanceScale(emission.center);
+        float envelope = pulse * bodyPulse * spawnScale * dist;
         emission.tick(state.ageInTicks, envelope);
+
+        // Pieces layer, in local space (pose origin is the shard center,
+        // forward is the world flight direction). Vertex estimate at
+        // distScale 1.0: one shard mesh at 288 plus one tendril wake at
+        // 384 is about 670, inside the class M budget of 2500. The mesh
+        // length carries the spawn scale-in and body pulse, so the piece
+        // breathes with the same math the emission uses.
+        if (spawnScale > 0.01f && dist > 0.01f) {
+            final long geoSeed = state.seed;
+            final float pieceEnv = spawnScale;
+            final float pieceDs = dist;
+            final Vec3 forward = emission.forward;
+            Vec3 side = forward.cross(new Vec3(0, 1, 0));
+            side = side.lengthSqr() < 1.0e-6 ? new Vec3(1, 0, 0) : side.normalize();
+            final Vec3 sideF = side;
+            final float len = 1.25f * state.sizeVar * bodyPulse * (0.55f + 0.45f * spawnScale);
+            final float girth = 0.40f * state.sizeVar;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.shard(pose, buffer, geoSeed ^ 0x5A17L,
+                    forward.scale(-len * 0.42), forward, len, girth,
+                    SHELL, CORE, 0.97f, pieceEnv));
+            final double sway = Math.sin(state.ageInTicks * 0.55f) * 0.16;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ 0x7EA7L,
+                    forward.scale(-len * 0.35),
+                    forward.scale(-len * 0.95).add(sideF.scale(0.26 + sway)),
+                    forward.scale(-len * 1.65).add(sideF.scale(-0.14 + sway * 0.5)),
+                    0.30f * state.sizeVar, CORE, SHELL, 0.90f, pieceEnv, pieceDs));
+        }
     }
 
     /**
      * Per shard emitter set. The sources are data only: they read the
      * shard's current center and flight direction at sample time and hand
-     * MaterialEmitters points at the head and along the wake path. Nothing
-     * here draws anything.
+     * MaterialEmitters points at the head and along the wake path.
+     * Geometry lives in submit, not here.
      */
     private static final class Emission {
         final ClientLevel level;
@@ -106,6 +143,7 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
         final MaterialEmitters.Emitter flame;
         final MaterialEmitters.Emitter trail;
         final MaterialEmitters.Emitter embers;
+        final MaterialEmitters.Emitter fragments;
 
         Emission(ClientLevel level, float sizeVar, int seed) {
             this.level = level;
@@ -134,6 +172,10 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
             this.embers = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.ember(Vec3.ZERO, 0.07f),
                 trailSource, 26f, 48);
+            // Complex particle layer: ember fragments shed along the wake.
+            this.fragments = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT, Vec3.ZERO, 0.07f),
+                trailSource, 22f, 40);
         }
 
         void tick(float age, float envelope) {
@@ -149,6 +191,7 @@ public class TridentShardRenderer extends EntityRenderer<TridentShardEntity, Tri
             flame.tick(delta, envelope * 0.85f);
             trail.tick(delta, envelope);
             embers.tick(delta, envelope * 0.7f);
+            fragments.tick(delta, envelope * 0.8f);
         }
     }
 

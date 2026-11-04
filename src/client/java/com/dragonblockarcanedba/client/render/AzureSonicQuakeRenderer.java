@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.AzureSonicQuakeEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -23,14 +24,21 @@ import java.util.Map;
 /**
  * Entity Renderer for Sonic Quake Impact Shockwave in Minecraft 26.2.
  *
- * No-shapes pass: this renderer draws no geometry. The expanding wave is
- * carried by material emission at its crest: compressed ground dust and
- * shock vapor rolling outward, physical debris chunks of the actual
- * ground block, sparks, and tempest plasma licking along the crest line.
- * The epicenter throws dust from a shrinking core area. Emission points
- * are sampled on the crest as data; nothing is rendered from the crest
- * itself. Wave timing, radius growth, and the fade envelope are unchanged
- * from the bespoke build.
+ * Complex pass: the quake is a layered composition. The pieces layer
+ * is fracturePlates plus a crackFan, both expanding with the wave
+ * radius so the ground breaks and the energy web spreads exactly as
+ * far as the crest has reached, never ahead of it. The plates submit
+ * solid with faceted shading; the cracks submit through the shader.
+ * The complex particle layer is SHARD_CHIP: a one-shot burst at the
+ * epicenter on the first frames plus chips shed along the crest. The
+ * material emission from the no-shapes pass stays as filler at the
+ * crest: compressed ground dust and shock vapor rolling outward,
+ * physical debris chunks of the actual ground block, sparks, and
+ * tempest plasma licking along the crest line. The epicenter throws
+ * dust from a shrinking core area. Wave timing, radius growth, and
+ * the fade envelope are unchanged from the bespoke build. The entity
+ * already spawns a real debris field server side; these pieces are
+ * the fast near-field fragments debris entities cannot time.
  */
 public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntity, AzureSonicQuakeRenderer.QuakeRenderState> {
 
@@ -84,6 +92,7 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
         ClientLevel level;
         MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
         float lastAge = -1f;
+        boolean shardBurstDone = false;
     }
 
     private final Map<Long, Emission> emissions = new HashMap<>();
@@ -152,6 +161,10 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
                         MaterialEmitters.Preset.dust(0xD8E2E6, 1.3f, seed ^ 0xC2AC,
                                 new Vec3(0.0, 0.10, 0.0), 0.04f),
                         epicenter(frame), 70f, 100),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                                new Vec3(0.0, 0.18, 0.0), 0.08f),
+                        crestRing(frame, 0.04f, 0.30f, 0.06f), 20f, 40),
         };
         return emission;
     }
@@ -189,6 +202,33 @@ public class AzureSonicQuakeRenderer extends EntityRenderer<AzureSonicQuakeEntit
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+            // One-shot chip burst at the epicenter, once per quake.
+            if (!emission.shardBurstDone && progress < 0.35f) {
+                emission.shardBurstDone = true;
+                MaterialEmitters.burst(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                                new Vec3(0.0, 0.22, 0.0), 0.12f),
+                        epicenter(emission.frame), 30);
+            }
+        }
+
+        // Pieces layer, class L: two builders. Fracture plates and the
+        // crack web both grow with the current wave radius, so nothing
+        // shows ahead of the crest the damage follows.
+        if (envelope > 0.01f) {
+            final float plateRadius = currentRadius;
+            final float crackRadius = currentRadius * 0.92f;
+            final float lift = 0.30f * (1.0f - progress * 0.45f);
+            final float geoEnv = envelope;
+            final float geoDs = ds;
+            final long plateSeed = state.seed ^ 0xF2ACL;
+            final long crackSeed = state.seed ^ 0xC4ACL;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.fracturePlates(pose, buffer, plateSeed, plateRadius, lift,
+                            0xA8C8D2, 0x46545C, 0.95f, geoEnv, geoDs));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, crackSeed, crackRadius,
+                            0xFFFFFF, 0x4DF2FF, 0.90f, geoEnv, geoDs));
         }
 
         super.submit(state, poseStack, collector, cameraState);

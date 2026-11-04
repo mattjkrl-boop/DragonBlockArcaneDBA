@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.CurseGroundShatterEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -17,16 +19,18 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Curse Ground Shatter as broken ground and venting curse, not drawn
- * geometry. The no-shapes conversion removes the crack stars, shock band,
- * glow pool, and slab ribbons entirely. The fissures survive as seeded
- * jagged paths across the ground, carried by crimson and pale curse plasma
- * emitted along them, with darkness smoke venting from the same paths and
- * ground dust rolling across the area and the expanding shock front. The
- * twelve slab positions survive as dust and darkness emission points where
- * the debris used to rise. The corrected fade over the fixed 35 tick life
- * is unchanged, and every path derives from the entity UUID seed so every
- * client sees the same shatter.
+ * Curse Ground Shatter as a layered composition. The pieces layer is a
+ * crackFan of curse energy wandering across the ground plus a fan of
+ * fracturePlates: real lifted slabs with thickness, tilted corners, and
+ * seeded gaps, lit hot crimson at the center and dark at the rim. The
+ * complex particle layer is shard chips thrown along the fissure paths.
+ * The material emission stays as filler: seeded jagged paths across the
+ * ground carry crimson and pale curse plasma, darkness smoke vents from
+ * the same paths, ground dust rolls across the area and the expanding
+ * shock front, and the twelve slab positions survive as dust and darkness
+ * emission points where the debris used to rise. The corrected fade over
+ * the fixed 35 tick life is unchanged, and every path derives from the
+ * entity UUID seed so every client sees the same shatter.
  */
 public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatterEntity, CurseGroundShatterRenderer.ShatterRenderState> {
 
@@ -86,6 +90,18 @@ public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatte
         float env = fade * ds;
         float delta = emissionDelta(state, age);
 
+        // Pieces layer: the crackFan energy web first, then the solid
+        // fracture plates over it, both seeded from the entity UUID.
+        final long pieceSeed = state.seed;
+        final float pieceFade = fade;
+        final float pieceDs = ds;
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.crackFan(pose, buffer, pieceSeed ^ 0xC4AC2L, radius * 1.02f,
+                0xFFF2F7, 0xF20D33, 0.95f, pieceFade, pieceDs));
+        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.fracturePlates(pose, buffer, pieceSeed ^ 0xF9A72L, radius, 0.38f,
+                0xB3122E, 0x241419, 0.95f, pieceFade, pieceDs));
+
         // The fissures: seeded jagged ground paths carrying curse plasma,
         // with darkness venting along them.
         List<List<Vec3>> cracks = crackPaths(center, radius, state.seed);
@@ -96,6 +112,10 @@ public class CurseGroundShatterRenderer extends EntityRenderer<CurseGroundShatte
             crackSource, 150f, delta, env);
         emit(level, MaterialEmitters.Preset.darkness(0x14030A, 1.60f, seed + 0xF157, new Vec3(0, 0.012, 0), 0.015f),
             crackSource, 150f, delta, env);
+
+        // Complex particle layer: shard chips kicked up along the fissures.
+        emit(level, MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, new Vec3(0, 0.030, 0), 0.040f),
+            crackSource, 34f, delta, env);
 
         // Ground dust across the whole shatter, thickening on the expanding
         // shock front the old band used to mark.

@@ -1,8 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DarknessBladeEntity;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -21,6 +24,11 @@ import net.minecraft.world.phys.Vec3;
  * falling path, with bright plasma sparks at the leading end. The entity
  * still falls and rolls exactly as before, and the 3 tick fade-in is
  * preserved as the emission envelope.
+ *
+ * Complex pass: a tendril wake trails above the falling blade as alpha
+ * veil strands (darkness smoke made structured), with ember fragments
+ * and spark streaks shed at the leading tip. The material emission stays
+ * as filler around the strands.
  */
 public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, DarknessBladeRenderer.DarknessBladeRenderState> {
 
@@ -67,8 +75,26 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
 
     @Override
     public void submit(DarknessBladeRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        submitPieces(state, poseStack, collector);
         emitMaterials(state);
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void submitPieces(DarknessBladeRenderState state, PoseStack poseStack, SubmitNodeCollector collector) {
+        float fade = Math.min(1.0f, Math.max(0.0f, state.age / 3.0f));
+        if (fade <= 0.01f) {
+            return;
+        }
+        float distScale = MaterialEmitters.distanceScale(new Vec3(state.px, state.py, state.pz));
+        float envelope = fade;
+        long seed = state.seed;
+        // Tendril wake behind the falling blade: the blade drops, so the
+        // wake streams upward from its upper end, strands splitting and
+        // rejoining as they tear away into darkness smoke.
+        ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendrilFan(pose, buffer, seed ^ 0xB1D1L,
+                new Vec3(0.0, 1.55, 0.0), new Vec3(0.0, 1.0, 0.0), 30.0f, 2.5f, 3,
+                0.34f, 0x8C0DF2, 0x2A0045, 0.92f, envelope, distScale));
     }
 
     private static void emitMaterials(DarknessBladeRenderState state) {
@@ -135,7 +161,13 @@ public class DarknessBladeRenderer extends EntityRenderer<DarknessBladeEntity, D
             new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.material(DbaMaterialOptions.PLASMA, 0xFFE4E6, 0.95f,
                     seed ^ 0xB1A7, Vec3.ZERO, 0.030f),
-                tipSparkSource(state), 42.0f, 50)
+                tipSparkSource(state), 42.0f, 50),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT, Vec3.ZERO, 0.05f),
+                tipSparkSource(state), 30.0f, 36),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.09f),
+                tipSparkSource(state), 22.0f, 28)
         };
     }
 

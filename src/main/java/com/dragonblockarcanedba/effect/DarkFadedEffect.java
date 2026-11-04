@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -43,6 +44,22 @@ public class DarkFadedEffect extends MobEffect {
 
     @Override
     public boolean applyEffectTick(ServerLevel level, LivingEntity entity, int amplifier) {
+
+        // Complex layer: darkness and void ASH_FLAKE on the existing 10 tick
+        // gate. This effect has no server tick emission of its own (its
+        // material is the ambient constructor particle, left unchanged),
+        // so the layer rides the only tick gate this file already has.
+        if (entity.tickCount % 10 == 0) {
+            double px = entity.getX() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
+            double py = entity.getY() + level.getRandom().nextDouble() * entity.getBbHeight();
+            double pz = entity.getZ() + (level.getRandom().nextDouble() - 0.5) * entity.getBbWidth();
+
+            level.sendParticles(
+                DbaParticles.ASH_FLAKE,
+                px, py, pz,
+                1, 0.0, 0.02, 0.0, 0.01
+            );
+        }
 
         // Void tick damage every 10 ticks
         if (entity.tickCount % 10 == 0) {

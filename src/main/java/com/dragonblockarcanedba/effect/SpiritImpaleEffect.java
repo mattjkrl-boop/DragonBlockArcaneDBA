@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -58,6 +59,12 @@ public class SpiritImpaleEffect extends MobEffect {
 
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.SOUL, 0xFFD700, 1.4f, entity.getId() * 31 + entity.tickCount),
+                px, py, pz,
+                1, 0.0, 0.05, 0.0, 0.01
+            );
+            // Complex layer: soul and valor WISP_CURL at the same tick point and rate as the golden soul emission.
+            level.sendParticles(
+                DbaParticles.WISP_CURL,
                 px, py, pz,
                 1, 0.0, 0.05, 0.0, 0.01
             );

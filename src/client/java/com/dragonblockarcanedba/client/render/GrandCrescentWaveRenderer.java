@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.GrandCrescentWaveEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -19,12 +21,14 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Grand Crescent Wave in Minecraft 26.2.
- * No-shapes conversion: this renderer draws no geometry. The wave is a
- * moving front of valor plasma sampled across its real travel volume,
- * with pale vapor trailing behind it, steel sparks inside the front, and
- * a brighter plasma surge during the opening strike window. Its life,
- * hit fade, damage, and travel behavior are unchanged; only the
- * presentation moved to material emission.
+ * Complex effects redo: layered composition. The wave body is a thick
+ * torn tendril bent along the crescent arc (submitEnergy on the tendril
+ * canvas), with a thinner echo tendril trailing below it. SPARK_STREAK
+ * sprites shed at the rim form the complex sprite layer. The existing
+ * material emission stays as filler: valor plasma sampled across the
+ * real travel volume, pale vapor trailing behind, steel sparks inside
+ * the front, and a brighter plasma surge during the opening strike
+ * window. Its life, hit fade, damage, and travel behavior are unchanged.
  */
 public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveEntity, GrandCrescentWaveRenderer.GrandCrescentWaveRenderState> {
 
@@ -130,6 +134,34 @@ public class GrandCrescentWaveRenderer extends EntityRenderer<GrandCrescentWaveE
                         forward.scale(0.06), 0.06f),
                     frontSource, 265f, 300, state.ageInTicks, impact * distScale);
             }
+
+            // Complex sprite layer: spark streaks shed at the front rim.
+            emit(level, base + "streak",
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, forward.scale(0.05), 0.10f),
+                frontSource, 30f, 40, state.ageInTicks, fade * distScale * 0.90f);
+
+            // Pieces layer: the crescent body itself. One thick tendril
+            // whose spine runs tip to tip across the span, bowed forward
+            // and up through its control point, plus a thinner echo
+            // tendril trailing below and behind it. Endpoints sag below
+            // center and the middle rides high, so the strand reads as a
+            // crescent arc rather than a straight beam.
+            final float arcSpan = span;
+            final float arcChord = chord;
+            final float waveFade = fade;
+            final float waveFpScale = fpScale;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                ComplexGeometry.tendril(pose, buffer, state.seed ^ 0xA2CL,
+                    right.scale(-arcSpan * 0.52).add(up.scale(-arcChord * 0.28)),
+                    forward.scale(0.95).add(up.scale(arcChord * 0.52)),
+                    right.scale(arcSpan * 0.52).add(up.scale(-arcChord * 0.28)),
+                    0.58f * waveFpScale, 0xFFD833, 0xFFF3B0, 0.95f, waveFade, distScale));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                ComplexGeometry.tendril(pose, buffer, state.seed ^ 0xEC40L,
+                    right.scale(-arcSpan * 0.44).add(up.scale(-arcChord * 0.52)).add(forward.scale(-0.42)),
+                    forward.scale(0.45).add(up.scale(arcChord * 0.05)),
+                    right.scale(arcSpan * 0.44).add(up.scale(-arcChord * 0.52)).add(forward.scale(-0.42)),
+                    0.30f * waveFpScale, 0xFFD833, 0xFFE9A8, 0.88f, waveFade, distScale));
         }
 
         super.submit(state, poseStack, collector, cameraState);

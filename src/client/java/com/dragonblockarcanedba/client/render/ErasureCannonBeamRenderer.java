@@ -1,10 +1,13 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.ErasureCannonBeamEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -18,18 +21,28 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Entity Renderer for Erasure Cannon Beam in MC 26.2.
- * No-shapes pass: this renderer draws no geometry. Following the
- * standard's beam method, the beam is dense ki plasma emitted along
- * its real path: a bright core run, a cyan body run, a darker outer
- * drift, vapor along the path, plasma bunched at the old focusing
- * stations and at the muzzle, and an impact plume of plasma, smoke,
- * vapor, and sparks at the terminus. Emission runs through persistent
- * per-entity MaterialEmitters Emitter channels, so the accumulator
- * and per-second budgets survive across frames; the channels rebuild
+ * Complex pass: layered composition, class L, with three builder
+ * types through submitEnergy so every energy piece carries the
+ * shader treatment. The pieces layer is a chained tendril core along
+ * the synced beam path (a thick strand white-hot at the root grading
+ * to the body cyan along its length, plus a thinner offset strand in
+ * the cyan to deep blue body colors), a six strand tendrilFan of
+ * impact lashes at the terminus, and a crackFan at the terminus when
+ * the terminus rests on ground within a short probe below it. The
+ * complex particle layer is SPARK_STREAK sprites heavy at the
+ * terminus. The no-shapes emission stays as filler only around those
+ * pieces: dense ki plasma emitted along the real path, a bright core
+ * run, a cyan body run, a darker outer drift, vapor along the path,
+ * plasma bunched at the old focusing stations and at the muzzle, and
+ * an impact plume of plasma, smoke, vapor, and sparks at the
+ * terminus. Emission runs through persistent per-entity
+ * MaterialEmitters Emitter channels, so the accumulator and
+ * per-second budgets survive across frames; the channels rebuild
  * only when a size or charge bucket changes. The shared FxEnvelope
  * still drives density so emission builds and dissipates with the
  * beam's life, exactly as the mesh alpha did. The entity's own server
- * particles, damage pulses, and endpoint detonation are untouched.
+ * particles, damage pulses, endpoint detonation, trench fissures,
+ * and endpoint crater are untouched.
  */
 public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamEntity, ErasureCannonBeamRenderer.ErasureCannonRenderState> {
     private static final Map<Integer, Emission> EMISSIONS = new ConcurrentHashMap<>();
@@ -158,6 +171,83 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         em.baseRadius = baseRadius;
         em.plumeRadius = plumeRadius;
 
+        // Pieces layer, in entity local space (start and end relative
+        // to the beam origin). Vertex budget at distScale 1.0: the main
+        // core chain is at most four tendrils (1536), the secondary
+        // chain at most two (768), the terminus fan six (2304), and the
+        // crack fan at most about 900, for about 5508 of the 6000
+        // class L budget.
+        final Vec3 startRel = start.subtract(state.origin);
+        final Vec3 endRel = end.subtract(state.origin);
+        final Vec3 fanDir = state.direction;
+        final Vec3 perpA = state.right;
+        final Vec3 perpB = state.up;
+        final long geoSeed = state.seed;
+        final float geoEnv = env;
+        final int coreSegments = span <= 10.0f ? 2 : span <= 22.0f ? 3 : 4;
+        final int sideSegments = Math.max(1, coreSegments / 2);
+        final float coreWidth = baseRadius * 1.20f;
+        final float sideWidth = baseRadius * 0.55f;
+        final float fanLength = plumeRadius * 1.90f;
+        final float fanWidth = Math.max(0.10f, baseRadius * 0.48f);
+        final double bow = baseRadius * 0.35;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            for (int i = 0; i < coreSegments; i++) {
+                float t0 = i / (float) coreSegments;
+                float t1 = (i + 1) / (float) coreSegments;
+                Vec3 segFrom = startRel.lerp(endRel, t0);
+                Vec3 segTo = startRel.lerp(endRel, t1);
+                double bowSign = i % 2 == 0 ? 1.0 : -1.0;
+                Vec3 segControl = segFrom.lerp(segTo, 0.5)
+                    .add(perpA.scale(bowSign * bow))
+                    .add(perpB.scale(bowSign * bow * 0.45));
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0xBEA1L + i * 7919L),
+                    segFrom, segControl, segTo, coreWidth,
+                    mixColor(0xFFFFFF, 0x00EBFF, t0), mixColor(0xFFFFFF, 0x00EBFF, t1),
+                    0.95f, geoEnv, distScale);
+            }
+            Vec3 sideOffset = perpA.scale(baseRadius * 0.38).add(perpB.scale(-baseRadius * 0.22));
+            for (int i = 0; i < sideSegments; i++) {
+                float t0 = i / (float) sideSegments;
+                float t1 = (i + 1) / (float) sideSegments;
+                Vec3 segFrom = startRel.lerp(endRel, t0).add(sideOffset);
+                Vec3 segTo = startRel.lerp(endRel, t1).add(sideOffset);
+                double bowSign = i % 2 == 0 ? -1.0 : 1.0;
+                Vec3 segControl = segFrom.lerp(segTo, 0.5)
+                    .add(perpA.scale(bowSign * bow * 0.7))
+                    .add(perpB.scale(bowSign * bow * 0.30));
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0x5EC0L + i * 104729L),
+                    segFrom, segControl, segTo, sideWidth,
+                    mixColor(0x00EBFF, 0x008CD9, t0), mixColor(0x00EBFF, 0x008CD9, t1),
+                    0.90f, geoEnv, distScale);
+            }
+            ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0xFA11L,
+                endRel, fanDir, 62.0f, fanLength, 6, fanWidth,
+                0xFFFFFF, 0x00F2FF, 0.92f, geoEnv, distScale);
+        });
+
+        // Crack fan at ground contact only: probe a short way below
+        // the terminus for the first non-air block and lay the fan on
+        // that surface. A beam ending in air or on a high wall draws
+        // no fan, so no crack web floats off the ground.
+        double groundTop = Double.NaN;
+        for (double probe = 0.0; probe <= 1.25; probe += 0.25) {
+            BlockPos pos = BlockPos.containing(end.x, end.y - probe, end.z);
+            if (!level.getBlockState(pos).isAir()) {
+                groundTop = pos.getY() + 1.0;
+                break;
+            }
+        }
+        if (!Double.isNaN(groundTop)) {
+            final float crackRadius = plumeRadius * 1.35f;
+            poseStack.pushPose();
+            poseStack.translate(endRel.x, groundTop - state.origin.y + 0.02, endRel.z);
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4ACL, crackRadius,
+                    0xFFFFFF, 0x00EBFF, 0.90f, geoEnv, distScale));
+            poseStack.popPose();
+        }
+
         float delta;
         if (Float.isNaN(em.lastAge) || age < em.lastAge) {
             delta = 1.0f / 60.0f;
@@ -250,8 +340,23 @@ public class ErasureCannonBeamRenderer extends EntityRenderer<ErasureCannonBeamE
         out.add(new MaterialEmitters.Emitter(level,
             MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.16f),
             plume, 140f, 200));
+        // Complex particle layer: spark streaks heavy at the terminus,
+        // at 38 per second inside the 40 per second continuous budget
+        // for one emitter, beside the SPARK filler above.
+        out.add(new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.22f),
+            plume, 38f, 48));
 
         return out.toArray(new MaterialEmitters.Emitter[0]);
+    }
+
+    /** Per channel linear mix of two RGB colors, for the core gradient along the beam. */
+    private static int mixColor(int fromRgb, int toRgb, float t) {
+        float clamped = Math.max(0.0f, Math.min(1.0f, t));
+        int r = Math.round(((fromRgb >> 16) & 0xFF) + (((toRgb >> 16) & 0xFF) - ((fromRgb >> 16) & 0xFF)) * clamped);
+        int g = Math.round(((fromRgb >> 8) & 0xFF) + (((toRgb >> 8) & 0xFF) - ((fromRgb >> 8) & 0xFF)) * clamped);
+        int b = Math.round((fromRgb & 0xFF) + ((toRgb & 0xFF) - (fromRgb & 0xFF)) * clamped);
+        return (r << 16) | (g << 8) | b;
     }
 
     private static Vec3 directionFromRotation(float xRot, float yRot) {

@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.KingsSlamEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -24,12 +25,19 @@ import java.util.Random;
 
 /**
  * Entity Renderer for Ox King's Slam (Normal and Flawless) in Minecraft 26.2.
- * No-shapes pass: this renderer draws no geometry. The slam reads as
- * compressed ground dust and shock vapor rolling across the impact disc,
- * physical debris chunks of the actual ground block, embers, and hot plasma
- * running through the radiating cracks. The flawless variant adds plasma
- * and vapor geyser emission at seeded anchor points inside the disc. Growth
- * curve, fade, radii, and lifetime are unchanged from the bespoke build.
+ * Complex pass: a layered composition at class L. The pieces layer is two
+ * ComplexGeometry builders at full disc radius: fracturePlates as solid
+ * fractured ground plates through submitSolid, and a crackFan of glowing
+ * energy cracks through submitEnergy on the dissolve shader. These are the
+ * fast near-field fragments and energy structure; the big physical chunks
+ * are the DebrisSpawner field the entity already spawns server side. The
+ * complex particle layer is a large SHARD_CHIP burst at impact plus a
+ * continuous chip stream across the disc. The material filler stays as
+ * before: compressed ground dust and shock vapor rolling across the impact
+ * disc, physical debris chunks of the actual ground block, embers, and hot
+ * plasma. The flawless variant adds plasma and vapor geyser emission at
+ * seeded anchor points inside the disc. Growth curve, fade, radii, and
+ * lifetime are unchanged from the bespoke build.
  */
 public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlamRenderer.KingsSlamRenderState> {
 
@@ -87,6 +95,7 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
         MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
         Vec3[] geyserOffsets = new Vec3[0];
         boolean flawless = false;
+        boolean burstFired = false;
         float lastAge = -1f;
     }
 
@@ -160,6 +169,12 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
                         MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, ground),
                                 new Vec3(0.0, 0.32, 0.0), 0.12f),
                         disc(frame, 0.05f, 0.10f), 54f, 90),
+                // Complex particle layer: stone chips thrown off the plates
+                // for the whole life of the slam, under the continuous cap.
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                                new Vec3(0.0, 0.30, 0.0), 0.13f),
+                        disc(frame, 0.05f, 0.12f), 30f, 44),
                 new MaterialEmitters.Emitter(level,
                         MaterialEmitters.Preset.plasma(hotColor, 1.5f, seed ^ 0x6E15,
                                 new Vec3(0.0, 0.62, 0.0), 0.06f),
@@ -206,6 +221,34 @@ public class KingsSlamRenderer extends EntityRenderer<KingsSlamEntity, KingsSlam
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+            // Complex particle layer, burst half: one large chip burst at
+            // impact, inside the class L burst budget of 60.
+            if (!emission.burstFired && age <= 2.0f) {
+                emission.burstFired = true;
+                MaterialEmitters.burst(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                                new Vec3(0.0, 0.38, 0.0), 0.24f),
+                        MaterialEmitters.groundArea(frame.center, Math.max(0.4f, shockR * 0.55f),
+                                frame.center.y + 0.10),
+                        48);
+            }
+        }
+
+        // Pieces layer, in the local ground frame: solid fracture plates
+        // across the whole impact disc and a glowing crack fan just inside
+        // it. Both follow the same growth curve as the emission disc.
+        if (fade > 0.01f && shockR >= 0.35f) {
+            final long geoSeed = state.seed;
+            final int hotColor = state.isFlawless ? 0xFFD24A : 0xFF8C1F;
+            final float geoRadius = shockR;
+            final float geoFade = fade;
+            final float geoDist = distScale;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0x9A7EL,
+                            geoRadius, 0.42f, hotColor, 0x4A3826, 0.95f, geoFade, geoDist));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
+                            geoRadius * 0.94f, 0xFFE9B0, hotColor, 0.95f, geoFade, geoDist));
         }
     }
 }

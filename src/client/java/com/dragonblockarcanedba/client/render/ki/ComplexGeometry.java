@@ -294,8 +294,53 @@ public final class ComplexGeometry {
 
         List<Polyline> lines = new ArrayList<>();
         lines.add(new Polyline(trunk, 0));
+        List<Polyline> forks = addForks(rng, trunk, totalLen, to.subtract(from), distScale, lines);
+        addSubBranches(rng, forks, lines);
+        return drawBoltLines(pose, buffer, seed, lines, width, coreArgb, glowArgb, alpha, envelope);
+    }
 
-        // Forks and sub-branches.
+    /**
+     * The same bolt drawn over a caller-supplied path: the trunk polyline
+     * is drawn exactly as given, with no midpoint displacement of its own,
+     * so a caller whose emission already walks a seeded path (the shared
+     * Bolt, CurseLightning) draws its geometry over the identical line and
+     * the two layers coincide by construction. Supplied branches are drawn
+     * exactly as given at fork order; seeded sub-branches grow off them.
+     * When no branches are supplied, seeded forks and sub-branches grow
+     * off the supplied trunk exactly as the generating overload grows
+     * them. Taper, per-segment width jitter, the sheath and core crossed
+     * ribbon passes, and the shader life remap are the shared draw below.
+     * Points are in the same local space the pose submits in.
+     */
+    public static int branchedLightning(PoseStack.Pose pose, VertexConsumer buffer, long seed,
+                                        List<Vec3> trunk, List<List<Vec3>> branches,
+                                        float width, int coreArgb, int glowArgb,
+                                        float alpha, float envelope, float distScale) {
+        if (envelope <= 0.01f || alpha <= 0.01f || width <= 0f) return 0;
+        if (trunk == null || trunk.size() < 2) return 0;
+        List<Polyline> lines = new ArrayList<>();
+        lines.add(new Polyline(List.copyOf(trunk), 0));
+        List<Polyline> forks = new ArrayList<>();
+        if (branches != null) {
+            for (List<Vec3> branch : branches) {
+                if (branch == null || branch.size() < 2) continue;
+                Polyline fork = new Polyline(List.copyOf(branch), 1);
+                forks.add(fork);
+                lines.add(fork);
+            }
+        }
+        Rng rng = new Rng(seed);
+        if (forks.isEmpty()) {
+            Vec3 axis = trunk.get(trunk.size() - 1).subtract(trunk.get(0));
+            forks = addForks(rng, trunk, forkSpan(trunk), axis, distScale, lines);
+        }
+        addSubBranches(rng, forks, lines);
+        return drawBoltLines(pose, buffer, seed, lines, width, coreArgb, glowArgb, alpha, envelope);
+    }
+
+    /** Seeded forks leaving a trunk at 25 to 55 degrees; appended to lines and returned. */
+    private static List<Polyline> addForks(Rng rng, List<Vec3> trunk, double totalLen, Vec3 axisFallback,
+                                           float distScale, List<Polyline> lines) {
         int forkCount = Math.max(2, Math.round((2.5f + rng.nextFloat() * 3f) * (0.5f + 0.5f * distScale)));
         List<Polyline> forks = new ArrayList<>();
         for (int f = 0; f < forkCount; f++) {
@@ -303,7 +348,7 @@ public final class ComplexGeometry {
             Vec3 start = pointAt(trunk, t);
             Vec3 ahead = pointAt(trunk, Math.min(1f, t + 0.05f));
             Vec3 tangent = ahead.subtract(start);
-            if (tangent.lengthSqr() < 1e-8) tangent = to.subtract(from);
+            if (tangent.lengthSqr() < 1e-8) tangent = axisFallback;
             tangent = tangent.normalize();
             double branchAng = 0.45 + rng.nextFloat() * 0.5;
             Vec3 dir = coneDir(tangent, branchAng, rng);
@@ -312,6 +357,11 @@ public final class ComplexGeometry {
             forks.add(fork);
             lines.add(fork);
         }
+        return forks;
+    }
+
+    /** Seeded sub-branches off each fork, 0 to 2 per fork; appended to lines. */
+    private static void addSubBranches(Rng rng, List<Polyline> forks, List<Polyline> lines) {
         for (Polyline fork : forks) {
             float roll = rng.nextFloat();
             int subs = roll < 0.45f ? 0 : roll < 0.82f ? 1 : 2;
@@ -327,9 +377,14 @@ public final class ComplexGeometry {
                 lines.add(new Polyline(walk(rng, start, dir, subLen, 3 + rng.nextInt(3), 0.42), 2));
             }
         }
+    }
 
+    /** The shared bolt draw: two passes, sheath then core, crossed ribbon pairs per segment. */
+    private static int drawBoltLines(PoseStack.Pose pose, VertexConsumer buffer, long seed,
+                                     List<Polyline> lines, float width,
+                                     int coreArgb, int glowArgb, float alpha, float envelope) {
+        Matrix4f mat = pose.pose();
         int verts = 0;
-        // Two passes: sheath then core.
         for (int pass = 0; pass < 2; pass++) {
             boolean core = pass == 1;
             float wScale = core ? 1.0f : 1.9f;
@@ -589,6 +644,14 @@ public final class ComplexGeometry {
      * tapering smoothly, with a 35 percent chance of one fork per crack.
      * Color runs hot at the center to the theme color at the tips. Draw
      * through submitEnergy.
+     *
+     * Radius is a walk length budget, not a hard disc bound: each step is
+     * radius divided by segments times a seeded 0.60 to 1.35 factor, so a
+     * crack that rolls near straight at the top of the range reaches about
+     * 1.35 times the nominal radius, and a fork runs a further 0.45 of the
+     * radius past its origin partway out. A telegraph whose drawn size
+     * must equal its hit size should scale the radius down to compensate
+     * (the Azure telegraph uses 0.78) instead of expecting a clamp here.
      */
     public static int crackFan(PoseStack.Pose pose, VertexConsumer buffer, long seed,
                                float radius, int hotArgb, int coolArgb,

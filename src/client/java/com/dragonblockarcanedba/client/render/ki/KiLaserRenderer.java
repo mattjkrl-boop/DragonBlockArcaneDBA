@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render.ki;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KiLaserEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -17,11 +18,14 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * No-shapes pass: this renderer draws no geometry. A ki laser is a thin,
- * dense stream of technique-colored plasma emitted along the path, a
- * white-hot concentration near the eyes, a whisper of vapor along the
- * path, and a small plasma plume where the stream ends. The path is data
- * sampled by the emitters; nothing is rendered from it.
+ * Complex pass: layered composition, class M. The pieces layer is a thin
+ * chained ComplexGeometry tendril core along the laser path, drawn
+ * through submitEnergy with the tendril canvas in the synced technique
+ * color running to a white tip. The complex particle layer is
+ * SPARK_STREAK sprites at the terminus. The no-shapes emission stays as
+ * filler only: a thin, dense stream of technique-colored plasma emitted
+ * along the path, a white-hot concentration near the eyes, a whisper of
+ * vapor along the path, and a small plasma plume where the stream ends.
  */
 public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRenderer.LaserRenderState> {
 
@@ -105,6 +109,9 @@ public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRender
                         MaterialEmitters.Preset.plasma(state.color, 1.5f * scale, seed ^ 0x01AC7,
                                 Vec3.ZERO, 0.09f),
                         random -> new MaterialEmitters.Sample(frame.to, frame.dir.scale(0.18)), 170f, 220),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.22f),
+                        random -> new MaterialEmitters.Sample(frame.to, frame.dir.scale(0.24)), 24f, 40),
         };
         return emission;
     }
@@ -133,6 +140,40 @@ public class KiLaserRenderer extends EntityRenderer<KiLaserEntity, KiLaserRender
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer, in entity local space (the pose origin is the
+        // laser origin). A chained tendril core: three segments at full
+        // spine samples is 1152 vertices, inside the class M budget of
+        // 2500. Segment controls bow alternately so the curl stays tight
+        // over a long thin beam instead of one loose bezier.
+        if (envelope > 0.01f) {
+            Vec3 dir = lookDir(state.yRot, state.xRot);
+            Vec3 perpTmp = dir.cross(new Vec3(0, 1, 0));
+            if (perpTmp.lengthSqr() < 1e-6) perpTmp = new Vec3(1, 0, 0);
+            final Vec3 perpA = perpTmp.normalize();
+            final Vec3 perpB = dir.cross(perpA).normalize();
+            final Vec3 geoEnd = dir.scale(state.length);
+            final long geoSeed = state.seed;
+            final int geoColor = state.color;
+            final float geoEnv = envelope;
+            final float geoDs = distScale;
+            final float geoScale = Math.max(0.2f, state.scale);
+            final int segs = state.length <= 15f ? 2 : 3;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                for (int i = 0; i < segs; i++) {
+                    float t0 = i / (float) segs;
+                    float t1 = (i + 1) / (float) segs;
+                    Vec3 segFrom = geoEnd.scale(t0);
+                    Vec3 segTo = geoEnd.scale(t1);
+                    float bow = (i % 2 == 0 ? 1f : -1f) * 0.10f * geoScale;
+                    Vec3 segControl = segFrom.lerp(segTo, 0.5)
+                            .add(perpA.scale(bow)).add(perpB.scale(bow * 0.5f));
+                    ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0x1A5EL + i * 7919L),
+                            segFrom, segControl, segTo, 0.17f * geoScale,
+                            geoColor, 0xFFFFFF, 0.95f, geoEnv, geoDs);
+                }
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

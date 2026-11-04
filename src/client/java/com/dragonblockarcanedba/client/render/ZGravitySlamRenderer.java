@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.ZGravitySlamEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -23,15 +24,21 @@ import java.util.Random;
 /**
  * Entity Renderer for Z-Sword Gravity Slam in Minecraft 26.2.
  *
- * No-shapes pass: the slam draws no geometry. Its footprint is carried
- * by compressed stone dust and pale vapor driven outward across the
- * ground, violet and gold gravity plasma rising through the trench
- * area, and physical block chunks using the struck ground material.
- * The old monolith positions survive only as data: each seeded anchor
- * carries a dense falling column of dust, debris, and heavy plasma
- * instead of a slab or ribbon. The geyser stage is an upward plasma
- * and dust eruption on the strike envelope. Lifecycle, radius, power,
- * and seed behavior carry over from the bespoke renderer.
+ * Complex pass: layered composition at class L, two piece builders.
+ * The solid pieces layer is a fracturePlates fan at the slam point in
+ * stone dust over dark stone, growing with the shock radius; the
+ * energy pieces layer is a crackFan web at the same point, pale gold
+ * hot at the center running out to violet at the tips, drawn on the
+ * shader through submitEnergy. These are the fast near field structure:
+ * the entity already spawns a DebrisSpawner field for the big physical
+ * chunks. The complex particle layer is a one shot SHARD_CHIP burst
+ * plus a SPARK_STREAK burst on the strike envelope. The filler layer
+ * is unchanged: compressed stone dust and pale vapor driven outward
+ * across the ground, violet and gold gravity plasma rising through
+ * the trench area, physical block chunks using the struck ground
+ * material, seeded falling columns at the old monolith anchors, and
+ * the geyser stage eruption. Lifecycle, radius, power, and seed
+ * behavior carry over from before.
  */
 public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGravitySlamRenderer.ZGravitySlamRenderState> {
 
@@ -126,6 +133,25 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
         emission.columnDust.tick(delta, envelope);
         emission.geyserPlasma.tick(delta, impact * envelope);
 
+        if (progress < 0.55f) {
+            emission.burstImpact();
+        }
+
+        // Pieces layer: solid fracture plates plus the shader crack web.
+        // Combined vertex count stays well inside the class L budget.
+        long geoSeed = state.seed;
+        float plateRadius = shockR;
+        float lift = 0.30f + power * 0.50f;
+        float solidEnv = fade;
+        float crackEnv = fade * (0.55f + 0.45f * impact);
+        float distF = dist;
+        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0xF9A7L,
+                plateRadius, lift, STONE_DUST, DARK_STONE, 0.96f, solidEnv, distF));
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+            ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC9ACL,
+                plateRadius * 1.05f, PALE_GOLD, VIOLET, 0.95f, crackEnv, distF));
+
         super.submit(state, poseStack, collector, cameraState);
     }
 
@@ -151,6 +177,8 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
 
     private static final class Emission {
         final long seed;
+        final ClientLevel level;
+        boolean impactBurstDone = false;
         final Frame frame = new Frame();
         final float[] columnAngles;
         final float[] columnDistFracs;
@@ -168,6 +196,7 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
 
         Emission(ClientLevel level, long seed, float power, BlockState groundState) {
             this.seed = seed;
+            this.level = level;
             int baseSeed = (int) seed;
             Frame f = frame;
 
@@ -246,6 +275,33 @@ public class ZGravitySlamRenderer extends EntityRenderer<ZGravitySlamEntity, ZGr
             geyserPlasma = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(GOLD, 2.45f, baseSeed ^ 0x6E15, Vec3.ZERO, 0.012f),
                 geyser, 138.0f, 285);
+        }
+
+        /**
+         * One shot complex sprite burst at the strike moment: stone
+         * shard chips and steel spark streaks thrown outward and up
+         * from inside the growing shock radius. Fires once per
+         * emission instance, so once per entity and seed.
+         */
+        void burstImpact() {
+            if (impactBurstDone) return;
+            impactBurstDone = true;
+            Frame f = frame;
+            MaterialEmitters.Source burstSource = random -> {
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double flat = Math.sqrt(random.nextDouble()) * f.radius * f.grow * 0.72;
+                Vec3 pos = f.center.add(Math.cos(angle) * flat, 0.14, Math.sin(angle) * flat);
+                Vec3 outward = new Vec3(Math.cos(angle), 0.0, Math.sin(angle))
+                    .scale(0.26 + random.nextDouble() * 0.26);
+                return new MaterialEmitters.Sample(pos,
+                    outward.add(0.0, 0.30 + random.nextDouble() * 0.30, 0.0));
+            };
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.14f),
+                burstSource, 36);
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.20f),
+                burstSource, 20);
         }
 
         Vec3 columnAnchor(Frame f, int index) {

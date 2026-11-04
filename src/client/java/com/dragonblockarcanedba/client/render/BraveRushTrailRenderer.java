@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.BraveRushTrailEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -15,10 +18,14 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Brave Sword Piercing Heroic Dash Flight Trail in Minecraft 26.2.
- * No-shapes pass: the renderer draws no geometry at all. The trail reads
- * as valor plasma and vapor shed along the real dash path, emitted
- * through MaterialEmitters in the Brave gold theme, with gold dust at
- * the ground contacts. Emission follows the same opening envelope,
+ * Complex pass: a layered composition. The pieces layer is three
+ * ComplexGeometry tendril strands laid along the real dash path, a white
+ * core strand and two gold side strands that converge toward the tail,
+ * on the dissolve shader. The complex particle layer is WISP_CURL
+ * sprites shed along the path. The material filler stays as before:
+ * valor plasma and vapor shed along the dash path, emitted through
+ * MaterialEmitters in the Brave gold theme, with gold dust at the ground
+ * contacts. Emission and geometry follow the same opening envelope,
  * strike window, first person owner scaling, and 30 tick life the old
  * trail used.
  */
@@ -41,6 +48,7 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         public MaterialEmitters.Emitter coreEmitter;
         public MaterialEmitters.Emitter vaporEmitter;
         public MaterialEmitters.Emitter dustEmitter;
+        public MaterialEmitters.Emitter wispEmitter;
         public long emitterSeed = Long.MIN_VALUE;
         public ClientLevel emitterLevel;
         public float lastAge = -1f;
@@ -103,6 +111,42 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
             state.coreEmitter.tick(delta, e * 0.80f);
             state.vaporEmitter.tick(delta, e * 0.70f);
             state.dustEmitter.tick(delta, e * 0.75f);
+            state.wispEmitter.tick(delta, e * 0.85f);
+
+            // Pieces layer: three tendril strands along the real rush path,
+            // in the local frame. The tip and length math matches the path
+            // source the emission samples, including the first person owner
+            // scale and the flipped tip. Side strands start at the cone
+            // width and converge toward the tail like the shed volume does.
+            final Basis gb = basis(state);
+            final float gscale = state.trailScale * (state.isFirstPersonOwner ? 0.45f : 1.0f);
+            final float open = FxEnvelope.smoothstep(Math.min(1.0f, progress / 0.25f));
+            final float glen = state.trailLength * (0.35f + 0.65f * open);
+            final float tipZ = state.isFirstPersonOwner ? (-0.6f * gscale) : (0.6f * gscale);
+            final Vec3 tip = gb.forward().scale(tipZ);
+            final Vec3 tail = gb.forward().scale(tipZ - glen);
+            final Vec3 mid = tip.add(tail).scale(0.5);
+            final float sideOff = 0.34f * gscale;
+            final float genv = FxEnvelope.envelope(state.age, maxLife, 0.25f, 0.4f);
+            final float geoDist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            final long gseed = state.seed;
+            final float coreWidth = 0.24f * gscale;
+            final float sideWidth = 0.16f * gscale;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.tendril(pose, buffer, gseed, tip,
+                    mid.add(gb.up().scale(0.10 * gscale)), tail, coreWidth,
+                    0xFFFFFF, 0xFFD700, 0.92f, genv, geoDist);
+                ComplexGeometry.tendril(pose, buffer, gseed ^ 0x2B992DDFL,
+                    tip.add(gb.right().scale(sideOff)),
+                    mid.add(gb.right().scale(sideOff * 0.7)).add(gb.up().scale(-0.06 * gscale)),
+                    tail.add(gb.right().scale(sideOff * 0.35)), sideWidth,
+                    0xFFD700, 0x00F2FF, 0.92f, genv, geoDist);
+                ComplexGeometry.tendril(pose, buffer, gseed ^ 0x51ED2701L,
+                    tip.add(gb.right().scale(-sideOff)),
+                    mid.add(gb.right().scale(-sideOff * 0.7)).add(gb.up().scale(0.06 * gscale)),
+                    tail.add(gb.right().scale(-sideOff * 0.35)), sideWidth,
+                    0xFFD700, 0xFFF2C0, 0.92f, genv, geoDist);
+            });
         }
 
         // Strike wake: a one-shot burst at the trail tip during the same
@@ -136,7 +180,7 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
 
         // Plasma and vapor shed along the dash path itself, widest at the
         // tip and narrowing down the trail, exactly where the old cone
-        // volume sat. The path is data; nothing is drawn from it.
+        // volume sat. The pieces layer strands follow the same path data.
         MaterialEmitters.Source path = random -> {
             Basis b = basis(state);
             float progress = Math.min(1.0f, state.age / (float) state.maxLifetime);
@@ -177,6 +221,11 @@ public class BraveRushTrailRenderer extends EntityRenderer<BraveRushTrailEntity,
         state.dustEmitter = new MaterialEmitters.Emitter(level,
             MaterialEmitters.Preset.dust(0xFFD700, 1.9f, seed ^ 0x85EBCA6B, new Vec3(0, 0.01, 0), 0.015f),
             ground, 30f, 60);
+        // Complex particle layer: wisp curls shed along the dash path with
+        // the plasma, at the standard continuous rate cap.
+        state.wispEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.04f),
+            path, 28f, 40);
         state.emitterSeed = state.seed;
         state.emitterLevel = level;
     }

@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -73,6 +74,12 @@ public class DemonSurgeEffect extends MobEffect {
 
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.SMOKE, 0xDC143C, 1.3f, entity.getId() * 31 + entity.tickCount), // Crimson
+                px, py, pz,
+                1, 0.0, 0.04, 0.0, 0.01
+            );
+            // Complex layer: hellfire EMBER_FRAGMENT at the same tick point and rate as the crimson smoke.
+            level.sendParticles(
+                DbaParticles.EMBER_FRAGMENT,
                 px, py, pz,
                 1, 0.0, 0.04, 0.0, 0.01
             );

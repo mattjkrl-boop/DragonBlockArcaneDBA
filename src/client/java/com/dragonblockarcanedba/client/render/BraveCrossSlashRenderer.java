@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.BraveCrossSlashEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -15,12 +18,16 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Brave Finisher Cross Slash in Minecraft 26.2.
- * No-shapes pass: the renderer draws no geometry at all. The finisher
- * reads as valor plasma and soul light shed along the two diagonal swing
+ * Complex pass: a layered composition. The pieces layer is the cross
+ * body itself: two crossed ComplexGeometry tendrils along the diagonal
+ * swing paths, bowed toward the facing direction, on the dissolve
+ * shader. The complex particle layer is SPARK_STREAK sprites shed along
+ * the blades and burst at the strike. The material filler stays as
+ * before: valor plasma and soul light shed along the two diagonal swing
  * paths and through the effect volume, emitted through MaterialEmitters
  * in the Brave gold theme, with a plasma burst in the strike window.
- * Emission follows the same draw-out, envelope, and strike timing the
- * old cross used over its real 40 tick life.
+ * Emission and geometry follow the same draw-out, envelope, and strike
+ * timing the old cross used over its real 40 tick life.
  */
 public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntity, BraveCrossSlashRenderer.CrossSlashRenderState> {
 
@@ -39,6 +46,7 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
         public MaterialEmitters.Emitter coreEmitter;
         public MaterialEmitters.Emitter soulEmitter;
         public MaterialEmitters.Emitter vaporEmitter;
+        public MaterialEmitters.Emitter sparkEmitter;
         public long emitterSeed = Long.MIN_VALUE;
         public ClientLevel emitterLevel;
         public float lastAge = -1f;
@@ -96,6 +104,31 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
             state.coreEmitter.tick(delta, e * 0.80f);
             state.soulEmitter.tick(delta, e * 0.75f);
             state.vaporEmitter.tick(delta, e * 0.60f);
+            state.sparkEmitter.tick(delta, e * 0.90f);
+
+            // Pieces layer: the two crossed tendrils are the cross body.
+            // Local frame axes match the world basis the emission samples,
+            // so the strands sit exactly on the diagonal swing paths, bowed
+            // forward by the same shallow offset the blade samples use.
+            final Basis gb = basis(state);
+            final float gspan = span(state);
+            final Vec3 diagA = gb.right().add(gb.up()).normalize();
+            final Vec3 diagB = gb.right().subtract(gb.up()).normalize();
+            final Vec3 ctrl = gb.forward().scale(0.35);
+            final Vec3 aFrom = diagA.scale(-gspan * 0.66);
+            final Vec3 aTo = diagA.scale(gspan * 0.66);
+            final Vec3 bFrom = diagB.scale(-gspan * 0.66);
+            final Vec3 bTo = diagB.scale(gspan * 0.66);
+            final float width = 0.30f * state.scale;
+            final float genv = fade * drawOut;
+            final float geoDist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            final long gseed = state.seed;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.tendril(pose, buffer, gseed, aFrom, ctrl, aTo, width,
+                    0xFFD700, 0xFFFFFF, 0.95f, genv, geoDist);
+                ComplexGeometry.tendril(pose, buffer, gseed ^ 0x51ED2701L, bFrom, ctrl, bTo, width,
+                    0xFFD700, 0x00F2FF, 0.95f, genv, geoDist);
+            });
         }
 
         // Strike burst at the center during the same 0.28 to 0.62 window
@@ -116,6 +149,9 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
                 MaterialEmitters.Preset.soul(0x00F2FF, 2.6f, seed ^ 0x85EBCA6B, Vec3.ZERO, 0.18f)
                     .withLifetimeFactor(0.5f),
                 MaterialEmitters.point(center), Math.round(10 * impact * s));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.28f),
+                MaterialEmitters.point(center), Math.min(30, Math.round(12 * impact * s)));
         } else if (impact <= 0.02f) {
             state.burstFired = false;
         }
@@ -170,6 +206,11 @@ public class BraveCrossSlashRenderer extends EntityRenderer<BraveCrossSlashEntit
             MaterialEmitters.Preset.vapor(0xFFF2C0, 2.4f, seed ^ 0x85EBCA6B, new Vec3(0, 0.01, 0), 0.02f)
                 .withLifetimeFactor(0.6f),
             volume, 32f, 70);
+        // Complex particle layer: spark streaks shed along the same blade
+        // paths as the plasma, at the standard continuous rate cap.
+        state.sparkEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.05f),
+            blades, 30f, 44);
         state.emitterSeed = state.seed;
         state.emitterLevel = level;
     }

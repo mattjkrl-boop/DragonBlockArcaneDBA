@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.TridentProngEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -18,12 +21,17 @@ import java.util.UUID;
 
 /**
  * One shot: three needles in trident formation.
- * No-shapes pass: the renderer draws no geometry at all. Each needle head
- * is a dense hellfire plasma emission cluster at the same formation
- * offsets, radii, intro fade, and post-impact dissolve the crescent blades
- * used, with flame at the heads, embers at the needle bases where the
- * barbs were, and a plasma trail shed behind each needle. The seed comes
- * from the entity UUID, so the formation is identical on every client.
+ * Complex pass: layered composition at class M. Each needle head is a
+ * solid ComplexGeometry shard mesh in a hellfire gradient, dark shell
+ * at the root running to the hot core color at the tip (submitSolid),
+ * with flameTongues at its base and a torn tendril wake streaming
+ * behind it, both on the shader. The complex particle layer sheds
+ * EMBER_FRAGMENT sprites at each needle base. The material emission
+ * stays as filler at the same formation offsets, radii, intro fade,
+ * and post-impact dissolve the earlier versions used: hellfire plasma
+ * clusters at the heads, flame at the heads, embers at the bases, and
+ * a plasma trail behind each needle. The seed comes from the entity
+ * UUID, so the formation is identical on every client.
  */
 public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, TridentProngRenderer.ProngState> {
 
@@ -103,15 +111,59 @@ public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, Tri
             emission.centers[i] = center.add(right.scale(OFFSETS[i]));
         }
         emission.forward = forward;
-        float envelope = fade * MaterialEmitters.distanceScale(center);
+        float dist = MaterialEmitters.distanceScale(center);
+        float envelope = fade * dist;
         emission.tick(state.age, envelope);
+
+        // Pieces layer, in local space (pose origin is the shot center,
+        // forward and right are the world flight axes). Vertex estimate
+        // at distScale 1.0: three shard meshes at 288 each is 864, three
+        // tendril wakes at reduced segment scale about 770, three flame
+        // tongue clusters of 3 tongues about 430. Total about 2070,
+        // inside the class M budget of 2500.
+        final long geoSeed = state.seed;
+        final float pieceEnv = fade;
+        final float pieceDs = dist;
+        final float sway = state.age * 0.45f;
+        Vec3 up = new Vec3(0, 1, 0);
+        Vec3 side = forward.cross(up);
+        side = side.lengthSqr() < 1.0e-6 ? new Vec3(1, 0, 0) : side.normalize();
+        final Vec3 sideF = side;
+        ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) -> {
+            for (int i = 0; i < 3; i++) {
+                Vec3 base = right.scale(OFFSETS[i]).subtract(forward.scale(0.55 * RADII[i]));
+                ComplexGeometry.shard(pose, buffer, geoSeed ^ (0x5A11L + i * 131L),
+                    base, forward, 1.10f * RADII[i], 0.34f * RADII[i],
+                    SHELL, CORE, 0.97f, pieceEnv);
+            }
+        });
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) -> {
+            for (int i = 0; i < 3; i++) {
+                Vec3 base = right.scale(OFFSETS[i]).subtract(forward.scale(0.50 * RADII[i]));
+                ComplexGeometry.flameTongues(pose, buffer, geoSeed ^ (0xF1A5L + i * 131L),
+                    base, 0.24f * RADII[i], 0.55f * RADII[i], 3,
+                    0xFFF0C0, CORE, 0.95f, pieceEnv, sway + i * 1.7f, pieceDs);
+            }
+        });
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            for (int i = 0; i < 3; i++) {
+                Vec3 base = right.scale(OFFSETS[i]).subtract(forward.scale(0.45 * RADII[i]));
+                double swayI = Math.sin(state.age * 0.55f + i * 2.1) * 0.14;
+                Vec3 control = base.subtract(forward.scale(0.65)).add(sideF.scale(0.22 + swayI));
+                Vec3 to = base.subtract(forward.scale(1.25)).add(sideF.scale(-0.12 + swayI * 0.5));
+                ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0x7EA5L + i * 131L),
+                    base, control, to, 0.26f * RADII[i],
+                    CORE, SHELL, 0.90f, pieceEnv, pieceDs * 0.7f);
+            }
+        });
     }
 
     /**
      * Per shot emitter set, one cluster group per needle. The sources are
      * data only: they read the needle centers and flight direction at
      * sample time and hand MaterialEmitters points at the heads, at the
-     * needle bases, and along the wake paths. Nothing here draws anything.
+     * needle bases, and along the wake paths. Geometry lives in submit,
+     * not here.
      */
     private static final class Emission {
         final ClientLevel level;
@@ -123,6 +175,7 @@ public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, Tri
         final MaterialEmitters.Emitter[] flames = new MaterialEmitters.Emitter[3];
         final MaterialEmitters.Emitter[] trails = new MaterialEmitters.Emitter[3];
         final MaterialEmitters.Emitter[] embers = new MaterialEmitters.Emitter[3];
+        final MaterialEmitters.Emitter[] fragments = new MaterialEmitters.Emitter[3];
 
         Emission(ClientLevel level, int seed) {
             this.level = level;
@@ -160,6 +213,10 @@ public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, Tri
                 embers[i] = new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.ember(Vec3.ZERO, 0.06f),
                     baseSource, 20f, 40);
+                // Complex particle layer: ember fragments shed at the base.
+                fragments[i] = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT, Vec3.ZERO, 0.08f),
+                    baseSource, 18f, 40);
             }
         }
 
@@ -177,6 +234,7 @@ public class TridentProngRenderer extends EntityRenderer<TridentProngEntity, Tri
                 flames[i].tick(delta, envelope * 0.85f);
                 trails[i].tick(delta, envelope);
                 embers[i].tick(delta, envelope * 0.7f);
+                fragments[i].tick(delta, envelope * 0.8f);
             }
         }
     }

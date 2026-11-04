@@ -1,7 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.BraveChargeEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -14,11 +18,15 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Brave Sword Heroic Focus Charge-up in Minecraft 26.2.
- * No-shapes pass: the renderer draws no geometry at all. The charge reads
- * as valor plasma and soul light motes gathered inward toward the caster
- * through MaterialEmitters, with vapor drifting at the core and gold dust
- * stirred across the ground. Emission follows the same charge ratio, spawn
- * fade-in, and synced fade factor the old construct used.
+ * Complex pass: a layered composition. The pieces layer is a fan of valor
+ * tendrils lashing from the caster core through ComplexGeometry on the
+ * dissolve shader, widening as the charge ratio climbs. The complex
+ * particle layer is WISP_CURL sprites streaming inward with the gather.
+ * The material filler stays as before: valor plasma and soul light motes
+ * gathered inward toward the caster through MaterialEmitters, with vapor
+ * drifting at the core and gold dust stirred across the ground. Emission
+ * and geometry follow the same charge ratio, spawn fade-in, and synced
+ * fade factor the old construct used.
  */
 public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, BraveChargeRenderer.ChargeRenderState> {
 
@@ -35,6 +43,7 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
         public MaterialEmitters.Emitter soulEmitter;
         public MaterialEmitters.Emitter vaporEmitter;
         public MaterialEmitters.Emitter dustEmitter;
+        public MaterialEmitters.Emitter wispEmitter;
         public long emitterSeed = Long.MIN_VALUE;
         public ClientLevel emitterLevel;
         public float lastAge = -1f;
@@ -86,6 +95,20 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
             state.soulEmitter.tick(delta, e * 0.85f);
             state.vaporEmitter.tick(delta, e * 0.70f);
             state.dustEmitter.tick(delta, e * 0.80f);
+            state.wispEmitter.tick(delta, e * 0.90f);
+
+            // Pieces layer: a fan of five valor tendrils lashing out of the
+            // core at the caster chest, in the local frame of the entity.
+            // The fan reach follows the same gather radius the motes stream
+            // in from, so the strands grow with the charge ratio.
+            final float geoDist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            final float fanLen = 1.15f + state.chargeRatio * 1.55f;
+            final long gseed = state.seed;
+            final float genv = env;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+                ComplexGeometry.tendrilFan(pose, buffer, gseed, new Vec3(0, 0.9, 0),
+                    new Vec3(0, 1, 0), 118f, fanLen, 5, 0.17f,
+                    0xFFD700, 0xFFF2C0, 0.92f, genv, geoDist));
         }
 
         super.submit(state, poseStack, collector, cameraState);
@@ -133,6 +156,11 @@ public class BraveChargeRenderer extends EntityRenderer<BraveChargeEntity, Brave
         state.dustEmitter = new MaterialEmitters.Emitter(level,
             MaterialEmitters.Preset.dust(0xFFD700, 1.9f, seed ^ 0x85EBCA6B, new Vec3(0, 0.012, 0), 0.012f),
             ground, 30f, 60);
+        // Complex particle layer: wisp curls riding the same inward gather
+        // stream as the plasma motes, at the standard continuous rate cap.
+        state.wispEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.02f),
+            gathering, 26f, 40);
         state.emitterSeed = state.seed;
         state.emitterLevel = level;
     }

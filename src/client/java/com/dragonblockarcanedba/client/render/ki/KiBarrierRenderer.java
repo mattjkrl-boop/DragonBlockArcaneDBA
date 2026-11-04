@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render.ki;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KiBarrierEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -18,12 +19,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * No-shapes pass: this renderer draws no geometry and no shell. A ki
- * barrier is a volume of technique-colored plasma motes drifting inside
- * the old shell radius, a sparse film of large vapor and plasma sprites
- * sampled on the boundary surface so the edge reads as eroded energy
- * rather than a surface, and two bright rims carried as ring emissions:
- * one flat around the equator and one standing in a vertical plane, both
+ * Complex pass: layered composition, class L. The pieces layer is six
+ * vertical ComplexGeometry tendril lashes standing on the barrier
+ * boundary at full spine samples, bowed outward through the equator and
+ * turning with the standing rim rate, drawn through submitEnergy with
+ * the tendril canvas in the synced technique color running to the glow
+ * tint at the tips. The complex particle layer is WISP_CURL sprites
+ * drifting in the volume. The no-shapes emission stays as filler only:
+ * a volume of technique-colored plasma motes drifting inside the old
+ * shell radius, a sparse film of large vapor and plasma sprites sampled
+ * on the boundary surface so the edge reads as eroded energy rather
+ * than a surface, and two bright rims carried as ring emissions, one
+ * flat around the equator and one standing in a vertical plane, both
  * spinning at the old rates (spin, and spin times 1.7). The radius still
  * breathes (0.5 plus 0.5 sin of age times 0.22, plus 2 percent) and still
  * grows with the used percent exactly as the bespoke shell did. Hit
@@ -172,6 +179,9 @@ public class KiBarrierRenderer extends EntityRenderer<KiBarrierEntity, KiBarrier
                         MaterialEmitters.Preset.plasma(glow, 1.7f, seed ^ 0xB7,
                                 Vec3.ZERO, 0.01f),
                         verticalRim(frame), 95f, 135),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.008f),
+                        moteVolume(frame), 24f, 40),
         };
         return emission;
     }
@@ -199,6 +209,41 @@ public class KiBarrierRenderer extends EntityRenderer<KiBarrierEntity, KiBarrier
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer, in entity local space (the pose origin is the
+        // barrier entity origin, and the barrier center sits 0.95 above
+        // it, matching the filler frame). Six vertical lashes at full
+        // spine samples is 2304 vertices, one builder at its full
+        // segment and count budget, inside the class L budget of 6000.
+        // The radius math is the filler frame math: breathe and used
+        // percent growth unchanged.
+        if (envelope > 0.01f) {
+            float geoRadius = (1.02f + 0.28f * (state.usedPercent / 100.0f)) * (1.0f + 0.02f * breathe);
+            final float r = geoRadius;
+            final float turn = state.ageInTicks * 0.0712f;
+            final long geoSeed = state.seed;
+            final int geoColor = state.color;
+            final int geoGlow = glowColor(state.color);
+            final float geoEnv = envelope;
+            final float geoDs = distScale;
+            final float h0 = -0.52f * r;
+            final float h1 = 0.62f * r;
+            final float flat0 = (float) Math.sqrt(Math.max(0.05f, r * r - h0 * h0));
+            final float flat1 = (float) Math.sqrt(Math.max(0.05f, r * r - h1 * h1));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                for (int i = 0; i < 6; i++) {
+                    double ang = turn + i * (Math.PI * 2.0 / 6.0);
+                    double cos = Math.cos(ang);
+                    double sin = Math.sin(ang);
+                    Vec3 base = new Vec3(cos * flat0, 0.95 + h0, sin * flat0);
+                    Vec3 control = new Vec3(cos * r * 1.12, 0.95 + 0.05 * r, sin * r * 1.12);
+                    Vec3 top = new Vec3(cos * flat1 * 0.97, 0.95 + h1, sin * flat1 * 0.97);
+                    ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0xBA11L + i * 7919L),
+                            base, control, top, 0.16f,
+                            geoColor, geoGlow, 0.90f, geoEnv, geoDs);
+                }
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

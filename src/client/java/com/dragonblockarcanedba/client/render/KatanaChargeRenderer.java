@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.KatanaChargeEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -106,6 +108,17 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
         anchor.forward = forward;
         anchor.charge = charge;
 
+        // Pieces layer: inward lashes converged at the hilt, length and
+        // width growing with the synced charge ratio, so a building
+        // charge reads as strands pulling tighter around the blade.
+        Vec3 hiltLocal = right.scale(-0.28).add(forward.scale(-0.05)).add(0, 0.75, 0);
+        float lashLength = 0.55f + charge * 1.15f;
+        float lashWidth = 0.09f + charge * 0.06f;
+        float lashEnvelope = alpha * pulse;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) ->
+            ComplexGeometry.tendrilFan(pose, buffer, state.seed ^ 0xC4A6EL, hiltLocal, new Vec3(0, 1, 0),
+                58.0f, lashLength, 5, lashWidth, 0xFFFFFF, 0x00D9FF, 0.92f, lashEnvelope, dist));
+
         float delta = anchor.deltaSeconds(mc.isPaused());
         if (delta > 0f) {
             float envelope = alpha * pulse * dist;
@@ -113,6 +126,8 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
             anchor.gatherVapor.tick(delta, envelope * 0.8f);
             anchor.hiltPlasma.tick(delta, envelope);
             anchor.hiltSparks.tick(delta, envelope);
+            anchor.sparkStreaks.tick(delta, envelope);
+            anchor.wispCurls.tick(delta, envelope * 0.7f);
             anchor.groundVapor.tick(delta, envelope * 0.55f);
         }
         super.submit(state, poseStack, collector, cameraState);
@@ -152,6 +167,8 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
         private final MaterialEmitters.Emitter hiltPlasma;
         private final MaterialEmitters.Emitter hiltSparks;
         private final MaterialEmitters.Emitter groundVapor;
+        private final MaterialEmitters.Emitter sparkStreaks;
+        private final MaterialEmitters.Emitter wispCurls;
 
         private Anchor(ClientLevel level, int seed) {
             this.level = level;
@@ -209,6 +226,15 @@ public class KatanaChargeRenderer extends EntityRenderer<KatanaChargeEntity, Kat
             this.groundVapor = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.vapor(0x7FD8FF, 3.6f, seed ^ 0x3333, Vec3.ZERO, 0.016f),
                 ground, 21f, 28);
+            // Complex particle layer: spark streaks at the hilt and a
+            // sparse wisp curl drift on the rim, both inside the 40 per
+            // second continuous budget.
+            this.sparkStreaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.08f),
+                hiltSource, 20f, 28);
+            this.wispCurls = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.03f),
+                rim, 9f, 14);
         }
 
         private Vec3 hilt() {

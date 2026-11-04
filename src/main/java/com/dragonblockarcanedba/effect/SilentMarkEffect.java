@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -29,6 +30,12 @@ public class SilentMarkEffect extends MobEffect {
 
         level.sendParticles(
             DbaMaterialOptions.of(DbaMaterialOptions.SOUL, 0xFFFFFF, 1.5f, entity.getId() * 31 + entity.tickCount),
+            entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz,
+            1, 0, 0.02, 0, 0.01
+        );
+        // Complex layer: soul and valor WISP_CURL at the same tick point and rate as the silver soul emission.
+        level.sendParticles(
+            DbaParticles.WISP_CURL,
             entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz,
             1, 0, 0.02, 0, 0.01
         );

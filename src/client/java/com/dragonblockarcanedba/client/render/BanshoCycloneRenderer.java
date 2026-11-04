@@ -1,9 +1,13 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.BanshoCycloneEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -15,12 +19,17 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Material presentation for the Bansho Fan cyclone. The renderer draws no
- * geometry. It feeds emerald vapor, pale mist, a bright vapor core, and
- * ground dust into sources shaped by the cyclone's current radius and
- * height, so the storm is carried by moving material rather than bands,
- * fans, arcs, or branch meshes. The lifecycle envelope remains the entity's
- * own build and decay envelope.
+ * Layered presentation for the Bansho Fan cyclone (class L). The pieces
+ * layer is a tendrilFan at the full fan budget: six tall wind strands in
+ * a cone around the column, rotated with the cyclone age so they swirl
+ * with the flow, drawn through the shader submit helper with the tendril
+ * canvas. The complex particle layer is ASH_FLAKE carried through the
+ * whole volume and SHARD_CHIP orbiting in the column wall. The material
+ * emission from the no-shapes pass stays as filler: emerald vapor, pale
+ * mist, a bright vapor core, and ground dust sampled by the cyclone's
+ * current radius and height. The lifecycle envelope remains the entity's
+ * own build and decay envelope, and every seed comes from the entity id,
+ * the same synced state the emission already used.
  */
 public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, BanshoCycloneRenderer.CycloneRenderState> {
 
@@ -47,6 +56,8 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         private MaterialEmitters.Emitter mist;
         private MaterialEmitters.Emitter dust;
         private MaterialEmitters.Emitter core;
+        private MaterialEmitters.Emitter ash;
+        private MaterialEmitters.Emitter chips;
 
         Emission(CycloneRenderState state) {
             this.state = state;
@@ -67,6 +78,8 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
             mist.tick(delta, envelope);
             dust.tick(delta, envelope);
             core.tick(delta, envelope);
+            ash.tick(delta, envelope);
+            chips.tick(delta, envelope);
         }
 
         private void create(ClientLevel level) {
@@ -96,6 +109,19 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
                             seed ^ 53, Vec3.ZERO, 0.008f),
                     random -> cycloneSample(state, random, 0.45f, 0.0f, 0.38f, 0.08f, 0.060f),
                     35.0f * rateScale, Math.max(1, Math.round(55.0f * rateScale)));
+            // Complex particle layer: ash flakes carried through the whole
+            // volume and stone chips orbiting in the column wall, both
+            // under the 40 per second continuous budget.
+            ash = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE,
+                            Vec3.ZERO, 0.02f),
+                    random -> cycloneSample(state, random, 1.0f, 0.30f, 1.05f, 0.13f, 0.030f),
+                    24.0f * rateScale, 40);
+            chips = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                            Vec3.ZERO, 0.03f),
+                    random -> cycloneSample(state, random, 0.85f, 0.60f, 1.08f, 0.16f, 0.035f),
+                    20.0f * rateScale, 40);
         }
     }
 
@@ -133,13 +159,42 @@ public class BanshoCycloneRenderer extends EntityRenderer<BanshoCycloneEntity, B
         float life = Math.max(1, state.lifetime);
         float envelope = FxEnvelope.envelope(state.age, life,
                 BanshoCycloneEntity.BUILD_FRAC, BanshoCycloneEntity.DECAY_FRAC);
+        float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
         if (envelope > 0.01f) {
             ClientLevel level = Minecraft.getInstance().level;
             if (level != null) {
                 if (state.emission == null) state.emission = new Emission(state);
-                float distanceScale = MaterialEmitters.distanceScale(new Vec3(state.ex, state.ey, state.ez));
                 state.emission.tick(level, envelope * distanceScale);
             }
+        }
+
+        // Pieces layer, class L: a six strand tendrilFan at the full fan
+        // budget. The 32 degree cone matches the grown funnel profile
+        // (radius over height), so the strands hug the column wall instead
+        // of crossing the core. Rotation is applied inside the piece on a
+        // copy of the submitted pose, at a rate whose surface speed at the
+        // wall matches the filler tangential velocity. Vertex count at
+        // full distance scale: 6 tendrils times 24 samples times 16
+        // vertices is 2304, inside the class L budget of 6000, and the
+        // fan count alone meets the full budget rule for one builder.
+        if (envelope > 0.01f && distanceScale > 0.01f) {
+            final float geoLen = heightNow(state) * 1.10f;
+            final float geoWidth = 0.55f * Math.max(0.6f, Math.min(1.6f, state.scale));
+            final float geoAge = state.age;
+            final float geoEnv = envelope * distanceScale;
+            final float geoDs = distanceScale;
+            final long geoSeed = state.seed ^ 0xC7C10L;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                PoseStack local = new PoseStack();
+                local.last().pose().set(pose.pose());
+                local.last().normal().set(pose.normal());
+                local.pushPose();
+                local.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(geoAge * 2.0f)));
+                ComplexGeometry.tendrilFan(local.last(), buffer, geoSeed, Vec3.ZERO,
+                        new Vec3(0.0, 1.0, 0.0), 32f, geoLen, 6, geoWidth,
+                        0x26FFA6, 0xCFFFEF, 0.92f, geoEnv, geoDs);
+                local.popPose();
+            });
         }
         super.submit(state, poseStack, collector, cameraState);
     }

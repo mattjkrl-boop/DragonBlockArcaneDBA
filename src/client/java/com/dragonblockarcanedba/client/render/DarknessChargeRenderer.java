@@ -1,8 +1,11 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DarknessChargeEntity;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -21,6 +24,11 @@ import net.minecraft.world.phys.Vec3;
  * are sampled on inward paths around the caster, so the charge reads as
  * material gathering into the weapon instead of constructed shapes. The
  * charge ratio, pulse, radius growth, and core position are unchanged.
+ *
+ * Complex pass: five darkness strands run inward from the gathering ring
+ * to the core as alpha veil tendrils, brightening from near black at the
+ * rim to hellish pink at the weapon, and wisp curls gather with the soul
+ * vapor. The material emission stays as filler between the strands.
  */
 public class DarknessChargeRenderer extends EntityRenderer<DarknessChargeEntity, DarknessChargeRenderer.ChargeRenderState> {
 
@@ -67,8 +75,36 @@ public class DarknessChargeRenderer extends EntityRenderer<DarknessChargeEntity,
 
     @Override
     public void submit(ChargeRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
+        submitPieces(state, poseStack, collector);
         emitMaterials(state);
         super.submit(state, poseStack, collector, cameraState);
+    }
+
+    private static void submitPieces(ChargeRenderState state, PoseStack poseStack, SubmitNodeCollector collector) {
+        float charge = Math.max(0.0f, Math.min(1.0f, state.chargeRatio));
+        float distScale = MaterialEmitters.distanceScale(new Vec3(state.px, state.py, state.pz));
+        float envelope = 0.30f + 0.70f * charge;
+        float radius = baseRadius(state) * 1.05f;
+        long seed = state.seed;
+        Vec3 core = new Vec3(0.0, 0.85, 0.0);
+        // Inward darkness strands through the veil path: one tendril per
+        // strand, rooted on the gathering ring and ending at the core,
+        // each control point swung tangentially so the strands curl as
+        // they are pulled in. Five strands at full spine samples stay
+        // inside the class M vertex budget.
+        ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            for (int i = 0; i < 5; i++) {
+                double angle = i * Math.PI * 2.0 / 5.0 + (seed & 63L) / 63.0 * 0.6;
+                double cos = Math.cos(angle);
+                double sin = Math.sin(angle);
+                double height = 0.25 + (i % 3) * 0.60;
+                Vec3 from = new Vec3(cos * radius, height, sin * radius);
+                Vec3 tangent = new Vec3(-sin, 0.0, cos).scale(i % 2 == 0 ? 0.38 : -0.38);
+                Vec3 control = from.add(core).scale(0.5).add(tangent).add(new Vec3(0.0, 0.22, 0.0));
+                ComplexGeometry.tendril(pose, buffer, seed ^ (0xC500L + i * 131L),
+                    from, control, core, 0.30f, 0x1F0040, 0xF21459, 0.92f, envelope, distScale);
+            }
+        });
     }
 
     private static void emitMaterials(ChargeRenderState state) {
@@ -132,7 +168,10 @@ public class DarknessChargeRenderer extends EntityRenderer<DarknessChargeEntity,
             new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.material(DbaMaterialOptions.VAPOR, 0x7C3AED, 3.05f,
                     seed ^ 0xC407, Vec3.ZERO, 0.014f),
-                helixSource(state), 80.0f, 90)
+                helixSource(state), 80.0f, 90),
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.03f),
+                sphereSource(state, 0.85, 1.05, 0.045), 28.0f, 34)
         };
     }
 

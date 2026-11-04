@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.ZChargeEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -18,13 +21,18 @@ import java.util.Map;
 /**
  * Entity Renderer for Z-Sword Shockwave Charging in Minecraft 26.2.
  *
- * No-shapes pass: the charge draws no geometry. Gravity plasma, pale
- * vapor, and stone dust are sampled across the ground and through the
- * funnel volume by the shared material emitters, always moving toward
- * the sword core. Levitating crystal material survives as dense bright
- * plasma glints inside the same inward stream, and the overdrive stage
- * adds faster core sparks. Lifecycle, radius, and seed behavior carry
- * over from the bespoke renderer.
+ * Complex pass: layered composition. The pieces layer is an inward
+ * tendril fan: three seeded clusters on the charge ring lash tendrils
+ * toward the sword core at center plus one block, drawn on the shader
+ * through submitEnergy with the tendril canvas, gold at the root
+ * brightening to near white gold at the core. The complex particle
+ * layer is SPARK_STREAK sprites streaming through the same volume.
+ * Gravity plasma, pale vapor, and stone dust stay as the filler layer,
+ * sampled across the ground and through the funnel volume by the shared
+ * material emitters, always moving toward the sword core. Levitating
+ * crystal material survives as dense bright plasma glints inside the
+ * same inward stream, and the overdrive stage adds faster core sparks.
+ * Lifecycle, radius, and seed behavior carry over from before.
  */
 public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRenderer.ZChargeRenderState> {
 
@@ -105,6 +113,35 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         emission.vapor.tick(delta, envelope * 0.82f);
         emission.dust.tick(delta, envelope * 0.76f);
         emission.core.tick(delta, envelope * (charge >= 0.4f ? 1.0f : 0.30f));
+        emission.streaks.tick(delta, envelope * 0.90f);
+
+        // Pieces layer: inward tendril fan. Three clusters sit on the
+        // charge ring and each fans two strands toward the core point
+        // the filler emission already converges on. Six tendrils at the
+        // toolkit segment count stay inside the class M vertex budget.
+        float geoEnv = Math.min(1.0f, baseAlpha);
+        if (geoEnv > 0.02f) {
+            long geoSeed = state.seed;
+            float ringR = baseRadius;
+            float width = 0.13f + charge * 0.11f;
+            float rot = age * 0.12f;
+            float envF = geoEnv;
+            float distF = dist;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.Rng rng = new ComplexGeometry.Rng(geoSeed ^ 0x7C4A21L);
+                Vec3 core = new Vec3(0.0, 1.0, 0.0);
+                for (int cluster = 0; cluster < 3; cluster++) {
+                    double ang = rot + cluster * (Math.PI * 2.0 / 3.0) + rng.nextFloat() * 0.6;
+                    double r = ringR * (0.88 + rng.nextFloat() * 0.22);
+                    Vec3 origin = new Vec3(Math.cos(ang) * r, 0.22 + cluster * 0.28, Math.sin(ang) * r);
+                    Vec3 dir = core.subtract(origin).normalize();
+                    double len = origin.distanceTo(core) * 1.05;
+                    ComplexGeometry.tendrilFan(pose, buffer, geoSeed + cluster * 104729L,
+                        origin, dir, 16.0f, (float) len, 2, width, GOLD, BRIGHT_GOLD,
+                        0.95f, envF, distF);
+                }
+            });
+        }
 
         super.submit(state, poseStack, collector, cameraState);
     }
@@ -134,6 +171,7 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
         final MaterialEmitters.Emitter vapor;
         final MaterialEmitters.Emitter dust;
         final MaterialEmitters.Emitter core;
+        final MaterialEmitters.Emitter streaks;
         long lastSeenNanos = System.nanoTime();
         long lastTickNanos = 0L;
 
@@ -175,6 +213,9 @@ public class ZChargeRenderer extends EntityRenderer<ZChargeEntity, ZChargeRender
             core = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.plasma(BRIGHT_GOLD, 1.45f, baseSeed ^ 0xC02E, Vec3.ZERO, 0.24f),
                 coreSource, 74.0f, 170);
+            streaks = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.04f),
+                volume, 28.0f, 36);
         }
 
         float nextDelta() {

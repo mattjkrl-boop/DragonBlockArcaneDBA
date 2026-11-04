@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render.ki;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KiSpiralBeamEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -17,12 +18,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * No-shapes pass: this renderer draws no geometry. A spiral beam is a
- * white plasma core stream along the path, wrapped by technique-colored
- * plasma whose emission points wind 3.5 turns over the beam length as
- * data, plus vapor winding with it and an impact plume of plasma and
- * smoke at the terminus. The winding lives in where particles are born
- * and how they drift, not in any rendered band or helix.
+ * Complex pass: layered composition, class L. The pieces layer is two
+ * ComplexGeometry tendrils with opposed helical controls as the spiral
+ * body: chained segments whose endpoints and controls ride the same
+ * 3.5 turn winding and phase the filler emission uses, one strand in
+ * the synced technique color and one white, plus a six strand
+ * tendrilFan of impact lashes at the terminus, all through
+ * submitEnergy with the tendril canvas. The complex particle layer is
+ * SPARK_STREAK sprites at the terminus. The no-shapes emission stays
+ * as filler only: a white plasma core stream along the path, wrapped
+ * by technique-colored plasma whose emission points wind 3.5 turns
+ * over the beam length, plus vapor winding with it and an impact plume
+ * of plasma and smoke at the terminus.
  */
 public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiSpiralBeamRenderer.SpiralBeamRenderState> {
 
@@ -143,6 +150,9 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
                         MaterialEmitters.Preset.smoke(state.color, 2.8f * scale, seed ^ 0x05107,
                                 new Vec3(0.0, 0.05, 0.0), 0.07f),
                         random -> new MaterialEmitters.Sample(frame.to, frame.dir.scale(0.10)), 50f, 75),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.26f),
+                        random -> new MaterialEmitters.Sample(frame.to, frame.dir.scale(0.26)), 30f, 40),
         };
         return emission;
     }
@@ -169,6 +179,63 @@ public class KiSpiralBeamRenderer extends EntityRenderer<KiSpiralBeamEntity, KiS
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer, in entity local space (the pose origin is the
+        // beam origin). Vertex count at distScale 1.0: the spiral body
+        // is at most four segments times two strands times 384 vertices
+        // (3072), plus the impact fan at six tendrils times 384 (2304),
+        // for 5376 of the class L budget of 6000. Helix offsets use the
+        // frame winding: 3.5 turns over the length, phase from age, the
+        // same values the filler helix source uses.
+        if (envelope > 0.01f) {
+            Vec3 dir = lookDir(state.yRot, state.xRot);
+            Vec3 uTmp = dir.cross(new Vec3(0, 1, 0));
+            if (uTmp.lengthSqr() < 1e-6) uTmp = new Vec3(1, 0, 0); else uTmp = uTmp.normalize();
+            final Vec3 geoU = uTmp;
+            final Vec3 geoV = geoU.cross(dir).normalize();
+            final Vec3 geoDir = dir;
+            final Vec3 geoEnd = dir.scale(state.length);
+            final long geoSeed = state.seed;
+            final int geoColor = state.color;
+            final float geoEnv = envelope;
+            final float geoDs = distScale;
+            final float geoScale = Math.max(0.2f, state.scale);
+            final float helixR = 0.28f * geoScale;
+            final float phase = state.ageInTicks * 0.35f;
+            final float geoLength = state.length;
+            final int segs = state.length <= 20f ? 3 : 4;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                for (int strand = 0; strand < 2; strand++) {
+                    float sign = strand == 0 ? 1f : -1f;
+                    int root = strand == 0 ? geoColor : 0xFFFFFF;
+                    int tip = strand == 0 ? 0xFFFFFF : geoColor;
+                    for (int i = 0; i < segs; i++) {
+                        float t0 = i / (float) segs;
+                        float t1 = (i + 1) / (float) segs;
+                        float tm = (t0 + t1) * 0.5f;
+                        double a0 = phase + t0 * Math.PI * 2.0 * 3.5;
+                        double am = phase + tm * Math.PI * 2.0 * 3.5;
+                        double a1 = phase + t1 * Math.PI * 2.0 * 3.5;
+                        Vec3 off0 = geoU.scale(Math.cos(a0) * helixR * sign)
+                                .add(geoV.scale(Math.sin(a0) * helixR * sign));
+                        Vec3 offM = geoU.scale(Math.cos(am) * helixR * sign)
+                                .add(geoV.scale(Math.sin(am) * helixR * sign));
+                        Vec3 off1 = geoU.scale(Math.cos(a1) * helixR * sign)
+                                .add(geoV.scale(Math.sin(a1) * helixR * sign));
+                        Vec3 segFrom = geoDir.scale(t0 * geoLength).add(off0);
+                        Vec3 segControl = geoDir.scale(tm * geoLength).add(offM);
+                        Vec3 segTo = geoDir.scale(t1 * geoLength).add(off1);
+                        ComplexGeometry.tendril(pose, buffer,
+                                geoSeed ^ (0x5F1A1L + strand * 0x101L + i * 7919L),
+                                segFrom, segControl, segTo, 0.30f * geoScale,
+                                root, tip, 0.93f, geoEnv, geoDs);
+                    }
+                }
+                ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0xFA11L,
+                        geoEnd, geoDir, 56.0f, 2.4f * geoScale, 6,
+                        0.32f * geoScale, geoColor, 0xFFFFFF, 0.92f, geoEnv, geoDs);
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

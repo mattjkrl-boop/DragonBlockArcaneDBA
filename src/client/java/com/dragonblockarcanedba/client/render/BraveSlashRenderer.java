@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.BraveSlashEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -15,11 +18,16 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Brave Slash in MC 26.2.
- * No-shapes pass: the renderer draws no geometry at all. The cut reads as
- * valor plasma shed across the swing width and along the real flight path,
- * emitted through MaterialEmitters in the Brave gold theme with a white
- * core stream and cyan vapor in the wake. Emission follows the same
- * lifecycle envelope and strike window the old cut used.
+ * Complex pass: a layered composition. The pieces layer is the cut body:
+ * a thick ComplexGeometry tendril swept across the swing width and bowed
+ * toward the flight direction, with a thinner white echo strand inside
+ * it, on the dissolve shader. The complex particle layer is SPARK_STREAK
+ * sprites shed across the cut and burst at the strike flash. The material
+ * filler stays as before: valor plasma shed across the swing width and
+ * along the real flight path, emitted through MaterialEmitters in the
+ * Brave gold theme with a white core stream and cyan vapor in the wake.
+ * Emission and geometry follow the same lifecycle envelope and strike
+ * window the old cut used.
  */
 public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSlashRenderer.BraveSlashRenderState> {
     public BraveSlashRenderer(EntityRendererProvider.Context context) {
@@ -35,6 +43,7 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
         public MaterialEmitters.Emitter plasmaEmitter;
         public MaterialEmitters.Emitter coreEmitter;
         public MaterialEmitters.Emitter vaporEmitter;
+        public MaterialEmitters.Emitter sparkEmitter;
         public long emitterSeed = Long.MIN_VALUE;
         public ClientLevel emitterLevel;
         public float lastAge = -1f;
@@ -77,6 +86,29 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
             state.plasmaEmitter.tick(delta, e);
             state.coreEmitter.tick(delta, e * 0.80f);
             state.vaporEmitter.tick(delta, e * 0.65f);
+            state.sparkEmitter.tick(delta, e * 0.90f);
+
+            // Pieces layer: the tendril body across the swing width, in the
+            // local frame. The bezier control sits twice as far forward as
+            // the belly the emission samples, so the strand crests on the
+            // same line, and the echo strand nests inside it.
+            final Basis gb = basis(state);
+            final float gspan = span(state);
+            final Vec3 from = gb.right().scale(-gspan * 0.5).add(gb.forward().scale(0.10));
+            final Vec3 to = gb.right().scale(gspan * 0.5).add(gb.forward().scale(0.10));
+            final Vec3 ctrl = gb.forward().scale(0.62);
+            final Vec3 from2 = gb.right().scale(-gspan * 0.40).add(gb.forward().scale(0.08));
+            final Vec3 to2 = gb.right().scale(gspan * 0.40).add(gb.forward().scale(0.08));
+            final Vec3 ctrl2 = gb.forward().scale(0.50);
+            final float genv = fade;
+            final float geoDist = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            final long gseed = state.seed;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.tendril(pose, buffer, gseed, from, ctrl, to, 0.40f,
+                    0xFFD700, 0xFFF2C0, 0.95f, genv, geoDist);
+                ComplexGeometry.tendril(pose, buffer, gseed ^ 0x51ED2701L, from2, ctrl2, to2, 0.17f,
+                    0xFFFFFF, 0xFFD700, 0.95f, genv, geoDist);
+            });
         }
 
         // Strike flash: a one-shot plasma burst at the belly of the cut
@@ -92,6 +124,9 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
                 MaterialEmitters.point(belly), Math.round(14 * impact));
             MaterialEmitters.burst(level,
                 MaterialEmitters.Preset.plasma(0xFFD700, 2.4f, seed ^ 0x27D4EB2F, Vec3.ZERO, 0.26f),
+                MaterialEmitters.point(belly), Math.round(10 * impact));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.24f),
                 MaterialEmitters.point(belly), Math.round(10 * impact));
         } else if (impact <= 0.02f) {
             state.burstFired = false;
@@ -139,6 +174,11 @@ public class BraveSlashRenderer extends EntityRenderer<BraveSlashEntity, BraveSl
         state.vaporEmitter = new MaterialEmitters.Emitter(level,
             MaterialEmitters.Preset.vapor(0x00F2FF, 2.3f, seed ^ 0x2B992DDF, Vec3.ZERO, 0.03f),
             wake, 48f, 90);
+        // Complex particle layer: spark streaks shed across the cut face
+        // with the plasma, at the standard continuous rate cap.
+        state.sparkEmitter = new MaterialEmitters.Emitter(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.05f),
+            cut, 30f, 44);
         state.emitterSeed = state.seed;
         state.emitterLevel = level;
     }

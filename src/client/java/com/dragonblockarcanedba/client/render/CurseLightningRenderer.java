@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.CurseLightningEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -17,15 +19,21 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Curse Lightning as lightning plasma along a seeded path, not a drawn bolt.
- * The no-shapes conversion removes the branch ribbons, crack star, and glow
- * pool entirely. The strike path survives as data: a midpoint-displaced
- * jagged polyline regenerated from the entity UUID seed on every frame, so
- * every client emits along the same bolt. Layered plasma in the sheath
- * color and a white hot core rides the path, a thinner twin strike lands
- * beside it, and the ground arcs become short plasma paths crawling out
- * from the strike point over ground dust. The 2.5 tick stab and the fade
- * reaching zero at tick 9.5 are unchanged.
+ * Curse Lightning as a layered composition. The pieces layer is a real
+ * branchedLightning drawn in the renderer in curse colors, through the
+ * builder's polyline overload: the geometry trunk is the exact midpoint
+ * displaced polyline the plasma emission walks (boltPath below), with
+ * seeded forks and sub-branches grown off it by the builder, a wide
+ * sheath pass in the sheath color and a narrow near-white core pass,
+ * through the shader. Its ground end travels from the cloud to the
+ * strike point over the same 2.5 tick stab the emission path uses, on
+ * the same entity UUID seed. The complex particle layer is spark
+ * streaks at the strike point.
+ * The material emission stays as filler: layered plasma in the sheath
+ * color and a white hot core rides a seeded jagged polyline, a thinner
+ * twin strike lands beside it, and the ground arcs become short plasma
+ * paths crawling out from the strike point over ground dust. The fade
+ * reaching zero at tick 9.5 is unchanged.
  * (The Cursed Tempest's live strikes ride BoltEntity; this renderer serves
  * the registered CurseLightningEntity type.)
  */
@@ -96,7 +104,38 @@ public class CurseLightningRenderer extends EntityRenderer<CurseLightningEntity,
         // branch bolt's end did, now as an emission path.
         Vec3 top = center.add(0, cloud, 0);
         Vec3 ground = center.add(0, cloud * (1.0f - strike), 0);
+
+        // The emission trunk, computed once: the pieces layer below and
+        // the plasma emission both walk this exact polyline.
         List<Vec3> trunk = boltPath(top, ground, state.seed);
+
+        // Pieces layer: the branched bolt itself, drawn over the emission
+        // trunk (in local space, so the points shift by the strike
+        // center), with the builder's seeded forks and sub-branches grown
+        // off it, seeded from the entity UUID so every client draws the
+        // same strike.
+        {
+            final long boltSeed = state.seed;
+            final float boltEnv = flashAlpha;
+            // Detail scaled to 0.8 of the distance factor as before; the
+            // overload spends it on the seeded forks and sub-branches off
+            // the supplied trunk, and the whole bolt stays inside the
+            // class M vertex budget on every seed, not only on average
+            // seeds.
+            final float boltDs = ds * 0.8f;
+            final int boltSheath = sheath;
+            List<Vec3> localTrunk = new ArrayList<>(trunk.size());
+            for (Vec3 p : trunk) localTrunk.add(p.subtract(center));
+            final List<Vec3> boltTrunk = List.copyOf(localTrunk);
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                ComplexGeometry.branchedLightning(pose, buffer, boltSeed, boltTrunk, List.of(), 0.50f,
+                    0xFFF0FA, boltSheath, 0.98f, boltEnv, boltDs));
+        }
+
+        // Complex particle layer: spark streaks bursting at the strike point.
+        emit(level, MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.060f),
+            MaterialEmitters.point(center.add(0, 0.10, 0)), 36f, delta, env);
+
         MaterialEmitters.Source trunkSource = MaterialEmitters.path(trunk, 0.0);
         emit(level, MaterialEmitters.Preset.plasma(sheath, 1.30f, seed, Vec3.ZERO, 0.030f),
             trunkSource, 360f, delta, env);

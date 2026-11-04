@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SaberVoidTearEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -21,12 +24,14 @@ import java.util.Map;
 /**
  * Entity Renderer for Saber Void Tear in Minecraft 26.2.
  *
- * <p>No-shapes pass: the slit ribbons, spike streaks, sonic dome, and
- * shock bands are no longer drawn as geometry. The renderer emits
- * darkness vapor around the tear volume, void plasma streaming inward
- * along the slit, a white plasma core, and spatial glass dust thrown
- * outward where the spikes used to read. Sampling follows the tear
- * plane as data only. Envelope timing, the destination boost, colors,
+ * <p>Complex pass: a flat fan of seeded spatial shard meshes now
+ * rings the tear in its own plane, with two tendrils streaming
+ * inward through the shader tendril canvas, plus WISP_CURL and
+ * ASH_FLAKE complex sprites. The darkness vapor, void plasma, white
+ * core, and spatial glass dust emission stays as the filler layer
+ * only. Pieces submit through the normal depth tested collector
+ * path in the tear plane, so the existing wall occlusion behavior
+ * is unchanged. Envelope timing, the destination boost, colors,
  * and alphas are unchanged in effect.</p>
  */
 public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, SaberVoidTearRenderer.VoidTearRenderState> {
@@ -124,6 +129,56 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
             MaterialEmitters.burst(level,
                 MaterialEmitters.Preset.plasma(0x4DD8FF, 0.90f, (int) (state.seed ^ 0xBADD2L), Vec3.ZERO, 0.35f),
                 MaterialEmitters.point(center), Math.max(3, Math.round(10 * ds)));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.30f),
+                MaterialEmitters.point(center), Math.max(3, Math.round(10 * ds)));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, Vec3.ZERO, 0.38f),
+                MaterialEmitters.point(center), Math.max(2, Math.round(8 * ds)));
+        }
+
+        // Pieces layer in the tear plane, under the same synced
+        // rotation the emission uses. Five solid shards form a flat
+        // fan around the slit (5 times 288 vertices) and two energy
+        // tendrils stream inward (near 770 vertices), for a total
+        // near 2210, inside the class M budget of 2500.
+        float pieceEnv = open * fade;
+        if (pieceEnv > 0.02f && ds > 0.05f) {
+            float sc = emission.scale;
+            float slitH = emission.slitH;
+            long seed = state.seed;
+            poseStack.pushPose();
+            poseStack.mulPose(new Matrix4f()
+                .rotationY((float) Math.toRadians(-state.yRot))
+                .rotateX((float) Math.toRadians(state.xRot)));
+            ComplexGeometry.submitSolid(collector, poseStack,
+                (pose, buffer) -> {
+                    ComplexGeometry.Rng rng = new ComplexGeometry.Rng(seed ^ 0x5A17L);
+                    for (int i = 0; i < 5; i++) {
+                        double ang = (i / 5.0) * Math.PI * 2.0 + rng.signed() * 0.35;
+                        Vec3 radial = new Vec3(Math.cos(ang), Math.sin(ang), 0);
+                        Vec3 o = radial.scale(slitH * 0.38);
+                        float len = 0.55f * sc * rng.range(0.8f, 1.25f);
+                        ComplexGeometry.shard(pose, buffer, seed + i * 0x9E37L,
+                            o, radial, len, len * 0.36f,
+                            0x3D1A78, 0xBFEFFF, 0.95f, pieceEnv);
+                    }
+                });
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL,
+                (pose, buffer) -> {
+                    for (int i = 0; i < 2; i++) {
+                        double ang = i * 2.4 + 0.7;
+                        Vec3 radial = new Vec3(Math.cos(ang), Math.sin(ang), 0);
+                        Vec3 tangent = new Vec3(-Math.sin(ang), Math.cos(ang), 0);
+                        Vec3 from = radial.scale(slitH * 1.05);
+                        Vec3 to = radial.scale(slitH * 0.10);
+                        Vec3 control = radial.scale(slitH * 0.55).add(tangent.scale(slitH * 0.30));
+                        ComplexGeometry.tendril(pose, buffer, seed ^ (0x7EA0L + i * 131L),
+                            from, control, to,
+                            0.20f * sc, 0x4DD8FF, 0xFFFFFF, 0.92f, pieceEnv, ds);
+                    }
+                });
+            poseStack.popPose();
         }
 
         super.submit(state, poseStack, collector, cameraState);
@@ -208,7 +263,17 @@ public class SaberVoidTearRenderer extends EntityRenderer<SaberVoidTearEntity, S
                     core, 110.0f, 150),
                 new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.glassDust(0xBFEFFF, 0.95f * baseScale, seed ^ 0x5907, Vec3.ZERO, 0.08f),
-                    glass, 150.0f, 200)
+                    glass, 150.0f, 200),
+                // Complex particle layer: wisp curls curling through
+                // the darkness volume and ash flakes thrown outward
+                // with the glass. Rates stay at or under the 40 per
+                // second continuous budget.
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, Vec3.ZERO, 0.05f),
+                    darkness, 32.0f, 40),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, Vec3.ZERO, 0.10f),
+                    glass, 28.0f, 40)
             };
         }
 

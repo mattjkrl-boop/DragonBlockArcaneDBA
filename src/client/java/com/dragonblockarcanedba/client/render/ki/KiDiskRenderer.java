@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.client.render.ki;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
 import com.dragonblockarcanedba.entity.KiDiskEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -17,12 +18,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * No-shapes pass: this renderer draws no geometry and no solid disc. A ki
- * disk is a spinning cloud of technique-colored plasma sampled across the
- * disc plane as data: denser and whiter toward the rim, shedding embers
- * off the rim as it flies, with vapor bleeding off the faces. The spin
- * lives in the tangential velocity the samples are born with (the old
- * 24 degrees per tick rotation), so the cloud itself wheels.
+ * Complex pass: layered composition, class M. The pieces layer is three
+ * short ComplexGeometry tendril lashes anchored at the rim, spinning
+ * with the disc at the old 24 degrees per tick and trailing tangentially
+ * as the cutting wake, through submitEnergy with the tendril canvas in
+ * the synced technique color. The complex particle layer is SPARK_STREAK
+ * sprites shed at the rim. The no-shapes emission stays as filler only:
+ * a spinning cloud of technique-colored plasma sampled across the disc
+ * plane, denser and whiter toward the rim, shedding embers off the rim
+ * as it flies, with vapor bleeding off the faces. The spin lives in the
+ * tangential velocity the samples are born with, so the cloud itself
+ * wheels.
  */
 public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.DiskRenderState> {
 
@@ -135,6 +141,9 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
                         MaterialEmitters.Preset.plasma(state.color, 1.2f * scale, seed ^ 0x05107,
                                 Vec3.ZERO, 0.03f),
                         rim(frame), 140f, 190),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.10f),
+                        rim(frame), 26f, 40),
         };
         return emission;
     }
@@ -161,6 +170,42 @@ public class KiDiskRenderer extends EntityRenderer<KiDiskEntity, KiDiskRenderer.
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer, in entity local space (the pose origin is the
+        // disc center). Three rim lashes at full spine samples is 1152
+        // vertices, inside the class M budget of 2500. The anchor angle
+        // advances at the old spin rate, 24 degrees per tick, so the
+        // lashes wheel with the filler cloud.
+        if (envelope > 0.01f) {
+            Vec3 dir = lookDir(state.yRot, state.xRot);
+            Vec3 uTmp = dir.cross(new Vec3(0, 1, 0));
+            if (uTmp.lengthSqr() < 1e-6) uTmp = new Vec3(1, 0, 0); else uTmp = uTmp.normalize();
+            final Vec3 geoU = uTmp;
+            final Vec3 geoV = geoU.cross(dir).normalize();
+            final Vec3 geoDir = dir;
+            final float geoScale = Math.max(0.2f, state.scale);
+            final float geoRadius = 0.72f * geoScale;
+            final float spin = state.ageInTicks * 0.4189f;
+            final long geoSeed = state.seed;
+            final int geoColor = state.color;
+            final float geoEnv = envelope;
+            final float geoDs = distScale;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                for (int i = 0; i < 3; i++) {
+                    double ang = spin + i * (Math.PI * 2.0 / 3.0);
+                    Vec3 radial = geoU.scale(Math.cos(ang)).add(geoV.scale(Math.sin(ang)));
+                    Vec3 tangent = geoU.scale(-Math.sin(ang)).add(geoV.scale(Math.cos(ang)));
+                    Vec3 from = radial.scale(geoRadius);
+                    Vec3 control = from.add(tangent.scale(0.34f * geoScale))
+                            .add(geoDir.scale(-0.10f * geoScale));
+                    Vec3 to = from.add(tangent.scale(0.66f * geoScale))
+                            .add(radial.scale(0.20f * geoScale));
+                    ComplexGeometry.tendril(pose, buffer, geoSeed ^ (0xD15CL + i * 7919L),
+                            from, control, to, 0.17f * geoScale,
+                            geoColor, 0xFFFFFF, 0.92f, geoEnv, geoDs);
+                }
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

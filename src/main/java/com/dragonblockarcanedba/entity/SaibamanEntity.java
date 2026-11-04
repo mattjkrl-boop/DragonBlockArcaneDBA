@@ -74,6 +74,15 @@ public class SaibamanEntity extends DbaHostileEntity {
                 this.getX(), this.getY() + 0.6, this.getZ(), 10, 0.4, 0.4, 0.4, 0.04);
         server.sendParticles(DbaMaterialOptions.of(DbaMaterialOptions.DUST, 0x86A860, 0.85f, this.getId() * 31 + 29),
                 this.getX(), this.getY() + 0.6, this.getZ(), 8, 0.4, 0.4, 0.4, 0.04);
+        // Complex sprite layer (class S): pale wisp curls and gray ash
+        // flakes at the same burst point, spread, and speed as the
+        // material burst above. 6 plus 6 stays inside the class S
+        // burst budget of 12. The physical slime chunks above stay
+        // physical and are not replaced.
+        server.sendParticles(DbaParticles.WISP_CURL,
+                this.getX(), this.getY() + 0.6, this.getZ(), 6, 0.4, 0.4, 0.4, 0.04);
+        server.sendParticles(DbaParticles.ASH_FLAKE,
+                this.getX(), this.getY() + 0.6, this.getZ(), 6, 0.4, 0.4, 0.4, 0.04);
         this.discard();
     }
 

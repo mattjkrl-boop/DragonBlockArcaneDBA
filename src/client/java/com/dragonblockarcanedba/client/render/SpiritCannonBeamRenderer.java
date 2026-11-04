@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SpiritCannonBeamEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -19,12 +21,18 @@ import org.joml.Vector3f;
 /**
  * Entity renderer for the Spirit Cannon beam.
  *
- * No-shapes pass: the renderer draws no geometry. The synced beam path is
- * emission data only. Soul material carries the white core and cyan sheath,
- * vapor softens the outside, gold souls gather toward the terminus, and the
- * contact point sheds plasma, vapor, and sparks. The lifecycle envelope,
- * first person anchor, fade retract, pulse, colors, and synced seed are the
- * bespoke pass values; only the presentation material changed.
+ * Complex pass: the beam is a layered composition. The pieces layer is a
+ * chained ComplexGeometry tendril core along the synced beam path (two
+ * strands, segmented so the bezier curl stays tight over a long beam)
+ * plus a six strand tendrilFan of impact lashes at the terminus, both
+ * through submitEnergy with the tendril canvas so every energy piece
+ * gets the shader treatment. The complex particle layer is SPARK_STREAK
+ * sprites at the terminus. The no-shapes material emission stays as
+ * filler only: soul material carries the white core and cyan sheath,
+ * vapor softens the outside, gold souls gather toward the terminus, and
+ * the contact point sheds plasma, vapor, and sparks. The lifecycle
+ * envelope, first person anchor, fade retract, pulse, colors, and
+ * synced seed are unchanged.
  */
 public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEntity, SpiritCannonBeamRenderer.SpiritCannonRenderState> {
 
@@ -164,6 +172,60 @@ public class SpiritCannonBeamRenderer extends EntityRenderer<SpiritCannonBeamEnt
             MaterialEmitters.Preset.fixed(DbaParticles.SPARK, direction.scale(0.10), 0.30f),
             MaterialEmitters.point(end),
             42.0f, 60, delta, emission);
+        // Complex particle layer: spark streaks thrown off the terminus,
+        // inside the 40 per second continuous budget for one emitter.
+        emit(level,
+            MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, direction.scale(0.12), 0.30f),
+            MaterialEmitters.point(end),
+            32.0f, 40, delta, emission);
+
+        // Pieces layer, class L with two builder uses at full budget.
+        // Geometry is drawn in entity local space (start and end relative
+        // to the origin), through the normal depth tested shader path.
+        // Vertex count at distScale 1.0: the core chain is at most four
+        // segments times two strands times 384 vertices (3072), plus the
+        // fan at six tendrils times 384 (2304), for 5376 of the 6000
+        // class L budget.
+        final Vec3 startRel = start.subtract(origin);
+        final Vec3 endRel = end.subtract(origin);
+        final Vec3 fanDir = direction;
+        final long geoSeed = state.seed;
+        final float geoEnv = env;
+        final float geoDs = distScale;
+        final float geoPulse = pulse;
+        final float geoFp = fpScale;
+        final int coreSegments = runLength <= 10.0f ? 2 : runLength <= 20.0f ? 3 : 4;
+        Vec3 perpTmp = direction.cross(new Vec3(0.0, 1.0, 0.0));
+        if (perpTmp.lengthSqr() < 1.0e-6) perpTmp = new Vec3(1.0, 0.0, 0.0);
+        final Vec3 perpA = perpTmp.normalize();
+        final Vec3 perpB = direction.cross(perpA).normalize();
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            for (int strand = 0; strand < 2; strand++) {
+                float strandWidth = (strand == 0 ? 0.60f : 0.30f) * geoPulse * geoFp;
+                int strandRoot = strand == 0 ? WHITE : CYAN;
+                int strandTip = strand == 0 ? CYAN : GOLD;
+                float strandAlpha = strand == 0 ? 0.95f : 0.90f;
+                Vec3 strandOffset = perpA.scale(strand == 0 ? 0.0 : 0.16 * geoFp)
+                    .add(perpB.scale(strand == 0 ? 0.0 : -0.10 * geoFp));
+                for (int i = 0; i < coreSegments; i++) {
+                    float t0 = i / (float) coreSegments;
+                    float t1 = (i + 1) / (float) coreSegments;
+                    Vec3 segFrom = startRel.lerp(endRel, t0).add(strandOffset);
+                    Vec3 segTo = startRel.lerp(endRel, t1).add(strandOffset);
+                    float bowSign = (i % 2 == 0 ? 1.0f : -1.0f) * (strand == 0 ? 1.0f : -1.0f);
+                    Vec3 segControl = segFrom.lerp(segTo, 0.5)
+                        .add(perpA.scale(bowSign * 0.22 * geoPulse * geoFp))
+                        .add(perpB.scale(bowSign * 0.10 * geoPulse * geoFp));
+                    ComplexGeometry.tendril(pose, buffer,
+                        geoSeed ^ (0xBEA1L + strand * 0x101L + i * 7919L),
+                        segFrom, segControl, segTo, strandWidth,
+                        strandRoot, strandTip, strandAlpha, geoEnv, geoDs);
+                }
+            }
+            ComplexGeometry.tendrilFan(pose, buffer, geoSeed ^ 0xFA11L,
+                endRel, fanDir, 58.0f, 2.6f * geoPulse * geoFp, 6,
+                0.34f * geoPulse * geoFp, CYAN, WHITE, 0.92f, geoEnv, geoDs);
+        });
     }
 
     private static void emit(ClientLevel level, MaterialEmitters.Preset preset, MaterialEmitters.Source source,

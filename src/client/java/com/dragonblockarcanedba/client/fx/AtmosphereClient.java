@@ -22,8 +22,11 @@ import java.util.List;
  * gloom, lerped toward the strongest source the player stands in and read
  * by DbaPostFx for its grade; RAIN streaks falling inside the volume around
  * the player, deepened by vapor precipitation, ground mist, wind driven
- * dust, and darkness material; and thunder, DbaSounds thunder scheduled at
- * random points in THUNDER volumes. No hard cuts anywhere.
+ * dust, darkness material, WISP_CURL wind wisps, and ASH_FLAKE airborne
+ * grit; and thunder, DbaSounds thunder scheduled at
+ * random points in THUNDER volumes. No hard cuts anywhere. This system
+ * adds no geometry of its own; the thunder geometry belongs to the
+ * shared Bolt system.
  */
 public final class AtmosphereClient {
     private AtmosphereClient() {}
@@ -124,9 +127,11 @@ public final class AtmosphereClient {
      * Material depth over the rain streaks: a falling vapor veil in the same
      * clipped cylinder, ground mist and wind driven dust on the terrain
      * under the player, and darkness material drifting through the gloom
-     * volume. The post grade keeps its original strength and lerp; these
-     * particles give the gloom a body instead of leaving it as a flat
-     * screen tint.
+     * volume. The complex sprite layer rides that same gloom volume
+     * source: WISP_CURL wind wisps and ASH_FLAKE airborne grit, carried
+     * on the same wind vector as the dust layer. The post grade keeps
+     * its original strength and lerp; these particles give the gloom a
+     * body instead of leaving it as a flat screen tint.
      */
     private static void emitMaterialLayers(Minecraft mc, Source s, Vec3 playerPos, double reach) {
         int seed = Double.hashCode(s.center.x) * 31 + Double.hashCode(s.center.z);
@@ -192,6 +197,21 @@ public final class AtmosphereClient {
                 MaterialEmitters.Preset.material(DbaMaterialOptions.DARKNESS, 0x0A0D13, 1.15f,
                         seed + 97, Vec3.ZERO, 0.018f),
                 gloomVolume, s.gloom >= 0.7f ? 2 : 1);
+        // Complex sprite layer, on this same gated cadence and volume as
+        // the darkness layer above: 2 per burst every 4 ticks is 10 per
+        // second per type, inside the 40 per second continuous cap and
+        // in keeping with the existing material counts here (mist 3,
+        // dust 2, darkness 1 to 2 per gated burst). Both ride the dust
+        // layer wind vector, so the wisps and grit move with the storm
+        // air the material layers already established.
+        MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL,
+                        new Vec3(0.20, 0.012, 0.03), 0.045f),
+                gloomVolume, 2);
+        MaterialEmitters.burst(mc.level,
+                MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE,
+                        new Vec3(0.20, 0.005, 0.03), 0.045f),
+                gloomVolume, 2);
     }
 
     public static boolean gloomActive() {

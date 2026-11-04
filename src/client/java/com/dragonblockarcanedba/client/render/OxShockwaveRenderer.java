@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.OxShockwaveEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -23,13 +24,18 @@ import java.util.Map;
 
 /**
  * Entity Renderer for Ox King's Groundbreaker Shockwave in Minecraft 26.2.
- * No-shapes pass: this renderer draws no geometry. The expanding wave is
- * carried by material emission at the crest: ground dust and shock vapor
- * rolling outward, physical debris chunks of the actual ground block,
- * embers, and hot plasma licking along the fracture line. Emission points
- * are sampled on the crest ring as data; nothing is rendered from the ring
- * itself. Wave timing, radius growth, and the fade envelope are unchanged
- * from the bespoke build.
+ * Complex pass: a layered composition at class L. The pieces layer is two
+ * ComplexGeometry builders: fracturePlates as solid fractured ground at
+ * the origin through submitSolid, and a crackFan of glowing energy cracks
+ * through submitEnergy on the dissolve shader, spreading outward with the
+ * wave front. These are the fast near-field fragments and energy
+ * structure; the big physical chunks are the debris the entity already
+ * spawns server side. The complex particle layer is a SHARD_CHIP burst at
+ * the origin plus a continuous chip stream on the crest. The material
+ * filler stays as before: ground dust and shock vapor rolling outward at
+ * the crest, physical debris chunks of the actual ground block, embers,
+ * and hot plasma licking along the fracture line. Wave timing, radius
+ * growth, and the fade envelope are unchanged from the bespoke build.
  */
 public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxShockwaveRenderer.OxShockwaveRenderState> {
     public OxShockwaveRenderer(EntityRendererProvider.Context context) {
@@ -85,6 +91,7 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
     private static final class Emission {
         final Frame frame = new Frame();
         MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        boolean burstFired = false;
         float lastAge = -1f;
     }
 
@@ -139,6 +146,12 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
                         MaterialEmitters.Preset.fixed(new BlockParticleOption(DbaParticles.BLOCK_CHUNKS, ground),
                                 new Vec3(0.0, 0.30, 0.0), 0.10f),
                         crestRing(frame, 0.05f, 0.10f, 0.05f), 42f, 80),
+                // Complex particle layer: stone chips riding the crest,
+                // under the continuous rate cap.
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                                new Vec3(0.0, 0.26, 0.0), 0.11f),
+                        crestRing(frame, 0.05f, 0.12f, 0.05f), 30f, 44),
         };
         return emission;
     }
@@ -185,6 +198,35 @@ public class OxShockwaveRenderer extends EntityRenderer<OxShockwaveEntity, OxSho
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+            // Complex particle layer, burst half: one chip burst at the
+            // origin as the wave leaves it, inside the class L budget.
+            if (!emission.burstFired && age <= 2.0f) {
+                emission.burstFired = true;
+                MaterialEmitters.burst(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                                new Vec3(0.0, 0.34, 0.0), 0.22f),
+                        MaterialEmitters.groundArea(emission.frame.center, 1.1,
+                                emission.frame.center.y + 0.10),
+                        40);
+            }
+        }
+
+        // Pieces layer, in the local ground frame: solid fracture plates
+        // at the origin and a glowing crack fan spreading with the wave.
+        float geoEnv = endFade * Math.max(0.25f, crest);
+        if (geoEnv > 0.01f) {
+            final long geoSeed = state.seed;
+            final float plateRadius = (2.6f + charge * 1.8f) * waveScale;
+            final float plateLift = (0.30f + charge * 0.28f) * waveScale;
+            final float crackRadius = Math.max(1.2f, radius * 0.85f);
+            final float geoFade = geoEnv;
+            final float geoDist = distScale;
+            ComplexGeometry.submitSolid(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.fracturePlates(pose, buffer, geoSeed ^ 0x9A7EL,
+                            plateRadius, plateLift, 0xFF8C1F, 0x4A3826, 0.95f, geoFade, geoDist));
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) ->
+                    ComplexGeometry.crackFan(pose, buffer, geoSeed ^ 0xC4A9L,
+                            crackRadius, 0xFFE9B0, 0xFF8C1F, 0.95f, geoFade, geoDist));
         }
 
         super.submit(state, poseStack, collector, cameraState);

@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.SaberSlashEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -21,12 +24,13 @@ import java.util.Map;
 /**
  * Entity Renderer for Saber Slash in Minecraft 26.2.
  *
- * <p>No-shapes pass: the crescent, tip spurs, and strike flash are no
- * longer drawn as geometry. The renderer emits dimensional void plasma,
- * spatial glass dust, and darkness vapor along the slash path and around
- * its tips, using the shared material emitters. The path is sampled as
- * data only; nothing here submits a mesh, ribbon, arc, or fan. Pose
- * timing, colors, scale, and the strike window are unchanged.</p>
+ * <p>Complex pass: a seeded tendril body now runs along the slash arc
+ * (the same parabolic path the trail emission samples), drawn through
+ * the shader tendril canvas, with SHARD_CHIP spatial fragments and
+ * SPARK_STREAK complex sprites layered over it. The dimensional void
+ * plasma, spatial glass dust, and darkness vapor emission stays as the
+ * filler layer only. Pose timing, colors, scale, and the strike window
+ * are unchanged.</p>
  */
 public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSlashRenderer.SaberSlashRenderState> {
 
@@ -128,6 +132,49 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
                 MaterialEmitters.Preset.glassDust(0xBFEFFF, 0.95f, (int) (state.seed ^ 0xFA11L), Vec3.ZERO, 0.48f)
                     .withLifetimeFactor(0.6f),
                 MaterialEmitters.point(center), glassCount);
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.42f),
+                MaterialEmitters.point(center), Math.max(3, Math.round(13 * ds)));
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.50f),
+                MaterialEmitters.point(center), Math.max(3, Math.round(11 * ds)));
+        }
+
+        // Pieces layer: three torn tendril strands along the slash arc.
+        // Local space matches the emission sampling exactly: x spans the
+        // slash, z bulges to chord at the middle, and the same synced
+        // rotation is applied to the pose. Vertices: three tendrils at
+        // at most 24 samples each stay near 1150, inside the class M
+        // budget of 2500.
+        float pieceEnv = open * fade;
+        if (pieceEnv > 0.02f && ds > 0.05f) {
+            float span = emission.span;
+            float chord = emission.chord;
+            float sc = emission.scale;
+            long seed = state.seed;
+            poseStack.pushPose();
+            poseStack.mulPose(new Matrix4f()
+                .rotationY((float) Math.toRadians(-state.yRot))
+                .rotateX((float) Math.toRadians(state.xRot))
+                .rotateZ((float) Math.toRadians(state.tiltAngle)));
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL,
+                (pose, buffer) -> {
+                    ComplexGeometry.tendril(pose, buffer, seed ^ 0x7E11L,
+                        new Vec3(-span * 0.5f, 0, 0), new Vec3(0, 0, chord * 2.0f),
+                        new Vec3(span * 0.5f, 0, 0),
+                        0.40f * sc, 0xFFFFFF, 0x4DD8FF, 0.95f, pieceEnv, ds);
+                    ComplexGeometry.tendril(pose, buffer, seed ^ 0x7E22L,
+                        new Vec3(-span * 0.46f, 0.07f * sc, -0.06f * sc),
+                        new Vec3(0, 0.07f * sc, chord * 1.82f),
+                        new Vec3(span * 0.46f, 0.07f * sc, -0.06f * sc),
+                        0.20f * sc, 0x4DD8FF, 0x3D1A78, 0.90f, pieceEnv, ds);
+                    ComplexGeometry.tendril(pose, buffer, seed ^ 0x7E33L,
+                        new Vec3(-span * 0.46f, -0.07f * sc, 0.05f * sc),
+                        new Vec3(0, -0.07f * sc, chord * 1.90f),
+                        new Vec3(span * 0.46f, -0.07f * sc, 0.05f * sc),
+                        0.18f * sc, 0x4DD8FF, 0xBFEFFF, 0.90f, pieceEnv, ds);
+                });
+            poseStack.popPose();
         }
 
         super.submit(state, poseStack, collector, cameraState);
@@ -214,7 +261,16 @@ public class SaberSlashRenderer extends EntityRenderer<SaberSlashEntity, SaberSl
                 new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.darkness(0x3D1A78, 1.35f * baseScale, seed ^ 0x4A10, Vec3.ZERO, 0.05f)
                         .withLifetimeFactor(0.45f),
-                    darkness, 90.0f, 130)
+                    darkness, 90.0f, 130),
+                // Complex particle layer: spatial shard chips riding the
+                // arc and spark streaks shed at the tips. Rates stay at
+                // or under the 40 per second continuous budget.
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, Vec3.ZERO, 0.10f),
+                    trail, 34.0f, 40),
+                new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.14f),
+                    glass, 30.0f, 40)
             };
         }
 

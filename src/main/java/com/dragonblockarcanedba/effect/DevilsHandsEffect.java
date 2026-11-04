@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.DbaDamage;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -72,6 +73,16 @@ public class DevilsHandsEffect extends MobEffect {
             // Dark red flames
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0x8B0000, 1.5F, entity.getId() * 31 + entity.tickCount), // Dark Red
+                entity.getX() + (level.getRandom().nextFloat() - 0.5) * width * 1.5,
+                entity.getY() + level.getRandom().nextFloat() * height,
+                entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width * 1.5,
+                3, // count
+                0.02, 0.1, 0.02, // delta (upward drift)
+                0.02 // speed
+            );
+            // Complex layer: hellfire EMBER_FRAGMENT with the dark red flames, same count and drift.
+            level.sendParticles(
+                DbaParticles.EMBER_FRAGMENT,
                 entity.getX() + (level.getRandom().nextFloat() - 0.5) * width * 1.5,
                 entity.getY() + level.getRandom().nextFloat() * height,
                 entity.getZ() + (level.getRandom().nextFloat() - 0.5) * width * 1.5,

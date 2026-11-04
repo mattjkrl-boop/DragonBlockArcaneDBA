@@ -1,6 +1,8 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.PowerPoleWhirlwindEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -19,14 +21,21 @@ import java.util.Map;
 /**
  * Entity Renderer for Power Pole Whirlwind in Minecraft 26.2.
  *
- * No-shapes conversion: this renderer draws no geometry. The funnel is a
- * moving volume of material particles sampled inside the cone the entity
- * already defines: cyan-white vapor near the core, emerald vapor through
- * the body, short plasma streaks racing with the spin, dust where the
+ * Complex pass: layered composition. The pieces layer is a
+ * ComplexGeometry tendrilFan of five circling strands in the cone the
+ * entity already defines: pale cyan at the root running to emerald at
+ * the tips, matching the vapor theme, fanned at the cone angle along
+ * the cone axis and rotated around that axis with age on a copy of
+ * the submitted pose, so the strands circle with the spin the filler
+ * particles carry, through the dissolve shader with the tendril
+ * canvas. The complex particle layer is ASH_FLAKE sprites carried
+ * airborne through the cone volume. The material filler stays as
+ * before: cyan-white vapor near the core, emerald vapor through the
+ * body, short plasma streaks racing with the spin, dust where the
  * moving air meets the ground near the caster, and occasional steel
- * sparks shed from contacts in the outer flow. The cone is data for
- * sampling and for the server-side forces; no sheath, band, ring, disc,
- * or crescent is rendered.
+ * sparks shed from contacts in the outer flow. The entity already
+ * spawns a DebrisSpawner field server side for the big chunks; these
+ * strands are the fast near-field structure debris cannot time.
  *
  * Lifecycle math is unchanged from the bespoke renderer and mirrors
  * PowerPoleWhirlwindEntity.currentEnvelope: build over BUILD_TICKS, hold
@@ -138,9 +147,38 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         float delta = rig.deltaFor(age);
         float swell = 0.55f + 0.45f * alphaMult;
         float coneTan = (float) Math.tan(Math.toRadians(state.coneAngle));
-        rig.frame.update(origin, direction(state.yRot, state.xRot), range, coneTan,
-            swell, age * 65.0f * (float) (Math.PI / 180.0));
+        Vec3 forward = direction(state.yRot, state.xRot);
+        float spin = age * 65.0f * (float) (Math.PI / 180.0);
+        rig.frame.update(origin, forward, range, coneTan, swell, spin);
         rig.tick(delta, alphaMult * distScale);
+
+        // Pieces layer: five tendril strands fanned at the cone angle
+        // along the cone axis, length matched to the cone reach and
+        // scaled by the same swell the filler cone uses. Rotation is
+        // applied inside the piece on a copy of the submitted pose,
+        // around the cone axis at the filler spin rate, so the strands
+        // circle with the flow instead of hanging static in the cone.
+        // Five strands at full tendril sampling stay inside the
+        // class M vertex budget (about 1920 of 2500 at distScale 1).
+        final Vec3 gForward = forward;
+        final float gLen = range * 0.92f * swell;
+        final float gSpread = state.coneAngle;
+        final float gSpin = spin;
+        final float gEnv = alphaMult;
+        final float gDist = distScale;
+        final long gSeed = state.seed;
+        ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+            PoseStack local = new PoseStack();
+            local.last().pose().set(pose.pose());
+            local.last().normal().set(pose.normal());
+            local.pushPose();
+            local.mulPose(new org.joml.Matrix4f().rotate(gSpin,
+                (float) gForward.x, (float) gForward.y, (float) gForward.z));
+            ComplexGeometry.tendrilFan(local.last(), buffer, gSeed ^ 0xF4A1L, Vec3.ZERO,
+                gForward, gSpread, gLen, 5, 0.34f,
+                0xEFFFFF, 0x26FFA6, 0.92f, gEnv, gDist);
+            local.popPose();
+        });
     }
 
     private static EmissionRig rigFor(ClientLevel level, WhirlwindRenderState state) {
@@ -243,6 +281,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
         final MaterialEmitters.Emitter plasmaStreaks;
         final MaterialEmitters.Emitter contactDust;
         final MaterialEmitters.Emitter sparks;
+        final MaterialEmitters.Emitter ashFlakes;
         float lastAge = 0.0f;
         long lastSeenGameTime = 0L;
         boolean started = false;
@@ -266,6 +305,11 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
             this.sparks = new MaterialEmitters.Emitter(level,
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK, Vec3.ZERO, 0.22f),
                 coneSource(frame, 1.00, 0.40, 0.80), 22.0f, 50);
+            // Complex particle layer: ash flake grit carried airborne
+            // through the cone volume, at the standard continuous cap.
+            this.ashFlakes = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE, Vec3.ZERO, 0.03f),
+                coneSource(frame, 0.95, 0.18, 0.45), 24.0f, 40);
         }
 
         float deltaFor(float age) {
@@ -286,6 +330,7 @@ public class PowerPoleWhirlwindRenderer extends EntityRenderer<PowerPoleWhirlwin
             plasmaStreaks.tick(delta, envelope);
             contactDust.tick(delta, envelope);
             sparks.tick(delta, envelope);
+            ashFlakes.tick(delta, envelope);
         }
     }
 }

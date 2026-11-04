@@ -1,10 +1,13 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.AzureTornadoEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -24,16 +27,24 @@ import java.util.Map;
 /**
  * Entity Renderer for Azure Tornado in Minecraft 26.2.
  *
- * No-shapes pass: this renderer draws no geometry and no funnel surface.
- * The tornado is swirling particle forces: vapor and mist sampled
- * throughout the funnel volume with tangential and rising velocities,
- * wind-driven rain sprayed through the same volume, ground dust pulled
- * around the base, physical debris chunks of the actual ground block
- * caught in the lower funnel, and tempest plasma threading the flow.
- * Sizes still match the entity's physics zone exactly (radius scale x 8
- * giant / x 3 mini, height scale x 16 / x 6), and the fade is the shared
- * FxEnvelope over the entity's real max lifetime. All emission takes the
- * tornado entity's synced render seed.
+ * Complex pass: the tornado is a layered composition. The pieces
+ * layer is a tendrilFan at full fan budget: six tall lashing strands
+ * in a 30 degree cone around the column axis, their length matched
+ * to the funnel diagonal so they reach the widening top, rotated
+ * around the axis with the tornado age so they swirl with the flow,
+ * and drawn through the shader submit helper with the tendril
+ * canvas. The complex particle layer is SHARD_CHIP orbiting debris
+ * in the lower funnel and ASH_FLAKE carried through the whole
+ * volume. The material emission from the no-shapes pass stays as
+ * filler: vapor and mist sampled throughout the funnel volume with
+ * tangential and rising velocities, wind-driven rain sprayed through
+ * the same volume, ground dust pulled around the base, physical
+ * debris chunks of the actual ground block caught in the lower
+ * funnel, and tempest plasma threading the flow. Sizes still match
+ * the entity's physics zone exactly (radius scale x 8 giant / x 3
+ * mini, height scale x 16 / x 6), and the fade is the shared
+ * FxEnvelope over the entity's real max lifetime. All emission and
+ * piece seeds take the tornado entity's synced render seed.
  */
 public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, AzureTornadoRenderer.TornadoRenderState> {
 
@@ -178,6 +189,14 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
                         MaterialEmitters.Preset.plasma(0x4DF2FF, 1.0f * sf, seed ^ 0xBE10,
                                 Vec3.ZERO, 0.01f),
                         funnel(frame, false, false), state.isGiant ? 45f : 25f, state.isGiant ? 80 : 50),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                                new Vec3(0.0, 0.15, 0.0), 0.05f),
+                        funnel(frame, true, false), state.isGiant ? 28f : 20f, 40),
+                new MaterialEmitters.Emitter(level,
+                        MaterialEmitters.Preset.fixed(DbaParticles.ASH_FLAKE,
+                                Vec3.ZERO, 0.02f),
+                        funnel(frame, false, false), 24f, 40),
         };
         return emission;
     }
@@ -211,6 +230,33 @@ public class AzureTornadoRenderer extends EntityRenderer<AzureTornadoEntity, Azu
             for (MaterialEmitters.Emitter emitter : emission.emitters) {
                 emitter.tick(delta, envelope);
             }
+        }
+
+        // Pieces layer, class L: a six strand tendrilFan at the full
+        // fan budget. The cone spread matches the funnel profile (top
+        // radius over height is the same ratio for giant and mini), so
+        // the strands hug the column instead of crossing it. Rotation
+        // is applied inside the piece on a copy of the submitted pose,
+        // so the strands swirl around the local axis with age.
+        if (envelope > 0.01f) {
+            final float geoLen = totalHeight * 1.12f;
+            final float geoWidth = (state.isGiant ? 0.60f : 0.36f)
+                    * Math.max(0.5f, Math.min(1.5f, state.scale));
+            final float geoAge = state.age;
+            final float geoEnv = envelope;
+            final float geoDs = ds;
+            final long geoSeed = state.seed ^ 0x7020L;
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                PoseStack local = new PoseStack();
+                local.last().pose().set(pose.pose());
+                local.last().normal().set(pose.normal());
+                local.pushPose();
+                local.mulPose(new org.joml.Matrix4f().rotation(Axis.YP.rotationDegrees(geoAge * 3.0f)));
+                ComplexGeometry.tendrilFan(local.last(), buffer, geoSeed, Vec3.ZERO,
+                        new Vec3(0.0, 1.0, 0.0), 30f, geoLen, 6, geoWidth,
+                        0xBFE3F2, 0x4DF2FF, 0.90f, geoEnv, geoDs);
+                local.popPose();
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);

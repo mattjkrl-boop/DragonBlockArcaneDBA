@@ -1,8 +1,12 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.entity.HollowAfterimageEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
+import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -28,6 +32,14 @@ import java.util.Map;
  * same seed source (the entity UUID), same 100 tick fade curve, and the
  * Dark Faded behavior in the entity is unchanged, so Katana and Saber
  * afterimages read exactly the same way.
+ *
+ * Complex pass: the ghost gains a pieces layer of veil tendrils shaped
+ * around the silhouette, submitted through the alpha shader with the
+ * tendril canvas: a rising tendrilFan from the feet, two strands curling
+ * up the sides of the body, and one short strand at the hair cap, graded
+ * from the synced skin tint through soul cyan to the synced hair color.
+ * A dense WISP_CURL stream joins the material emission as the complex
+ * particle layer. The material streams stay as filler only.
  */
 public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEntity, HollowAfterimageRenderer.AfterimageRenderState> {
 
@@ -84,6 +96,7 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
         final MaterialEmitters.Emitter scan;
         final MaterialEmitters.Emitter wake;
         final MaterialEmitters.Emitter ground;
+        final MaterialEmitters.Emitter wisp;
         long lastNanos = 0L;
         long lastSeenNanos = 0L;
         Vec3 center = Vec3.ZERO;
@@ -159,6 +172,17 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
                     return new MaterialEmitters.Sample(new Vec3(
                         center.x + Math.cos(ang) * rr, center.y + 0.04, center.z + Math.sin(ang) * rr), Vec3.ZERO);
                 }, 30f, 36);
+            // Complex particle layer: wisp curls dense through the body
+            // volume, at the standard continuous rate cap.
+            this.wisp = new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.WISP_CURL, new Vec3(0, 0.03, 0), 0.02f),
+                random -> {
+                    Vec3 c = center.add(0, 0.92, 0);
+                    return new MaterialEmitters.Sample(new Vec3(
+                        c.x + (random.nextDouble() * 2.0 - 1.0) * 0.30 * spread,
+                        c.y + (random.nextDouble() * 2.0 - 1.0) * 0.92,
+                        c.z + (random.nextDouble() * 2.0 - 1.0) * 0.30 * spread), Vec3.ZERO);
+                }, 36f, 40);
         }
     }
 
@@ -223,8 +247,48 @@ public class HollowAfterimageRenderer extends EntityRenderer<HollowAfterimageEnt
         s.spread = 1.0f + progress * 0.35f;
         s.ringR = 0.5f + (state.age * 0.03f) % 0.8f;
 
+        // Pieces layer: veil tendrils shaped around the silhouette, in
+        // local space (the pose sits at the entity feet, unrotated, so the
+        // synced front and right vectors are plain offsets). A rising fan
+        // of three strands from the feet, two strands curling up the sides
+        // of the body, and one short strand at the hair cap: six tendrils
+        // at full spine samples is 2304 vertices, inside the class M
+        // budget of 2500. Alpha stays honest for a veil body and the fade
+        // rides the envelope, so the shader dissolves the strands only in
+        // the tail of the same 100 tick curve.
+        float pieceEnv = (1.0f - progress * progress) * pulse;
+        if (pieceEnv > 0.02f && ds > 0.05f) {
+            final Vec3 frontL = s.front;
+            final Vec3 rightL = s.right;
+            final float spreadL = s.spread;
+            final int tipHair = hairArgb;
+            final int rootBody = bodyArgb;
+            final long pseed = state.seed;
+            final float pds = FxEnvelope.distScale(Math.sqrt(Math.max(0.0, state.distanceToCameraSq)));
+            ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                ComplexGeometry.tendrilFan(pose, buffer, pseed ^ 0xA11L,
+                    new Vec3(0, 0.12, 0), new Vec3(0, 1, 0), 20f, 1.80f * spreadL, 3,
+                    0.15f, 0x1AD9FF, tipHair, 0.88f, pieceEnv, pds);
+                for (int side = -1; side <= 1; side += 2) {
+                    Vec3 from = rightL.scale(0.34 * side * spreadL).add(0, 0.30, 0);
+                    Vec3 control = rightL.scale(0.50 * side * spreadL).add(0, 1.05, 0)
+                        .add(frontL.scale(0.14 * side));
+                    Vec3 to = rightL.scale(0.20 * side * spreadL).add(0, 1.86, 0)
+                        .add(frontL.scale(0.05));
+                    ComplexGeometry.tendril(pose, buffer, pseed ^ (side < 0 ? 0xA22L : 0xA33L),
+                        from, control, to, 0.17f, rootBody, 0x1AD9FF, 0.88f, pieceEnv, pds);
+                }
+                Vec3 hairFrom = frontL.scale(0.04).add(0, 1.50, 0).add(rightL.scale(-0.16));
+                Vec3 hairControl = frontL.scale(-0.10).add(0, 1.78, 0);
+                Vec3 hairTo = frontL.scale(0.04).add(0, 1.66, 0).add(rightL.scale(0.18));
+                ComplexGeometry.tendril(pose, buffer, pseed ^ 0xA44L,
+                    hairFrom, hairControl, hairTo, 0.13f, tipHair, 0xD9FBFF, 0.88f, pieceEnv, pds);
+            });
+        }
+
         s.dark.tick(delta, env);
         s.soul.tick(delta, env * 0.9f);
+        s.wisp.tick(delta, env * 0.9f);
         s.hair.tick(delta, env * 0.9f);
         s.eye.tick(delta, env * 0.95f);
         s.scan.tick(delta, env * 0.65f);

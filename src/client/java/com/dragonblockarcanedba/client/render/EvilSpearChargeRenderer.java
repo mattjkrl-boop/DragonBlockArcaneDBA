@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.EvilSpearChargeEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -20,13 +23,17 @@ import java.util.Map;
 /**
  * Entity renderer for the Evil Spear charge presentation in Minecraft 26.2.
  *
- * No-shapes pass: this renderer draws no geometry. The charge is carried by
- * material emission around the caster: darkness smoke gathering at ground
- * level, hellfire embers and flame moving through the column, a crimson
- * plasma core at spear height, and pale soul vapor drifting through the same
- * volume. The entity still owns the charge ratio, release timing, sounds,
- * and server side particles; this class only replaces the old drawn seals,
- * bands, fans, and dome core with shared material emitters.
+ * Complex pass: a layered composition at class M. Five darkness strands
+ * run inward from the gathering ring to the core at spear height as veil
+ * tendrils on the alpha shader, rooted in near black darkness and ending
+ * in crimson at the core, and a small cluster of flame tongues licks at
+ * the spear tip through the additive shader. The complex particle layer
+ * is EMBER_FRAGMENT sprites shed from the ground ring. The material
+ * emission from the no-shapes pass stays as filler: darkness smoke
+ * gathering at ground level, hellfire embers and flame moving through
+ * the column, a crimson plasma core at spear height, and pale soul vapor
+ * drifting through the same volume. The entity still owns the charge
+ * ratio, release timing, sounds, and server side particles.
  */
 public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntity, EvilSpearChargeRenderer.ChargeRenderState> {
 
@@ -92,6 +99,41 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
             float envelope = lifecycle * distance;
 
             if (envelope > 0.01f) {
+                // Pieces layer, in local space (pose origin is the entity
+                // position, core at spear height 0.88 as in sampleCore).
+                // Five one-count tendrilFan strands rooted on the gathering
+                // ring and aimed at the core, so the fan reads inward.
+                // At distScale 0.66 each strand is about 256 vertices, and
+                // four flame tongues add about 192, for roughly 1470 total,
+                // inside the class M budget of 2500.
+                final long pieceSeed = state.seed;
+                final float pieceEnv = lifecycle;
+                final float pieceDs = distance;
+                final float ringR = radius * 0.95f;
+                final float strandW = 0.20f + charge * 0.10f;
+                final float sway = age * 0.40f;
+                final Vec3 core = new Vec3(0.0, 0.88, 0.0);
+                ComplexGeometry.submitVeil(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                    for (int i = 0; i < 5; i++) {
+                        double ang = i * Math.PI * 2.0 / 5.0 + age * 0.15
+                                + (pieceSeed & 63L) / 63.0 * 0.6;
+                        double height = 0.30 + (i % 3) * 0.55;
+                        Vec3 from = new Vec3(Math.cos(ang) * ringR, height, Math.sin(ang) * ringR);
+                        Vec3 dir = core.subtract(from);
+                        double len = dir.length();
+                        if (len < 0.05) continue;
+                        ComplexGeometry.tendrilFan(pose, buffer, pieceSeed ^ (0xE511L + i * 131L),
+                                from, dir.scale(1.0 / len), 4f, (float) len * 0.98f, 1,
+                                strandW, 0x26030B, 0xF20D33, 0.92f, pieceEnv, pieceDs * 0.66f);
+                    }
+                });
+                // Small flame tongues at the spear tip, at the core point.
+                ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.FLAME_TONGUE, (pose, buffer) ->
+                        ComplexGeometry.flameTongues(pose, buffer, pieceSeed ^ 0xF1A3L,
+                                new Vec3(0.0, 0.82, 0.0), 0.30f + charge * 0.14f,
+                                0.55f + charge * 0.50f, 4,
+                                0xFFF3D6, 0xF20D33, 0.95f, pieceEnv, sway, pieceDs));
+
                 EmissionRig rig = rigFor(level, state.seed, center, age);
                 rig.tick(center, charge, radius, envelope, age);
             }
@@ -135,6 +177,7 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
 
         private final MaterialEmitters.Emitter darkness;
         private final MaterialEmitters.Emitter embers;
+        private final MaterialEmitters.Emitter emberFragments;
         private final MaterialEmitters.Emitter flame;
         private final MaterialEmitters.Emitter plasma;
         private final MaterialEmitters.Emitter soul;
@@ -155,6 +198,12 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
             this.embers = new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.ember(new Vec3(0.0, 0.055, 0.0), 0.060f),
                     ground, 52f, 76);
+            // Complex particle layer: irregular ember fragments shed from
+            // the same ground ring as the round ember filler.
+            this.emberFragments = new MaterialEmitters.Emitter(level,
+                    MaterialEmitters.Preset.fixed(DbaParticles.EMBER_FRAGMENT,
+                            new Vec3(0.0, 0.055, 0.0), 0.050f),
+                    ground, 28f, 36);
             this.flame = new MaterialEmitters.Emitter(level,
                     MaterialEmitters.Preset.flame(new Vec3(0.0, 0.105, 0.0), 0.035f),
                     core, 36f, 56);
@@ -179,6 +228,7 @@ public class EvilSpearChargeRenderer extends EntityRenderer<EvilSpearChargeEntit
             float gathering = 0.45f + charge * 0.75f;
             darkness.tick(delta, envelope);
             embers.tick(delta, envelope * gathering);
+            emberFragments.tick(delta, envelope * gathering);
             flame.tick(delta, envelope * (0.35f + charge * 0.85f));
             plasma.tick(delta, envelope * (0.45f + charge * 0.80f));
             soul.tick(delta, envelope * (0.55f + charge * 0.45f));

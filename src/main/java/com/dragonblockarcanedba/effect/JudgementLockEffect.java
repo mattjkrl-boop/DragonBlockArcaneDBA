@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.effect;
 
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.particle.DbaMaterialOptions;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectCategory;
@@ -64,6 +65,12 @@ public class JudgementLockEffect extends MobEffect {
 
             level.sendParticles(
                 DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0x00E5FF, 1.4f, entity.getId() * 31 + entity.tickCount),
+                px, py, pz,
+                1, 0.0, 0.02, 0.0, 0.01
+            );
+            // Complex layer: temporal glass SHARD_CHIP at the same tick point and rate as the fracture plasma.
+            level.sendParticles(
+                DbaParticles.SHARD_CHIP,
                 px, py, pz,
                 1, 0.0, 0.02, 0.0, 0.01
             );

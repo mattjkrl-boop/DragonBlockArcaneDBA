@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.PowerPoleImpactEntity;
 import com.dragonblockarcanedba.particle.DbaParticles;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -12,6 +13,8 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -19,13 +22,16 @@ import java.util.Map;
 /**
  * Entity Renderer for Power Pole Impact in Minecraft 26.2.
  *
- * No-shapes conversion: this renderer draws no geometry. The impact is a
- * short material event at the strike point: an opening burst of gold and
- * crimson plasma, pale vapor, impact dust, and steel sparks, followed by
- * a brief expanding wash of the same materials in the strike plane as
- * the compression moves outward. The strike plane and expansion radius
- * are data sampled by the emitters; no dome, band, ring, starburst, or
- * shard is rendered.
+ * Complex pass: layered composition. The pieces layer is a small
+ * ComplexGeometry crackFan at the impact, drawn on a copy of the pose
+ * rotated so the fan plane is the strike plane (its normal is the
+ * strike direction), hot pale gold at the center running out to
+ * crimson at the tips, growing with the same shock expansion the
+ * filler wash uses, through the dissolve shader. The complex particle
+ * layer is a SHARD_CHIP burst in the opening burst. The material
+ * filler stays as before: an opening burst of gold and crimson
+ * plasma, pale vapor, impact dust, and steel sparks, followed by a
+ * brief expanding wash of the same materials in the strike plane.
  *
  * Lifecycle math is unchanged from the bespoke renderer: the expansion
  * eases out over the first 8 ticks and the whole event fades with the
@@ -112,6 +118,23 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
             rig.burstDone = true;
         }
         rig.tick(delta, fade * distScale);
+
+        // Pieces layer: a small crack fan on the strike plane. The
+        // crackFan builder draws in its local XZ plane, so the piece
+        // rotates a copy of the submitted pose to carry that plane
+        // onto the strike plane, exactly as the filler wash is framed.
+        final Vec3 gForward = direction(state.yRot, state.xRot);
+        final Vector3f gFwd = new Vector3f((float) gForward.x, (float) gForward.y, (float) gForward.z);
+        final float gRadius = state.scale * (0.70f + 0.60f * shockProgress);
+        final float gEnv = fade;
+        final float gDist = distScale;
+        final long gSeed = state.seed;
+        ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+            PoseStack.Pose flat = pose.copy();
+            flat.rotate(new Quaternionf().rotateTo(new Vector3f(0.0f, 1.0f, 0.0f), gFwd));
+            ComplexGeometry.crackFan(flat, buffer, gSeed ^ 0xC9ACL, gRadius,
+                0xFFF7D6, 0xE32636, 0.95f, gEnv, gDist);
+        });
 
         if (age >= maxLife) {
             RIGS.remove(state.entityId);
@@ -251,6 +274,12 @@ public class PowerPoleImpactRenderer extends EntityRenderer<PowerPoleImpactEntit
                 MaterialEmitters.Preset.fixed(DbaParticles.SPARK, frame.forward.scale(0.20), 0.50f),
                 MaterialEmitters.sphereVolume(frame.origin, 0.12 * frame.scale),
                 Math.round(16 * distScale));
+            // Complex particle layer: hard edged chip fragments thrown
+            // off the strike point, inside the class M burst budget.
+            MaterialEmitters.burst(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP, frame.forward.scale(0.18), 0.38f),
+                MaterialEmitters.sphereVolume(frame.origin, 0.12 * frame.scale),
+                Math.round(18 * distScale));
         }
 
         void tick(float delta, float envelope) {

@@ -68,6 +68,12 @@ public class EarthShatterEffect extends MobEffect {
                 px, py, pz,
                 1, 0.1, 0.1, 0.1, 0.05
             );
+            // Complex layer: earth and stone SHARD_CHIP at the same tick point and rate as the rubble and dust.
+            level.sendParticles(
+                DbaParticles.SHARD_CHIP,
+                px, py, pz,
+                1, 0.1, 0.1, 0.1, 0.05
+            );
         }
         return true;
     }

@@ -1,7 +1,10 @@
 package com.dragonblockarcanedba.client.render;
 
 import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.ki.ComplexTextures;
 import com.dragonblockarcanedba.entity.DimensionalSlashEntity;
+import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -15,18 +18,21 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Entity Renderer for Dimensional Slash in Minecraft 26.2.
- * No-shapes conversion: this renderer draws no geometry at all. The slash
- * is carried entirely by material particles emitted through the shared
- * MaterialEmitters toolkit, sampled across the cut plane the entity is
- * actually travelling on (emission points are data, not a mesh):
+ * Complex pass: a layered composition. The pieces layer is the cut body:
+ * one thick ComplexGeometry tendril strand with torn pinches swept tip
+ * to tip across the cut plane and bowed along the old crescent belly,
+ * with a thinner white core strand and a reversed rim strand nested in
+ * it, all through the shader tendril canvas. The complex particle layer
+ * is SHARD_CHIP spatial fragments fraying off the two pinched tips. The
+ * material emission stays as filler only, sampled across the cut plane
+ * the entity is actually travelling on:
  * - Void plasma in the crescent's three theme stops (abyssal violet, neon
  *   blood-magenta, white tear) streaming backward off the cut
  * - A dense white plasma core where the singularity pearl used to sit
  * - Darkness vapor wrapping the cut and spatial glass dust fraying off the
  *   two tips
  * Lifecycle, tilt, spin wobble timing, first-person scale-in, and the
- * lingering tear fade are the same numbers the geometry version used; only
- * the presentation material changed.
+ * lingering tear fade are the same numbers the geometry version used.
  */
 public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEntity, DimensionalSlashRenderer.SlashRenderState> {
 
@@ -183,7 +189,10 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
             MaterialEmitters.sphereVolume(center, 1.45f * scaleAll),
             80f, 100).tick(delta, residueEnv);
 
-        // Spatial glass dust fraying off the two pinched tips.
+        // Spatial glass dust fraying off the two pinched tips, with the
+        // complex particle layer riding the same tips: SHARD_CHIP spatial
+        // fragments shed at the rim, inside the 40 per second continuous
+        // budget per emitter.
         for (int s = -1; s <= 1; s += 2) {
             Vec3 tip = center.add(right.scale(s * halfWidth * 0.92f)).add(up.scale(0.05f));
             new MaterialEmitters.Emitter(level,
@@ -191,6 +200,42 @@ public class DimensionalSlashRenderer extends EntityRenderer<DimensionalSlashEnt
                     forward.scale(-0.22).add(right.scale(s * 0.10)), 0.05f),
                 MaterialEmitters.sphereVolume(tip, 0.30f * scaleAll),
                 80f, 95).tick(delta, residueEnv);
+            new MaterialEmitters.Emitter(level,
+                MaterialEmitters.Preset.fixed(DbaParticles.SHARD_CHIP,
+                    forward.scale(-0.22).add(right.scale(s * 0.10)), 0.05f),
+                MaterialEmitters.sphereVolume(tip, 0.30f * scaleAll),
+                28f, 40).tick(delta, residueEnv);
+        }
+
+        // Pieces layer, class L on one builder type at full strand count:
+        // three tendrils in the cut plane, drawn in entity local space
+        // along the same right, up, and forward basis the emission samples.
+        // The bezier control sits twice as far along up as the belly the
+        // cut plane samples, so the strands crest on the same bowed line.
+        // Vertices: three tendrils at at most 24 samples each stay near
+        // 1150, inside the class L budget of 6000.
+        float pieceEnv = fade * (lingerT >= 0.0f ? 1.0f - 0.55f * lingerT : 1.0f);
+        if (pieceEnv > 0.02f) {
+            ComplexGeometry.submitEnergy(collector, poseStack, ComplexTextures.TENDRIL, (pose, buffer) -> {
+                Vec3 from = right.scale(-halfWidth).add(up.scale(0.05f * scaleAll));
+                Vec3 to = right.scale(halfWidth).add(up.scale(0.05f * scaleAll));
+                Vec3 control = up.scale(1.05f * scaleAll).add(forward.scale(0.10f * scaleAll));
+                ComplexGeometry.tendril(pose, buffer, seed ^ 0xD51A,
+                    from, control, to,
+                    0.85f * scaleAll * pulse, 0xA60DF2, 0xFF1A59, 0.95f, pieceEnv, distScale);
+                Vec3 coreFrom = right.scale(-halfWidth * 0.80f).add(up.scale(0.10f * scaleAll));
+                Vec3 coreTo = right.scale(halfWidth * 0.80f).add(up.scale(0.10f * scaleAll));
+                Vec3 coreControl = up.scale(0.88f * scaleAll).add(forward.scale(0.22f * scaleAll));
+                ComplexGeometry.tendril(pose, buffer, seed ^ 0xD52B,
+                    coreFrom, coreControl, coreTo,
+                    0.32f * scaleAll * pulse, 0xFFFFFF, 0xFF26D9, 0.95f, pieceEnv, distScale);
+                Vec3 rimFrom = right.scale(-halfWidth * 0.97f).add(up.scale(0.02f * scaleAll));
+                Vec3 rimTo = right.scale(halfWidth * 0.97f).add(up.scale(0.02f * scaleAll));
+                Vec3 rimControl = up.scale(1.12f * scaleAll).add(forward.scale(-0.14f * scaleAll));
+                ComplexGeometry.tendril(pose, buffer, seed ^ 0xD53C,
+                    rimFrom, rimControl, rimTo,
+                    0.28f * scaleAll, 0xFF1A59, 0xA60DF2, 0.90f, pieceEnv, distScale);
+            });
         }
 
         super.submit(state, poseStack, collector, cameraState);
