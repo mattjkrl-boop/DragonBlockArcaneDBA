@@ -1,8 +1,7 @@
 {
-  "transform_generic": {
-    "subtitle": "Transformation",
+  "ability_charge": {
     "sounds": [
-      "dragonblockarcanedba:transform_generic"
+      "dragonblockarcanedba:ability_charge"
     ]
   },
   "arcosian_hurt": {
@@ -11,22 +10,149 @@
       "dragonblockarcanedba:arcosian_hurt"
     ]
   },
-  "namekian_hurt": {
-    "subtitle": "Namekian Hurt",
+  "beam_charge": {
     "sounds": [
-      "dragonblockarcanedba:namekian_hurt"
+      "dragonblockarcanedba:beam_charge"
     ]
   },
-  "saiyan_hurt": {
-    "subtitle": "Saiyan Hurt",
+  "beam_fire": {
     "sounds": [
-      "dragonblockarcanedba:saiyan_hurt"
+      "dragonblockarcanedba:beam_fire"
     ]
   },
-  "space_pod_launch": {
-    "subtitle": "Space Pod Launch",
+  "blade_shing": {
     "sounds": [
-      "dragonblockarcanedba:space_pod_launch"
+      "dragonblockarcanedba:blade_shing"
+    ]
+  },
+  "blaster_shot": {
+    "sounds": [
+      "dragonblockarcanedba:blaster_shot"
+    ]
+  },
+  "boom_big": {
+    "sounds": [
+      "dragonblockarcanedba:boom_big"
+    ]
+  },
+  "boom_holy": {
+    "sounds": [
+      "dragonblockarcanedba:boom_holy"
+    ]
+  },
+  "boom_sonic": {
+    "sounds": [
+      "dragonblockarcanedba:boom_sonic"
+    ]
+  },
+  "cast_dark": {
+    "sounds": [
+      "dragonblockarcanedba:cast_dark"
+    ]
+  },
+  "cast_magic": {
+    "sounds": [
+      "dragonblockarcanedba:cast_magic"
+    ]
+  },
+  "chain_rattle": {
+    "sounds": [
+      "dragonblockarcanedba:chain_rattle"
+    ]
+  },
+  "charge_dark": {
+    "sounds": [
+      "dragonblockarcanedba:charge_dark"
+    ]
+  },
+  "charge_full": {
+    "sounds": [
+      "dragonblockarcanedba:charge_full"
+    ]
+  },
+  "charge_hum": {
+    "sounds": [
+      "dragonblockarcanedba:charge_hum"
+    ]
+  },
+  "charge_rise": {
+    "sounds": [
+      "dragonblockarcanedba:charge_rise"
+    ]
+  },
+  "crit_hit": {
+    "sounds": [
+      "dragonblockarcanedba:crit_hit"
+    ]
+  },
+  "crystal_chime": {
+    "sounds": [
+      "dragonblockarcanedba:crystal_chime"
+    ]
+  },
+  "dark_pulse": {
+    "sounds": [
+      "dragonblockarcanedba:dark_pulse"
+    ]
+  },
+  "extinguish": {
+    "sounds": [
+      "dragonblockarcanedba:extinguish"
+    ]
+  },
+  "fire_ignite": {
+    "sounds": [
+      "dragonblockarcanedba:fire_ignite"
+    ]
+  },
+  "fire_shot": {
+    "sounds": [
+      "dragonblockarcanedba:fire_shot"
+    ]
+  },
+  "fizzle": {
+    "sounds": [
+      "dragonblockarcanedba:fizzle"
+    ]
+  },
+  "flight_wind": {
+    "sounds": [
+      "dragonblockarcanedba:flight_wind"
+    ]
+  },
+  "glass_crack": {
+    "sounds": [
+      "dragonblockarcanedba:glass_crack"
+    ]
+  },
+  "ground_crack": {
+    "sounds": [
+      "dragonblockarcanedba:ground_crack"
+    ]
+  },
+  "heartbeat_dark": {
+    "sounds": [
+      "dragonblockarcanedba:heartbeat_dark"
+    ]
+  },
+  "heavy_impact": {
+    "sounds": [
+      "dragonblockarcanedba:heavy_impact"
+    ]
+  },
+  "hit_flesh": {
+    "sounds": [
+      "dragonblockarcanedba:hit_flesh"
+    ]
+  },
+  "hit_metal": {
+    "sounds": [
+      "dragonblockarcanedba:hit_metal"
+    ]
+  },
+  "item_shatter": {
+    "sounds": [
+      "dragonblockarcanedba:item_shatter"
     ]
   },
   "kamehameha_charge": {
@@ -41,64 +167,153 @@
       "dragonblockarcanedba:kamehameha_fire"
     ]
   },
-  "ability_charge": {
-    "subtitle": "Ability charges",
+  "lava_bubble": {
     "sounds": [
-      "dragonblockarcanedba:ability_charge"
-    ]
-  },
-  "blade_shing": {
-    "subtitle": "Blade rings",
-    "sounds": [
-      "dragonblockarcanedba:blade_shing"
-    ]
-  },
-  "blaster_shot": {
-    "subtitle": "Blaster fires",
-    "sounds": [
-      "dragonblockarcanedba:blaster_shot"
-    ]
-  },
-  "dark_pulse": {
-    "subtitle": "Dark pulse",
-    "sounds": [
-      "dragonblockarcanedba:dark_pulse"
-    ]
-  },
-  "heavy_impact": {
-    "subtitle": "Heavy impact",
-    "sounds": [
-      "dragonblockarcanedba:heavy_impact"
+      "dragonblockarcanedba:lava_bubble"
     ]
   },
   "lightning_zap": {
-    "subtitle": "Lightning crackles",
     "sounds": [
       "dragonblockarcanedba:lightning_zap"
     ]
   },
+  "mark_hit": {
+    "sounds": [
+      "dragonblockarcanedba:mark_hit"
+    ]
+  },
+  "namekian_hurt": {
+    "subtitle": "Namekian Hurt",
+    "sounds": [
+      "dragonblockarcanedba:namekian_hurt"
+    ]
+  },
+  "release_blast": {
+    "sounds": [
+      "dragonblockarcanedba:release_blast"
+    ]
+  },
+  "release_dark": {
+    "sounds": [
+      "dragonblockarcanedba:release_dark"
+    ]
+  },
+  "rift_ambient": {
+    "sounds": [
+      "dragonblockarcanedba:rift_ambient"
+    ]
+  },
+  "rift_open": {
+    "sounds": [
+      "dragonblockarcanedba:rift_open"
+    ]
+  },
   "saber_hum": {
-    "subtitle": "Saber hums",
     "sounds": [
       "dragonblockarcanedba:saber_hum"
     ]
   },
+  "saiyan_hurt": {
+    "subtitle": "Saiyan Hurt",
+    "sounds": [
+      "dragonblockarcanedba:saiyan_hurt"
+    ]
+  },
+  "shield_clank": {
+    "sounds": [
+      "dragonblockarcanedba:shield_clank"
+    ]
+  },
+  "slam_thud": {
+    "sounds": [
+      "dragonblockarcanedba:slam_thud"
+    ]
+  },
   "slash_whoosh": {
-    "subtitle": "Slash whooshes",
     "sounds": [
       "dragonblockarcanedba:slash_whoosh"
     ]
   },
+  "soul_drift": {
+    "sounds": [
+      "dragonblockarcanedba:soul_drift"
+    ]
+  },
+  "space_pod_launch": {
+    "subtitle": "Space Pod Launch",
+    "sounds": [
+      "dragonblockarcanedba:space_pod_launch"
+    ]
+  },
+  "swing_fan": {
+    "sounds": [
+      "dragonblockarcanedba:swing_fan"
+    ]
+  },
+  "swing_heavy": {
+    "sounds": [
+      "dragonblockarcanedba:swing_heavy"
+    ]
+  },
+  "swing_light": {
+    "sounds": [
+      "dragonblockarcanedba:swing_light"
+    ]
+  },
+  "teleport_whoosh": {
+    "sounds": [
+      "dragonblockarcanedba:teleport_whoosh"
+    ]
+  },
+  "thunder_crack": {
+    "sounds": [
+      "dragonblockarcanedba:thunder_crack"
+    ]
+  },
+  "thunder_dark": {
+    "sounds": [
+      "dragonblockarcanedba:thunder_dark"
+    ]
+  },
+  "thunk": {
+    "sounds": [
+      "dragonblockarcanedba:thunk"
+    ]
+  },
   "time_stop": {
-    "subtitle": "Time stops",
     "sounds": [
       "dragonblockarcanedba:time_stop"
     ]
   },
+  "transform_generic": {
+    "subtitle": "Transformation",
+    "sounds": [
+      "dragonblockarcanedba:transform_generic"
+    ]
+  },
+  "trident_hit": {
+    "sounds": [
+      "dragonblockarcanedba:trident_hit"
+    ]
+  },
+  "trident_throw": {
+    "sounds": [
+      "dragonblockarcanedba:trident_throw"
+    ]
+  },
+  "void_ambient": {
+    "sounds": [
+      "dragonblockarcanedba:void_ambient"
+    ]
+  },
   "wind_gust": {
-    "subtitle": "Wind gusts",
     "sounds": [
       "dragonblockarcanedba:wind_gust"
+    ]
+  },
+  "zap_dark": {
+    "sounds": [
+      "dragonblockarcanedba:zap_dark"
     ]
   }
 }

@@ -1,8 +1,8 @@
 package com.dragonblockarcanedba.util;
 
 import com.dragonblockarcanedba.config.DbaEffectsConfig;
+import com.dragonblockarcanedba.particle.DbaDustOptions;
 import com.dragonblockarcanedba.particle.DbaParticles;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -18,8 +18,9 @@ import net.minecraft.world.phys.Vec3;
 public final class LayeredParticles {
     private LayeredParticles() {}
 
-    public static DustParticleOptions dust(int argb, float scale) {
-        return new DustParticleOptions(argb & 0xFFFFFF, scale);
+    /** Theme dust on the mod's own THEME_DUST type (bespoke pass: no vanilla dust). */
+    public static DbaDustOptions dust(int argb, float scale) {
+        return new DbaDustOptions(argb & 0xFFFFFF, scale);
     }
 
     private static int scaled(float base, float envelope) {
@@ -54,7 +55,7 @@ public final class LayeredParticles {
 
         // Mid: theme colored dust on a helical band, the layer that reads at range.
         int mid = scaled(5f, env);
-        DustParticleOptions midDust = dust(themeArgb, 1.4f);
+        DbaDustOptions midDust = dust(themeArgb, 1.4f);
         for (int i = 0; i < mid; i++) {
             double a = rand.nextDouble() * Math.PI * 2.0 + age * 0.15;
             double r = radius * (0.55 + 0.25 * rand.nextDouble());
@@ -82,7 +83,7 @@ public final class LayeredParticles {
         if (density <= 0f) return;
         RandomSource rand = level.getRandom();
         int n = Math.max(2, Math.round(14f * density));
-        DustParticleOptions dust = dust(themeArgb, 1.2f);
+        DbaDustOptions dust = dust(themeArgb, 1.2f);
         for (int i = 0; i < n; i++) {
             double a = rand.nextDouble() * Math.PI * 2.0;
             double r = radius * rand.nextDouble();
@@ -90,7 +91,7 @@ public final class LayeredParticles {
                 center.x + Math.cos(a) * r, center.y + 0.15, center.z + Math.sin(a) * r,
                 1, 0.25, 0.08, 0.25, 0.05);
             if (i % 3 == 0) {
-                level.sendParticles(net.minecraft.core.particles.ParticleTypes.POOF,
+                level.sendParticles(DbaParticles.DUST_PUFF,
                     center.x + Math.cos(a) * r, center.y + 0.3, center.z + Math.sin(a) * r,
                     1, 0.2, 0.1, 0.2, 0.03);
             }

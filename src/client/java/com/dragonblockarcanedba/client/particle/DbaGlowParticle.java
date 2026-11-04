@@ -21,6 +21,14 @@ public class DbaGlowParticle extends SingleQuadParticle {
     public static final Style VOID_SMOKE = new Style(0.35f, 0.1f, 0.5f, 0.05f, 0.0f, 0.08f, 20, 36, 0.35f, 1.2f, -0.01f, 0.9f, false);
     public static final Style KI_MOTE = new Style(1f, 0.93f, 0.72f, 1f, 0.72f, 0.35f, 16, 30, 0.11f, 0.25f, -0.015f, 0.96f, true);
     public static final Style WIND = new Style(0.9f, 0.97f, 1f, 0.7f, 0.85f, 1f, 8, 14, 0.25f, 0.8f, 0f, 0.92f, true);
+    // Bespoke pass styles.
+    public static final Style ASH = new Style(0.17f, 0.15f, 0.19f, 0.05f, 0.05f, 0.07f, 26, 48, 0.16f, 0.9f, 0.012f, 0.96f, false);
+    public static final Style WISP = new Style(0.75f, 0.95f, 1f, 0.4f, 0.6f, 1f, 30, 60, 0.14f, 0.2f, -0.02f, 0.97f, true);
+    public static final Style RAIN = new Style(0.65f, 0.78f, 1f, 0.5f, 0.65f, 0.95f, 10, 16, 0.3f, 0f, 0.35f, 0.98f, true);
+    public static final Style DUST_PUFF = new Style(0.92f, 0.9f, 0.88f, 0.74f, 0.72f, 0.7f, 14, 26, 0.28f, 1.6f, -0.005f, 0.92f, false);
+    public static final Style CRIT_SPARK = new Style(1f, 0.98f, 0.85f, 1f, 0.75f, 0.3f, 8, 14, 0.16f, -0.4f, 0.25f, 0.9f, true);
+    public static final Style FLAME_TONGUE = new Style(1f, 0.85f, 0.45f, 0.95f, 0.3f, 0.05f, 10, 20, 0.2f, -0.2f, -0.06f, 0.92f, true);
+    public static final Style BLAST = new Style(1f, 0.95f, 0.85f, 0.68f, 0.58f, 0.5f, 12, 20, 0.55f, 2.2f, 0f, 0.9f, false);
 
     private final SpriteSet sprites;
     private final Style style;

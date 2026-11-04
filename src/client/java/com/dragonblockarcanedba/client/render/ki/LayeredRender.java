@@ -3,7 +3,6 @@ package com.dragonblockarcanedba.client.render.ki;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import org.joml.Matrix4f;
 
 /**
  * Shared layered geometry for spectacle effects (SPECTACLE-STANDARD point 1).
@@ -11,6 +10,13 @@ import org.joml.Matrix4f;
  * core 0.85, mid 0.45, outer 0.18, all multiplied by the lifecycle envelope
  * and by the distance scale, so all weapons share one visual language and
  * distant effects step down instead of costing full geometry.
+ *
+ * Bespoke pass: the shapes themselves come from BespokeGeometry (seeded,
+ * irregular, broken bands and a jittered glow fan). The signatures here are
+ * unchanged from the spectacle pass, so existing callers keep working; only
+ * the silhouette changed, from stacked regular rings to torn bespoke bands.
+ * Seeds derive from the layer dimensions, so a given effect's silhouette is
+ * stable frame to frame and identical on every client.
  *
  * All methods draw in entity local space (origin at the effect center, ground
  * at y = 0) inside an existing submitCustomGeometry call.
@@ -30,6 +36,10 @@ public final class LayeredRender {
         return com.dragonblockarcanedba.util.FxEnvelope.distScale(d);
     }
 
+    private static long seedFor(float radiusAt, float height, int layer) {
+        return (long) (radiusAt * 127.0f) * 2654435761L ^ (long) (height * 511.0f) * 40503L ^ layer * 7919L;
+    }
+
     /**
      * A standing vortex or column in three counter rotating bands:
      * a tight bright core, a theme mid band, and a wide wispy outer band whose
@@ -41,71 +51,35 @@ public final class LayeredRender {
                                        float r, float g, float b, float envelope,
                                        float distScale) {
         if (envelope <= 0.01f) return;
-        Matrix4f matrix = pose.pose();
-        band(matrix, buffer, pose, radiusAt * 0.38f, height, age * 2.6f,
+        vortexLayer(pose, buffer, seedFor(radiusAt, height, 0), radiusAt * 0.38f, height,
+            (float) Math.toRadians(age * 2.6f),
             Math.min(1f, r + 0.45f), Math.min(1f, g + 0.45f), Math.min(1f, b + 0.45f),
-            ALPHA_CORE * envelope, distScale, 0.9f);
-        band(matrix, buffer, pose, radiusAt, height, -age * 1.7f,
-            r, g, b, ALPHA_MID * envelope, distScale, 0.75f);
-        band(matrix, buffer, pose, radiusAt * 1.45f, height * 1.1f, age * 0.9f,
-            r, g, b, ALPHA_OUTER * envelope, distScale, 0.55f);
+            ALPHA_CORE * envelope, distScale);
+        vortexLayer(pose, buffer, seedFor(radiusAt, height, 1), radiusAt, height,
+            (float) Math.toRadians(-age * 1.7f),
+            r, g, b, ALPHA_MID * envelope, distScale);
+        vortexLayer(pose, buffer, seedFor(radiusAt, height, 2), radiusAt * 1.45f, height * 1.1f,
+            (float) Math.toRadians(age * 0.9f),
+            r, g, b, ALPHA_OUTER * envelope, distScale);
     }
 
-    /** One helical band: stacked rings whose centers rotate and shrink with height. */
-    private static void band(Matrix4f matrix, VertexConsumer buffer, PoseStack.Pose pose,
-                             float radius, float height, float rotDeg, float r, float g, float b,
-                             float alpha, float distScale, float topFade) {
-        int segments = com.dragonblockarcanedba.util.FxEnvelope.segments(28, distScale, 10);
-        int rings = 6;
-        float rot = (float) Math.toRadians(rotDeg);
-        for (int ring = 0; ring < rings; ring++) {
-            float t0 = ring / (float) rings;
-            float t1 = (ring + 1) / (float) rings;
-            float y0 = t0 * height;
-            float y1 = t1 * height;
-            float rad0 = radius * (1f - t0 * 0.35f);
-            float rad1 = radius * (1f - t1 * 0.35f);
-            float a0 = alpha * (1f - t0 * topFade);
-            float a1 = alpha * (1f - t1 * topFade);
-            float twist0 = rot + t0 * 1.9f;
-            float twist1 = rot + t1 * 1.9f;
-            for (int i = 0; i < segments; i++) {
-                double s0 = (i / (double) segments) * Math.PI * 2.0;
-                double s1 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-                float x0 = (float) Math.cos(s0 + twist0) * rad0, z0 = (float) Math.sin(s0 + twist0) * rad0;
-                float x1 = (float) Math.cos(s1 + twist0) * rad0, z1 = (float) Math.sin(s1 + twist0) * rad0;
-                float x2 = (float) Math.cos(s1 + twist1) * rad1, z2 = (float) Math.sin(s1 + twist1) * rad1;
-                float x3 = (float) Math.cos(s0 + twist1) * rad1, z3 = (float) Math.sin(s0 + twist1) * rad1;
-                KiRenderHelper.vertex(buffer, matrix, pose, x0, y0, z0, r, g, b, a0, 0, 0, 0, 1, 0);
-                KiRenderHelper.vertex(buffer, matrix, pose, x1, y0, z1, r, g, b, a0, 1, 0, 0, 1, 0);
-                KiRenderHelper.vertex(buffer, matrix, pose, x2, y1, z2, r, g, b, a1, 1, 1, 0, 1, 0);
-                KiRenderHelper.vertex(buffer, matrix, pose, x3, y1, z3, r, g, b, a1, 0, 1, 0, 1, 0);
-                KiRenderHelper.vertex(buffer, matrix, pose, x3, y1, z3, r, g, b, a1, 0, 1, 0, -1, 0);
-                KiRenderHelper.vertex(buffer, matrix, pose, x2, y1, z2, r, g, b, a1, 1, 1, 0, -1, 0);
-                KiRenderHelper.vertex(buffer, matrix, pose, x1, y0, z1, r, g, b, a0, 1, 0, 0, -1, 0);
-                KiRenderHelper.vertex(buffer, matrix, pose, x0, y0, z0, r, g, b, a0, 0, 0, 0, -1, 0);
-            }
-        }
+    /** One vortex layer: two stacked broken bands, shrinking and fading with height. */
+    private static void vortexLayer(PoseStack.Pose pose, VertexConsumer buffer, long seed,
+                                    float radius, float height, float twist,
+                                    float r, float g, float b, float alpha, float distScale) {
+        BespokeGeometry.brokenVortexBand(pose, buffer, seed, radius, 0f, height * 0.55f,
+            twist, r, g, b, alpha, distScale);
+        BespokeGeometry.brokenVortexBand(pose, buffer, seed ^ 0x77AA55L, radius * 0.8f,
+            height * 0.5f, height, twist + height * 0.55f * 0.4f,
+            r, g, b, alpha * 0.55f, distScale);
     }
 
-    /** Ground anchor glow: a soft additive style disc that grounds an effect to the world. */
+    /** Ground anchor glow: a soft splash of light that grounds an effect to the world. */
     public static void drawAnchorGlow(PoseStack.Pose pose, VertexConsumer buffer,
                                       float radius, float y, float r, float g, float b,
                                       float alpha, float distScale) {
         if (alpha <= 0.01f) return;
-        Matrix4f matrix = pose.pose();
-        int segments = com.dragonblockarcanedba.util.FxEnvelope.segments(24, distScale, 10);
-        for (int i = 0; i < segments; i++) {
-            double a0 = (i / (double) segments) * Math.PI * 2.0;
-            double a1 = ((i + 1) / (double) segments) * Math.PI * 2.0;
-            float x0 = (float) Math.cos(a0) * radius, z0 = (float) Math.sin(a0) * radius;
-            float x1 = (float) Math.cos(a1) * radius, z1 = (float) Math.sin(a1) * radius;
-            KiRenderHelper.vertex(buffer, matrix, pose, 0, y, 0, r, g, b, alpha, 0.5f, 0.5f, 0, 1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, x0, y, z0, r, g, b, alpha * 0.1f, 0, 0, 0, 1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, x1, y, z1, r, g, b, alpha * 0.1f, 1, 0, 0, 1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, x1, y, z1, r, g, b, alpha * 0.1f, 1, 0, 0, -1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, x0, y, z0, r, g, b, alpha * 0.1f, 0, 0, 0, -1, 0);
-            KiRenderHelper.vertex(buffer, matrix, pose, 0, y, 0, r, g, b, alpha, 0.5f, 0.5f, 0, -1, 0);
-        }
+        BespokeGeometry.glowFan(pose, buffer, (long) (radius * 997.0f) * 31L + 7L,
+            radius, y, r, g, b, alpha, distScale);
     }
 }

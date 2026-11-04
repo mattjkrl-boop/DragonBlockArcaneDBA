@@ -353,7 +353,7 @@ public class OxShockwaveEntity extends Projectile {
                 1, 0.02, 0.05, 0.02, 0.01);
         }
 
-        DustParticleOptions midDust = LayeredParticles.dust(0xFF7A1A, 1.5f);
+        com.dragonblockarcanedba.particle.DbaDustOptions midDust = LayeredParticles.dust(0xFF7A1A, 1.5f);
         int mid = Math.round(radius * 0.40f * density * env * layerScale);
         for (int i = 0; i < mid; i++) {
             double a = rand.nextDouble() * Math.PI * 2.0;
