@@ -26,6 +26,11 @@ public final class DbaParticleProviders {
         reg(DbaParticles.CLOUD_PUFF, DbaGlowParticle.CLOUD_PUFF);
         reg(DbaParticles.DAMAGE_SPARK, DbaGlowParticle.DAMAGE_SPARK);
         reg(DbaParticles.HAPPY_SPARKLE, DbaGlowParticle.HAPPY_SPARKLE);
+        reg(DbaParticles.SHARD_CHIP, DbaGlowParticle.SHARD_CHIP);
+        reg(DbaParticles.SPARK_STREAK, DbaGlowParticle.SPARK_STREAK);
+        reg(DbaParticles.WISP_CURL, DbaGlowParticle.WISP_CURL);
+        reg(DbaParticles.EMBER_FRAGMENT, DbaGlowParticle.EMBER_FRAGMENT);
+        reg(DbaParticles.ASH_FLAKE, DbaGlowParticle.ASH_FLAKE);
         regMaterial(DbaParticles.PLASMA, DbaMaterialOptions.PLASMA);
         regMaterial(DbaParticles.SMOKE, DbaMaterialOptions.SMOKE);
         regMaterial(DbaParticles.VAPOR, DbaMaterialOptions.VAPOR);
