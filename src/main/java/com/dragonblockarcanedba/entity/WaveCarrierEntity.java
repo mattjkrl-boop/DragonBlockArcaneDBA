@@ -108,7 +108,14 @@ public class WaveCarrierEntity extends CarrierEntity {
                 if (wave.selfLaunch() > 0 && !this.selfLaunched && owner != null) {
                     this.selfLaunched = true;
                     Vec3 vel = owner.getDeltaMovement();
-                    owner.setDeltaMovement(vel.x, Math.max(vel.y, wave.selfLaunch()), vel.z);
+                    Vec3 launched = new Vec3(vel.x, Math.max(vel.y, wave.selfLaunch()), vel.z);
+                    // A bare server setDeltaMovement on a player never reaches the
+                    // client; MovementPhysics syncs it.
+                    if (owner instanceof ServerPlayer sp) {
+                        com.dragonblockarcanedba.movement.MovementPhysics.setVelocity(sp, launched);
+                    } else {
+                        owner.setDeltaMovement(launched);
+                    }
                 }
                 // Phase 6: carrierHit summons, once per wave unless data says otherwise.
                 if (owner instanceof ServerPlayer serverOwner) {
