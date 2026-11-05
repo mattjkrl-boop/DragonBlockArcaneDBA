@@ -69,9 +69,22 @@ rejected, so typos fail loudly instead of silently doing nothing.
   lockout before the same player can start any other ability. These
   three numbers are the contract the Phase 2 animation layer will
   read; see the hooks section below.
-- animation (string, optional): reserved for Phase 2, the animation
-  clip id for this attack. Parsed and carried now so data written
-  this phase never needs a schema change when the layer lands.
+- animation (object, optional; shape defined by Phase 2): the cast
+  animation for this attack. id (required) names the release clip;
+  charge (optional) names a separate wind-up clip played across
+  startup instead of the release clip's own wind-up segment;
+  strikeAt (0.05 to 0.95, default 0.5) is the fraction of the
+  release clip where the strike frame sits, and that frame lands
+  exactly on the fire tick; followTicks (0 to 200, default 10)
+  caps the follow-through after the strike (the carrier's active
+  lifetime is not a body pose); channel (default false) holds the
+  pose just past the strike frame for the whole active phase
+  instead. Clip ids are Bedrock animation names (dotted lowercase
+  tokens); a malformed id or an out-of-range value is rejected at
+  parse time naming the field. The generic clip set lives in
+  assets/dragonblockarcanedba/animations/abilities.animation.json
+  (animation.ability.*). Abilities without the block cast exactly
+  as before, with no pose. See the Phase 2 section below.
 - chargeRelease (boolean, default false): when true, the attack
   charges while the button is held and fires on release, with power
   scaled by held fraction (see minPower). When false, pressing starts
@@ -276,3 +289,51 @@ against level game time.
   honest simple carrier geometry (band, dome, casing) behind the
   same renderer classes; the schema's visual block is where kit
   parameters will land.
+
+## Phase 2: the animation layer (landed)
+
+The layer is built on the mod's existing Bedrock animation engine
+(BedrockAnimationRegistry and BedrockAnimationApplier, the same
+JSON keyframe system that runs locomotion, emotes, and form
+transform clips), not on a new library. How it fits:
+
+- Priority: BedrockAnimationApplier gained one slot, directly
+  below the form transform clip and above emotes. A cast pose
+  overrides emotes, swings, item use, locomotion, and idle; it
+  never overrides death, sleep, the Azure rush pose, or a form
+  transformation, all of which return earlier in the cascade.
+- Sync: AbilityService broadcasts CastSyncPayload (entity id,
+  ability id, action, game tick) to the caster and every tracking
+  player at the three cast transitions: start (a cast registers),
+  fire (in fire(), the same tick the carrier spawns and the fire
+  sound plays), and cancel (charge replaced, weapon swapped, or
+  definition removed). Only abilities with an animation block
+  produce traffic. Poses are server-authoritative; there is no
+  client prediction, matching how carriers already appear.
+- Sampling: client/ability/CastAnimations.java holds one entry per
+  casting player and maps game time onto the clip: smoothstep
+  across startup for the wind-up gear (a charge clip when the
+  data names one, else the release clip's pre-strike segment),
+  then a cubic ease-out across followTicks plus recovery for the
+  strike snap and settle, the second gear. Channel animations
+  hold just past the strike frame across active instead. A fire
+  signal with no matching start (observer arrived mid-cast) is
+  reconstructed from the definition's startup.
+- Keyframe firing alignment: nothing new fires server-side. The
+  charge sound already plays at press, the fire sound and carrier
+  spawn already happen in fire(); the pose's strike frame is
+  pinned to the broadcast fire tick, so pose, carrier, and sound
+  share one tick by construction.
+- Charge read: client/render/ability/ChargeRingRenderer.java
+  draws a ground ring for every winding-up player from the same
+  cast store: radius grows with charge fraction, brightness and
+  the counter-rotating dashed arcs follow the cast's power curve,
+  colors come from the definition's visual block, distance
+  behavior from its caps block. The server-sent charge motes in
+  AbilityService remain as the decay layer around it.
+- Generic set: charge_stance (two-handed gather), overhead_release,
+  horizontal_release, thrust, channel_raise, point_slam. Every
+  release clip places its strike frame at half its length, the
+  schema's default strikeAt; durations come from each ability's
+  phases, never from the clip, so one clip serves a 6-tick cast
+  and a 60-tick cast alike.
