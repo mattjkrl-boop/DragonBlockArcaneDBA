@@ -1000,7 +1000,15 @@ public final class AbilityService {
                 horiz = horiz.normalize();
                 move.dashDirX = horiz.x;
                 move.dashDirZ = horiz.z;
-                move.ticksLeft = Math.max(1, (int) Math.ceil(def.move().distance() / 2.2));
+                double dashDistance = def.move().distance();
+                if (def.chargeRelease() && def.minPower() > 0) {
+                    // A charged dash travels farther the longer it was
+                    // charged: distance scales from the minPower fraction
+                    // at a tap to full distance at full power (Heroic
+                    // Dash: 8 to 24 blocks from distance 24, minPower 0.34).
+                    dashDistance *= def.minPower() + (1.0 - def.minPower()) * power;
+                }
+                move.ticksLeft = Math.max(1, (int) Math.ceil(dashDistance / 2.2));
             }
             case "slam" -> {
                 move.ticksLeft = 80;
