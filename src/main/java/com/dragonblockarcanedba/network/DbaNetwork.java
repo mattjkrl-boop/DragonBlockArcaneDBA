@@ -65,6 +65,8 @@ public class DbaNetwork {
         // Weapon clicks for data-driven abilities (C2S) and ability definition sync (S2C)
         PayloadTypeRegistry.serverboundPlay().register(C2SWeaponClickPayload.TYPE, C2SWeaponClickPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(AbilitySyncPayload.TYPE, AbilitySyncPayload.CODEC);
+        // Cast lifecycle for the Phase 2 animation layer (S2C)
+        PayloadTypeRegistry.clientboundPlay().register(CastSyncPayload.TYPE, CastSyncPayload.CODEC);
 
         // Movement verbs (C2S, Phase 5 movement layer)
         PayloadTypeRegistry.serverboundPlay().register(C2SMovementPayload.ID, C2SMovementPayload.CODEC);

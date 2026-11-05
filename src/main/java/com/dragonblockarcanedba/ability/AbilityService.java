@@ -8,8 +8,10 @@ import com.dragonblockarcanedba.entity.ProjectileCarrierEntity;
 import com.dragonblockarcanedba.entity.WaveCarrierEntity;
 import com.dragonblockarcanedba.network.AbilitySyncPayload;
 import com.dragonblockarcanedba.network.C2SWeaponClickPayload;
+import com.dragonblockarcanedba.network.CastSyncPayload;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -82,7 +84,11 @@ public final class AbilityService {
         UUID uuid = player.getUUID();
 
         // Starting anything cancels a charge in progress, silently.
-        CASTS.remove(uuid);
+        Cast replaced = CASTS.remove(uuid);
+        if (replaced != null) {
+            broadcastCast(player, AbilityRegistry.get(replaced.abilityId()),
+                    CastSyncPayload.ACTION_CANCEL, now);
+        }
 
         if (now < LOCKOUT.getOrDefault(uuid, 0L)) {
             return;
@@ -104,6 +110,7 @@ public final class AbilityService {
             return;
         }
         CASTS.put(uuid, new Cast(def.id(), now, def.chargeRelease()));
+        broadcastCast(player, def, CastSyncPayload.ACTION_START, now);
         playSoundId(player, def.sounds() != null ? def.sounds().charge() : null, 0.8f, 1.0f);
     }
 
@@ -116,6 +123,8 @@ public final class AbilityService {
         AbilityDef def = heldAbility(player, slot);
         CASTS.remove(uuid);
         if (def == null || !def.id().equals(cast.abilityId())) {
+            broadcastCast(player, AbilityRegistry.get(cast.abilityId()),
+                    CastSyncPayload.ACTION_CANCEL, player.level().getGameTime());
             return; // weapon changed mid-charge: the charge is gone
         }
         long held = player.level().getGameTime() - cast.startTick();
@@ -134,20 +143,28 @@ public final class AbilityService {
         AbilityDef def = AbilityRegistry.get(cast.abilityId());
         if (def == null) {
             CASTS.remove(uuid);
+            // The definition is gone (a reload removed it), so whether
+            // it had an animation block is unknowable here; the cancel
+            // goes out ungated and clients that track no cast for this
+            // player simply ignore it.
+            broadcastCastRaw(player, cast.abilityId(),
+                    CastSyncPayload.ACTION_CANCEL, player.level().getGameTime());
             return;
         }
         // The charge dies if the weapon leaves the main hand.
         AbilityDef held = heldAbility(player, def.slot());
         if (held == null || !held.id().equals(def.id())) {
             CASTS.remove(uuid);
+            broadcastCast(player, def, CastSyncPayload.ACTION_CANCEL, player.level().getGameTime());
             return;
         }
         long now = player.level().getGameTime();
         long elapsed = now - cast.startTick();
 
         // Charge dressing: sparse material motes in the ability's mid
-        // color gathering at the caster. This is the honest Phase 1
-        // stand-in; the animation layer owns charge poses later.
+        // color gathering at the caster. Since Phase 2 the animation
+        // layer owns the charge pose and the ground ring; these motes
+        // remain as the decay layer around both.
         if (player.level() instanceof ServerLevel serverLevel && elapsed % 2 == 0) {
             float frac = def.phases().startup() <= 0 ? 1f
                     : Math.min(1f, (float) elapsed / def.phases().startup());
@@ -219,6 +236,30 @@ public final class AbilityService {
             }
         }
         playSoundId(player, def.sounds() != null ? def.sounds().fire() : null, 1.0f, 1.0f);
+        broadcastCast(player, def, CastSyncPayload.ACTION_FIRE, now);
+    }
+
+    /**
+     * Tells the caster and everyone tracking them about a cast
+     * lifecycle transition, for the client animation layer. Only
+     * abilities whose data carries an animation block produce
+     * traffic; the packet is the whole signal (see CastSyncPayload
+     * for why start, fire, and cancel are each necessary).
+     */
+    private static void broadcastCast(ServerPlayer player, AbilityDef def, int action, long tick) {
+        if (def == null || def.animation() == null) {
+            return;
+        }
+        broadcastCastRaw(player, def.id(), action, tick);
+    }
+
+    private static void broadcastCastRaw(ServerPlayer player, Identifier abilityId, int action, long tick) {
+        CastSyncPayload payload = new CastSyncPayload(
+                player.getId(), abilityId.toString(), action, tick);
+        for (ServerPlayer viewer : PlayerLookup.tracking(player)) {
+            ServerPlayNetworking.send(viewer, payload);
+        }
+        ServerPlayNetworking.send(player, payload);
     }
 
     private static Vec3 anchorFor(ServerPlayer player, AbilityDef def) {
