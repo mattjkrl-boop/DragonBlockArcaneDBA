@@ -110,8 +110,8 @@ public final class AbilityDamage {
         applyHitScaled(level, def, direct, attacker, target, power, distFrac, meleeKind, 1.0);
     }
 
-    /** applyHit with an extra amount scale, for scaled area helpers. */
-    static void applyHitScaled(ServerLevel level, AbilityDef def, Entity direct, Entity attacker,
+    /** applyHit with an extra amount scale, for scaled area helpers and model zones. */
+    public static void applyHitScaled(ServerLevel level, AbilityDef def, Entity direct, Entity attacker,
                                LivingEntity target, float power, double distFrac, boolean meleeKind,
                                double scale) {
         float dmg = amount(def, attacker, power, distFrac, scale);

@@ -1,6 +1,9 @@
 package com.dragonblockarcanedba.entity;
 
+import com.dragonblockarcanedba.ability.AbilityDamage;
 import com.dragonblockarcanedba.ability.AbilityDef;
+import com.dragonblockarcanedba.ability.AbilityRegistry;
+import com.dragonblockarcanedba.movement.MovementPhysics;
 import com.geckolib.animatable.GeoEntity;
 import com.geckolib.animatable.instance.AnimatableInstanceCache;
 import com.geckolib.animatable.manager.AnimatableManager;
@@ -12,30 +15,35 @@ import com.geckolib.util.GeckoLibUtil;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
- * The one generic modeled presentation entity (Models Pass). An
- * ability definition's "models" block names a GeckoLib asset set;
- * this entity renders it through the dynamic GeoModel on the
- * client and runs one of five presentation behaviors on the
- * server: descend (plant from the air), fall (rain and shatter),
- * hang (freeze mid-air, then drop), bolt (fly the cast line), and
- * escort (ride the caster). It is pure presentation: it deals no
- * damage, blocks nothing, cannot be picked or hurt, refuses to
- * save, and discards itself on its data lifetime. The synced
+ * The one generic modeled entity (Models Pass). An ability
+ * definition's "models" block names a GeckoLib asset set; this
+ * entity renders it through the dynamic GeoModel on the client and
+ * runs presentation behaviors on the server (descend, fall, hang,
+ * bolt, escort, orbit, ride, burst). By default it is presentation
+ * only: noPhysics, cannot be picked or hurt, refuses to save, and
+ * discards itself on its data lifetime. Opt-in models.collide and
+ * models.zone (parsed on the AbilityDef) let a lingering piece
+ * block entities and projectiles, or apply per-tick damage, pull,
+ * slow, or knockback, with the caster always exempt. The synced
  * contract is the model name, the three clip names, the scale,
- * and the animation phase (0 spawn, 1 hold, 2 end) the server
- * derives from the behavior clock, so every observer plays the
- * same clip at the same tick.
+ * and the animation phase (0 spawn, 1 hold, 2 end).
  */
 public class ModelDisplayEntity extends Entity implements GeoEntity {
     private static final EntityDataAccessor<String> MODEL =
@@ -83,6 +91,14 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
     private double fallVelocity;
     private int groundedAge = -1;
     private Vec3 boltVelocity = Vec3.ZERO;
+
+    // Opt-in gameplay (models.collide / models.zone). Null means off.
+    private AbilityDef.ModelCollideSpec collide;
+    private AbilityDef.ModelZoneSpec zone;
+    private Identifier abilityDefId;
+    private float abilityPower = 1.0f;
+    /** Real caster for immunity and AbilityDamage; may differ from ownerUuid when orbiting a carrier. */
+    private UUID casterUuid;
 
     // Client-side clip cache (controllers run on the client).
     private String cachedClipName;
@@ -133,10 +149,27 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
         this.spawnTicks = Math.max(1, spec.spawnTicks());
         this.castDef = null;
         this.boltVelocity = boltVelocity == null ? Vec3.ZERO : boltVelocity;
+        this.collide = spec.collide();
+        this.zone = spec.zone();
         this.setPos(startPos.x, startPos.y, startPos.z);
         if (this.boltVelocity.lengthSqr() > 1.0e-6) {
             faceVelocity(this.boltVelocity);
         }
+    }
+
+    /**
+     * Binds the ability this piece came from so zone damage can use
+     * AbilityDamage with the same rules as carriers. Power is the
+     * cast power at spawn (1.0 for cast-trigger charge pieces).
+     */
+    public void bindAbility(Identifier defId, float power) {
+        bindAbility(defId, power, null);
+    }
+
+    public void bindAbility(Identifier defId, float power, UUID casterUuid) {
+        this.abilityDefId = defId;
+        this.abilityPower = power;
+        this.casterUuid = casterUuid != null ? casterUuid : this.ownerUuid;
     }
 
     public String getModelName() {
@@ -202,6 +235,175 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
                 }
             }
         }
+        if (!this.isRemoved()) {
+            tickGameplay(age);
+        }
+    }
+
+    /**
+     * Opt-in collide and zone. Runs after the presentation clock so
+     * the piece has its final position for the tick. Caster (ownerUuid)
+     * is never affected; owner-owned projectiles are left alone.
+     */
+    private void tickGameplay(int age) {
+        if (!(this.level() instanceof ServerLevel level)) {
+            return;
+        }
+        if (this.collide != null) {
+            tickCollide(level);
+        }
+        if (this.zone != null) {
+            tickZone(level, age);
+        }
+    }
+
+    private void tickCollide(ServerLevel level) {
+        AbilityDef.ModelCollideSpec box = this.collide;
+        double halfW = box.width() * 0.5;
+        double halfH = box.height() * 0.5;
+        double halfD = box.depth() * 0.5;
+        double reach = Math.max(box.width(), Math.max(box.height(), box.depth())) * 0.5
+                + Math.max(Math.abs(box.offsetX()), Math.max(Math.abs(box.offsetY()), Math.abs(box.offsetZ())))
+                + 2.0;
+        AABB broad = new AABB(
+                this.getX() - reach, this.getY() - reach, this.getZ() - reach,
+                this.getX() + reach, this.getY() + reach, this.getZ() + reach);
+        Entity caster = casterEntity(level);
+
+        if (box.entities()) {
+            List<LivingEntity> living = level.getEntitiesOfClass(LivingEntity.class, broad,
+                    e -> e.isAlive() && e != caster && (this.casterUuid == null || !this.casterUuid.equals(e.getUUID())));
+            for (LivingEntity e : living) {
+                double[] local = toLocal(e.getX() - this.getX(), e.getY() + e.getBbHeight() * 0.5 - this.getY(),
+                        e.getZ() - this.getZ());
+                double pad = e.getBbWidth() * 0.5;
+                double dx = local[0] - box.offsetX();
+                double dy = local[1] - box.offsetY();
+                double dz = local[2] - box.offsetZ();
+                if (Math.abs(dx) > halfW + pad || Math.abs(dy) > halfH + e.getBbHeight() * 0.5
+                        || Math.abs(dz) > halfD + pad) {
+                    continue;
+                }
+                // Push out along the shallowest local axis.
+                double penX = halfW + pad - Math.abs(dx);
+                double penY = halfH + e.getBbHeight() * 0.5 - Math.abs(dy);
+                double penZ = halfD + pad - Math.abs(dz);
+                Vec3 push;
+                if (penX <= penY && penX <= penZ) {
+                    push = fromLocal(Math.copySign(penX, dx == 0 ? 1 : dx), 0, 0);
+                } else if (penZ <= penY) {
+                    push = fromLocal(0, 0, Math.copySign(penZ, dz == 0 ? 1 : dz));
+                } else {
+                    push = fromLocal(0, Math.copySign(penY, dy == 0 ? 1 : dy), 0);
+                }
+                e.setPos(e.getX() + push.x, e.getY() + push.y, e.getZ() + push.z);
+                Vec3 cancel = new Vec3(
+                        push.x != 0 ? 0 : e.getDeltaMovement().x,
+                        push.y != 0 ? Math.min(0, e.getDeltaMovement().y) : e.getDeltaMovement().y,
+                        push.z != 0 ? 0 : e.getDeltaMovement().z);
+                if (e instanceof ServerPlayer sp) {
+                    MovementPhysics.setVelocity(sp, cancel);
+                } else {
+                    e.setDeltaMovement(cancel);
+                }
+            }
+        }
+
+        if (box.projectiles()) {
+            for (Projectile projectile : level.getEntitiesOfClass(Projectile.class, broad,
+                    pr -> !pr.isRemoved() && pr.getOwner() != caster
+                            && (this.casterUuid == null || pr.getOwner() == null
+                            || !this.casterUuid.equals(pr.getOwner().getUUID())))) {
+                double[] local = toLocal(projectile.getX() - this.getX(),
+                        projectile.getY() - this.getY(), projectile.getZ() - this.getZ());
+                double pad = Math.max(projectile.getBbWidth(), projectile.getBbHeight()) * 0.5;
+                if (Math.abs(local[0] - box.offsetX()) <= halfW + pad
+                        && Math.abs(local[1] - box.offsetY()) <= halfH + pad
+                        && Math.abs(local[2] - box.offsetZ()) <= halfD + pad) {
+                    projectile.discard();
+                }
+            }
+        }
+    }
+
+    private void tickZone(ServerLevel level, int age) {
+        AbilityDef.ModelZoneSpec zone = this.zone;
+        Entity caster = casterEntity(level);
+        double radius = zone.radius();
+        double halfH = zone.height() * 0.5;
+        AABB broad = new AABB(
+                this.getX() - radius - 2, this.getY() - halfH - 2, this.getZ() - radius - 2,
+                this.getX() + radius + 2, this.getY() + halfH + 2, this.getZ() + radius + 2);
+        List<LivingEntity> living = level.getEntitiesOfClass(LivingEntity.class, broad,
+                e -> e.isAlive() && e != caster && (this.casterUuid == null || !this.casterUuid.equals(e.getUUID())));
+        AbilityDef def = this.abilityDefId != null ? AbilityRegistry.get(this.abilityDefId) : null;
+        for (LivingEntity e : living) {
+            double dx = e.getX() - this.getX();
+            double dz = e.getZ() - this.getZ();
+            double horiz = Math.sqrt(dx * dx + dz * dz);
+            if (horiz > radius + e.getBbWidth() * 0.5) {
+                continue;
+            }
+            double midY = e.getY() + e.getBbHeight() * 0.5;
+            if (Math.abs(midY - this.getY()) > halfH + e.getBbHeight() * 0.5) {
+                continue;
+            }
+
+            Vec3 vel = e.getDeltaMovement();
+            if (zone.pull() != 0 && horiz > 1.0e-3) {
+                Vec3 dirIn = new Vec3(-dx / horiz, 0, -dz / horiz);
+                vel = vel.add(dirIn.scale(zone.pull() * 0.045));
+            }
+            if (zone.knockback() > 0 && horiz > 1.0e-3) {
+                Vec3 dirOut = new Vec3(dx / horiz, 0.05, dz / horiz);
+                vel = vel.add(dirOut.scale(zone.knockback()));
+            } else if (zone.knockback() > 0) {
+                vel = vel.add(0, zone.knockback() * 0.25, 0);
+            }
+            if (zone.slow() > 0) {
+                double keep = 1.0 - zone.slow();
+                vel = new Vec3(vel.x * keep, vel.y, vel.z * keep);
+            }
+            if (vel != e.getDeltaMovement()) {
+                if (e instanceof ServerPlayer sp) {
+                    MovementPhysics.setVelocity(sp, vel);
+                } else {
+                    e.setDeltaMovement(vel);
+                }
+            }
+
+            if (def != null && zone.damageInterval() > 0 && age % zone.damageInterval() == 0
+                    && zone.damageScale() > 0) {
+                double distFrac = radius <= 0 ? 0 : Math.min(1.0, horiz / radius);
+                AbilityDamage.applyHitScaled(level, def, this, caster, e,
+                        this.abilityPower, distFrac, false, zone.damageScale());
+            }
+        }
+    }
+
+    private Entity casterEntity(ServerLevel level) {
+        UUID id = this.casterUuid != null ? this.casterUuid : this.ownerUuid;
+        if (id == null) {
+            return null;
+        }
+        return level.getEntity(id);
+    }
+
+    /** World delta (wx, wy, wz) into model-local space for this piece's yaw. */
+    private double[] toLocal(double wx, double wy, double wz) {
+        double yaw = Math.toRadians(this.getYRot());
+        double cos = Math.cos(yaw);
+        double sin = Math.sin(yaw);
+        // Inverse of model +Z -> (sin yaw, -cos yaw): see yawFacing.
+        return new double[]{wx * cos + wz * sin, wy, wx * sin - wz * cos};
+    }
+
+    /** Model-local delta into world space for this piece's yaw. */
+    private Vec3 fromLocal(double lx, double ly, double lz) {
+        double yaw = Math.toRadians(this.getYRot());
+        double cos = Math.cos(yaw);
+        double sin = Math.sin(yaw);
+        return new Vec3(lx * cos + lz * sin, ly, lx * sin - lz * cos);
     }
 
     private void tickDescend(int age) {

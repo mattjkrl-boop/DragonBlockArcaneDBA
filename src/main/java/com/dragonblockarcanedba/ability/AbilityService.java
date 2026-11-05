@@ -1204,7 +1204,7 @@ public final class AbilityService {
             }
             e.teleportTo(to.x, to.y, to.z);
             e.setDeltaMovement(Vec3.ZERO);
-            e.hurtMarked = true;
+            com.dragonblockarcanedba.util.DbaCompat.markHurt(e);
             slot++;
         }
     }

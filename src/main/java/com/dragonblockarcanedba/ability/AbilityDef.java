@@ -278,24 +278,21 @@ public record AbilityDef(
                               int recallCooldownTicks, int starveCooldownTicks, int lockoutTicks) {}
 
     /**
-     * The models block (Models Pass): a modeled presentation set
-     * rendered by the one generic ModelDisplayEntity, never by
-     * per-weapon code. The model names a GeckoLib asset set under
-     * geckolib/models/entity/ (plus its texture, glowmask, and
-     * animation file of the same name). Behaviors are presentation
-     * only: descend plants pieces from the air onto the ground,
-     * fall rains them, hang freezes them mid-air before they drop,
-     * bolt flies them along the cast direction, and escort carries
-     * them with the caster, orbit circles the caster, ride glues a
-     * piece to a host entity, and burst plants pieces at a fixed
-     * point in the air (a ring around the anchor faces outward) for
-     * their lifetime. The block may be one object or an array of up
-     * to four sets. Trigger "step" spawns at each chain move hop
-     * from the spot the caster leaves; minPower gates a fire set on
-     * the release power (1.0 means full charge only).
-     * Trigger "finale" fires the set from a
-     * cloud carrier's finale instead of at cast fire. Damage,
-     * timing, and costs never read this block.
+     * The models block (Models Pass): a modeled set rendered by the
+     * one generic ModelDisplayEntity, never by per-weapon code. The
+     * model names a GeckoLib asset set under geckolib/models/entity/
+     * (plus its texture, glowmask, and animation file of the same
+     * name). Behaviors plant and move the pieces: descend, fall,
+     * hang, bolt, escort, orbit, ride, and burst. The block may be
+     * one object or an array of up to four sets. Trigger "step"
+     * spawns at each chain hop from the spot the caster leaves;
+     * minPower gates a fire set on the release power (1.0 means full
+     * charge only). Trigger "finale" fires the set from a cloud
+     * carrier's finale instead of at cast fire. Timing and costs
+     * never read this block. Opt-in collide and zone blocks (null
+     * means off) let a lingering piece block movement or projectiles,
+     * or apply per-tick damage, pull, slow, or knockback; the caster
+     * is always exempt.
      */
     public record ModelSpec(String model, int count, String formation, String behavior,
                             String trigger, double radius, double height, float scale,
@@ -303,22 +300,43 @@ public record AbilityDef(
                             double spin, int hangTicks, double speed, double forward,
                             double up, String animSpawn, String animHold, String animEnd,
                             float minPower, String animAlt, int spawnTicks,
-                            String anchor) {
+                            String anchor, ModelCollideSpec collide, ModelZoneSpec zone) {
 
         /** The same set with a different hold clip (animAlt alternation). */
         public ModelSpec withHold(String hold) {
             return new ModelSpec(model, count, formation, behavior, trigger, radius, height, scale,
                     lifetimeTicks, descendTicks, fallSpeed, spin, hangTicks, speed, forward, up,
-                    animSpawn, hold, animEnd, minPower, animAlt, spawnTicks, anchor);
+                    animSpawn, hold, animEnd, minPower, animAlt, spawnTicks, anchor, collide, zone);
         }
 
         /** The same set with a resolved lifetime. */
         public ModelSpec withLifetime(int ticks) {
             return new ModelSpec(model, count, formation, behavior, trigger, radius, height, scale,
                     ticks, descendTicks, fallSpeed, spin, hangTicks, speed, forward, up,
-                    animSpawn, animHold, animEnd, minPower, animAlt, spawnTicks, anchor);
+                    animSpawn, animHold, animEnd, minPower, animAlt, spawnTicks, anchor, collide, zone);
         }
     }
+
+    /**
+     * Opt-in oriented collide box on a model piece. Dimensions are full
+     * extents in model local space (width = X, height = Y, depth = Z),
+     * centered at the piece plus optional offsets. Absent means the
+     * piece does not block. entities and projectiles default true.
+     */
+    public record ModelCollideSpec(double width, double height, double depth,
+                                   double offsetX, double offsetY, double offsetZ,
+                                   boolean entities, boolean projectiles) {}
+
+    /**
+     * Opt-in cylindrical zone around a model piece. Absent means no
+     * zone. damageInterval 0 means no damage; pull uses the same
+     * units as cloud.pull; slow is 0 (off) to 1 (full stop) applied
+     * each tick to horizontal velocity; knockback is an outward
+     * impulse per tick while inside.
+     */
+    public record ModelZoneSpec(double radius, double height,
+                                int damageInterval, double damageScale,
+                                double pull, double slow, double knockback) {}
 
     /** The first ride set (swarm shard bodies), or null when none rides. */
     public ModelSpec rideModel() {
@@ -973,7 +991,12 @@ public record AbilityDef(
     private static final Set<String> MODELS_FIELDS = Set.of(
             "model", "count", "formation", "behavior", "trigger", "radius", "height",
             "scale", "lifetimeTicks", "descendTicks", "fallSpeed", "spin", "hangTicks",
-            "speed", "forward", "up", "animSpawn", "animHold", "animEnd", "minPower", "animAlt", "spawnTicks", "anchor");
+            "speed", "forward", "up", "animSpawn", "animHold", "animEnd", "minPower", "animAlt",
+            "spawnTicks", "anchor", "collide", "zone");
+    private static final Set<String> MODEL_COLLIDE_FIELDS = Set.of(
+            "width", "height", "depth", "offsetX", "offsetY", "offsetZ", "entities", "projectiles");
+    private static final Set<String> MODEL_ZONE_FIELDS = Set.of(
+            "radius", "height", "damageInterval", "damageScale", "pull", "slow", "knockback");
     private static final Set<String> MODELS_BEHAVIORS = Set.of(
             "descend", "fall", "escort", "bolt", "hang", "orbit", "ride", "burst");
     private static final Set<String> MODELS_FORMATIONS = Set.of(
@@ -1073,7 +1096,43 @@ public record AbilityDef(
                 // spawnTicks: how long orbit, ride and escort pieces play
                 // their spawn clip before holding (a titan's full rise)
                 (int) optDouble(m, "models.spawnTicks", "spawnTicks", 6, 1, 200),
-                anchor);
+                anchor,
+                parseModelCollide(m),
+                parseModelZone(m));
+    }
+
+    private static ModelCollideSpec parseModelCollide(JsonObject m) {
+        if (!m.has("collide")) {
+            return null;
+        }
+        JsonObject c = reqObject(m, "collide");
+        rejectUnknown(c, MODEL_COLLIDE_FIELDS, "models.collide");
+        double width = optDouble(c, "models.collide.width", "width", 1.0, 0.1, 64);
+        double height = optDouble(c, "models.collide.height", "height", 1.0, 0.1, 64);
+        double depth = optDouble(c, "models.collide.depth", "depth", 1.0, 0.1, 64);
+        return new ModelCollideSpec(
+                width, height, depth,
+                optDouble(c, "models.collide.offsetX", "offsetX", 0, -64, 64),
+                optDouble(c, "models.collide.offsetY", "offsetY", height * 0.5, -64, 64),
+                optDouble(c, "models.collide.offsetZ", "offsetZ", 0, -64, 64),
+                namedBool(c, "models.collide.entities", "entities", true),
+                namedBool(c, "models.collide.projectiles", "projectiles", true));
+    }
+
+    private static ModelZoneSpec parseModelZone(JsonObject m) {
+        if (!m.has("zone")) {
+            return null;
+        }
+        JsonObject z = reqObject(m, "zone");
+        rejectUnknown(z, MODEL_ZONE_FIELDS, "models.zone");
+        return new ModelZoneSpec(
+                optDouble(z, "models.zone.radius", "radius", 1.0, 0.1, 64),
+                optDouble(z, "models.zone.height", "height", 3.0, 0.1, 64),
+                (int) optDouble(z, "models.zone.damageInterval", "damageInterval", 0, 0, 72000),
+                optDouble(z, "models.zone.damageScale", "damageScale", 1.0, 0.0, 4),
+                optDouble(z, "models.zone.pull", "pull", 0, -4, 4),
+                optDouble(z, "models.zone.slow", "slow", 0, 0, 1),
+                optDouble(z, "models.zone.knockback", "knockback", 0, 0, 4));
     }
 
     private static final Set<String> BEAM_FIELDS = Set.of(

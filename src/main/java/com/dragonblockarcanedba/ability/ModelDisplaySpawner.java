@@ -12,14 +12,13 @@ import net.minecraft.world.phys.Vec3;
 import java.util.UUID;
 
 /**
- * Spawns the modeled presentation set of an ability definition's
- * "models" block (Models Pass). Two entry points mirror the two
- * moments a def can ask for models: at cast fire (called from the
- * one carrier spawn path, so casts, summons, moves, and channels
- * all dress the same way) and at a cloud carrier's finale. The
- * set is pure presentation: positions come from the formation,
- * the ground from the heightmap, and every behavior clock from
- * the data. Nothing here deals damage or reads combat state.
+ * Spawns the modeled set of an ability definition's "models" block
+ * (Models Pass). Entry points cover cast, fire, step, latch, and
+ * cloud finale. Positions come from the formation, the ground from
+ * the heightmap, and every behavior clock from the data. Opt-in
+ * collide and zone on a set are applied by ModelDisplayEntity;
+ * this spawner only places the pieces and binds the ability id and
+ * cast power so zone damage can reuse AbilityDamage.
  */
 public final class ModelDisplaySpawner {
     private ModelDisplaySpawner() {}
@@ -28,7 +27,7 @@ public final class ModelDisplaySpawner {
     public static void spawnForCast(ServerPlayer caster, AbilityDef def, int seed) {
         for (AbilityDef.ModelSpec spec : def.models()) {
             if ("cast".equals(spec.trigger()) && caster.level() instanceof ServerLevel level) {
-                spawnSet(level, caster, def, spec, caster.position(), spec.radius(), seed);
+                spawnSet(level, caster, def, spec, caster.position(), spec.radius(), seed, 1.0f);
             }
         }
     }
@@ -37,7 +36,7 @@ public final class ModelDisplaySpawner {
     public static void spawnForStep(ServerPlayer caster, AbilityDef def, Vec3 from, float yaw, int seed) {
         for (AbilityDef.ModelSpec spec : def.models()) {
             if ("step".equals(spec.trigger()) && caster.level() instanceof ServerLevel level) {
-                spawnSetRaw(level, def, spec, from, spec.radius(), caster.getUUID(), caster, seed, yaw);
+                spawnSetRaw(level, def, spec, from, spec.radius(), caster.getUUID(), caster, seed, yaw, 1.0f);
             }
         }
     }
@@ -57,7 +56,7 @@ public final class ModelDisplaySpawner {
                 // swarm shards host their own riders; any other carrier
                 // (a projectile, a wave) carries this piece itself
                 if (carrier != null && !(carrier instanceof com.dragonblockarcanedba.entity.SwarmHostEntity)) {
-                    spawnRider(level, spec, carrier);
+                    spawnRider(level, def, spec, carrier, power);
                 }
                 continue;
             }
@@ -65,19 +64,19 @@ public final class ModelDisplaySpawner {
                 // orbit the carrier (a rift, a cyclone, a latched chain
                 // cloud) and end with it
                 spawnSetRaw(level, def, spec, carrier.position(), spec.radius(), carrier.getUUID(),
-                        caster, seed, Float.NaN);
+                        caster, seed, Float.NaN, power);
                 continue;
             }
             if ("burst".equals(spec.behavior()) && "carrier".equals(spec.anchor()) && carrier != null) {
                 spawnSetRaw(level, def, spec, carrier.position(), spec.radius(), caster.getUUID(),
-                        caster, seed, carrier.getYRot());
+                        caster, seed, carrier.getYRot(), power);
                 continue;
             }
             // burst sets dress the caster's own body; the rest the carrier
             Vec3 anchor = carrier != null && !"burst".equals(spec.behavior())
                     ? carrier.position() : caster.position();
             float yaw = "burst".equals(spec.behavior()) ? caster.getYRot() : Float.NaN;
-            spawnSetRaw(level, def, spec, anchor, spec.radius(), caster.getUUID(), caster, seed, yaw);
+            spawnSetRaw(level, def, spec, anchor, spec.radius(), caster.getUUID(), caster, seed, yaw, power);
         }
     }
 
@@ -100,6 +99,8 @@ public final class ModelDisplaySpawner {
             for (int i = 0; i < spec.count(); i++) {
                 ModelDisplayEntity display = new ModelDisplayEntity(DbaEntities.MODEL_DISPLAY, level);
                 display.init(spec, target.getUUID(), i, target.getY(), target.position(), Vec3.ZERO);
+                // Latch pieces orbit the target; caster is the cloud's owner.
+                display.bindAbility(def.id(), 1.0f, cloud.getOwnerUuid());
                 display.bindToLatch(cloud.getUUID());
                 display.setYRot((float) baseAngle);
                 display.yRotO = display.getYRot();
@@ -132,17 +133,18 @@ public final class ModelDisplaySpawner {
     private static void spawnFinaleSet(ServerLevel level, AbilityDef def, AbilityDef.ModelSpec spec,
                                        Vec3 center, double areaRadius, UUID ownerUuid, int seed) {
         double radius = spec.radius() > 0 ? spec.radius() : areaRadius;
-        spawnSetRaw(level, def, spec, center, radius, ownerUuid, null, seed, Float.NaN);
+        spawnSetRaw(level, def, spec, center, radius, ownerUuid, null, seed, Float.NaN, 1.0f);
     }
 
     private static void spawnSet(ServerLevel level, ServerPlayer caster, AbilityDef def,
-                                 AbilityDef.ModelSpec spec, Vec3 anchor, double radius, int seed) {
-        spawnSetRaw(level, def, spec, anchor, radius, caster.getUUID(), caster, seed, Float.NaN);
+                                 AbilityDef.ModelSpec spec, Vec3 anchor, double radius, int seed,
+                                 float power) {
+        spawnSetRaw(level, def, spec, anchor, radius, caster.getUUID(), caster, seed, Float.NaN, power);
     }
 
     private static void spawnSetRaw(ServerLevel level, AbilityDef def, AbilityDef.ModelSpec specIn,
                                     Vec3 anchor, double radius, UUID ownerUuid,
-                                    ServerPlayer caster, int seed, float fixedYaw) {
+                                    ServerPlayer caster, int seed, float fixedYaw, float power) {
         AbilityDef.ModelSpec spec = specIn;
         if (spec.lifetimeTicks() <= 0) {
             // Derive the lifetime the data left open: the carrier's
@@ -235,6 +237,8 @@ public final class ModelDisplaySpawner {
                 }
             }
             display.init(spec, ownerUuid, i, targetY, start, boltVelocity);
+            UUID casterId = caster != null ? caster.getUUID() : ownerUuid;
+            display.bindAbility(def.id(), power, casterId);
             if ("cast".equals(spec.trigger())) {
                 display.bindToCast(def.id());
             }
@@ -248,6 +252,18 @@ public final class ModelDisplaySpawner {
     public static void spawnRider(ServerLevel level, AbilityDef.ModelSpec spec, Entity host) {
         ModelDisplayEntity display = new ModelDisplayEntity(DbaEntities.MODEL_DISPLAY, level);
         display.init(spec, host.getUUID(), 0, host.getY(), host.position(), Vec3.ZERO);
+        display.setYRot(ModelDisplayEntity.yawFacingLook(host.getYRot()));
+        display.yRotO = display.getYRot();
+        level.addFreshEntity(display);
+    }
+
+    /** ride set with ability binding so an opted-in zone can resolve damage. */
+    public static void spawnRider(ServerLevel level, AbilityDef def, AbilityDef.ModelSpec spec,
+                                  Entity host, float power) {
+        ModelDisplayEntity display = new ModelDisplayEntity(DbaEntities.MODEL_DISPLAY, level);
+        display.init(spec, host.getUUID(), 0, host.getY(), host.position(), Vec3.ZERO);
+        Entity owner = host instanceof net.minecraft.world.entity.projectile.Projectile pr ? pr.getOwner() : null;
+        display.bindAbility(def.id(), power, owner != null ? owner.getUUID() : null);
         display.setYRot(ModelDisplayEntity.yawFacingLook(host.getYRot()));
         display.yRotO = display.getYRot();
         level.addFreshEntity(display);
