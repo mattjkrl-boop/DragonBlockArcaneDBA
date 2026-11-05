@@ -490,6 +490,152 @@ def temporal_strike_arc():
     return m
 
 
+# ================================================================ Heaven Splitter
+def heaven_slice_wall():
+    """Towering vertical slice of torn reality laid along the dash path: one continuous
+    white-hot seam, violet torn space either side, a jagged crown of torn lips with gold
+    rims, flapping torn edges, and lit obsidian ground wrenched up along the base.
+    Long axis runs back toward the caster (-Z) from where the wave died."""
+    m = Model("heaven_slice_wall", tex=256, bounds=8)
+    energy(m, "seam", "#B366FF", "#F4E6FF", "#FFFFFF")
+    energy(m, "tear", "#1A0633", "#6A2BD1", "#C9A8FF")
+    energy(m, "rim", "#8A5A00", "#FFD23F", "#FFF6D0")
+    m.material("rock", "obsidian", "#0E0A12", "#2A2230", "#4A4056")
+    L = 72
+    m.bone("root")
+    m.bone("core", "root")
+    m.bone("crown", "root", (0, 40, -L / 2))
+    m.bone("flaps", "root")
+    m.bone("rubble", "root")
+    # the sheet: a lens-shaped cut, tallest a third of the way back, tapering to both ends
+    m.box("core", (0, 20, -L / 2), (0.8, 40, L), "seam")
+    m.box("core", (0, 18, -L / 2), (3.0, 36, L - 6), "tear")
+    m.box("core", (0, 16, -L / 2), (4.4, 28, L - 18), "tear")
+    for z, h in ((-2, 26), (-L + 2, 22)):
+        m.box("core", (0, h / 2, z), (2.2, h, 6), "tear", rot=(0, 0, 0))
+    # jagged crown: torn lips at varying heights and lean, so the top is a ragged tear
+    for i in range(9):
+        z = -4 - i * 8
+        f = i / 8
+        h = 4 + 12 * math.sin(math.pi * min(1, f * 1.4)) + (4 if i % 2 else 0)
+        lean = (-22 if i % 2 else 18) + (i % 3) * 6
+        m.box("crown", (0, 38 + h / 2, z), (1.6, h, 6.5), "tear", rot=(lean, 0, 0))
+        m.box("crown", (0, 38 + h, z + (2 if i % 2 else -2)), (2.2, 1.6, 4), "rim", rot=(lean, 0, 0))
+    m.box("crown", (0, 40, -L / 2), (0.6, 4, L - 4), "seam")
+    # torn edges peeling away from the cut on both faces
+    for i in range(6):
+        z = -8 - i * 11
+        side = 1 if i % 2 else -1
+        m.box("flaps", (side * 2.8, 12 + (i * 9) % 22, z), (0.5, 9, 3), "rim",
+              rot=(20 * side, 0, 22 * side))
+    # the ground torn open and heaved up along the base (lit matter)
+    for i in range(6):
+        z = -6 - i * 12
+        side = 1 if i % 2 else -1
+        m.box("rubble", (side * (4 + (i % 3)), 1.8, z), (4.5, 3.6 + (i % 2) * 2, 6), "rock",
+              rot=(16 * side, 20 * i, 28 * side))
+    m.clip("tear", 0.7, "hold_on_last_frame", {
+        "core": {"scale": lambda t: [max(0.02, ease_out(clamp((t - 0.05) / 0.3))), max(0.02, ease_out(clamp(t / 0.35))), 1]},
+        "crown": {"scale": lambda t: [1, max(0.02, overshoot(clamp((t - 0.2) / 0.35))), 1]},
+        "flaps": {"scale": lambda t: [max(0.02, clamp((t - 0.35) / 0.2))] * 3},
+        "rubble": {"position": lambda t: [0, -5 + 5 * ease_out(clamp(t / 0.3)), 0]},
+    })
+    m.clip("pulse", 1.0, True, {
+        "core": {"scale": lambda t: [1 + 0.25 * wave(t, 0.5), 1, 1]},
+        "crown": {"scale": lambda t: [1, 1 + 0.06 * wave(t, 0.33), 1]},
+        "flaps": {"rotation": lambda t: [6 * wave(t, 0.5), 0, 4 * wave(t, 0.25)]},
+    })
+    m.clip("seal", 0.5, "hold_on_last_frame", {
+        "core": {"scale": lambda t: [max(0.02, 1 - ease_in(clamp(t / 0.3))), max(0.02, 1 - ease_in(t / 0.5)), 1]},
+        "crown": {"scale": lambda t: [max(0.02, 1 - ease_in(clamp(t / 0.3))), max(0.02, 1 - ease_in(t / 0.5)), 1]},
+        "flaps": {"scale": lambda t: [max(0.02, 1 - t / 0.25)] * 3},
+        "rubble": {"position": lambda t: [0, -5 * ease_in(t / 0.5), 0]},
+    })
+    return m
+
+
+# ================================================================ Z Shockwave
+def z_golden_vortex():
+    """Golden vortex wound round the caster while Z Shockwave charges: three tilted
+    spiral rings, rising spiral arms, a ground disc of compressed light."""
+    m = Model("z_golden_vortex", tex=256, bounds=5)
+    energy(m, "gold", "#8A4A00", "#FFD23F", "#FFFFFF")
+    energy(m, "amber", "#5A2A00", "#FF8C1A", "#FFE0A0")
+    energy(m, "core", "#B8860B", "#FFF2B0", "#FFFFFF")
+    m.bone("root")
+    for k in range(3):
+        m.bone("ring%d" % k, "root", (0, 6 + k * 9, 0))
+    m.bone("arms", "root")
+    m.bone("disc", "root")
+    for k in range(3):
+        r = 26 - k * 5
+        span = 300 - k * 30
+        seg = 2 * math.pi * r * span / 360 / 16 * 1.2
+        arc_xz(m, "ring%d" % k, r, 0, span, 16, (lambda seg: lambda f: (2.2 - 1.6 * f + 0.4, 1.0 - 0.5 * f, seg))(seg),
+               "gold" if k != 1 else "amber", y=6 + k * 9)
+    for j in range(4):
+        # rising spiral arm: overlapping streaks climbing and winding inward
+        for q in range(4):
+            a = math.radians(j * 90 + q * 22)
+            r = 22 - q * 3
+            m.box("arms", (r * math.sin(a), 3 + q * 7, r * math.cos(a)), (1.0, 1.0, 9), "amber",
+                  rot=(-28, math.degrees(a) + 90, 0))
+    for rot in (0, 30, 60):
+        m.box("disc", (0, 0.3, 0), (30, 0.4, 30), "amber", rot=(0, rot, 0))
+    for rot in (15, 45, 75):
+        m.box("disc", (0, 0.5, 0), (16, 0.4, 16), "core", rot=(0, rot, 0))
+    m.clip("spawn", 0.4, "hold_on_last_frame", {
+        "root": {"scale": lambda t: [max(0.02, overshoot(t / 0.4)), max(0.02, ease_out(t / 0.4)), max(0.02, overshoot(t / 0.4))]},
+    })
+    m.clip("spin", 1.0, True, {
+        "ring0": {"rotation": lambda t: [8, 360 * t, 0]},
+        "ring1": {"rotation": lambda t: [-10, -540 * t, 0]},
+        "ring2": {"rotation": lambda t: [6, 720 * t, 0]},
+        "arms": {"rotation": lambda t: [0, 360 * t, 0], "scale": lambda t: [1, 1 + 0.2 * wave(t, 0.25), 1]},
+        "disc": {"rotation": lambda t: [0, -180 * t, 0], "scale": lambda t: [1 + 0.06 * wave(t, 0.2), 1, 1 + 0.06 * wave(t, 0.2)]},
+    })
+    m.clip("end", 0.3, "hold_on_last_frame", {
+        "root": {"scale": lambda t: [1 + 0.8 * t / 0.3, max(0.02, 1 - t / 0.3), 1 + 0.8 * t / 0.3]},
+    })
+    return m
+
+
+# ================================================================ Grand Crescent Wave
+def grand_crescent():
+    """The Grand Crescent Wave: a broad horizontal amber crescent with a white leading
+    edge, a layered body, and trailing shock sheets, riding the release wave."""
+    m = Model("grand_crescent", tex=256, bounds=6)
+    energy(m, "edge", "#E8862E", "#FFF2D0", "#FFFFFF")
+    energy(m, "body", "#7A3A00", "#FFC44D", "#FFE9B0")
+    energy(m, "sheet", "#5A2A00", "#E8862E", "#FFD08A")
+    m.bone("root")
+    m.bone("edge", "root")
+    m.bone("body", "root")
+    m.bone("sheets", "root")
+    m.bone("tips", "root")
+    taper = lambda f: 1 - abs(f - 0.5) * 1.7
+    arc_xz(m, "edge", 30, -68, 68, 13, lambda f: (2.6 * taper(f) + 0.4, 1.0 * taper(f) + 0.4, 7.6), "edge", zoff=-16)
+    arc_xz(m, "body", 26, -60, 60, 11, lambda f: (8.0 * taper(f) + 0.8, 1.6 * taper(f) + 0.6, 8.0), "body", zoff=-16)
+    arc_xz(m, "sheets", 24, -48, 48, 7, lambda f: (2.0, 0.4, 8.4), "sheet", zoff=-16, y=1.2)
+    arc_xz(m, "sheets", 24, -48, 48, 7, lambda f: (2.0, 0.4, 8.4), "sheet", zoff=-16, y=-1.2)
+    for s in (-1, 1):
+        a = math.radians(74 * s)
+        m.box("tips", (31 * math.sin(a), 0, 31 * math.cos(a) - 16), (0.6, 0.6, 7), "edge",
+              rot=(0, math.degrees(a) + 90 - 25 * s, 0))
+    m.clip("spawn", 0.3, "hold_on_last_frame", {
+        "root": {"scale": lambda t: [max(0.02, overshoot(t / 0.3)), 1, max(0.02, ease_out(t / 0.3))]},
+    })
+    m.clip("fly", 0.5, True, {
+        "edge": {"scale": lambda t: [1, 1 + 0.3 * wave(t, 0.125), 1]},
+        "sheets": {"position": lambda t: [0, 0, -1.5 * wave(t, 0.25)], "scale": lambda t: [1, 1 + 0.5 * wave(t, 0.25), 1]},
+        "tips": {"rotation": lambda t: [0, 0, 6 * wave(t, 0.25)]},
+    })
+    m.clip("end", 0.3, "hold_on_last_frame", {
+        "root": {"scale": lambda t: [1 + 0.3 * t / 0.3, max(0.02, 1 - t / 0.3), max(0.02, 1 - ease_in(t / 0.3))]},
+    })
+    return m
+
+
 # ================================================================ Ox Brace
 def titan_aegis():
     """Spectral ox titan rising behind the caster: horned helm, pauldrons,
@@ -870,7 +1016,8 @@ BUILDERS = {f.__name__: f for f in (
     curse_chain_bind, hell_chain_bind, void_fragment, dimensional_crescent,
     prong_bolt, sorrow_slash_arc, titan_aegis, blaster_bolt, blaster_casing,
     lava_fountain, flail_chain_ball, rising_eruption, cyclone_debris,
-    spirit_swing_crescent, temporal_strike_arc)}
+    spirit_swing_crescent, temporal_strike_arc,
+    heaven_slice_wall, z_golden_vortex, grand_crescent)}
 
 if __name__ == "__main__":
     for n in sys.argv[1:] or list(BUILDERS):

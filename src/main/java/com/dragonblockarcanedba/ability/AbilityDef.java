@@ -302,20 +302,21 @@ public record AbilityDef(
                             int lifetimeTicks, int descendTicks, double fallSpeed,
                             double spin, int hangTicks, double speed, double forward,
                             double up, String animSpawn, String animHold, String animEnd,
-                            float minPower, String animAlt, int spawnTicks) {
+                            float minPower, String animAlt, int spawnTicks,
+                            String anchor) {
 
         /** The same set with a different hold clip (animAlt alternation). */
         public ModelSpec withHold(String hold) {
             return new ModelSpec(model, count, formation, behavior, trigger, radius, height, scale,
                     lifetimeTicks, descendTicks, fallSpeed, spin, hangTicks, speed, forward, up,
-                    animSpawn, hold, animEnd, minPower, animAlt, spawnTicks);
+                    animSpawn, hold, animEnd, minPower, animAlt, spawnTicks, anchor);
         }
 
         /** The same set with a resolved lifetime. */
         public ModelSpec withLifetime(int ticks) {
             return new ModelSpec(model, count, formation, behavior, trigger, radius, height, scale,
                     ticks, descendTicks, fallSpeed, spin, hangTicks, speed, forward, up,
-                    animSpawn, animHold, animEnd, minPower, animAlt, spawnTicks);
+                    animSpawn, animHold, animEnd, minPower, animAlt, spawnTicks, anchor);
         }
     }
 
@@ -972,7 +973,7 @@ public record AbilityDef(
     private static final Set<String> MODELS_FIELDS = Set.of(
             "model", "count", "formation", "behavior", "trigger", "radius", "height",
             "scale", "lifetimeTicks", "descendTicks", "fallSpeed", "spin", "hangTicks",
-            "speed", "forward", "up", "animSpawn", "animHold", "animEnd", "minPower", "animAlt", "spawnTicks");
+            "speed", "forward", "up", "animSpawn", "animHold", "animEnd", "minPower", "animAlt", "spawnTicks", "anchor");
     private static final Set<String> MODELS_BEHAVIORS = Set.of(
             "descend", "fall", "escort", "bolt", "hang", "orbit", "ride", "burst");
     private static final Set<String> MODELS_FORMATIONS = Set.of(
@@ -1044,6 +1045,15 @@ public record AbilityDef(
                         + " must be a Bedrock clip name (dotted lowercase tokens), got \"" + pair[1] + "\"");
             }
         }
+        // anchor: burst sets dress the caster by default; "carrier" plants
+        // them on the spawned carrier, facing its yaw (a summoned wall)
+        String anchor = optString(m, "anchor", "caster");
+        if (!anchor.equals("caster") && !anchor.equals("carrier")) {
+            throw new IllegalArgumentException("models.anchor must be caster or carrier, got \"" + anchor + "\"");
+        }
+        if (anchor.equals("carrier") && !"burst".equals(behavior)) {
+            throw new IllegalArgumentException("models.anchor carrier only applies to behavior burst");
+        }
         return new ModelSpec(model,
                 (int) optDouble(m, "models.count", "count", 1, 1, 64),
                 formation, behavior, trigger,
@@ -1062,7 +1072,8 @@ public record AbilityDef(
                 (float) optDouble(m, "models.minPower", "minPower", 0, 0, 1), animAlt,
                 // spawnTicks: how long orbit, ride and escort pieces play
                 // their spawn clip before holding (a titan's full rise)
-                (int) optDouble(m, "models.spawnTicks", "spawnTicks", 6, 1, 200));
+                (int) optDouble(m, "models.spawnTicks", "spawnTicks", 6, 1, 200),
+                anchor);
     }
 
     private static final Set<String> BEAM_FIELDS = Set.of(

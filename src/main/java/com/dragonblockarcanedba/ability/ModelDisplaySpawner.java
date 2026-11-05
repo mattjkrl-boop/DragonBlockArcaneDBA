@@ -68,6 +68,11 @@ public final class ModelDisplaySpawner {
                         caster, seed, Float.NaN);
                 continue;
             }
+            if ("burst".equals(spec.behavior()) && "carrier".equals(spec.anchor()) && carrier != null) {
+                spawnSetRaw(level, def, spec, carrier.position(), spec.radius(), caster.getUUID(),
+                        caster, seed, carrier.getYRot());
+                continue;
+            }
             // burst sets dress the caster's own body; the rest the carrier
             Vec3 anchor = carrier != null && !"burst".equals(spec.behavior())
                     ? carrier.position() : caster.position();
