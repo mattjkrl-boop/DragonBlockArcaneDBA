@@ -39,6 +39,17 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
 
     private AbilityDef cachedDef;
 
+    /** Phase 6: multiplies aoeRadius at burst time (autoFire overcharge). Server-set only. */
+    private float aoeScale = 1.0f;
+
+    public void setAoeScale(float aoeScale) {
+        this.aoeScale = aoeScale;
+    }
+
+    public float getAoeScale() {
+        return this.aoeScale;
+    }
+
     public ProjectileCarrierEntity(EntityType<? extends ThrowableProjectile> entityType, Level level) {
         super(entityType, level);
     }
@@ -117,9 +128,10 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
             if (def != null && def.projectile() != null) {
                 LivingEntity owner = getOwner() instanceof LivingEntity living ? living : null;
                 if (result.getEntity() instanceof LivingEntity target && target != owner) {
-                    AbilityDamage.apply(serverLevel, def, this, owner, target, getPower(), 0.0);
+                    AbilityDamage.applyHit(serverLevel, def, this, owner, target, getPower(), 0.0, false);
                 }
                 burst(serverLevel, def, owner, this.position());
+                terrainImpact(serverLevel, def);
                 AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
                         this.position(), this.getDeltaMovement(),
                         getSeed() ^ 0x4917, getPower(), 1);
@@ -138,6 +150,7 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
             if (def != null && def.projectile() != null) {
                 LivingEntity owner = getOwner() instanceof LivingEntity living ? living : null;
                 burst(serverLevel, def, owner, this.position());
+                terrainImpact(serverLevel, def);
                 AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
                         this.position(), this.getDeltaMovement(),
                         getSeed() ^ 0x4917, getPower(), 1);
@@ -149,9 +162,17 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
     }
 
     private void burst(ServerLevel level, AbilityDef def, LivingEntity owner, Vec3 at) {
-        double aoe = def.projectile().aoeRadius();
+        double aoe = def.projectile().aoeRadius() * this.aoeScale;
         if (aoe > 0) {
-            AbilityDamage.applyArea(level, def, this, owner, at, aoe, getPower(), owner);
+            AbilityDamage.applyAreaHit(level, def, this, owner, at, aoe, getPower(), owner);
+        }
+    }
+
+    /** Terrain impact event (Phase 6), fired on any projectile hit before the discard. */
+    private void terrainImpact(ServerLevel level, AbilityDef def) {
+        if (def.terrain() != null && "impact".equals(def.terrain().event())) {
+            com.dragonblockarcanedba.ability.AbilityTerrain.eventAt(level,
+                    this.blockPosition(), def.terrain());
         }
     }
 

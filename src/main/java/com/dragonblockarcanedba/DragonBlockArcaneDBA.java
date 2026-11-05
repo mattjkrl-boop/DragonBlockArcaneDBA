@@ -109,6 +109,7 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             new com.dragonblockarcanedba.ability.AbilityLoader()
         );
         com.dragonblockarcanedba.ability.AbilityService.register();
+        com.dragonblockarcanedba.ability.RewindService.register();
 
         // Register creative tab modification using new Fabric 26.2 API
         // Moved items to custom tab in DbaItems.java
@@ -133,6 +134,12 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                 }
                 accessor.dba$syncStats();
             }
+            return net.minecraft.world.InteractionResult.PASS;
+        });
+
+        // Register Swing Hook (Phase 6): swing-block effects on vanilla melee hits
+        net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            com.dragonblockarcanedba.ability.AbilitySwingHook.onAttack(player, world, hand, entity);
             return net.minecraft.world.InteractionResult.PASS;
         });
 

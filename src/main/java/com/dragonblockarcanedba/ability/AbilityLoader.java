@@ -80,6 +80,79 @@ public class AbilityLoader extends SimplePreparableReloadListener<Map<Identifier
             }
         }
         RAW = Map.copyOf(raw);
+        crossValidate();
         DragonBlockArcaneDBA.LOGGER.info("Loaded {} abilities ({} files seen)", loaded, prepared.size());
+    }
+
+    /**
+     * Phase 6 cross-validation: the parser checks identifier format
+     * only, so resolution is checked here, once the full set is
+     * registered and the game registries exist. Every bad reference
+     * is a loud error naming the def and the reference; the def is
+     * NOT unregistered (execution treats an unresolved reference as
+     * a no-op).
+     */
+    private static void crossValidate() {
+        for (AbilityDef def : AbilityRegistry.all()) {
+            checkAbilityRef(def, "sneakVariant", def.sneakVariant());
+            checkAbilityRef(def, "airVariant", def.airVariant());
+            for (AbilityDef.SummonSpec summon : def.summons()) {
+                checkAbilityRef(def, "summons.ability", summon.ability());
+            }
+            if (def.criticalWindow() != null) {
+                checkAbilityRef(def, "criticalWindow.summonAbility", def.criticalWindow().summonAbility());
+            }
+            if (def.onHit() != null) {
+                checkEffectRef(def, "onHit.effect", def.onHit().effectId());
+            }
+            if (def.swing() != null) {
+                checkEffectRef(def, "swing.effect", def.swing().effectId());
+            }
+            if (def.aura() != null) {
+                checkEffectRef(def, "aura.selfEffect", def.aura().selfEffectId());
+            }
+            if (def.cloud() != null && def.cloud().insideEffect() != null) {
+                checkEffectRef(def, "cloud.insideEffect.effect", def.cloud().insideEffect().effectId());
+            }
+            if (def.terrain() != null) {
+                checkBlockRef(def, "terrain.place", def.terrain().placeId());
+                checkBlockRef(def, "terrain.crust", def.terrain().crustId());
+            }
+        }
+    }
+
+    private static void checkAbilityRef(AbilityDef def, String field, String ref) {
+        if (ref == null) {
+            return;
+        }
+        Identifier id = Identifier.tryParse(ref);
+        if (id == null || AbilityRegistry.get(id) == null) {
+            DragonBlockArcaneDBA.LOGGER.error(
+                    "Ability {} has unresolved {} reference \"{}\" (no such registered ability)",
+                    def.id(), field, ref);
+        }
+    }
+
+    private static void checkEffectRef(AbilityDef def, String field, Identifier ref) {
+        if (ref == null) {
+            return;
+        }
+        if (BuiltInRegistries.MOB_EFFECT.getValue(ref) == null) {
+            DragonBlockArcaneDBA.LOGGER.error(
+                    "Ability {} has unresolved {} reference \"{}\" (no such mob effect)",
+                    def.id(), field, ref);
+        }
+    }
+
+    private static void checkBlockRef(AbilityDef def, String field, String ref) {
+        if (ref == null) {
+            return;
+        }
+        Identifier id = Identifier.tryParse(ref);
+        if (id == null || BuiltInRegistries.BLOCK.getValue(id) == null) {
+            DragonBlockArcaneDBA.LOGGER.error(
+                    "Ability {} has unresolved {} reference \"{}\" (no such block)",
+                    def.id(), field, ref);
+        }
     }
 }

@@ -36,15 +36,17 @@ public final class AbilityRegistry {
         if (BY_ID.containsKey(def.id())) {
             return "duplicate ability id " + def.id();
         }
-        EnumMap<AbilityDef.Slot, Identifier> slots =
-                BY_ITEM.computeIfAbsent(def.weapon(), k -> new EnumMap<>(AbilityDef.Slot.class));
-        Identifier existing = slots.get(def.slot());
-        if (existing != null) {
-            return "weapon " + def.weapon() + " slot " + def.slot()
-                    + " is already bound to " + existing + "; " + def.id() + " loses";
+        if (def.bind()) {
+            EnumMap<AbilityDef.Slot, Identifier> slots =
+                    BY_ITEM.computeIfAbsent(def.weapon(), k -> new EnumMap<>(AbilityDef.Slot.class));
+            Identifier existing = slots.get(def.slot());
+            if (existing != null) {
+                return "weapon " + def.weapon() + " slot " + def.slot()
+                        + " is already bound to " + existing + "; " + def.id() + " loses";
+            }
+            slots.put(def.slot(), def.id());
         }
         BY_ID.put(def.id(), def);
-        slots.put(def.slot(), def.id());
         return null;
     }
 

@@ -113,6 +113,9 @@ public abstract class CarrierEntity extends Entity {
                 // recipes to send): announce the end on the same
                 // tick the carrier dies, presentation only.
                 if (def != null && this.tickCount > def.phases().active()) {
+                    // Phase 6 hook: natural expiry work (cloud finales,
+                    // swarm end reasons) runs before the end fx sends.
+                    onExpire();
                     double yawRad = Math.toRadians(this.getYRot());
                     AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_END,
                             this.position(),
@@ -125,6 +128,14 @@ public abstract class CarrierEntity extends Entity {
             }
         }
     }
+
+    /**
+     * Called once on natural expiry (tickCount past phases.active),
+     * before the carrier-end fx and feedback are sent and before the
+     * discard. Default: nothing. Only the expiry branch of tick()
+     * calls this; a manual discard never does.
+     */
+    protected void onExpire() {}
 
     /** Carriers are pure effects: nothing can hurt them. */
     @Override

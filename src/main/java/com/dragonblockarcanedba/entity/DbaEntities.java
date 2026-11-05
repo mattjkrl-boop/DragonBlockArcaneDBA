@@ -118,6 +118,36 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ability_projectile")))
     );
 
+    public static final EntityType<BeamCarrierEntity> ABILITY_BEAM = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ability_beam"),
+            EntityType.Builder.<BeamCarrierEntity>of(BeamCarrierEntity::new, MobCategory.MISC)
+                    .sized(0.25f, 0.25f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ability_beam")))
+    );
+
+    public static final EntityType<SwarmHostEntity> ABILITY_SWARM_HOST = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ability_swarm_host"),
+            EntityType.Builder.<SwarmHostEntity>of(SwarmHostEntity::new, MobCategory.MISC)
+                    .sized(1.2f, 1.2f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ability_swarm_host")))
+    );
+
+    public static final EntityType<SwarmShardEntity> ABILITY_SWARM_SHARD = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ability_swarm_shard"),
+            EntityType.Builder.<SwarmShardEntity>of(SwarmShardEntity::new, MobCategory.MISC)
+                    .sized(0.35f, 0.35f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ability_swarm_shard")))
+    );
+
     public static final EntityType<ShenronEntity> SHENRON = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("shenron"),

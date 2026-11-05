@@ -4,10 +4,14 @@ import com.dragonblockarcanedba.ability.AbilityDamage;
 import com.dragonblockarcanedba.ability.AbilityDef;
 import com.dragonblockarcanedba.ability.AbilityFeedbackService;
 import com.dragonblockarcanedba.ability.AbilityFxService;
+import com.dragonblockarcanedba.ability.AbilityService;
+import com.dragonblockarcanedba.ability.AbilityTerrain;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
@@ -28,6 +32,10 @@ import java.util.UUID;
  */
 public class WaveCarrierEntity extends CarrierEntity {
     private final Set<UUID> hit = new HashSet<>();
+    private final Set<Integer> deflected = new HashSet<>();
+    private boolean selfLaunched;
+    private boolean carrierHitSummonFired;
+    private int trailConverted;
 
     public WaveCarrierEntity(EntityType<?> type, Level level) {
         super(type, level);
@@ -73,8 +81,19 @@ public class WaveCarrierEntity extends CarrierEntity {
                 double dist = Math.sqrt(distX * distX + distZ * distZ);
                 if (dist <= wave.radius() + target.getBbWidth() * 0.5) {
                     this.hit.add(target.getUUID());
-                    AbilityDamage.apply(serverLevel, def, this, owner, target,
-                            getPower(), dist / wave.radius());
+                    AbilityDamage.applyHit(serverLevel, def, this, owner, target,
+                            getPower(), dist / wave.radius(), false);
+                    if (wave.knockback() != null) {
+                        Vec3 away = new Vec3(distX, 0, distZ);
+                        Vec3 vel = target.getDeltaMovement();
+                        if (away.lengthSqr() > 1.0e-4 && wave.knockback().out() > 0) {
+                            vel = vel.add(away.normalize().scale(wave.knockback().out()));
+                        }
+                        if (wave.knockback().up() > 0) {
+                            vel = new Vec3(vel.x, vel.y + wave.knockback().up(), vel.z);
+                        }
+                        target.setDeltaMovement(vel);
+                    }
                     hitsThisTick++;
                 }
             }
@@ -85,6 +104,54 @@ public class WaveCarrierEntity extends CarrierEntity {
                         center, new Vec3(dx, 0, dz),
                         getSeed() ^ this.tickCount, getPower(), Math.min(hitsThisTick, 8));
                 AbilityFeedbackService.carrier(this, def, AbilityDef.FxEvent.CARRIER_HIT, center);
+                // Phase 6: self-launch on the first connecting tick.
+                if (wave.selfLaunch() > 0 && !this.selfLaunched && owner != null) {
+                    this.selfLaunched = true;
+                    Vec3 vel = owner.getDeltaMovement();
+                    owner.setDeltaMovement(vel.x, Math.max(vel.y, wave.selfLaunch()), vel.z);
+                }
+                // Phase 6: carrierHit summons, once per wave unless data says otherwise.
+                if (owner instanceof ServerPlayer serverOwner) {
+                    for (AbilityDef.SummonSpec summon : def.summons()) {
+                        if (!"carrierHit".equals(summon.when())) {
+                            continue;
+                        }
+                        if (summon.once() && this.carrierHitSummonFired) {
+                            continue;
+                        }
+                        this.carrierHitSummonFired = true;
+                        AbilityService.executeSummon(serverOwner, def, summon,
+                                getPower(), center, null);
+                    }
+                }
+            }
+            tickWaveModules(serverLevel, def, wave, box);
+        }
+    }
+
+    /** Phase 6 wave modules that run even on ticks without a hit: deflect and terrain trail. */
+    private void tickWaveModules(ServerLevel serverLevel, AbilityDef def,
+                                 AbilityDef.WaveParams wave, AABB box) {
+        AbilityDef.WaveDeflectSpec deflect = wave.deflect();
+        if (deflect != null) {
+            Player owner = ownerPlayer();
+            for (Projectile projectile : serverLevel.getEntitiesOfClass(Projectile.class, box,
+                    pr -> !pr.isRemoved() && pr.getOwner() != owner)) {
+                if (this.deflected.contains(projectile.getId())) {
+                    continue;
+                }
+                this.deflected.add(projectile.getId());
+                projectile.setDeltaMovement(projectile.getDeltaMovement().scale(-deflect.scale()));
+                if (deflect.claim() && owner != null) {
+                    projectile.setOwner(owner);
+                }
+            }
+        }
+        if (def.terrain() != null && "trail".equals(def.terrain().event())
+                && def.terrain().placeId() != null) {
+            int remaining = def.terrain().cap() - this.trailConverted;
+            if (remaining > 0) {
+                this.trailConverted += AbilityTerrain.trailStep(serverLevel, this, def.terrain(), remaining);
             }
         }
     }
