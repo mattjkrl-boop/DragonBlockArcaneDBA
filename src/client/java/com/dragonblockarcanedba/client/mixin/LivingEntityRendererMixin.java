@@ -87,13 +87,6 @@ public abstract class LivingEntityRendererMixin<T extends LivingEntity, S extend
         }
     }
 
-    @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V", at = @At("TAIL"))
-    protected void dba$extractRenderState(T entity, S state, float partialTicks, CallbackInfo ci) {
-        if (com.dragonblockarcanedba.item.SaberItem.clientPhasedEntityId == entity.getId()) {
-            state.isInvisible = true;
-        }
-    }
-
     @org.spongepowered.asm.mixin.Unique
     private static net.minecraft.network.chat.MutableComponent dba$createHealthBarComponent(float health, float maxHealth) {
         int barLength = 10;

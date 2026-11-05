@@ -52,6 +52,9 @@ public final class AbilityFxDefaults {
                     recipe(AbilityFxEntries.SPARK_STREAK, "core",
                             AbilityDef.FxShape.POINT, 24, 0.05, 0.12,
                             0.13, 0.18, 0.45, 5, 10, 0.22, 0.88, 40));
+            // Beam, swarm and carrierless abilities have no default tick fx:
+            // their renderers draw the body, and data authors any recipes
+            case BEAM, SWARM, NONE -> List.of();
         };
     }
 

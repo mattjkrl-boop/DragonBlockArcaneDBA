@@ -128,6 +128,9 @@ public final class AbilityFxExpander {
                         : def.cloud().radiusStart()) * scale;
             }
             case PROJECTILE -> 0.0;
+            // Beam, swarm and carrierless defs: renderer-local expansion passes
+            // live radii; packets fall back to a unit ring
+            case BEAM, SWARM, NONE -> 1.0;
         };
     }
 
