@@ -483,62 +483,94 @@ def titan_aegis():
 
 # ================================================================ Blaster
 def blaster_bolt():
-    """Plasma slug: hot core, faceted sheath, compression rings, tail fins."""
+    """Plasma slug: white-hot core, faceted sheath, nose cone, compression rings, fins and a heat wake."""
     m = Model("blaster_bolt", tex=256, bounds=2)
     energy(m, "core", "#FF6A00", "#FFD9A0", "#FFFFFF")
     energy(m, "sheath", "#8F1D1D", "#FF6A00", "#FFC27A")
     energy(m, "ring", "#B8860B", "#FFD23F", "#FFF6D0")
+    energy(m, "wake", "#5A0E0E", "#C83A00", "#FF8A3A")
     m.bone("root")
     m.bone("body", "root")
+    m.bone("nose", "root", (0, 0, 6))
     m.bone("rings", "root")
     m.bone("fins", "root", (0, 0, -6))
+    m.bone("wake", "root", (0, 0, -9))
     m.box("body", (0, 0, 0), (1.8, 1.8, 11), "core")
     m.box("body", (0, 0, 0.5), (2.8, 2.8, 8), "sheath", rot=(0, 0, 45))
-    m.box("body", (0, 0, 5.4), (2.0, 2.0, 1.6), "core", rot=(0, 0, 45))
-    m.box("body", (0, 0, 6.6), (1.0, 1.0, 1.2), "core")
+    m.box("body", (0, 0, 0.5), (2.4, 2.4, 9), "sheath", rot=(0, 0, 22.5))
+    for r in (0, 90, 180, 270):
+        a = math.radians(r + 45)
+        m.box("body", (1.7 * math.cos(a), 1.7 * math.sin(a), 1), (0.4, 0.4, 5), "ring", rot=(0, 0, r))
+    m.box("nose", (0, 0, -0.6), (2.0, 2.0, 1.6), "core", rot=(0, 0, 45))
+    m.box("nose", (0, 0, 0.6), (1.4, 1.4, 1.2), "core")
+    m.box("nose", (0, 0, 1.5), (0.8, 0.8, 1.0), "core", rot=(0, 0, 45))
+    m.box("nose", (0, 0, 2.2), (0.4, 0.4, 0.8), "core")
     m.box("body", (0, 0, -6.5), (1.2, 1.2, 5), "sheath")
     for i, z in enumerate((3, 0, -3)):
         m.box("rings", (0, 0, z), (3.6 - i * 0.4, 3.6 - i * 0.4, 0.5), "ring", rot=(0, 0, 45 * (i % 2)))
     for r in (0, 90, 180, 270):
         a = math.radians(r)
-        m.box("fins", (1.8 * math.cos(a), 1.8 * math.sin(a), -6), (0.3, 1.4, 4), "sheath", rot=(0, 0, r))
-    m.box("fins", (0, 0, -10), (0.6, 0.6, 6), "sheath", rot=(0, 0, 45))
+        m.box("fins", (1.8 * math.cos(a), 1.8 * math.sin(a), 0), (0.3, 1.4, 4), "sheath", rot=(0, 0, r))
+        m.box("fins", (2.4 * math.cos(a), 2.4 * math.sin(a), -1.2), (0.2, 0.6, 2), "ring", rot=(0, 0, r))
+    m.box("fins", (0, 0, -4), (0.6, 0.6, 6), "sheath", rot=(0, 0, 45))
+    for i in range(3):
+        m.box("wake", (0, 0, -i * 2.5), (1.6 - i * 0.4, 1.6 - i * 0.4, 2), "wake", rot=(0, 0, 30 * i))
     m.clip("spawn", 0.3, "hold_on_last_frame", {
         "root": {"scale": lambda t: [max(0.02, overshoot(t / 0.3))] * 3},
+        "nose": {"scale": lambda t: [1 + 0.8 * (1 - t / 0.3)] * 3},
     })
     m.clip("fly", 0.5, True, {
         "body": {"rotation": lambda t: [0, 0, 720 * t]},
+        "nose": {"scale": lambda t: [1 + 0.15 * wave(t, 0.1)] * 3},
         "rings": {"rotation": lambda t: [0, 0, -360 * t / 0.5],
                   "position": lambda t: [0, 0, -2 * (t / 0.5)]},
         "fins": {"scale": lambda t: [1, 1, 1 + 0.3 * wave(t, 0.1)]},
+        "wake": {"scale": lambda t: [1 + 0.2 * wave(t, 0.125), 1 + 0.2 * wave(t, 0.125), 1 + 0.5 * (t / 0.5)],
+                 "rotation": lambda t: [0, 0, -540 * t]},
     })
     m.clip("end", 0.3, "hold_on_last_frame", {
         "root": {"scale": lambda t: [1 + 1.5 * t / 0.3, 1 + 1.5 * t / 0.3, max(0.02, 1 - t / 0.3)]},
+        "rings": {"scale": lambda t: [1 + 2 * t / 0.3, 1 + 2 * t / 0.3, 1]},
     })
     return m
 
 
 def blaster_casing():
-    """Spent brass casing kicked out of the blaster, tumbling to the right."""
+    """Spent brass casing kicked out of the blaster to the gun's right (geo +X is the caster's right
+    after GeckoLib's X flip), tumbling with a smoke wisp from the mouth."""
     m = Model("blaster_casing", tex=256, bounds=2)
     m.material("brass", "gold", "#4A3008", "#B8860B", "#FFE08A")
     m.material("brass_dark", "gold", "#2A1A06", "#7A5A14", "#C8A040")
     m.material("primer", "steel", "#2A2A30", "#6A6A72", "#C0C0C8")
+    m.material("soot", "obsidian", "#0E0C0A", "#2A2622", "#4A443E")
+    energy(m, "ember", "#8F1D1D", "#FF6A00", "#FFC27A")
     m.bone("root")
     m.bone("case", "root")
+    m.bone("smoke", "case", (0, 0, 5))
     m.box("case", (0, 0, 0), (2.4, 2.4, 6), "brass")
     m.box("case", (0, 0, 0), (2.6, 2.6, 5.4), "brass", rot=(0, 0, 45))
+    m.box("case", (0, 0, 0), (2.5, 2.5, 5.6), "brass", rot=(0, 0, 22.5))
+    m.box("case", (0, 0, -2.0), (2.7, 2.7, 0.3), "brass_dark", rot=(0, 0, 22.5))
     m.box("case", (0, 0, -3.2), (3.0, 3.0, 0.6), "brass_dark")
     m.box("case", (0, 0, -3.25), (3.1, 3.1, 0.5), "brass_dark", rot=(0, 0, 45))
+    m.box("case", (0, 0, -2.75), (2.2, 2.2, 0.4), "brass_dark", rot=(0, 0, 22.5))
     m.box("case", (0, 0, -3.6), (1.0, 1.0, 0.3), "primer")
-    m.box("case", (0, 0, 3.6), (1.8, 1.8, 1.4), "brass", rot=(0, 0, 22))
+    m.box("case", (0, 0, -3.7), (0.5, 0.5, 0.2), "primer", rot=(0, 0, 45))
+    m.box("case", (0, 0, 3.4), (2.2, 2.2, 0.6), "brass", rot=(0, 0, 45))
+    m.box("case", (0, 0, 3.8), (1.8, 1.8, 1.0), "brass", rot=(0, 0, 22))
     m.box("case", (0, 0, 4.5), (2.0, 2.0, 0.4), "brass_dark")
+    m.box("case", (0, 0, 4.6), (1.2, 1.2, 0.3), "soot")
+    m.box("case", (0, 0, 4.7), (0.8, 0.8, 0.2), "ember", rot=(0, 0, 45))
     m.box("case", (0, 1.3, 0.5), (0.4, 0.2, 4), "brass_dark")
     m.box("case", (1.3, 0, -0.5), (0.2, 0.4, 3), "brass_dark")
     m.box("case", (0, -1.3, -1.5), (0.6, 0.2, 1), "brass_dark", rot=(0, 30, 0))
+    m.box("case", (-1.25, 0.6, 1.2), (0.2, 0.8, 1.6), "soot")
+    for i in range(3):
+        m.box("smoke", (0.3 * i, 0.6 * i, 0.8 * i), (1.0 - 0.2 * i, 1.0 - 0.2 * i, 0.8), "soot", rot=(0, 0, 30 * i))
     m.clip("eject", 0.6, "hold_on_last_frame", {
         "root": {"position": lambda t: [10 * (t / 0.6), 9 * (t / 0.6) - 16 * (t / 0.6) ** 2, -3 * t / 0.6]},
         "case": {"rotation": lambda t: [900 * t, 300 * t, 0]},
+        "smoke": {"scale": lambda t: [max(0.02, 1 + 1.5 * t / 0.6 if t < 0.45 else 1 - (t - 0.45) / 0.15 * 2.5)] * 3},
     })
     return m
 
