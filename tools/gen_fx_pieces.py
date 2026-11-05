@@ -4,8 +4,6 @@
                      (ride behavior on the swarm shards, faces +Z).
   cyclone_shard      Grand Cyclone: broken greatsword fragments thrown
                      round the spin (orbit, cast trigger, faces +Z).
-  rain_sword_tip     Katchin Weight finale: broken Z Sword tips driven
-                     down by the gravity slam (fall, point along -Y).
   evil_spike         Evil Impale full charge: short black spearheads
                      bursting out of the air round the caster's body
                      (burst ring, points outward along +Z).
@@ -155,59 +153,6 @@ def cyclone_shard():
                   "rotation": lambda t: [40 * t / 0.3, 0, 200 * t / 0.3]},
         "chips": {"position": lambda t: [3 * t / 0.3, -4 * ease_in(t / 0.3), -5 * t / 0.3],
                   "rotation": lambda t: [300 * t, 120 * t, 90 * t]},
-    })
-    return m
-
-
-# ================================================================ rain_sword_tip
-def rain_sword_tip():
-    m = Model("rain_sword_tip", tex=256, bounds=3)
-    m.material("steel", "steel", "#23202C", "#6E6880", "#D9D3EA")
-    m.material("edge", "steel", "#3A3548", "#ADA6C2", "#FFFFFF")
-    m.material("fuller", "steel", "#120F1A", "#3A3150", "#7D6AA8")
-    m.material("break", "iron", "#141218", "#34303E", "#6E6880")
-    m.material("vein", "energy", "#000000", "#000000", "#000000",
-               glow=("#3B1163", "#7C3AED", "#E9D5FF"))
-    m.bone("root")
-    m.bone("blade", "root", (0, 2, 0))
-    m.bone("vein", "blade", (0, 10, 0))
-    m.bone("shards", "root", (0, 22, 0))
-    # tapering blade, point down at y=0, broken top near y=22
-    m.box("blade", (0, 15.5, 0), (5.2, 11, 1.1), "steel")
-    m.box("blade", (0, 7.5, 0), (4.4, 5, 1.05), "steel")
-    m.box("blade", (0, 3.6, 0), (3.2, 2.8, 1.0), "steel")
-    m.box("blade", (0, 1.4, 0), (2.0, 2.0, 0.95), "edge", rot=(0, 0, 45))
-    m.box("blade", (0, 0.4, 0), (1.0, 1.0, 0.8), "edge", rot=(0, 0, 45))
-    # diamond edge rails both sides, per step
-    for y0, y1, w in ((10, 21, 2.6), (5, 10, 2.2), (2.2, 5, 1.6)):
-        for sgn in (1, -1):
-            m.box("blade", (sgn * w, (y0 + y1) / 2, 0), (0.8, y1 - y0, 0.8), "edge",
-                  rot=(0, 45, 0))
-    m.box("blade", (0, 13, 0), (1.3, 15, 1.22), "fuller")
-    # jagged break at the top
-    for x, ln, rz in ((-2.0, 2.4, 16), (-0.3, 3.2, -10), (1.6, 1.8, 22)):
-        m.box("blade", (x, 21 + ln / 2, 0), (1.6, ln, 1.05), "break", rot=(0, 0, rz),
-              pivot=(x, 21, 0))
-    # violet gravity vein down the fuller (energy, the only glow)
-    m.box("vein", (0, 12.5, 0), (0.4, 13, 1.3), "vein")
-    m.box("vein", (0, 5.2, 0), (0.3, 2.6, 1.2), "vein", rot=(0, 0, 45))
-    # trailing shards above the break
-    m.box("shards", (1.2, 24.5, 0.3), (0.9, 1.4, 0.7), "break", rot=(20, 10, 35))
-    m.box("shards", (-1.4, 26.0, -0.2), (0.7, 1.0, 0.6), "steel", rot=(-30, 25, -20))
-
-    m.clip("fall", 0.6, True, {
-        "blade": {"rotation": lambda t: [2 * wave(t, 0.3), 0, 2.5 * wave(t, 0.6, 0.2)]},
-        "vein": {"scale": lambda t: [1 + 0.25 * wave(t, 0.15), 1, 1 + 0.25 * wave(t, 0.15)]},
-        "shards": {"position": lambda t: [0.4 * wave(t, 0.3), 1.2 + 0.6 * wave(t, 0.6), 0],
-                   "rotation": lambda t: [600 * t, 300 * t, 0]},
-    })
-    m.clip("impact", 0.4, "hold_on_last_frame", {
-        "root": {"position": lambda t: [0, -7 * ease_out(t / 0.12), 0]},
-        "blade": {"rotation": lambda t: [9 * ease_out(t / 0.4) + 3 * wave(t, 0.08) * (1 - t / 0.4),
-                                         0, -6 * ease_out(t / 0.4)]},
-        "vein": {"scale": lambda t: [max(0.05, 1.6 - 1.5 * t / 0.4), 1, max(0.05, 1.6 - 1.5 * t / 0.4)]},
-        "shards": {"position": lambda t: [5 * t / 0.4, 2 - 9 * ease_in(t / 0.4), 3 * t / 0.4],
-                   "rotation": lambda t: [500 * t, 200 * t, 90 * t]},
     })
     return m
 
@@ -386,7 +331,7 @@ def katana_afterimage():
 
 
 BUILDERS = {f.__name__: f for f in
-            (devil_shard, cyclone_shard, rain_sword_tip, evil_spike, katana_afterimage)}
+            (devil_shard, cyclone_shard, evil_spike, katana_afterimage)}
 
 if __name__ == "__main__":
     names = sys.argv[1:] or list(BUILDERS)
