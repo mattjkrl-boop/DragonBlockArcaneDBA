@@ -337,3 +337,92 @@ transform clips), not on a new library. How it fits:
   schema's default strikeAt; durations come from each ability's
   phases, never from the clip, so one clip serves a 6-tick cast
   and a 60-tick cast alike.
+
+## Phase 3: the universal particle system (landed)
+
+One registered particle type carries every ability effect; the
+server never streams particles; clients expand small seeded
+packets into the full effect locally.
+
+- Universal class: particle type
+  dragonblockarcanedba:ability_fx (DbaParticles.ABILITY_FX), a
+  complex type whose options record (particle/AbilityFxOptions)
+  carries entry index, ARGB color, size start and end, lifetime,
+  gravity, drag, and a seed. The client particle
+  (client/particle/AbilityFxParticle) is a SingleQuadParticle that
+  reads everything from the options: lit entries (shard chip, ash
+  flake, smoke puff) shade with world light on the translucent
+  layer and collide with the ground; additive entries (spark
+  streak, wisp curl, ember fragment, soft mote) render full bright
+  on the no-depth-write additive layer. Spin comes from the seed,
+  never from shared random state, so it is behavior-neutral
+  between clients.
+- Entry table: particle/AbilityFxEntries is the one place entry
+  names meet sprites: 7 entries of 8 flipbook frames each (56
+  slots in assets particles/ability_fx.json), reusing the sprite
+  families the material set established (generic geometry chips,
+  spark streaks, energy shards, ki motes, smoke). Data names
+  entries; ids are validated at parse time.
+- Recipes in data: the schema gained an "fx" list. Each recipe is
+  keyed to one event (cast_start, fire with "strike" as an
+  accepted alias, carrier_tick, carrier_hit, carrier_end,
+  charge_tick) with an entry, a shape (point, ring, disc, cone,
+  sphere_shell, band), a count (burst events) or rate per second
+  (continuous events), speed, spread, cone angle, an optional
+  radius override, size and lifetime ranges with an end-size
+  scale, gravity, drag, an alpha override, a color reference
+  (core, mid, rim, or a literal hex), a hard per-burst cap, and a
+  cap group. The parser rejects unknown events, entries, shapes,
+  fields, and out-of-range values by name, like every other block.
+- Caps: every recipe respects the ability's caps block twice
+  over. Rates and burst counts scale by a deterministic distance
+  factor (1 inside fullDetailDistance, falling linearly to 0.35 at
+  cullDistance, 0 beyond), the effects density setting, and the
+  definition's particleRate; and a shared client budget
+  (client/fx/FxBudget) enforces maxParticlesPerSecond per ability
+  and per cap group across every route, so a recipe can ask for
+  more than the cap but never emit more.
+- Seeded packets: network/AbilityFxPayload carries ability id,
+  event, origin, direction, seed, power, and a repeat count
+  (nothing else; a burst is one small packet). ability/
+  AbilityFxService sends it server-side only when the definition
+  actually has recipes for the event, to the anchor's tracking
+  players plus the anchor player. Clients resolve the definition
+  from the synced registry and expand through client/fx/
+  AbilityFxExpander: a splitmix stream keyed on the packet seed,
+  per-particle seeds offset by a fixed stride, a fixed draw order
+  per shape, and positions and velocities derived only from the
+  seed, the definition, and the packet. Same seed plus same
+  definition plus same event gives the same emission parameter
+  list on every client; proven by harness (two independent
+  expansions of the Cursed Tempest strike burst are record-equal;
+  a different seed differs).
+- Routes, and why: burst events (cast_start, fire, carrier_hit,
+  carrier_end) travel by packet because they are one-shot moments
+  whose exact seed matters for cross-client agreement (the cloud
+  strike burst reuses the strike's already-synced seed, so burst
+  and bolt describe the same strike). carrier_tick stays
+  carrier-local in the renderers: the carrier entity is already
+  synced, its continuous shed needs no cross-client identity, and
+  a packet per tick would be pure waste. charge_tick is
+  client-local from the Phase 2 cast store: every client already
+  knows who is charging and how far along, so the server sends no
+  charge particles at all (the Phase 1 server-sent charge motes
+  are deleted).
+- Defaults: ability/AbilityFxDefaults mirrors the old Phase 1
+  hardcoded sheds as code-level default carrier_tick recipes
+  (wave band shed, cloud ground puff plus drift, projectile
+  cluster plus wake band plus a capped spark trickle), used only
+  when a definition authors no carrier_tick recipes of its own.
+  The two proof attacks author theirs; their numbers are in the
+  phase report.
+- What did not migrate: the carriers' geometry (wave band, cloud
+  dome shells, telegraph, strike bolt, projectile casing and
+  core) is geometry, not particles, and stays in the renderers
+  for the Phase 4 kit. The projectile's server-side burst() hit
+  flash stays server-sent material particles this phase: it is
+  the carrier's own impact flash on the shared material system,
+  not an ability recipe emission, and converting it belongs with
+  the Phase 4 pass over carrier presentation. Non-ability users
+  of the material system (auras, weather, StaggerFx, the wish
+  ritual) are untouched by design.
