@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.ability.AbilityDamage;
 import com.dragonblockarcanedba.ability.AbilityDef;
+import com.dragonblockarcanedba.ability.AbilityFeedbackService;
 import com.dragonblockarcanedba.ability.AbilityFxService;
 import com.dragonblockarcanedba.ability.AbilityRegistry;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -100,6 +101,8 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
                     AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_END,
                             this.position(), this.getDeltaMovement(),
                             getSeed(), getPower(), 1);
+                    AbilityFeedbackService.carrier(this, def, AbilityDef.FxEvent.CARRIER_END,
+                            this.position());
                 }
                 this.discard();
             }
@@ -120,6 +123,8 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
                 AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
                         this.position(), this.getDeltaMovement(),
                         getSeed() ^ 0x4917, getPower(), 1);
+                AbilityFeedbackService.carrier(this, def, AbilityDef.FxEvent.CARRIER_HIT,
+                        this.position());
             }
             this.discard();
         }
@@ -136,6 +141,8 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
                 AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
                         this.position(), this.getDeltaMovement(),
                         getSeed() ^ 0x4917, getPower(), 1);
+                AbilityFeedbackService.carrier(this, def, AbilityDef.FxEvent.CARRIER_HIT,
+                        this.position());
             }
             this.discard();
         }

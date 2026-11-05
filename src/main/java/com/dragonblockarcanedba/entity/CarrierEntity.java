@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.ability.AbilityDef;
+import com.dragonblockarcanedba.ability.AbilityFeedbackService;
 import com.dragonblockarcanedba.ability.AbilityFxService;
 import com.dragonblockarcanedba.ability.AbilityRegistry;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -117,6 +118,8 @@ public abstract class CarrierEntity extends Entity {
                             this.position(),
                             new net.minecraft.world.phys.Vec3(-Math.sin(yawRad), 0, Math.cos(yawRad)),
                             getSeed(), getPower(), 1);
+                    AbilityFeedbackService.carrier(this, def, AbilityDef.FxEvent.CARRIER_END,
+                            this.position());
                 }
                 this.discard();
             }

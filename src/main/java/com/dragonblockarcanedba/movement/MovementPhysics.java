@@ -198,7 +198,7 @@ public final class MovementPhysics {
         level.sendParticles(DbaParticles.DUST_PUFF, x, y + 0.15, z, dust, 0.55, 0.12, 0.55, 0.06);
         level.playSound(null, x, y, z, DbaSounds.SLAM_THUD, SoundSource.PLAYERS, 0.7f, 0.9f);
         float intensity = (float) Math.min(1.6, 0.45 + (impact - IMPACT_MIN_SPEED) * 0.55) * (s.fastFalling ? 1.35f : 1.0f);
-        ServerPlayNetworking.send(player, new ScreenShakePayload(intensity, 7, 0));
+        ServerPlayNetworking.send(player, new ScreenShakePayload(intensity, 7, 0, x, y, z, 0f));
     }
 
     /** Drops tracked state when a player leaves, so the map cannot grow forever. */

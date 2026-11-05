@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.ability.AbilityDamage;
 import com.dragonblockarcanedba.ability.AbilityDef;
+import com.dragonblockarcanedba.ability.AbilityFeedbackService;
 import com.dragonblockarcanedba.ability.AbilityFxService;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
@@ -83,6 +84,7 @@ public class WaveCarrierEntity extends CarrierEntity {
                 AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
                         center, new Vec3(dx, 0, dz),
                         getSeed() ^ this.tickCount, getPower(), Math.min(hitsThisTick, 8));
+                AbilityFeedbackService.carrier(this, def, AbilityDef.FxEvent.CARRIER_HIT, center);
             }
         }
     }

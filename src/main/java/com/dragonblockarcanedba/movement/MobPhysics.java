@@ -98,7 +98,8 @@ public final class MobPhysics {
                 ServerPlayer killer = entity.level().getServer().getPlayerList().getPlayer(hit.attackerId());
                 if (killer != null && killer != entity) {
                     float intensity = 1.25f + strength * 0.35f;
-                    ServerPlayNetworking.send(killer, new com.dragonblockarcanedba.network.ScreenShakePayload(intensity, 6, 3));
+                    ServerPlayNetworking.send(killer, new com.dragonblockarcanedba.network.ScreenShakePayload(
+                            intensity, 6, 3, killer.getX(), killer.getY(), killer.getZ(), 0f));
                 }
             }
         });

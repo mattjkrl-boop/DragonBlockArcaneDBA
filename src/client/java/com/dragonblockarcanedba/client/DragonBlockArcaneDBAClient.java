@@ -144,7 +144,8 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
 
         ClientPlayNetworking.registerGlobalReceiver(com.dragonblockarcanedba.network.ScreenShakePayload.TYPE, (payload, context) ->
             {
-                com.dragonblockarcanedba.client.fx.ScreenShakeHandler.trigger(payload.intensity(), payload.durationTicks(), payload.hitstopTicks());
+                com.dragonblockarcanedba.client.fx.ScreenShakeHandler.trigger(payload.intensity(), payload.durationTicks(), payload.hitstopTicks(),
+                        payload.ox(), payload.oy(), payload.oz(), payload.radius());
                 com.dragonblockarcanedba.client.fx.DbaPostFx.onShake(payload.intensity());
             });
         ClientPlayNetworking.registerGlobalReceiver(com.dragonblockarcanedba.network.AtmospherePayload.TYPE, (payload, context) ->

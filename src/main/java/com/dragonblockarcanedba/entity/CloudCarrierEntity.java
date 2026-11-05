@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.ability.AbilityDamage;
 import com.dragonblockarcanedba.ability.AbilityDef;
+import com.dragonblockarcanedba.ability.AbilityFeedbackService;
 import com.dragonblockarcanedba.ability.AbilityFxService;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -125,6 +126,8 @@ public class CloudCarrierEntity extends CarrierEntity {
             AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
                     this.pendingPoint.add(0, 0.5, 0), Vec3.ZERO,
                     strikeSeed(), getPower(), 1);
+            AbilityFeedbackService.carrier(this, def, AbilityDef.FxEvent.CARRIER_HIT,
+                    this.pendingPoint);
             this.entityData.set(STRIKE_AGE, -1);
             this.pendingStrikeAge = -1;
             this.pendingPoint = null;

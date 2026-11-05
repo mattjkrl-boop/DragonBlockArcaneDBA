@@ -229,6 +229,7 @@ public final class AbilityService {
         broadcastCast(player, def, CastSyncPayload.ACTION_FIRE, now);
         AbilityFxService.send(player, def, AbilityDef.FxEvent.FIRE,
                 player.position().add(0, 1.0, 0), player.getLookAngle(), seed, power, 1);
+        AbilityFeedbackService.fire(player, def);
     }
 
     /**
