@@ -500,3 +500,101 @@ packets into the full effect locally.
   Tempest authors a 2-layer shell with swirl 1.2, rim glow 0.7,
   and strike hue split. Picture verdicts live in the phase
   report.
+
+## Phase 5: the feedback service (landed)
+
+One service owns how abilities feel in the camera and the air:
+data-authored screen shake with real arbitration, domain fog,
+and a deliberately narrow answer on hit-stop.
+
+- Shake, Iron's Spells style. The schema gains a top-level
+  "feedback" block: one optional shake per event (onFire,
+  onCarrierHit, onCarrierEnd), each {strength (required, up to
+  the hard cap 3.0), durationTicks (default 10, cap 40), radius
+  (default 16, cap 64)}. The caps live in the parser
+  (AbilityDef.MAX_SHAKE_*), so data cannot make players sick.
+  ability/AbilityFeedbackService sends ONE ScreenShakePayload
+  per event to the players inside the radius, on the same tick
+  the event already happens on (called beside the AbilityFxService
+  sends in AbilityService.fire and the carriers' hit and expiry
+  paths). The service is gated on the data, not on fx recipes.
+- The payload grew an origin and a radius. ScreenShakePayload
+  was already the mod's one shake channel (registered, received,
+  config-scaled); Phase 5 extended it rather than adding a
+  second channel, because arbitration only works if every shake
+  competes in one store. Radius 0 means a direct shake with no
+  falloff: the two legacy senders (MovementPhysics landings,
+  the MobPhysics finisher) pass the receiver's own position and
+  radius 0, byte-for-byte the feel they had. The codec is
+  mod-internal on both ends, so the format change is safe.
+- The client store (client/fx/ScreenShakeHandler, 3.0) holds up
+  to 8 active shakes. Per tick, each shake's effective amplitude
+  is intensity times FeedbackMath.falloff (distance-squared:
+  full at the origin, quadratically to zero at the radius; pure
+  math, harness-proven) times its trauma-squared decay, and the
+  strongest drives the existing sway (layered sines plus a
+  directional kick, sampled before aging, so a fresh shake's
+  first tick is full strength, the old sequence). This replaces
+  2.0's replace-or-ignore rule: a weaker shake arriving during a
+  stronger one now waits and can surface as the winner decays,
+  which is what nearest-wins arbitration means with several live
+  sources. The config scale (DbaEffectsConfig.screenShake) still
+  multiplies the final offsets, so players can turn all of it
+  down or off. The handler's hitstop camera hold (the MobPhysics
+  finishers' freeze frame) is untouched and is NOT ability
+  hit-stop; see below.
+- Domain fog, Cataclysm style. The cloud block gains an optional
+  "atmosphere" object {tint (hex, required), strength (0 to 1,
+  default 0.6), density (0 to 1, default 0.5)}. Clients evaluate
+  it entirely from the carrier's already-synced state: no new
+  packets. client/fx/DomainFog walks the rendered entities each
+  client tick; a domain's influence is its lifecycle envelope
+  (FxEnvelope over the carrier's age: in with growth, out with
+  the end) times a spatial factor (full inside the live
+  radiusAt radius, feathering to zero at 1.6 radii). With
+  several domains live, one wins: the highest
+  envelope-times-spatial-times-strength score, and its tint,
+  strength, and density apply whole (colors never blend). A
+  smoothed weight (about a second in, about two and a half out)
+  carries transitions. client/mixin/FogRendererMixin
+  post-processes the FogData at FogRenderer.setupFog's return
+  (same signature on 26.2 and 26.3): fog distances scale by
+  1 - weight * density * 0.85 (floored at 0.12) and the fog
+  color lerps toward the tint by weight * strength. This is
+  separate from the orphaned bespoke-era AtmosphereServer /
+  AtmosphereClient storm system (payload-driven rain and post
+  grade gloom, no senders left at this head); domains do not
+  revive it, because the carrier state already carries
+  everything the fog needs.
+- Hit-stop: designed, NOT built. The research is blunt that the
+  field mostly skips it (none of Better Combat, Epic Fight, or
+  SlashBlade uses any), and the bundled definition (a
+  caster-local scale of the animation AND carrier presentation
+  clocks on a confirmed hit) does not fit this codebase's clock
+  structure. The cast pose half would work: CastAnimations
+  samples are a pure function of server ticks, so a per-local-
+  player lag applied only to the follow-through segment is a
+  small contained change. The carrier half does not: carrier
+  render age is the entity's own tickCount (shared client
+  simulation state, sampled into EntityRenderState.ageInTicks),
+  the carrier's owner is deliberately not synced (the Phase 1
+  contract: ability id, seed, power, nothing else), and slowing
+  a carrier's presentation would desync its visuals from the
+  positions and radii the server is applying damage from, which
+  the wave and cloud contracts explicitly forbid (what you see
+  is what can hit you). The designed field, for when Phase 6 or
+  later wants to pay for it properly: "hitStopTicks" (int, cap
+  4) inside the feedback block, fired by a caster-only direct
+  packet at the carrier_hit moment, freezing the local player's
+  CastAnimations sample clock for that many ticks (post-strike
+  segment only, entry ends late by the same count). Unblocking
+  the carrier half needs a deliberate contract change (a synced
+  owner on carriers) plus per-renderer age rewriting; neither
+  was forced here. The full reasoning is in the Phase 5 report.
+- Proof wiring: Z Shockwave authors onFire 0.9 / 12 ticks /
+  radius 20 and onCarrierHit 1.5 / 14 / 16. Cursed Tempest
+  authors onCarrierHit 0.45 / 8 / 14 (strikes land every 16
+  ticks, so the per-strike shake stays seasoning) and a violet
+  atmosphere (tint #3B1163, strength 0.65, density 0.5). Values
+  are conservative on purpose; feel is tuned after Carter's PC
+  test, in data.
