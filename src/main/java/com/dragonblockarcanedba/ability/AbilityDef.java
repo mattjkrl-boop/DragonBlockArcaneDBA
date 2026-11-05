@@ -39,7 +39,8 @@ public record AbilityDef(
         CloudParams cloud,
         ProjectileParams projectile,
         List<FxRecipe> fx,
-        GeometrySpec geometry
+        GeometrySpec geometry,
+        FeedbackSpec feedback
 ) {
     /** The recipes keyed to one event, in data order. Empty when the ability has none. */
     public List<FxRecipe> fxFor(FxEvent event) {
@@ -115,7 +116,54 @@ public record AbilityDef(
     public record WaveParams(double speed, double radius, double height, double arcDegrees) {}
 
     public record CloudParams(double radiusStart, double radiusEnd, double height, String anchor,
-                              int strikeInterval, int telegraphTicks, double strikeRadius) {}
+                              int strikeInterval, int telegraphTicks, double strikeRadius,
+                              CloudAtmosphere atmosphere) {}
+
+    /**
+     * The Phase 5 atmosphere block, inside the cloud block: while
+     * this domain is active, clients inside its influence see the
+     * render fog lerped toward tint and pulled closer. strength
+     * (0 to 1) is how far the fog color travels toward the tint at
+     * full influence; density (0 to 1) is how far the fog distances
+     * shrink at full influence. Pure presentation, evaluated
+     * client-side from the carrier's already-synced state (age,
+     * radius formula, position); the server sends nothing for it.
+     */
+    public record CloudAtmosphere(int tint, float strength, float density) {}
+
+    /**
+     * One screen shake, as data (Phase 5): strength in degrees of
+     * camera jitter at the event origin, durationTicks of
+     * trauma-squared decay, radius in blocks. The server sends one
+     * packet per event to the players inside radius; each client
+     * scales strength by the distance-squared falloff from the
+     * origin (ability/FeedbackMath) and arbitrates strongest-wins
+     * in its shake store. The parser caps are the feel ceiling:
+     * data cannot ask for more than 3 degrees, 40 ticks, or a
+     * 64-block radius, so no datapack can make players sick.
+     */
+    public record ShakeSpec(float strength, int durationTicks, float radius) {}
+
+    /**
+     * The Phase 5 feedback block: one optional shake per ability
+     * event. A null member means that event is silent. Events are
+     * the same moments the fx recipes key to: fire (the carrier
+     * spawns), carrier_hit (a wave sweep connects, a strike lands,
+     * a projectile hits), carrier_end (the carrier expires). The
+     * service that sends them is ability/AbilityFeedbackService.
+     */
+    public record FeedbackSpec(ShakeSpec onFire, ShakeSpec onCarrierHit, ShakeSpec onCarrierEnd) {
+        public static final FeedbackSpec NONE = new FeedbackSpec(null, null, null);
+
+        public ShakeSpec forEvent(FxEvent event) {
+            return switch (event) {
+                case FIRE -> onFire;
+                case CARRIER_HIT -> onCarrierHit;
+                case CARRIER_END -> onCarrierEnd;
+                default -> null;
+            };
+        }
+    }
 
     public record ProjectileParams(double speed, double gravityScale, double aoeRadius,
                                    String casing, double lengthScale) {}
@@ -247,7 +295,7 @@ public record AbilityDef(
     private static final Set<String> TOP_LEVEL = Set.of(
             "weapon", "slot", "name", "carrier", "phases", "animation", "chargeRelease",
             "minPower", "kiCost", "kiCostPercent", "cooldownTicks", "damage", "sounds",
-            "visual", "caps", "wave", "cloud", "projectile", "fx", "geometry");
+            "visual", "caps", "wave", "cloud", "projectile", "fx", "geometry", "feedback");
 
     private static final Set<String> STATS = Set.of(
             "strength", "dexterity", "spirit", "willpower", "defense", "none");
@@ -352,7 +400,8 @@ public record AbilityDef(
                         reqDouble(c, "radiusEnd", 0.1, 512),
                         reqDouble(c, "height", 0.1, 512),
                         anchor, strikeInterval, telegraph,
-                        optDouble(c, "strikeRadius", 2.5, 0.1, 512));
+                        optDouble(c, "strikeRadius", 2.5, 0.1, 512),
+                        parseAtmosphere(c));
             }
             case PROJECTILE -> {
                 JsonObject p = reqObject(json, "projectile");
@@ -371,11 +420,105 @@ public record AbilityDef(
 
         List<FxRecipe> fx = parseFx(json);
         GeometrySpec geometry = parseGeometry(json);
+        FeedbackSpec feedback = parseFeedback(json);
 
         return new AbilityDef(id, weapon, slot, name, carrier, phases, animation,
                 chargeRelease, minPower, kiCost, kiCostPercent, cooldownTicks,
                 damage, sounds, visual, caps, wave, cloud, projectile, List.copyOf(fx),
-                geometry);
+                geometry, feedback);
+    }
+
+    private static final Set<String> ATMOSPHERE_FIELDS = Set.of("tint", "strength", "density");
+
+    /**
+     * Parses the optional atmosphere object inside the cloud block
+     * (Phase 5). tint is required inside the object (a fog shift
+     * with no color is meaningless); strength and density default
+     * to 0.6 and 0.5. Errors name the exact field
+     * (cloud.atmosphere.strength and so on).
+     */
+    private static CloudAtmosphere parseAtmosphere(JsonObject cloudJson) {
+        if (!cloudJson.has("atmosphere")) {
+            return null;
+        }
+        JsonObject a = reqObject(cloudJson, "atmosphere");
+        for (String key : a.keySet()) {
+            if (!ATMOSPHERE_FIELDS.contains(key)) {
+                throw new IllegalArgumentException("unknown field \"cloud.atmosphere." + key + "\"");
+            }
+        }
+        int tint;
+        try {
+            tint = parseColor(reqString(a, "tint"));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("cloud.atmosphere.tint: " + e.getMessage());
+        }
+        return new CloudAtmosphere(tint,
+                (float) optDouble(a, "cloud.atmosphere.strength", "strength", 0.6, 0.0, 1.0),
+                (float) optDouble(a, "cloud.atmosphere.density", "density", 0.5, 0.0, 1.0));
+    }
+
+    private static final Set<String> FEEDBACK_EVENTS = Set.of("onFire", "onCarrierHit", "onCarrierEnd");
+    private static final Set<String> SHAKE_FIELDS = Set.of("strength", "durationTicks", "radius");
+
+    /** Hard ceilings for data-authored shakes; see ShakeSpec. */
+    public static final float MAX_SHAKE_STRENGTH = 3.0f;
+    public static final int MAX_SHAKE_DURATION = 40;
+    public static final float MAX_SHAKE_RADIUS = 64.0f;
+
+    /**
+     * Parses the optional feedback block (Phase 5): up to one shake
+     * per event key. Unknown event keys, unknown shake fields,
+     * wrong types, and out-of-range values are rejected naming the
+     * exact field (feedback.onFire.strength and so on), like every
+     * other block. strength is required inside a shake object;
+     * durationTicks defaults to 10 and radius to 16.
+     */
+    private static FeedbackSpec parseFeedback(JsonObject json) {
+        if (!json.has("feedback")) {
+            return FeedbackSpec.NONE;
+        }
+        JsonObject f = reqObject(json, "feedback");
+        for (String key : f.keySet()) {
+            if (!FEEDBACK_EVENTS.contains(key)) {
+                throw new IllegalArgumentException("unknown feedback event \"" + key
+                        + "\" (expected onFire, onCarrierHit, or onCarrierEnd)");
+            }
+        }
+        return new FeedbackSpec(
+                parseShake(f, "onFire"),
+                parseShake(f, "onCarrierHit"),
+                parseShake(f, "onCarrierEnd"));
+    }
+
+    private static ShakeSpec parseShake(JsonObject feedbackJson, String eventKey) {
+        if (!feedbackJson.has(eventKey)) {
+            return null;
+        }
+        String at = "feedback." + eventKey;
+        JsonObject s = reqObject(feedbackJson, eventKey);
+        for (String key : s.keySet()) {
+            if (!SHAKE_FIELDS.contains(key)) {
+                throw new IllegalArgumentException("unknown field \"" + at + "." + key + "\"");
+            }
+        }
+        return new ShakeSpec(
+                (float) reqDouble(s, at + ".strength", "strength", 0.01, MAX_SHAKE_STRENGTH),
+                (int) optDouble(s, at + ".durationTicks", "durationTicks", 10, 1, MAX_SHAKE_DURATION),
+                (float) optDouble(s, at + ".radius", "radius", 16, 1, MAX_SHAKE_RADIUS));
+    }
+
+    /** A required numeric field whose errors report displayName instead of the raw key. */
+    private static double reqDouble(JsonObject json, String displayName, String field, double min, double max) {
+        JsonElement el = json.get(field);
+        if (el == null || !el.isJsonPrimitive() || !el.getAsJsonPrimitive().isNumber()) {
+            throw new IllegalArgumentException("field \"" + displayName + "\" is required and must be a number");
+        }
+        double v = el.getAsDouble();
+        if (Double.isNaN(v) || v < min || v > max) {
+            throw new IllegalArgumentException("field \"" + displayName + "\" must be between " + min + " and " + max + ", got " + v);
+        }
+        return v;
     }
 
     private static final Set<String> GEO_BLOCKS = Set.of("wave", "cloud", "charge", "projectile");
