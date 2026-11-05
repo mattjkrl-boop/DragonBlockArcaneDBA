@@ -400,6 +400,96 @@ def sorrow_slash_arc():
     return m
 
 
+# ================================================================ Spirit Swing
+def spirit_swing_crescent():
+    """Soul crescent riding the Spirit Swing shot: teal blade edge, pale soul body,
+    ghost wisps trailing from both horns."""
+    m = Model("spirit_swing_crescent", tex=256, bounds=4)
+    energy(m, "edge", "#0E7490", "#4DE8E0", "#FFFFFF")
+    energy(m, "body", "#073B4C", "#2BB3B0", "#C8FFF8")
+    energy(m, "wisp", "#06303A", "#1E8C96", "#9AF5EE")
+    m.bone("root")
+    m.bone("arc", "root")
+    m.bone("inner", "root")
+    m.bone("wisps", "root", (0, 0, -16))
+    m.bone("motes", "root")
+    taper = lambda f: 1 - abs(f - 0.5) * 1.6
+    arc_xz(m, "arc", 22, -70, 70, 13, lambda f: (3.0 * taper(f) + 0.4, 0.7 * taper(f) + 0.3, 6.0), "edge", zoff=-12)
+    arc_xz(m, "inner", 19.5, -58, 58, 9, lambda f: (3.6 * taper(f) + 0.5, 0.4, 6.4), "body", zoff=-12)
+    for s in (-1, 1):
+        for k in range(3):
+            a = math.radians(s * (66 - k * 6))
+            r = 22 - k * 1.5
+            m.box("wisps", (r * math.sin(a), 0.6 * k * s, r * math.cos(a) - 12 - k * 3 + 16),
+                  (0.9 - k * 0.2, 0.9 - k * 0.2, 4 + k * 1.5), "wisp", rot=(0, math.degrees(a) * 0.4, 45))
+    for i in range(4):
+        a = math.radians(-36 + i * 24)
+        m.box("motes", (17 * math.sin(a), (1 if i % 2 else -1) * 1.6, 17 * math.cos(a) - 12),
+              (0.8, 0.8, 0.8), "wisp", rot=(45, 0, 45))
+    m.clip("spawn", 0.3, "hold_on_last_frame", {
+        "root": {"scale": lambda t: [max(0.02, overshoot(t / 0.3)), 1, 1]},
+    })
+    m.clip("fly", 0.5, True, {
+        "arc": {"scale": lambda t: [1, 1 + 0.2 * wave(t, 0.125), 1]},
+        "inner": {"scale": lambda t: [1 + 0.06 * wave(t, 0.25), 1 + 0.5 * wave(t, 0.25), 1]},
+        "wisps": {"scale": lambda t: [1, 1, 1 + 0.35 * wave(t, 0.17)], "rotation": lambda t: [0, 0, 8 * wave(t, 0.25)]},
+        "motes": {"position": lambda t: [0, 1.2 * wave(t, 0.25), 0]},
+    })
+    m.clip("end", 0.3, "hold_on_last_frame", {
+        "root": {"scale": lambda t: [1 + 0.4 * t / 0.3, max(0.02, 1 - t / 0.3), max(0.02, 1 - ease_in(t / 0.3))]},
+    })
+    return m
+
+
+# ================================================================ Temporal Strike (Time Shatter melee)
+def temporal_strike_arc():
+    """Clock-hand sweep for the Whis staff strike: a pale dial arc with hour ticks,
+    the swept hand, and steel shards of cracked time flaking off the rim."""
+    m = Model("temporal_strike_arc", tex=256, bounds=4)
+    energy(m, "dial", "#3A6A9C", "#BFE3FF", "#FFFFFF")
+    energy(m, "glow", "#1E3A66", "#6FA8DC", "#DDEEFF")
+    m.material("shard", "steel", "#2A3644", "#8AA4C0", "#E8F2FF")
+    m.bone("root")
+    n = 10
+    for i in range(n):
+        m.bone("seg%d" % i, "root")
+    m.bone("ticks", "root")
+    m.bone("hand", "root", (0, 0, -12))
+    m.bone("shards", "root")
+    arc_xz(m, lambda i: "seg%d" % i, 30, 65, -65, n, lambda f: (2.2, 0.6, 6.0), "dial", zoff=-12)
+    for i in range(7):
+        a = math.radians(54 - i * 18)
+        m.box("ticks", (34 * math.sin(a), 0, 34 * math.cos(a) - 12),
+              (0.6, 0.5, 3.2 if i % 3 == 0 else 1.8), "glow", rot=(0, math.degrees(a), 0))
+    m.box("hand", (0, 0, 15), (1.2, 0.5, 30), "glow")
+    m.box("hand", (0, 0, 29), (2.4, 0.5, 2.4), "dial", rot=(0, 45, 0))
+    m.box("hand", (0, 0, 0), (2.0, 1.0, 2.0), "dial", rot=(0, 45, 0))
+    for i in range(6):
+        a = math.radians(50 - i * 20)
+        m.box("shards", (27 * math.sin(a), (i % 3 - 1) * 1.2, 27 * math.cos(a) - 12),
+              (1.4, 0.3, 2.2), "shard", rot=(30 * (i % 2 * 2 - 1), math.degrees(a), 20))
+    segs = {}
+    for i in range(n):
+        d = 0.18 * i / (n - 1)
+        segs["seg%d" % i] = {"scale": (lambda d: lambda t: [max(0.02, ease_out(clamp((t - d) / 0.06)))] * 3)(d)}
+    m.clip("sweep", 0.3, "hold_on_last_frame", {
+        **segs,
+        "hand": {"rotation": lambda t: [0, 65 - 130 * ease_out(clamp(t / 0.24)), 0]},
+        "ticks": {"scale": lambda t: [max(0.02, ease_out(clamp((t - 0.05) / 0.2)))] * 3},
+        "shards": {"scale": lambda t: [max(0.02, clamp((t - 0.12) / 0.1))] * 3},
+    })
+    m.clip("hold", 0.4, True, {
+        "hand": {"rotation": lambda t: [0, -65, 0]},
+        "shards": {"position": lambda t: [0, -2 * t / 0.4, 0], "rotation": lambda t: [40 * t / 0.4, 0, 0]},
+    })
+    m.clip("fade", 0.3, "hold_on_last_frame", {
+        "root": {"scale": lambda t: [1 + 0.1 * t / 0.3, max(0.02, 1 - ease_in(t / 0.3)), 1 + 0.1 * t / 0.3]},
+        "hand": {"rotation": lambda t: [0, -65, 0]},
+        "shards": {"position": lambda t: [0, -2 - 5 * t / 0.3, 0]},
+    })
+    return m
+
+
 # ================================================================ Ox Brace
 def titan_aegis():
     """Spectral ox titan rising behind the caster: horned helm, pauldrons,
@@ -779,7 +869,8 @@ BUILDERS = {f.__name__: f for f in (
     saber_line_slash, saber_afterimage, void_rift_portal, brave_cross_slash,
     curse_chain_bind, hell_chain_bind, void_fragment, dimensional_crescent,
     prong_bolt, sorrow_slash_arc, titan_aegis, blaster_bolt, blaster_casing,
-    lava_fountain, flail_chain_ball, rising_eruption, cyclone_debris)}
+    lava_fountain, flail_chain_ball, rising_eruption, cyclone_debris,
+    spirit_swing_crescent, temporal_strike_arc)}
 
 if __name__ == "__main__":
     for n in sys.argv[1:] or list(BUILDERS):
