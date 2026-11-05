@@ -37,15 +37,35 @@ Foundation (aff69c4): orbit on a carrier, ride on any carrier, point burst honou
 
 Ratings are proposed from data, previews and build only. None are STRONG on look until the PC test.
 
+## Follow-up pass (Nov 5, 2026)
+One commit per item, all pushed to main. Build passes, and the new checkAbilities step reports all 55 ability files OK.
+
+| Item | Commit | Change |
+|---|---|---|
+| Pitch with aim | 593c6e1 | Model pieces now pitch: bolts and riders follow their motion, escorts follow the owner's pitch. Bursts, descend and orbit pieces stay level. |
+| Configurable opening | 26c04d9 | models.spawnTicks (1 to 200, default 6). titan_aegis rise is now a phased 1.2 s clip (spawnTicks 24). |
+| Chain links | ee5927f | The cloud syncs its latched set. A new "latch" trigger binds the chain model on every chained target, and links are drawn to all of them. The client approximation is gone. |
+| Blaster | 05f7636 | blaster_bolt 27 cubes (nose, heat wake), blaster_casing 21 cubes (smoke wisp). Eject side confirmed: GeckoLib negates geo X, so geo +X is the caster's right. |
+| Blitz line-up | 3c65acc | Generic move.lineUp (chain only): the finisher snaps every chained target onto one line along the aim, 2.5 blocks out and 1.6 apart, skipping blocked spots. The saber card calls for it. |
+| Spirit Swing | 954d883 | spirit_swing_crescent (32 cubes) rides the shot. |
+| Time Shatter melee | 954d883 | temporal_strike_arc clock-hand sweep (26 cubes) on Temporal Strike. |
+| JSON load test | d380863 | The checkAbilities Gradle task (run by build) parses every file with AbilityDef.parse and checks its model geo, clip names and summon targets. A broken clip name was tested and failed the build. |
+
+Spirit Swing and Time Shatter melee move to PARTIAL-STRONG (proposed). Counts are now 11 STRONG, 33 PARTIAL-STRONG and 0 PARTIAL. All of this is unverified until the PC test.
+
+### Reference card recheck (all 9 cards viewed)
+- Saber: the finisher lines targets up. Done (lineUp). Flash Step rifts at both ends match.
+- Curse Chain: chains latch and orbit every target, up to 10. Now matches, with a bind on every target.
+- Brave cross slash, Hollow fragment ring, Azure Dragon Rush dragon aura (azure_dragon escort) and Dabura sky blades (sky_blade finale) all match the existing sets.
+- Grand Cyclone blade shards match (cyclone_shard). The Grand Crescent Wave has no dedicated crescent model and rides the wave visuals.
+- Katana Heaven Splitter vertical slice wall: there is no wall model, only the wave and cloud visuals. Open.
+- Z Shockwave golden vortex: there is no vortex model, only wave visuals. Open.
+
 ## Still open
-- Pitch is not rendered on model pieces, so ride models on steep shots stay level.
-- Blitz Flurry does not line the targets up; that would be a new mechanic.
-- Curse Chain and Hell Hunt: links between chained targets are still the client approximation; the bind model sits on the anchor target only.
-- Orbit and ride spawn phases are fixed at 6 ticks in code, so spawn clips are 0.3 s.
-- blaster_bolt and blaster_casing sit at 13 and 10 cubes (small props, below the 12 to 24 bar for the casing).
-- Wind Spin's drawn band is now radius 8; deflect now works only inside that band as it travels.
+- Heaven Splitter slice wall model, Z Shockwave golden vortex model and Grand Crescent Wave crescent model.
 - Rising Blow launch is vertical only.
-- Spirit Swing and Time Shatter melee stay PARTIAL (their pictures are carried by the summons).
+- Wind Spin's drawn band is radius 8, and deflect works only inside the band.
+- Line-up uses the caster's Y and falls back to the target's Y. Targets in blocked spots are skipped.
 
 ## Hit-stop
 Kept deferred. The prompt allows only a pose-clock-only freeze behind an opt-in field, off by default; with it off nothing would change on Carter's test, so it was not built this pass.

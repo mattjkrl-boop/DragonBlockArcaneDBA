@@ -122,7 +122,7 @@ means the hero element lands with one named approximation.
 PARTIAL means the mechanic is fully real but the picture's
 signature visual is approximated by recipes or palette.
 
-Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and build only; Carter's PC test confirms or reverts them. Count now 11 STRONG, 31 PARTIAL-STRONG, 2 PARTIAL.
+Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and build only; Carter's PC test confirms or reverts them. Count now 11 STRONG, 33 PARTIAL-STRONG, 0 PARTIAL (follow-up pass, see DESIGN-AUDIT-NOV5.md).
 
 | # | Weapon | Attack | Carrier and modules | Rating | Gap |
 |---|--------|--------|--------------------|--------|-----|
@@ -130,7 +130,7 @@ Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and 
 | 2 | Katana | Heaven Splitter | wave slow; ground wall and cracks | STRONG | wall now lingers 100 ticks where the wave dies (carrierEnd summon, katana_heaven_wall); unverified in game |
 | 3 | Z Sword | Z Shockwave | wave; raised charge ring (proof) | STRONG | none open |
 | 4 | Z Sword | Katchin Weight | cloud anchor target; pull, finale slam, crater, cracks | PARTIAL-STRONG | the concept's sword rain is picture dressing, not the design |
-| 5 | Saber | Blitz Flurry | move chain into wave | PARTIAL-STRONG | saber_line_slash 7 block cut on finish, cyan saber_afterimage per hop (Nov 5); targets are not lined up, that would be a mechanic |
+| 5 | Saber | Blitz Flurry | move chain into wave | PARTIAL-STRONG | saber_line_slash 7 block cut on finish, cyan saber_afterimage per hop (Nov 5); finisher lines the chained targets up along the aim (move.lineUp, Nov 5) |
 | 6 | Saber | Flash Step | move step, charges 3; echoed cloud | PARTIAL-STRONG | tall diamond void_rift_portal at departure and arrival (Nov 5) |
 | 7 | Brave Sword | Assault | melee; combo 10 into ring wave | PARTIAL-STRONG | brave_cross_slash gold and cyan X model on the tenth hit (Nov 5) |
 | 8 | Brave Sword | Heroic Dash | move dash (power-scaled 8 to 24); ring wave on arrival | PARTIAL-STRONG | trail is the ring's shed recipes, no dash-trail carrier |
@@ -140,16 +140,16 @@ Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and 
 | 12 | Azure Dragon Sword | Call of the Tempest | cloud; strikes, vortex | STRONG | debris is recipe particles, not flying blocks |
 | 13 | Dabura Sword | Abyssal Slash | chargeRelease wave; onHit petrification | PARTIAL-STRONG | picture's second cross arc not fired |
 | 14 | Dabura Sword | Eclipse Domain | cloud follow caster; pull, stasis slow, petrify inside, finale strikes, obsidian finale | PARTIAL-STRONG | finale sky blades read as strikes and bursts, no blade model |
-| 15 | Cursed Blade | Curse Chain | cloud anchor entity; follow entity, chains 10, inside damage | PARTIAL-STRONG | curse_chain_bind loops on the bound target (Nov 5); links to the other chained targets are still the client approximation |
+| 15 | Cursed Blade | Curse Chain | cloud anchor entity; follow entity, chains 10, inside damage | PARTIAL-STRONG | curse_chain_bind loops on the bound target (Nov 5); bind on every latched target and links drawn to the synced latched set (Nov 5) |
 | 16 | Cursed Blade | Cursed Tempest | cloud; strikes, 2-layer shell (proof) | PARTIAL-STRONG | held from Phase 4 |
 | 17 | Hollow's Edge | Hollow Rush | none; move chain 4 | PARTIAL-STRONG | katana_afterimage model left at each hop (Nov 5) |
 | 18 | Hollow's Edge | Void Rift | cloud anchor target; pull 2.2, vortex, finale implosion | PARTIAL-STRONG | void_fragment ring, 8 plus 5 lit obsidian fragments orbiting, implode at end (Nov 5) |
 | 19 | Dimensional Sword | Dimensional Slash | projectile; swing melting | PARTIAL-STRONG | dimensional_crescent rides the shot; animAlt alternates a 30 degree left and right roll per cast (Nov 5) |
 | 20 | Dimensional Sword | Warp Rift | move warp 1024 (sky fallback 128 in code); destination cloud, onSpawnBurst | PARTIAL-STRONG | void_rift_portal at origin (1.0) and a larger destination rift (1.8) (Nov 5) |
-| 21 | Spirit Sword | Spirit Swing | projectile plus melee; meleeHit summon | PARTIAL | the picture's second half is the summon below |
+| 21 | Spirit Sword | Spirit Swing | projectile plus melee; meleeHit summon | PARTIAL-STRONG | spirit_swing_crescent soul crescent rides the shot (Nov 5) |
 | 22 | Spirit Sword | Spirit Cannon | beam; sustain 5 percent per second | STRONG | braided multi-stream beam texture is renderer-side |
 | 23 | Evil Spear | Evil Impale | chargeRelease projectile; fullPower summon | PARTIAL-STRONG | thrown spear is an energy-cased shard, not a spear model |
-| 24 | Evil Spear | Hell Hunt | cloud anchor entity; chains 3, finale 2.2 | PARTIAL-STRONG | hell_chain_bind loops on the bound target (Nov 5); links to the other targets still client approximated |
+| 24 | Evil Spear | Hell Hunt | cloud anchor entity; chains 3, finale 2.2 | PARTIAL-STRONG | hell_chain_bind loops on the bound target (Nov 5); bind on every latched target, links to the synced set (Nov 5) |
 | 25 | Devil Trident | Deploy | swarm carrier, all design numbers verbatim | STRONG | shard look depends on the swarm renderer (lit shard plus energy core) |
 | 26 | Devil Trident | Prong Shot | projectile; 750 flat, Ki 60 drained over 10 ticks, cooldown 10 (design) | PARTIAL-STRONG | prong_bolt gold prong model with hellfire tail rides the shot (Nov 5) |
 | 27 | Sickle of Sorrow | Sorrow Slash | melee; onHit melting plus 15 percent lifesteal | PARTIAL-STRONG | sorrow_slash_arc crescent trail model (Nov 5) |
@@ -162,7 +162,7 @@ Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and 
 | 34 | Whis Staff | Temporal Rift | cloud; freeze 60, rewind 100, damage 0 | PARTIAL-STRONG | drawn glass ring has no kit equivalent; freeze and rewind are real |
 | 35 | Bansho Fan | Gale Force | wave; knockback, carrierHit cyclone summon | PARTIAL-STRONG | dust trails ride the cyclone palette; Great Cyclone now carries 64 real debris pieces (cyclone_debris, Nov 5) |
 | 36 | Bansho Fan | Tempest Barrage | projectile volley 5; fire shockwave summon | STRONG | dust grey bolts with the Bansho emerald rim (Nov 5) |
-| 37 | Blaster Gun | Barrage | autoFire channel; heat to overcharged shot | PARTIAL-STRONG | blaster_bolt plasma model per shot plus lit brass blaster_casing ejected per shot (Nov 5) |
+| 37 | Blaster Gun | Barrage | autoFire channel; heat to overcharged shot | PARTIAL-STRONG | blaster_bolt (27 cubes) per shot plus lit brass blaster_casing (21) ejected to the right (Nov 5) |
 | 38 | Blaster Gun | Erasure Cannon | chargeRelease beam 48 | STRONG | none material |
 | 39 | Lava Sword | Lava Cleave | wave; terrain trail lava cap 120; sneak variant volcano | PARTIAL-STRONG | lava_fountain models, one large behind plus a ring of four (Nov 5) |
 | 40 | Lava Sword | Lava Eruption | cloud; terrain field lava cap 260, basalt crust; sneak variant meteor | PARTIAL-STRONG | magma channel lines are the field conversion, not drawn channels |
