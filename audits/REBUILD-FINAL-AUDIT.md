@@ -189,10 +189,14 @@ missing behavior.
 
 ## Designs not fully expressed, and what shipped instead
 
-- Temporal Rift rewind is POSITION ONLY (RewindService):
-  health, effects, and inventory are not rewound. Freeze is
-  velocity zeroing plus the temporal_stasis effect; mob AI
-  timers are not paused. Both named in the plan and here.
+- Temporal Rift (follow-up): rewind now restores position,
+  rotation, health, fire, air, and status effects (stasis
+  excluded). Inventory is still not rewound, deliberately
+  (duplication risk). Freeze now also pauses mob AI via NoAI
+  for the freeze window, restored at window end or cloud
+  removal; mobs already NoAI are untouched. Players are only
+  velocity-zeroed plus stasis. Known edge: a chunk unloading
+  mid-freeze can save a mob with NoAI set. Unverified in game.
 - Spirit Impale's six swords, Eclipse's sky blades, Katchin's
   sword rain: no sword or blade model exists in the kit.
   Shipped as dome and disc volumes, strike scheduling, and

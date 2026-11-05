@@ -68,6 +68,8 @@ public class CloudCarrierEntity extends CarrierEntity {
     private final Set<UUID> latched = new HashSet<>();
     private final Map<Integer, Vec3> frozenProjectiles = new HashMap<>();
     private boolean rewindDone;
+    /** Mobs whose AI this cloud paused during its freeze window (restored after or on removal). */
+    private final Set<UUID> aiPaused = new HashSet<>();
     private boolean finaleDone;
     private boolean spawnBurstDone;
     private int fieldConverted;
@@ -327,10 +329,20 @@ public class CloudCarrierEntity extends CarrierEntity {
         if (cloud.freezeTicks() > 0 && age <= cloud.freezeTicks()) {
             for (LivingEntity e : inside) {
                 e.setDeltaMovement(Vec3.ZERO);
+                // Pause mob AI (goals, pathing, attack timers) for the window.
+                // Mobs already NoAI by someone else are left alone.
+                if (e instanceof net.minecraft.world.entity.Mob mob && !mob.isNoAi()) {
+                    mob.setNoAi(true);
+                    this.aiPaused.add(mob.getUUID());
+                }
                 if (age % 5 == 0 && DbaEffects.TEMPORAL_STASIS_HOLDER != null) {
                     e.addEffect(new MobEffectInstance(DbaEffects.TEMPORAL_STASIS_HOLDER, 10, 0));
                 }
             }
+        }
+
+        if (!this.aiPaused.isEmpty() && age > cloud.freezeTicks()) {
+            resumePausedAi(serverLevel);
         }
 
         // Projectile stasis.
@@ -464,6 +476,9 @@ public class CloudCarrierEntity extends CarrierEntity {
     /** Restores frozen projectile velocities on any removal path. */
     @Override
     public void remove(RemovalReason reason) {
+        if (this.level() instanceof ServerLevel sl && !this.aiPaused.isEmpty()) {
+            resumePausedAi(sl);
+        }
         if (this.level() instanceof ServerLevel serverLevel && !this.frozenProjectiles.isEmpty()) {
             for (Map.Entry<Integer, Vec3> entry : this.frozenProjectiles.entrySet()) {
                 Entity projectile = serverLevel.getEntity(entry.getKey());
@@ -474,5 +489,14 @@ public class CloudCarrierEntity extends CarrierEntity {
             this.frozenProjectiles.clear();
         }
         super.remove(reason);
+    }
+
+    private void resumePausedAi(ServerLevel serverLevel) {
+        for (UUID id : this.aiPaused) {
+            if (serverLevel.getEntity(id) instanceof net.minecraft.world.entity.Mob mob) {
+                mob.setNoAi(false);
+            }
+        }
+        this.aiPaused.clear();
     }
 }
