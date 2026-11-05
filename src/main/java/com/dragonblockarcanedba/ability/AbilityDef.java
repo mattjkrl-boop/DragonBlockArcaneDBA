@@ -61,7 +61,8 @@ public record AbilityDef(
         TerrainSpec terrain,
         BeamParams beam,
         SwarmParams swarm,
-        ModelSpec models
+        ModelSpec models,
+        int kiDrainTicks
 ) {
     /** The recipes keyed to one event, in data order. Empty when the ability has none. */
     public List<FxRecipe> fxFor(FxEvent event) {
@@ -432,7 +433,7 @@ public record AbilityDef(
 
     private static final Set<String> TOP_LEVEL = Set.of(
             "weapon", "slot", "name", "carrier", "phases", "animation", "chargeRelease",
-            "minPower", "kiCost", "kiCostPercent", "cooldownTicks", "damage", "sounds",
+            "minPower", "kiCost", "kiCostPercent", "kiDrainTicks", "cooldownTicks", "damage", "sounds",
             "visual", "caps", "wave", "cloud", "projectile", "fx", "geometry", "feedback",
             "bind", "sneakVariant", "airVariant", "rooted", "charges", "chargeRegenTicks",
             "move", "melee", "onHit", "swing", "summons", "aura", "sustain", "autoFire",
@@ -467,6 +468,9 @@ public record AbilityDef(
         float minPower = (float) optDouble(json, "minPower", 0.4, 0.0, 1.0);
         double kiCost = optDouble(json, "kiCost", 0, 0, Double.MAX_VALUE);
         double kiCostPercent = optDouble(json, "kiCostPercent", 0, 0, 100);
+        // kiDrainTicks > 0: the price is paid in equal parts once per tick
+        // over that many ticks starting at fire, instead of all at fire.
+        int kiDrainTicks = (int) optDouble(json, "kiDrainTicks", 0, 0, 200);
         int cooldownTicks = (int) optDouble(json, "cooldownTicks", 0, 0, 72000);
 
         JsonObject dmg = reqObject(json, "damage");
@@ -613,7 +617,7 @@ public record AbilityDef(
                 geometry, feedback, bind, sneakVariant, airVariant, rooted, charges,
                 chargeRegenTicks, move, melee, onHit, swing, List.copyOf(summons), aura,
                 sustain, autoFire, combo, criticalWindow, volley, terrain, beam, swarm,
-                models);
+                models, kiDrainTicks);
     }
 
 

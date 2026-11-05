@@ -124,6 +124,8 @@ public final class AbilityService {
         final Map<Long, PendingSpawn> pendingByTick = new HashMap<>();
         long auraLastDamageTick = -1000000L;
         final Set<Integer> auraDeflected = new HashSet<>();
+        /** Discrete Ki drains in flight: {perTick, ticksLeft}. */
+        final List<double[]> kiDrains = new ArrayList<>();
     }
 
     private static final Map<UUID, Runtime> RUNTIMES = new HashMap<>();
@@ -458,6 +460,21 @@ public final class AbilityService {
         ServerLevel level = (ServerLevel) player.level();
         long now = level.getGameTime();
 
+        if (!rt.kiDrains.isEmpty()) {
+            PlayerStatsAccessor ki = (PlayerStatsAccessor) player;
+            double take = 0;
+            for (java.util.Iterator<double[]> it = rt.kiDrains.iterator(); it.hasNext(); ) {
+                double[] d = it.next();
+                take += d[0];
+                if (--d[1] <= 0) {
+                    it.remove();
+                }
+            }
+            ki.dba$addKi(-Math.min(take, ki.dba$getCurrentKi()));
+            ki.dba$pauseKiRecovery(20);
+            ki.dba$syncStats();
+        }
+
         // Channels die on weapon swap or when their def vanishes.
         if (rt.channel != null) {
             AbilityDef held = heldAbility(player, rt.channel.def.slot());
@@ -634,7 +651,13 @@ public final class AbilityService {
             playSound(player, "dragonblockarcanedba:fizzle", 0.7f, 1.0f);
             return;
         }
-        accessor.dba$addKi(-price);
+        if (def.kiDrainTicks() > 0) {
+            // Discrete drain: the full price must be on hand at fire, then
+            // it leaves in equal parts over the window (tickRuntime).
+            runtime(player).kiDrains.add(new double[] {price / def.kiDrainTicks(), def.kiDrainTicks()});
+        } else {
+            accessor.dba$addKi(-price);
+        }
         accessor.dba$pauseKiRecovery(20);
         accessor.dba$syncStats();
 

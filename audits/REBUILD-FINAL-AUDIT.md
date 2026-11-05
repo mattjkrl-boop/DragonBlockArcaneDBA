@@ -149,7 +149,7 @@ signature visual is approximated by recipes or palette.
 | 23 | Evil Spear | Evil Impale | chargeRelease projectile; fullPower summon | PARTIAL-STRONG | thrown spear is an energy-cased shard, not a spear model |
 | 24 | Evil Spear | Hell Hunt | cloud anchor entity; chains 3, finale 2.2 | PARTIAL | chain links drawn to a client-approximated set |
 | 25 | Devil Trident | Deploy | swarm carrier, all design numbers verbatim | STRONG | shard look depends on the swarm renderer (lit shard plus energy core) |
-| 26 | Devil Trident | Prong Shot | projectile; 750 flat, Ki 60, cooldown 10 (design) | PARTIAL | a plain fast projectile; the golden streak reads via palette |
+| 26 | Devil Trident | Prong Shot | projectile; 750 flat, Ki 60 drained over 10 ticks, cooldown 10 (design) | PARTIAL | a plain fast projectile; the golden streak reads via palette |
 | 27 | Sickle of Sorrow | Sorrow Slash | melee; onHit melting plus 15 percent lifesteal | PARTIAL | slash trail read via fx; design numbers verbatim (750 plus 3.0 Strength) |
 | 28 | Sickle of Sorrow | Dimensional Rift | cloud; vortex, inside damage, finale implosion | PARTIAL-STRONG | crystal shards are recipes, no crystal geometry |
 | 29 | Ox King's Ax | Ox King's Strike | rooted chargeRelease 200; ring wave radius 24; fullPower summon | STRONG | none material |
@@ -201,9 +201,9 @@ missing behavior.
   sword rain: no sword or blade model exists in the kit.
   Shipped as dome and disc volumes, strike scheduling, and
   burst recipes.
-- Prong Shot Ki pricing is flattened to the standard at-fire
-  payment (Ki 60 flat), per the plan; the design's discrete
-  10-tick drain is not a payment shape the service has.
+- Prong Shot Ki pricing: CLOSED Nov 5, 2026 (Grok). Restored to
+  the design: generic kiDrainTicks field, the full 60 must be on
+  hand at fire and leaves as 6 per tick over 10 ticks.
 - Blaster Barrage overcharge: the design's overcharged AoE of
   2.2 is reached as base aoeRadius 1.1 times overchargeAoeScale
   2, because the channel multiplies the base radius. Normal
