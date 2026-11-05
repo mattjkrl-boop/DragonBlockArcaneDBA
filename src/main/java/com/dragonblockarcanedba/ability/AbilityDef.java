@@ -226,7 +226,8 @@ public record AbilityDef(
 
     /** Caster movement module (Phase 6). mode is one of dash, chain, step, warp, launch, slam, rush. */
     public record MoveSpec(String mode, double distance, double maxDistance, int targets,
-                           double range, int stepTicks, boolean damageOnPass, double forward) {}
+                           double range, int stepTicks, boolean damageOnPass, double forward,
+                           boolean lineUp) {}
 
     /** Instant cone hit module (Phase 6), resolved at the fire tick. */
     public record MeleeSpec(double range, double arcDegrees) {}
@@ -722,7 +723,7 @@ public record AbilityDef(
     }
 
     private static final Set<String> MOVE_FIELDS = Set.of(
-            "mode", "distance", "maxDistance", "targets", "range", "stepTicks", "damageOnPass", "forward");
+            "mode", "distance", "maxDistance", "targets", "range", "stepTicks", "damageOnPass", "forward", "lineUp");
     private static final Set<String> MOVE_MODES = Set.of(
             "dash", "chain", "step", "warp", "launch", "slam", "rush");
 
@@ -733,6 +734,9 @@ public record AbilityDef(
         JsonObject m = reqObject(json, "move");
         rejectUnknown(m, MOVE_FIELDS, "move");
         String mode = reqString(m, "mode");
+        if (m.has("lineUp") && !"chain".equals(mode)) {
+            throw new IllegalArgumentException("move.lineUp only applies to mode chain");
+        }
         if (!MOVE_MODES.contains(mode)) {
             throw new IllegalArgumentException("move.mode must be one of dash, chain, step, warp, "
                     + "launch, slam, rush, got \"" + mode + "\"");
@@ -745,7 +749,9 @@ public record AbilityDef(
                 (int) optDouble(m, "move.stepTicks", "stepTicks", 2, 1, 20),
                 namedBool(m, "move.damageOnPass", "damageOnPass", false),
                 // launch only: horizontal push along the caster's aim, in blocks per tick
-                optDouble(m, "move.forward", "forward", 0, 0, 3));
+                optDouble(m, "move.forward", "forward", 0, 0, 3),
+                // chain only: at the finisher every chained target snaps onto one line along the aim
+                namedBool(m, "move.lineUp", "lineUp", false));
     }
 
     private static final Set<String> MELEE_FIELDS = Set.of("range", "arcDegrees");

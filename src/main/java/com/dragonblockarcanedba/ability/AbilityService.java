@@ -77,7 +77,7 @@ public final class AbilityService {
         int ticksLeft;
         int hopTimer;
         int hopsDone;
-        final Set<UUID> visited = new HashSet<>();
+        final Set<UUID> visited = new java.util.LinkedHashSet<>();
         double dashDirX;
         double dashDirZ;
         boolean startedAirborne;
@@ -1179,6 +1179,36 @@ public final class AbilityService {
         }
     }
 
+    /** Chain lineUp: snap every chained target onto one line along the caster's aim, ready for the finisher. */
+    private static void lineUpChained(ServerPlayer player, MoveState move) {
+        ServerLevel level = (ServerLevel) player.level();
+        Vec3 look = player.getLookAngle();
+        Vec3 flat = new Vec3(look.x, 0, look.z);
+        if (flat.lengthSqr() < 1.0e-4) {
+            return;
+        }
+        flat = flat.normalize();
+        int slot = 0;
+        for (java.util.UUID id : move.visited) {
+            if (!(level.getEntity(id) instanceof LivingEntity e) || !e.isAlive()) {
+                continue;
+            }
+            double d = 2.5 + slot * 1.6;
+            Vec3 to = new Vec3(player.getX() + flat.x * d, player.getY(), player.getZ() + flat.z * d);
+            AABB moved = e.getBoundingBox().move(to.subtract(e.position()));
+            if (!level.noCollision(e, moved)) {
+                to = new Vec3(to.x, e.getY(), to.z);
+                if (!level.noCollision(e, e.getBoundingBox().move(to.subtract(e.position())))) {
+                    continue;
+                }
+            }
+            e.teleportTo(to.x, to.y, to.z);
+            e.setDeltaMovement(Vec3.ZERO);
+            e.hurtMarked = true;
+            slot++;
+        }
+    }
+
     /** A timed move ends: its pending carrier fires here (unless a rush timed out unlanded). */
     private static void finishMove(ServerPlayer player, Runtime rt, boolean fireCarrier) {
         MoveState move = rt.move;
@@ -1187,6 +1217,9 @@ public final class AbilityService {
         }
         rt.move = null;
         AbilityDef def = move.def;
+        if (fireCarrier && "chain".equals(def.move().mode()) && def.move().lineUp()) {
+            lineUpChained(player, move);
+        }
         if (!fireCarrier || def.carrier() == AbilityDef.Carrier.NONE) {
             return;
         }
