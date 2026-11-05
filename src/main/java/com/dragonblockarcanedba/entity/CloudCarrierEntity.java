@@ -59,6 +59,10 @@ public class CloudCarrierEntity extends CarrierEntity {
     private static final EntityDataAccessor<Integer> STRIKE_SEED =
             SynchedEntityData.defineId(CloudCarrierEntity.class, EntityDataSerializers.INT);
 
+    /** Entity ids of the latched chain targets, comma separated, for the client chain draw. */
+    private static final EntityDataAccessor<String> LATCHED_IDS =
+            SynchedEntityData.defineId(CloudCarrierEntity.class, EntityDataSerializers.STRING);
+
     private int nextStrikeAge = -1;
     private int pendingStrikeAge = -1;
     private Vec3 pendingPoint;
@@ -100,6 +104,30 @@ public class CloudCarrierEntity extends CarrierEntity {
         builder.define(STRIKE_Z, 0f);
         builder.define(STRIKE_AGE, -1);
         builder.define(STRIKE_SEED, 0);
+        builder.define(LATCHED_IDS, "");
+    }
+
+    /** True while the given entity is one of this cloud's latched chain targets (server side). */
+    public boolean isLatched(UUID uuid) {
+        return uuid != null && this.latched.contains(uuid) && !this.isRemoved();
+    }
+
+    /** The synced latched target entity ids (client side chain draw). */
+    public int[] latchedIds() {
+        String raw = this.entityData.get(LATCHED_IDS);
+        if (raw.isEmpty()) {
+            return new int[0];
+        }
+        String[] parts = raw.split(",");
+        int[] out = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            try {
+                out[i] = Integer.parseInt(parts[i]);
+            } catch (NumberFormatException e) {
+                out[i] = -1;
+            }
+        }
+        return out;
     }
 
     /** Current domain radius at the given fractional age, shared by server logic and renderers. */
@@ -284,11 +312,27 @@ public class CloudCarrierEntity extends CarrierEntity {
 
         // Chains: refresh the latched set every 10 ticks.
         if (cloud.chains() != null && age % 10 == 1) {
+            Set<UUID> before = new HashSet<>(this.latched);
             this.latched.clear();
             List<LivingEntity> near = insiders(serverLevel, def, radius, owner);
             near.sort(Comparator.comparingDouble(e -> e.position().distanceToSqr(center)));
+            StringBuilder ids = new StringBuilder();
             for (int i = 0; i < Math.min(cloud.chains().maxLinks(), near.size()); i++) {
-                this.latched.add(near.get(i).getUUID());
+                LivingEntity e = near.get(i);
+                this.latched.add(e.getUUID());
+                if (ids.length() > 0) {
+                    ids.append(',');
+                }
+                ids.append(e.getId());
+                if (!before.contains(e.getUUID())) {
+                    // a fresh latch: the def's "latch" model sets bind this target
+                    com.dragonblockarcanedba.ability.ModelDisplaySpawner.spawnForLatch(
+                            serverLevel, def, this, e, getSeed() ^ e.getId());
+                }
+            }
+            String synced = ids.toString();
+            if (!synced.equals(this.entityData.get(LATCHED_IDS))) {
+                this.entityData.set(LATCHED_IDS, synced);
             }
         }
         boolean chainsActive = cloud.chains() != null;

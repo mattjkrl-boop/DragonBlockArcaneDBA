@@ -78,6 +78,8 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
     /** cast-trigger sets: the def whose cast keeps this piece alive. */
     private net.minecraft.resources.Identifier castDef;
     private int castEndAge = -1;
+    /** latch-trigger sets: the chain cloud whose latch on the owner keeps this piece alive. */
+    private UUID latchCloud;
     private double fallVelocity;
     private int groundedAge = -1;
     private Vec3 boltVelocity = Vec3.ZERO;
@@ -319,6 +321,11 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
                 && !com.dragonblockarcanedba.ability.AbilityService.isCasting(this.ownerUuid, this.castDef)) {
             this.castEndAge = age;
         }
+        if (this.latchCloud != null && this.castEndAge < 0
+                && !(serverLevel.getEntity(this.latchCloud) instanceof CloudCarrierEntity cloud
+                        && cloud.isLatched(this.ownerUuid))) {
+            this.castEndAge = age;
+        }
         if (this.castEndAge >= 0) {
             setPhase(PHASE_END);
             if (age > this.castEndAge + 6) {
@@ -453,6 +460,11 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
     @Override
     public AnimatableInstanceCache getAnimatableInstanceCache() {
         return this.geoCache;
+    }
+
+    /** Binds this piece to a chain cloud's latch on its owner: it breaks when the latch does. */
+    public void bindToLatch(UUID cloudUuid) {
+        this.latchCloud = cloudUuid;
     }
 
     /** Binds this piece to a cast: it plays its end clip and leaves when the cast ends. */

@@ -58,6 +58,7 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
         public float yaw = 0;
         public int strikeAge = -1;
         public int strikeSeed = 0;
+        public int[] latchedIds = new int[0];
         public double sx = 0, sy = 0, sz = 0;
     }
 
@@ -100,6 +101,8 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
         state.wz = entity.getZ();
         state.strikeAge = entity.strikeAge();
         state.strikeSeed = entity.strikeSeed();
+        state.latchedIds = entity.def() != null && entity.def().cloud() != null
+                && entity.def().cloud().chains() != null ? entity.latchedIds() : new int[0];
         if (entity.hasPendingStrike()) {
             Vec3 sp = entity.strikePos();
             state.sx = sp.x - entity.getX();
@@ -304,28 +307,19 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
         }
 
         if (hasChains) {
-            // Presentation approximation: the server latches its own
-            // chain set; the client re-derives the nearest living
-            // entities inside the current radius each frame and
-            // draws to those. The two sets agree in the common case
-            // (nearest first, same radius) but are not synced.
-            AABB box = new AABB(wx - radius, wy - 4, wz - radius,
-                    wx + radius, wy + cloud.height() + 4, wz + radius);
-            List<LivingEntity> found = new ArrayList<>(
-                    level.getEntitiesOfClass(LivingEntity.class, box, e -> e.isAlive()));
-            found.sort(Comparator.comparingDouble(e -> e.distanceToSqr(wx, wy, wz)));
+            // The server's latched set, synced as entity ids: a link is
+            // drawn from the cloud's anchor to every chained target.
             List<Vec3> targets = new ArrayList<>();
-            Vec3 center = new Vec3(wx, wy, wz);
-            for (LivingEntity e : found) {
-                if (targets.size() >= cloud.chains().maxLinks()) {
-                    break;
-                }
-                Vec3 ec = e.position().add(0, e.getBbHeight() * 0.5, 0);
-                if (ec.distanceTo(center) > radius + e.getBbWidth()) {
+            for (int id : state.latchedIds) {
+                net.minecraft.world.entity.Entity e = level.getEntity(id);
+                if (!(e instanceof LivingEntity le) || !le.isAlive()) {
                     continue;
                 }
-                targets.add(new Vec3(e.getX() - wx,
-                        e.getY() - wy + e.getBbHeight() * 0.6, e.getZ() - wz));
+                Vec3 rel = new Vec3(e.getX() - wx, e.getY() - wy + e.getBbHeight() * 0.6, e.getZ() - wz);
+                if (rel.horizontalDistanceSqr() < 1.0) {
+                    continue; // the anchor target itself: its bind model carries it
+                }
+                targets.add(rel);
             }
             if (!targets.isEmpty()) {
                 final Vec3 from = new Vec3(0, cloud.height() * 0.55, 0);

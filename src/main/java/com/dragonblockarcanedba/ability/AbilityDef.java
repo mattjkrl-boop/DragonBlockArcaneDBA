@@ -971,7 +971,7 @@ public record AbilityDef(
             "descend", "fall", "escort", "bolt", "hang", "orbit", "ride", "burst");
     private static final Set<String> MODELS_FORMATIONS = Set.of(
             "ring", "rain", "escort", "point");
-    private static final Set<String> MODELS_TRIGGERS = Set.of("fire", "finale", "cast", "step");
+    private static final Set<String> MODELS_TRIGGERS = Set.of("fire", "finale", "cast", "step", "latch");
 
     private static java.util.List<ModelSpec> parseModels(JsonObject json) {
         if (!json.has("models")) {
@@ -1020,7 +1020,10 @@ public record AbilityDef(
         String trigger = optString(m, "trigger", "fire");
         if (!MODELS_TRIGGERS.contains(trigger)) {
             throw new IllegalArgumentException(
-                    "models.trigger must be fire, finale, cast, or step, got \"" + trigger + "\"");
+                    "models.trigger must be fire, finale, cast, step, or latch, got \"" + trigger + "\"");
+        }
+        if ("latch".equals(trigger) && !"orbit".equals(behavior)) {
+            throw new IllegalArgumentException("models.trigger latch needs behavior orbit (it binds each latched target)");
         }
         String animSpawn = optString(m, "animSpawn", null);
         String animHold = optString(m, "animHold", null);

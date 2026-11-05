@@ -76,6 +76,33 @@ public final class ModelDisplaySpawner {
         }
     }
 
+    /**
+     * Latch trigger: a chain cloud latched a new target. Each "latch" set
+     * orbits that target (radius 0 binds it) and plays its end clip when
+     * the cloud lets it go or ends.
+     */
+    public static void spawnForLatch(ServerLevel level, AbilityDef def,
+                                     com.dragonblockarcanedba.entity.CloudCarrierEntity cloud,
+                                     Entity target, int seed) {
+        for (AbilityDef.ModelSpec specIn : def.models()) {
+            if (!"latch".equals(specIn.trigger())) {
+                continue;
+            }
+            AbilityDef.ModelSpec spec = specIn.lifetimeTicks() > 0 ? specIn
+                    : specIn.withLifetime(def.phases().active() + 20);
+            RandomSource random = RandomSource.create(seed * 31L + 17L);
+            double baseAngle = random.nextDouble() * 360.0;
+            for (int i = 0; i < spec.count(); i++) {
+                ModelDisplayEntity display = new ModelDisplayEntity(DbaEntities.MODEL_DISPLAY, level);
+                display.init(spec, target.getUUID(), i, target.getY(), target.position(), Vec3.ZERO);
+                display.bindToLatch(cloud.getUUID());
+                display.setYRot((float) baseAngle);
+                display.yRotO = display.getYRot();
+                level.addFreshEntity(display);
+            }
+        }
+    }
+
     /** Finale trigger: rains or plants the set across the finale area. */
     public static void spawnForFinale(ServerLevel level, AbilityDef def, Vec3 center,
                                       double areaRadius, UUID ownerUuid, int seed) {
