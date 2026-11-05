@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render.ability;
 
 import com.dragonblockarcanedba.ability.AbilityDef;
-import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.ability.AbilityFxDefaults;
+import com.dragonblockarcanedba.client.fx.AbilityFxExpander;
+import com.dragonblockarcanedba.client.fx.RecipeEmitter;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
 import com.dragonblockarcanedba.entity.CloudCarrierEntity;
@@ -16,7 +18,9 @@ import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -26,8 +30,10 @@ import java.util.Map;
  * so every client sees the same bolts), the synced telegraph as a
  * narrowing light pillar plus a ground ring at the strike radius,
  * and the strike itself as one thick bolt in the three ticks after
- * it fires. Interior weather is material particles only: decay and
- * atmosphere, never the body.
+ * it fires. Interior weather runs on Phase 3 recipes (the
+ * definition's carrier_tick fx, or the shared defaults), expanded
+ * locally from the carrier's synced state: decay and atmosphere,
+ * never the body.
  */
 public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, CloudCarrierRenderer.State> {
 
@@ -55,11 +61,12 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
 
     private static final class Frame {
         double cx, cy, cz, radius;
+        float power = 1f;
     }
 
     private static final class Emission {
         final Frame frame = new Frame();
-        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        List<RecipeEmitter> emitters = List.of();
         float lastAge = -1f;
     }
 
@@ -221,46 +228,39 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
         emission.frame.cy = state.wy;
         emission.frame.cz = state.wz;
         emission.frame.radius = CloudCarrierEntity.radiusAt(def, state.ageInTicks) * def.visual().scale();
+        emission.frame.power = state.power;
         float delta = emission.lastAge < 0f ? 0.05f
                 : Math.min(0.05f, Math.max(0f, (state.ageInTicks - emission.lastAge) / 20.0f));
         emission.lastAge = state.ageInTicks;
-        float rateScale = dist <= def.caps().fullDetailDistance() ? 1f : distScale;
-        for (MaterialEmitters.Emitter emitter : emission.emitters) {
-            emitter.tick(delta, rateScale);
+        // Recipes thin by the caps-driven detail factor: full rate
+        // inside fullDetailDistance, the shared falloff beyond, and
+        // the cull check above stops them entirely past cull.
+        float detail = AbilityFxExpander.detailFactor(def, dist);
+        for (RecipeEmitter emitter : emission.emitters) {
+            emitter.tick(delta, detail);
         }
     }
 
     private Emission buildEmission(ClientLevel level, State state, AbilityDef def) {
         Emission emission = new Emission();
-        AbilityDef.VisualSpec vis = def.visual();
         final Frame frame = emission.frame;
         frame.cx = state.wx;
         frame.cy = state.wy;
         frame.cz = state.wz;
-        frame.radius = CloudCarrierEntity.radiusAt(def, state.ageInTicks) * vis.scale();
+        frame.radius = CloudCarrierEntity.radiusAt(def, state.ageInTicks) * def.visual().scale();
+        frame.power = state.power;
         // Interior weather, sampled against the live frame radius so
-        // the shed grows with the domain.
-        MaterialEmitters.Source interior = random -> {
-            double a = random.nextDouble() * Math.PI * 2.0;
-            double rr = frame.radius * Math.sqrt(random.nextDouble());
-            Vec3 pos = new Vec3(frame.cx + Math.cos(a) * rr,
-                    frame.cy + 0.3 + random.nextDouble() * 1.2,
-                    frame.cz + Math.sin(a) * rr);
-            return new MaterialEmitters.Sample(pos, new Vec3(0, 0.03, 0));
-        };
-        float budget = def.caps().maxParticlesPerSecond();
-        float groundRate = Math.min(budget * 0.6f, 200f * vis.particleRate());
-        float driftRate = Math.min(budget * 0.4f, 110f * vis.particleRate());
-        emission.emitters = new MaterialEmitters.Emitter[]{
-                new MaterialEmitters.Emitter(level,
-                        MaterialEmitters.Preset.material(vis.particleMaterial(), vis.rim(),
-                                3.2f * vis.scale(), state.seed, Vec3.ZERO, 0.02f),
-                        interior, groundRate, Math.max(1, Math.round(groundRate))),
-                new MaterialEmitters.Emitter(level,
-                        MaterialEmitters.Preset.material(vis.particleMaterial(), vis.mid(),
-                                2.2f * vis.scale(), state.seed ^ 0x51AB, Vec3.ZERO, 0.02f),
-                        interior, driftRate, Math.max(1, Math.round(driftRate)))
-        };
+        // the shed grows with the domain: the context re-reads the
+        // frame on every emitter tick.
+        List<AbilityDef.FxRecipe> recipes = AbilityFxDefaults.tickRecipes(def);
+        List<RecipeEmitter> emitters = new ArrayList<>();
+        for (int i = 0; i < recipes.size(); i++) {
+            emitters.add(new RecipeEmitter(level, def, recipes.get(i), state.seed + i * 0x51AB,
+                    () -> new AbilityFxExpander.Ctx(
+                            new Vec3(frame.cx, frame.cy, frame.cz),
+                            new Vec3(0, 1, 0), frame.power, frame.radius)));
+        }
+        emission.emitters = emitters;
         return emission;
     }
 }

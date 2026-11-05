@@ -1,7 +1,9 @@
 package com.dragonblockarcanedba.client.render.ability;
 
 import com.dragonblockarcanedba.ability.AbilityDef;
-import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.ability.AbilityFxDefaults;
+import com.dragonblockarcanedba.client.fx.AbilityFxExpander;
+import com.dragonblockarcanedba.client.fx.RecipeEmitter;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.WaveCarrierEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
@@ -15,17 +17,21 @@ import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Generic Wave renderer, parameterized entirely by the ability
  * definition: a ground-anchored arc band in three stacked strips
  * (rim at the ground, mid body, white-hot core band, fading top),
- * a ground ring at its base, and a sparse material decay shed along
- * the band. Geometry is the hero; the particles only dissipate.
- * The shape language is Phase 1 simple on purpose; the primitive
- * kit phase enriches behind this class.
+ * a ground ring at its base, and a decay shed along the band. The
+ * shed runs on Phase 3 recipes (the definition's carrier_tick fx,
+ * or the shared defaults), expanded locally from the carrier's
+ * synced state; geometry is the hero, the particles only
+ * dissipate. The shape language is Phase 1 simple on purpose; the
+ * primitive kit phase enriches behind this class.
  */
 public class WaveCarrierRenderer extends EntityRenderer<WaveCarrierEntity, WaveCarrierRenderer.State> {
 
@@ -42,14 +48,16 @@ public class WaveCarrierRenderer extends EntityRenderer<WaveCarrierEntity, WaveC
         public double wx = 0, wy = 0, wz = 0;
     }
 
-    /** Mutable per-frame anchor for the shed source; the wave travels, so the source must follow. */
+    /** Mutable per-frame anchor for the shed context; the wave travels, so the context must follow. */
     private static final class Frame {
         double cx, cy, cz, yRot;
+        float power = 1f;
+        double radiusHint = 1.0;
     }
 
     private static final class Emission {
         final Frame frame = new Frame();
-        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        List<RecipeEmitter> emitters = List.of();
         float lastAge = -1f;
     }
 
@@ -139,44 +147,39 @@ public class WaveCarrierRenderer extends EntityRenderer<WaveCarrierEntity, WaveC
         emission.frame.cy = state.wy;
         emission.frame.cz = state.wz;
         emission.frame.yRot = state.yRot;
+        emission.frame.power = state.power;
+        emission.frame.radiusHint = def.wave().radius() * def.visual().scale();
         float delta = emission.lastAge < 0f ? 0.05f
                 : Math.min(0.05f, Math.max(0f, (state.ageInTicks - emission.lastAge) / 20.0f));
         emission.lastAge = state.ageInTicks;
-        for (MaterialEmitters.Emitter emitter : emission.emitters) {
-            emitter.tick(delta, distScale);
+        float detail = AbilityFxExpander.detailFactor(def, dist);
+        for (RecipeEmitter emitter : emission.emitters) {
+            emitter.tick(delta, detail);
         }
     }
 
     private Emission buildEmission(ClientLevel level, State state, AbilityDef def) {
         Emission emission = new Emission();
-        AbilityDef.VisualSpec vis = def.visual();
-        AbilityDef.WaveParams wave = def.wave();
-        final double radius = wave.radius() * vis.scale();
-        final double height = wave.height() * vis.scale();
-        final double arc = Math.toRadians(wave.arcDegrees());
         final Frame frame = emission.frame;
         frame.cx = state.wx;
         frame.cy = state.wy;
         frame.cz = state.wz;
         frame.yRot = state.yRot;
-        MaterialEmitters.Source alongBand = random -> {
-            double yawRad = Math.toRadians(frame.yRot);
-            double fwdX = -Math.sin(yawRad);
-            double fwdZ = Math.cos(yawRad);
-            double a = (random.nextDouble() - 0.5) * arc;
-            double px = frame.cx + (fwdX * Math.cos(a) - fwdZ * Math.sin(a)) * radius;
-            double pz = frame.cz + (fwdZ * Math.cos(a) + fwdX * Math.sin(a)) * radius;
-            double py = frame.cy + random.nextDouble() * height;
-            return new MaterialEmitters.Sample(new Vec3(px, py, pz),
-                    new Vec3(fwdX * 0.05, 0.05, fwdZ * 0.05));
-        };
-        float rate = Math.min(def.caps().maxParticlesPerSecond(), 260f * vis.particleRate());
-        emission.emitters = new MaterialEmitters.Emitter[]{
-                new MaterialEmitters.Emitter(level,
-                        MaterialEmitters.Preset.material(vis.particleMaterial(), vis.mid(),
-                                2.1f * vis.scale(), state.seed, Vec3.ZERO, 0.03f),
-                        alongBand, rate, Math.max(1, Math.round(rate)))
-        };
+        frame.power = state.power;
+        frame.radiusHint = def.wave().radius() * def.visual().scale();
+        List<AbilityDef.FxRecipe> recipes = AbilityFxDefaults.tickRecipes(def);
+        List<RecipeEmitter> emitters = new ArrayList<>();
+        for (int i = 0; i < recipes.size(); i++) {
+            emitters.add(new RecipeEmitter(level, def, recipes.get(i), state.seed + i * 0x51AB,
+                    () -> {
+                        double yawRad = Math.toRadians(frame.yRot);
+                        return new AbilityFxExpander.Ctx(
+                                new Vec3(frame.cx, frame.cy, frame.cz),
+                                new Vec3(-Math.sin(yawRad), 0, Math.cos(yawRad)),
+                                frame.power, frame.radiusHint);
+                    }));
+        }
+        emission.emitters = emitters;
         return emission;
     }
 }

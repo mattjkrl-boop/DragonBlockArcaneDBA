@@ -1,10 +1,11 @@
 package com.dragonblockarcanedba.client.render.ability;
 
 import com.dragonblockarcanedba.ability.AbilityDef;
-import com.dragonblockarcanedba.client.fx.MaterialEmitters;
+import com.dragonblockarcanedba.ability.AbilityFxDefaults;
+import com.dragonblockarcanedba.client.fx.AbilityFxExpander;
+import com.dragonblockarcanedba.client.fx.RecipeEmitter;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.entity.ProjectileCarrierEntity;
-import com.dragonblockarcanedba.particle.DbaParticles;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -16,17 +17,21 @@ import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Generic Projectile renderer: a shard body whose material is the
  * definition's casing choice (a world-lit physical casing through
  * the lit path, an emissive energy body, or nothing), an energy
- * core along the flight axis showing through it, and a material
- * wake shed behind. Physical casings never take the emissive path:
- * that is the standing world-lit rule, enforced here by casing
- * choice rather than per weapon.
+ * core along the flight axis showing through it, and a wake shed
+ * behind. The shed runs on Phase 3 recipes (the definition's
+ * carrier_tick fx, or the shared defaults), expanded locally from
+ * the carrier's synced state. Physical casings never take the
+ * emissive path: that is the standing world-lit rule, enforced
+ * here by casing choice rather than per weapon.
  */
 public class ProjectileCarrierRenderer extends EntityRenderer<ProjectileCarrierEntity, ProjectileCarrierRenderer.State> {
 
@@ -47,11 +52,12 @@ public class ProjectileCarrierRenderer extends EntityRenderer<ProjectileCarrierE
     private static final class Frame {
         Vec3 center = Vec3.ZERO;
         Vec3 dir = Vec3.ZERO;
+        float power = 1f;
     }
 
     private static final class Emission {
         final Frame frame = new Frame();
-        MaterialEmitters.Emitter[] emitters = new MaterialEmitters.Emitter[0];
+        List<RecipeEmitter> emitters = List.of();
         float lastAge = -1f;
     }
 
@@ -146,51 +152,29 @@ public class ProjectileCarrierRenderer extends EntityRenderer<ProjectileCarrierE
         }
         emission.frame.center = new Vec3(state.wx, state.wy, state.wz);
         emission.frame.dir = lookDir(state.yRot, state.xRot);
+        emission.frame.power = state.power;
         float delta = emission.lastAge < 0f ? 0.05f
                 : Math.min(0.05f, Math.max(0f, (state.ageInTicks - emission.lastAge) / 20.0f));
         emission.lastAge = state.ageInTicks;
-        for (MaterialEmitters.Emitter emitter : emission.emitters) {
-            emitter.tick(delta, distScale);
+        float detail = AbilityFxExpander.detailFactor(def, dist);
+        for (RecipeEmitter emitter : emission.emitters) {
+            emitter.tick(delta, detail);
         }
     }
 
     private Emission buildEmission(ClientLevel level, State state, AbilityDef def) {
         Emission emission = new Emission();
-        AbilityDef.VisualSpec vis = def.visual();
         final Frame frame = emission.frame;
         frame.center = new Vec3(state.wx, state.wy, state.wz);
         frame.dir = lookDir(state.yRot, state.xRot);
-        MaterialEmitters.Source cluster = random -> {
-            Vec3 pos = frame.center.add(new Vec3(
-                    (random.nextDouble() * 2 - 1) * 0.14,
-                    (random.nextDouble() * 2 - 1) * 0.14,
-                    (random.nextDouble() * 2 - 1) * 0.14));
-            return new MaterialEmitters.Sample(pos, frame.dir.scale(-0.04));
-        };
-        MaterialEmitters.Source wake = random -> {
-            double t = random.nextDouble();
-            Vec3 pos = frame.center.add(frame.dir.scale(-(0.2 + t * 1.5))).add(new Vec3(
-                    (random.nextDouble() * 2 - 1) * 0.12 * (1 + t),
-                    (random.nextDouble() * 2 - 1) * 0.12 * (1 + t),
-                    (random.nextDouble() * 2 - 1) * 0.12 * (1 + t)));
-            return new MaterialEmitters.Sample(pos, frame.dir.scale(-0.02));
-        };
-        float budget = def.caps().maxParticlesPerSecond();
-        float clusterRate = Math.min(budget * 0.6f, 300f * vis.particleRate());
-        float wakeRate = Math.min(budget * 0.4f, 200f * vis.particleRate());
-        emission.emitters = new MaterialEmitters.Emitter[]{
-                new MaterialEmitters.Emitter(level,
-                        MaterialEmitters.Preset.material(vis.particleMaterial(), vis.mid(),
-                                1.9f * vis.scale(), state.seed, Vec3.ZERO, 0.02f),
-                        cluster, clusterRate, Math.max(1, Math.round(clusterRate))),
-                new MaterialEmitters.Emitter(level,
-                        MaterialEmitters.Preset.material(vis.particleMaterial(), vis.core(),
-                                1.4f * vis.scale(), state.seed ^ 0x77, Vec3.ZERO, 0.02f),
-                        wake, wakeRate, Math.max(1, Math.round(wakeRate))),
-                new MaterialEmitters.Emitter(level,
-                        MaterialEmitters.Preset.fixed(DbaParticles.SPARK_STREAK, Vec3.ZERO, 0.12f),
-                        cluster, 24f, 40)
-        };
+        frame.power = state.power;
+        List<AbilityDef.FxRecipe> recipes = AbilityFxDefaults.tickRecipes(def);
+        List<RecipeEmitter> emitters = new ArrayList<>();
+        for (int i = 0; i < recipes.size(); i++) {
+            emitters.add(new RecipeEmitter(level, def, recipes.get(i), state.seed + i * 0x77,
+                    () -> new AbilityFxExpander.Ctx(frame.center, frame.dir, frame.power, 0)));
+        }
+        emission.emitters = emitters;
         return emission;
     }
 }
