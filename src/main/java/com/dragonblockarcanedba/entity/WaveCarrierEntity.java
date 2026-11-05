@@ -34,6 +34,7 @@ public class WaveCarrierEntity extends CarrierEntity {
     private final Set<UUID> hit = new HashSet<>();
     private final Set<Integer> deflected = new HashSet<>();
     private boolean selfLaunched;
+    private Vec3 origin;
     private boolean carrierHitSummonFired;
     private int trailConverted;
 
@@ -57,6 +58,9 @@ public class WaveCarrierEntity extends CarrierEntity {
         double yawRad = Math.toRadians(this.getYRot());
         double dx = -Math.sin(yawRad);
         double dz = Math.cos(yawRad);
+        if (this.origin == null) {
+            this.origin = this.position();
+        }
         double nx = this.getX() + dx * wave.speed();
         double nz = this.getZ() + dz * wave.speed();
         int groundY = this.level().getHeight(Heightmap.Types.MOTION_BLOCKING,
@@ -79,6 +83,9 @@ public class WaveCarrierEntity extends CarrierEntity {
                 double distX = target.getX() - center.x;
                 double distZ = target.getZ() - center.z;
                 double dist = Math.sqrt(distX * distX + distZ * distZ);
+                if (wave.reach() > 0 && !insideCone(target, wave, dx, dz)) {
+                    continue;
+                }
                 if (dist <= wave.radius() + target.getBbWidth() * 0.5) {
                     this.hit.add(target.getUUID());
                     AbilityDamage.applyHit(serverLevel, def, this, owner, target,
@@ -137,6 +144,21 @@ public class WaveCarrierEntity extends CarrierEntity {
     }
 
     /** Phase 6 wave modules that run even on ticks without a hit: deflect and terrain trail. */
+    /** The reach cone: within reach of the spawn point and half the arc of the aim. */
+    private boolean insideCone(LivingEntity target, AbilityDef.WaveParams wave, double dx, double dz) {
+        double ox = target.getX() - this.origin.x;
+        double oz = target.getZ() - this.origin.z;
+        double d = Math.sqrt(ox * ox + oz * oz);
+        if (d > wave.reach() + target.getBbWidth() * 0.5) {
+            return false;
+        }
+        if (d < 1.5 || wave.arcDegrees() >= 360) {
+            return true;
+        }
+        double cos = (ox * dx + oz * dz) / d;
+        return cos >= Math.cos(Math.toRadians(wave.arcDegrees() * 0.5));
+    }
+
     private void tickWaveModules(ServerLevel serverLevel, AbilityDef def,
                                  AbilityDef.WaveParams wave, AABB box) {
         AbilityDef.WaveDeflectSpec deflect = wave.deflect();

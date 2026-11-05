@@ -139,7 +139,8 @@ public record AbilityDef(
     public record Caps(int maxParticlesPerSecond, double fullDetailDistance, double cullDistance) {}
 
     public record WaveParams(double speed, double radius, double height, double arcDegrees,
-                             KnockbackSpec knockback, WaveDeflectSpec deflect, double selfLaunch) {}
+                             KnockbackSpec knockback, WaveDeflectSpec deflect, double selfLaunch,
+                             double reach) {}
 
     /** Wave knockback module (Phase 6): out is horizontal push away from the wave center, up is vertical. */
     public record KnockbackSpec(double out, double up) {}
@@ -550,7 +551,10 @@ public record AbilityDef(
                         reqDouble(w, "arcDegrees", 10, 360),
                         parseWaveKnockback(w),
                         parseWaveDeflect(w),
-                        optDouble(w, "wave.selfLaunch", "selfLaunch", 0, 0, 4));
+                        optDouble(w, "wave.selfLaunch", "selfLaunch", 0, 0, 4),
+                        // reach: when set, hits are gated to a true cone, within
+                        // reach blocks of the spawn point and arcDegrees of the aim
+                        optDouble(w, "wave.reach", "reach", 0, 0, 512));
             }
             case CLOUD -> {
                 JsonObject c = reqObject(json, "cloud");
