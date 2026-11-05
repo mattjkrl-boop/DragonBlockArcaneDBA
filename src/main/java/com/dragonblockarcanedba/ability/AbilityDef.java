@@ -21,7 +21,7 @@ public record AbilityDef(
         String name,
         Carrier carrier,
         Phases phases,
-        String animation,
+        AnimationSpec animation,
         boolean chargeRelease,
         float minPower,
         double kiCost,
@@ -61,6 +61,21 @@ public record AbilityDef(
     }
 
     public record Phases(int startup, int active, int recovery) {}
+
+    /**
+     * The Phase 2 animation block. id names the release clip (a
+     * Bedrock animation the client resolves; clips for the generic
+     * set live in animations/abilities.animation.json). charge, when
+     * present, names a separate wind-up clip played across startup
+     * instead of the release clip's own wind-up segment. strikeAt is
+     * the fraction of the release clip where the strike frame sits;
+     * that frame lands exactly on the fire tick. followTicks caps
+     * the follow-through after the strike (the carrier's active
+     * lifetime is not a body pose); channel instead holds the raised
+     * pose for the whole active phase (sustained channels).
+     */
+    public record AnimationSpec(String id, String charge, float strikeAt,
+                                int followTicks, boolean channel) {}
 
     public record DamageSpec(double base, String stat, double perStat, String type,
                              String falloff, float falloffFloor) {}
@@ -109,7 +124,7 @@ public record AbilityDef(
                 reqInt(phasesJson, "active", 1, 72000),
                 reqInt(phasesJson, "recovery", 0, 72000));
 
-        String animation = optString(json, "animation", null);
+        AnimationSpec animation = parseAnimation(json);
         boolean chargeRelease = optBool(json, "chargeRelease", false);
         float minPower = (float) optDouble(json, "minPower", 0.4, 0.0, 1.0);
         double kiCost = optDouble(json, "kiCost", 0, 0, Double.MAX_VALUE);
@@ -210,6 +225,56 @@ public record AbilityDef(
                 damage, sounds, visual, caps, wave, cloud, projectile);
     }
 
+    private static final Set<String> ANIMATION_FIELDS = Set.of(
+            "id", "charge", "strikeAt", "followTicks", "channel");
+
+    /**
+     * Parses the optional animation block. Clip ids are Bedrock
+     * animation names (dotted lowercase tokens); existence of the
+     * clip is a client concern (the client logs and skips a missing
+     * clip), but a malformed id or an out-of-range phase value is a
+     * data error and is rejected here, naming the exact field.
+     */
+    private static AnimationSpec parseAnimation(JsonObject json) {
+        if (!json.has("animation")) {
+            return null;
+        }
+        JsonObject a = reqObject(json, "animation");
+        for (String key : a.keySet()) {
+            if (!ANIMATION_FIELDS.contains(key)) {
+                throw new IllegalArgumentException("unknown animation field \"" + key + "\"");
+            }
+        }
+        String id = reqString(a, "id");
+        if (!isClipName(id)) {
+            throw new IllegalArgumentException(
+                    "animation.id must be a Bedrock clip name (dotted lowercase tokens), got \"" + id + "\"");
+        }
+        String charge = optString(a, "charge", null);
+        if (charge != null && !isClipName(charge)) {
+            throw new IllegalArgumentException(
+                    "animation.charge must be a Bedrock clip name (dotted lowercase tokens), got \"" + charge + "\"");
+        }
+        float strikeAt = (float) optDouble(a, "animation.strikeAt", "strikeAt", 0.5, 0.05, 0.95);
+        int followTicks = (int) optDouble(a, "animation.followTicks", "followTicks", 10, 0, 200);
+        boolean channel = optBool(a, "channel", false);
+        return new AnimationSpec(id, charge, strikeAt, followTicks, channel);
+    }
+
+    private static boolean isClipName(String s) {
+        if (s == null || s.isEmpty() || s.startsWith(".") || s.endsWith(".") || s.contains("..")) {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.';
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Total Ki price for a caster with the given max Ki. */
     public double kiPrice(double maxKi) {
         return kiCost + maxKi * kiCostPercent / 100.0;
@@ -299,16 +364,22 @@ public record AbilityDef(
     }
 
     private static double optDouble(JsonObject json, String field, double fallback, double min, double max) {
+        return optDouble(json, field, field, fallback, min, max);
+    }
+
+    /** As optDouble, but errors report displayName instead of the raw key. */
+    private static double optDouble(JsonObject json, String displayName, String field,
+                                    double fallback, double min, double max) {
         JsonElement el = json.get(field);
         if (el == null) {
             return fallback;
         }
         if (!el.isJsonPrimitive() || !el.getAsJsonPrimitive().isNumber()) {
-            throw new IllegalArgumentException("field \"" + field + "\" must be a number");
+            throw new IllegalArgumentException("field \"" + displayName + "\" must be a number");
         }
         double v = el.getAsDouble();
         if (Double.isNaN(v) || v < min || v > max) {
-            throw new IllegalArgumentException("field \"" + field + "\" must be between " + min + " and " + max + ", got " + v);
+            throw new IllegalArgumentException("field \"" + displayName + "\" must be between " + min + " and " + max + ", got " + v);
         }
         return v;
     }
