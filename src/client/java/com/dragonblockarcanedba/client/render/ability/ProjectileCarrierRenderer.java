@@ -5,6 +5,7 @@ import com.dragonblockarcanedba.ability.AbilityFxDefaults;
 import com.dragonblockarcanedba.client.fx.AbilityFxExpander;
 import com.dragonblockarcanedba.client.fx.RecipeEmitter;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.kit.PlateCasing;
 import com.dragonblockarcanedba.entity.ProjectileCarrierEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -23,15 +24,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Generic Projectile renderer: a shard body whose material is the
+ * Generic Projectile renderer: a body whose material is the
  * definition's casing choice (a world-lit physical casing through
  * the lit path, an emissive energy body, or nothing), an energy
  * core along the flight axis showing through it, and a wake shed
- * behind. The shed runs on Phase 3 recipes (the definition's
- * carrier_tick fx, or the shared defaults), expanded locally from
- * the carrier's synced state. Physical casings never take the
- * emissive path: that is the standing world-lit rule, enforced
- * here by casing choice rather than per weapon.
+ * behind. The body's form is the geometry block's casingForm: the
+ * faceted shard (the default, the Phase 1 body) or the kit's
+ * flat-plate sabot casing. The shed runs on Phase 3 recipes (the
+ * definition's carrier_tick fx, or the shared defaults), expanded
+ * locally from the carrier's synced state. Physical casings never
+ * take the emissive path: that is the standing world-lit rule,
+ * enforced here by casing choice rather than per weapon.
  */
 public class ProjectileCarrierRenderer extends EntityRenderer<ProjectileCarrierEntity, ProjectileCarrierRenderer.State> {
 
@@ -113,15 +116,34 @@ public class ProjectileCarrierRenderer extends EntityRenderer<ProjectileCarrierE
         final long seed = state.seed;
         final int light = state.lightCoords;
 
+        final boolean plate = "plate".equals(def.geometry().projectile().casingForm());
         switch (proj.casing()) {
-            case "lit" -> ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) -> {
-                ComplexGeometry.shard(pose, buffer, seed, dir.scale(-0.15), dir, length, 0.17f * scale,
-                        vis.rim(), vis.mid(), 1.0f, distScale);
-            });
-            case "energy" -> ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
-                ComplexGeometry.shard(pose, buffer, seed, dir.scale(-0.15), dir, length, 0.17f * scale,
-                        vis.mid(), vis.core(), 0.95f, distScale);
-            });
+            case "lit" -> {
+                if (plate) {
+                    ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) -> {
+                        PlateCasing.draw(pose, buffer, seed, dir.scale(-0.15), dir, length, 0.34f * scale,
+                                vis.rim(), vis.mid(), 1.0f);
+                    });
+                } else {
+                    ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) -> {
+                        ComplexGeometry.shard(pose, buffer, seed, dir.scale(-0.15), dir, length, 0.17f * scale,
+                                vis.rim(), vis.mid(), 1.0f, distScale);
+                    });
+                }
+            }
+            case "energy" -> {
+                if (plate) {
+                    ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+                        PlateCasing.draw(pose, buffer, seed, dir.scale(-0.15), dir, length, 0.34f * scale,
+                                vis.mid(), vis.core(), 0.95f);
+                    });
+                } else {
+                    ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+                        ComplexGeometry.shard(pose, buffer, seed, dir.scale(-0.15), dir, length, 0.17f * scale,
+                                vis.mid(), vis.core(), 0.95f, distScale);
+                    });
+                }
+            }
             default -> {
                 // "none": no casing; the core alone carries the bolt.
             }

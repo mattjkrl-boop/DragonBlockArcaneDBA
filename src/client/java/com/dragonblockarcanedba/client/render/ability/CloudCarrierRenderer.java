@@ -5,7 +5,7 @@ import com.dragonblockarcanedba.ability.AbilityFxDefaults;
 import com.dragonblockarcanedba.client.fx.AbilityFxExpander;
 import com.dragonblockarcanedba.client.fx.RecipeEmitter;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
-import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.kit.DomeShell;
 import com.dragonblockarcanedba.entity.CloudCarrierEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -132,12 +132,19 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
             CarrierGeometry.flatRing(pose, buffer, 0, 0, 0.05, radius * 0.90, radius * 0.97, segments,
                     midR, midG, midB, env * 0.22f);
         });
-        // Shell: two nested translucent spheres (the ground hides the lower half).
+        // Shell: the kit DomeShell, layered hemispheres with
+        // scrolling alpha and rim brightening from the geometry
+        // block. At the defaults (2 layers, swirl 0, rim glow 0)
+        // the layers sit at the old spheres' radii and alphas
+        // (mid 0.10 at full radius, rim 0.07 at 0.8), and the
+        // buried lower hemisphere is simply no longer emitted.
+        AbilityDef.CloudGeometry cloudGeo = def.geometry().cloud();
+        final int domeSlices = FxEnvelope.segments(28, distScale, 12);
         ComplexGeometry.submitVeil(collector, poseStack, (pose, buffer) -> {
-            KiRenderHelper.drawSphere(pose, buffer, (float) radius, 10, 18, midR, midG, midB, env * 0.10f);
-        });
-        ComplexGeometry.submitVeil(collector, poseStack, (pose, buffer) -> {
-            KiRenderHelper.drawSphere(pose, buffer, (float) (radius * 0.8), 8, 14, rimR, rimG, rimB, env * 0.07f);
+            DomeShell.draw(pose, buffer, radius, domeSlices, 6, cloudGeo.shellLayers(),
+                    (float) cloudGeo.swirlSpeed(), state.ageInTicks,
+                    vis.mid(), vis.rim(), vis.core(),
+                    (float) cloudGeo.shellAlpha(), (float) cloudGeo.rimGlow(), env);
         });
         // Ambient interior lightning, bucketed so all clients agree.
         if (distScale > 0.3f) {
@@ -196,10 +203,17 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
             final float flashEnv = env * (1f - (state.ageInTicks - seen.age) / 3f);
             final double sx = seen.x, sy = seen.y, sz = seen.z;
             final int boltSeed = seen.seed;
+            // The two-hue signature from the Tempest picture,
+            // opt-in per ability: strike bolts split between the
+            // mid and rim hues by the strike's own synced seed,
+            // so every observer sees the same strike in the same
+            // hue. Off by default; bolts stay in the mid hue.
+            final int boltGlow = def.geometry().cloud().strikeHueSplit() && (boltSeed & 1) != 0
+                    ? vis.rim() : vis.mid();
             ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
                 ComplexGeometry.branchedLightning(pose, buffer, boltSeed,
                         new Vec3(sx, sy + height + 5.0, sz), new Vec3(sx, sy + 0.2, sz),
-                        0.5f * vis.scale(), vis.core(), vis.mid(), flashEnv, flashEnv, distScale);
+                        0.5f * vis.scale(), vis.core(), boltGlow, flashEnv, flashEnv, distScale);
                 CarrierGeometry.flatRing(pose, buffer, sx, sz, sy + 0.09,
                         cloud.strikeRadius() * 0.4, cloud.strikeRadius() * 1.15, 22,
                         coreR, coreG, coreB, flashEnv * 0.7f);

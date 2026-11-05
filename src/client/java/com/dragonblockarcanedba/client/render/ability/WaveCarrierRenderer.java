@@ -5,6 +5,7 @@ import com.dragonblockarcanedba.ability.AbilityFxDefaults;
 import com.dragonblockarcanedba.client.fx.AbilityFxExpander;
 import com.dragonblockarcanedba.client.fx.RecipeEmitter;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.kit.CrescentBand;
 import com.dragonblockarcanedba.entity.WaveCarrierEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -30,8 +31,11 @@ import java.util.Map;
  * shed runs on Phase 3 recipes (the definition's carrier_tick fx,
  * or the shared defaults), expanded locally from the carrier's
  * synced state; geometry is the hero, the particles only
- * dissipate. The shape language is Phase 1 simple on purpose; the
- * primitive kit phase enriches behind this class.
+ * dissipate. Since Phase 4 the band itself is the kit's
+ * CrescentBand primitive, driven by the definition's geometry
+ * block (turbulence for a torn wall, baseRing toggle for the
+ * ground ring); at the defaults it emits the Phase 1 band
+ * exactly.
  */
 public class WaveCarrierRenderer extends EntityRenderer<WaveCarrierEntity, WaveCarrierRenderer.State> {
 
@@ -110,20 +114,19 @@ public class WaveCarrierRenderer extends EntityRenderer<WaveCarrierEntity, WaveC
         final int segments = FxEnvelope.segments(30, distScale, 10);
 
         final float[] rimB = {CarrierGeometry.r(vis.rim()), CarrierGeometry.g(vis.rim()), CarrierGeometry.b(vis.rim()), env * 0.75f};
-        final float[] midB = {CarrierGeometry.r(vis.mid()), CarrierGeometry.g(vis.mid()), CarrierGeometry.b(vis.mid()), env * 0.9f};
-        final float[] coreB = {CarrierGeometry.r(vis.core()), CarrierGeometry.g(vis.core()), CarrierGeometry.b(vis.core()), env};
-        final float[] coreT = {CarrierGeometry.r(vis.core()), CarrierGeometry.g(vis.core()), CarrierGeometry.b(vis.core()), env * 0.55f};
-        final float[] fadeT = {CarrierGeometry.r(vis.rim()), CarrierGeometry.g(vis.rim()), CarrierGeometry.b(vis.rim()), 0f};
+        final AbilityDef.WaveGeometry waveGeo = def.geometry().wave();
+        final float turbulence = waveGeo.turbulence();
 
         ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
-            CarrierGeometry.arcBand(pose, buffer, fwdX, fwdZ, radius, 0, height * 0.35, arc, segments, rimB, midB);
-            CarrierGeometry.arcBand(pose, buffer, fwdX, fwdZ, radius, height * 0.35, height * 0.68, arc, segments, midB, coreB);
-            CarrierGeometry.arcBand(pose, buffer, fwdX, fwdZ, radius, height * 0.68, height, arc, segments, coreT, fadeT);
+            CrescentBand.draw(pose, buffer, state.seed, fwdX, fwdZ, radius, 0, height, arc, segments,
+                    vis.rim(), vis.mid(), vis.core(), env, turbulence);
         });
-        ComplexGeometry.submitVeil(collector, poseStack, (pose, buffer) -> {
-            CarrierGeometry.flatRing(pose, buffer, 0, 0, 0.06, radius * 0.96, radius * 1.10, segments,
-                    rimB[0], rimB[1], rimB[2], env * 0.45f);
-        });
+        if (waveGeo.baseRing()) {
+            ComplexGeometry.submitVeil(collector, poseStack, (pose, buffer) -> {
+                CarrierGeometry.flatRing(pose, buffer, 0, 0, 0.06, radius * 0.96, radius * 1.10, segments,
+                        rimB[0], rimB[1], rimB[2], env * 0.45f);
+            });
+        }
     }
 
     private void tickEmission(State state, AbilityDef def, float dist, float distScale) {

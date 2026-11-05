@@ -4,6 +4,7 @@ import com.dragonblockarcanedba.ability.AbilityDef;
 import com.dragonblockarcanedba.client.ability.CastAnimations;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
 import com.dragonblockarcanedba.client.render.ki.KiRenderHelper;
+import com.dragonblockarcanedba.client.render.kit.VortexBand;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
@@ -22,11 +23,14 @@ import org.joml.Matrix4f;
  * power curve, in the ability's own rim and mid colors. Two dashed
  * arcs inside the ring rotate against each other, faster as power
  * grows, which is the vortex read; at full charge a bright core
- * ring pulses to say the release is at full power. This is the
- * honest Phase 2 form of the charge vortex: flat ground geometry
- * under a posed caster. The torn Saturn ring from the Z Shockwave
- * picture is primitive kit work (Phase 4) and will replace the
- * arcs behind this same class.
+ * ring pulses to say the release is at full power. The ground
+ * read is the Phase 2 form of the charge vortex. Since Phase 4,
+ * an ability whose geometry block asks for it also gets the torn
+ * Saturn ring from the Z Shockwave picture: a raised VortexBand
+ * of energy slabs at waist height that lifts and brightens as
+ * the charge grows, drawn behind this same class. Abilities
+ * without the option draw the ground ring alone, exactly as
+ * before.
  *
  * Distance behavior comes from the ability's own caps block: past
  * fullDetailDistance only the outer ring draws; past cullDistance
@@ -115,6 +119,27 @@ public final class ChargeRingRenderer {
                     }
                 }
             });
+            AbilityDef.ChargeGeometry chargeGeo = def.geometry().charge();
+            if (fullDetail && chargeGeo.raisedRing()) {
+                // The raised torn ring: it lifts from near the
+                // ground to its full height and brightens as the
+                // charge fraction grows, turning with the vortex
+                // spin, so the build reads before the release
+                // lands. The seed is the player's UUID hash, so
+                // every observer tears the same ring.
+                final double ringRadius = radius * 1.02;
+                final double centerY = chargeGeo.ringHeight() * scale * (0.2 + 0.8 * frac);
+                final double bandWidth = chargeGeo.ringWidth() * scale;
+                final double slabHeight = 0.16 * scale;
+                final double rotation = spin * 0.8 + seedPhase;
+                final float ringAlpha = (0.25f + 0.55f * power) * (0.45f + 0.55f * frac);
+                final long ringSeed = player.getUUID().hashCode() * 2654435761L;
+                final int rimI = rim, midI = mid, coreI = core;
+                ComplexGeometry.submitEnergy(collector, stack, (pose, buffer) -> {
+                    VortexBand.draw(pose, buffer, ringSeed, centerY, ringRadius, bandWidth,
+                            slabHeight, 26, rotation, rimI, midI, coreI, ringAlpha);
+                });
+            }
         } finally {
             stack.popPose();
         }
