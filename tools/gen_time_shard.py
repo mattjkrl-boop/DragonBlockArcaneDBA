@@ -5,6 +5,15 @@ fragments that hang in the air at the hit point, then drop and shatter.
 Palette: pale ice glass, hex EAF6FF and CDE9FF, with white cores.
 One cluster about 20 units wide, six shards pointing outward.
 
+Model pass upgrade: every shard is a tapered crystal built from
+three stacked shrinking segments (base, mid, tip) with the mid
+segment and the tip wedge carrying their own cube rotations, so
+the facets exist in geometry instead of only in paint. Four tiny
+satellite splinters float beside their parent shards. The texture
+paints a different value step on every face, so a turning shard
+reads as cut crystal, and the hang clip trembles each shard on
+its own phase.
+
 Emits, from the SAME cube and UV constants below:
   - geckolib/models/entity/time_shard.geo.json
   - geckolib/animations/entity/time_shard.animation.json
@@ -23,7 +32,8 @@ from PIL import Image
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 RES = ROOT / "src/main/resources/assets/dragonblockarcanedba"
 NAME = "time_shard"
-TEX = 64
+TEX = 128
+UV_SCALE = 3
 
 # ---------------------------------------------------------------- palette
 ICE_DEEP = (127, 184, 232)     # deeper blue edge
@@ -33,6 +43,11 @@ ICE_WHITE = (255, 255, 255)
 GLOW_CORE = (214, 248, 255)    # soft white-cyan
 GLOW_DIM = (46, 78, 98)
 GLOW_EDGE = (8, 16, 24)
+
+# Per-face value steps: every face of a cube shades differently.
+FACE_STEP = {"north": 1.0, "east": 0.9, "south": 0.8,
+             "west": 0.7, "up": 1.06, "down": 0.6}
+MAT_TINT = {"ice": 0.0, "mid": 0.18, "tip": 0.38, "splinter": 0.26}
 
 # ---------------------------------------------------------------- helpers
 
@@ -55,34 +70,77 @@ def r2(v):
 
 
 # ---------------------------------------------------------------- shard data
-# Each shard: bone rotation (rest pose, degrees), a center offset used for
-# scatter directions, and 1 to 2 boxes (main tapered box plus optional chip).
-# Every shard bone pivot is the cluster center [0, 0, 0] so the hang, fall
-# and shatter clips can scatter the shards from one shared origin.
+# Each shard is built along local +Y starting at y_start, in three
+# stacked shrinking segments, then oriented by its bone rest rotation.
+# Every shard bone pivot is the cluster center [0, 0, 0] so the hang,
+# fall and shatter clips can scatter the shards from one shared origin.
+# sat: optional satellite splinter (side offset, y fraction, rotation).
 SHARDS = [
     dict(name="shard_0", rot=[0, 0, -8], center=[0, 5, 0], scatter=5.0,
-         boxes=[dict(origin=[-1.5, 1.5, -1], size=[3, 7, 2], mat="ice"),
-                dict(origin=[-1, 8.5, -0.75], size=[2, 3, 1.5], mat="chip")]),
+         length=10.5, wid=3.2, dep=2.0, y_start=1.0,
+         mid_rot=5, tip_rot=[10, 6, 16],
+         sat=dict(side=1, yfrac=0.35, rot=[18, -12, 24])),
     dict(name="shard_1", rot=[15, 20, -50], center=[6, 2, 2], scatter=6.0,
-         boxes=[dict(origin=[3.5, 0, 1], size=[2.5, 6, 2], mat="ice"),
-                dict(origin=[4, 6, 1.25], size=[1.5, 2.5, 1.5], mat="chip")]),
+         length=9.5, wid=2.8, dep=1.8, y_start=1.6,
+         mid_rot=-6, tip_rot=[-12, 10, -18],
+         sat=dict(side=-1, yfrac=0.45, rot=[-20, 14, -26])),
     dict(name="shard_2", rot=[-20, -15, -110], center=[5, -4, -2], scatter=4.5,
-         boxes=[dict(origin=[3, -6.5, -2.75], size=[3, 5, 1.5], mat="ice")]),
+         length=8.5, wid=3.0, dep=1.6, y_start=0.8,
+         mid_rot=7, tip_rot=[14, -8, 20], sat=None),
     dict(name="shard_3", rot=[10, -25, 55], center=[-6, 3, -1], scatter=6.5,
-         boxes=[dict(origin=[-7, 0.5, -2], size=[2, 6, 2], mat="ice"),
-                dict(origin=[-6.75, 6.5, -1.75], size=[1.5, 2.5, 1.5], mat="chip")]),
+         length=10.0, wid=2.6, dep=2.0, y_start=1.4,
+         mid_rot=-5, tip_rot=[-10, -12, -15],
+         sat=dict(side=1, yfrac=0.3, rot=[22, 10, 30])),
     dict(name="shard_4", rot=[-15, 10, 125], center=[-5, -4, 2], scatter=5.5,
-         boxes=[dict(origin=[-6.25, -6, 1.25], size=[2.5, 5, 1.5], mat="ice")]),
+         length=9.0, wid=2.8, dep=1.7, y_start=1.2,
+         mid_rot=6, tip_rot=[16, 8, -14],
+         sat=dict(side=-1, yfrac=0.5, rot=[-16, -18, 20])),
     dict(name="shard_5", rot=[25, 30, 170], center=[1, -6, -3], scatter=7.0,
-         boxes=[dict(origin=[0, -8.5, -4], size=[2, 5, 2], mat="ice"),
-                dict(origin=[0.25, -11, -3.75], size=[1.5, 2.5, 1.5], mat="chip")]),
+         length=10.5, wid=3.0, dep=2.2, y_start=0.6,
+         mid_rot=-7, tip_rot=[-14, 12, 18], sat=None),
 ]
 
 FACES = ("north", "south", "east", "west", "up", "down")
-ALL_CUBES = []
-for sh in SHARDS:
-    for i, bx in enumerate(sh["boxes"]):
-        ALL_CUBES.append(dict(id="%s_%d" % (sh["name"], i), bone=sh["name"], **bx))
+
+
+def build_cubes():
+    """Expand each shard spec into its segment cubes."""
+    cubes = []
+    for si, sh in enumerate(SHARDS):
+        L, W, D, y0 = sh["length"], sh["wid"], sh["dep"], sh["y_start"]
+        phase = hash01(si * 17 + 3, si * 29 + 5, 4)
+        base_h = L * 0.42
+        mid_h = L * 0.34
+        tip_h = L * 0.28
+        mid_w, mid_d = W * 0.7, D * 0.72
+        tip_w, tip_d = W * 0.4, D * 0.48
+        mid_y = y0 + base_h
+        tip_y = mid_y + mid_h
+        cubes.append(dict(
+            id="%s_0" % sh["name"], bone=sh["name"], mat="ice", phase=phase,
+            origin=[r2(-W / 2), r2(y0), r2(-D / 2)], size=[r2(W), r2(base_h), r2(D)]))
+        cubes.append(dict(
+            id="%s_1" % sh["name"], bone=sh["name"], mat="mid", phase=phase,
+            origin=[r2(-mid_w / 2), r2(mid_y), r2(-mid_d / 2)],
+            size=[r2(mid_w), r2(mid_h), r2(mid_d)],
+            pivot=[0, r2(mid_y + mid_h / 2), 0], rotation=[0, 0, sh["mid_rot"]]))
+        cubes.append(dict(
+            id="%s_2" % sh["name"], bone=sh["name"], mat="tip", phase=phase,
+            origin=[r2(-tip_w / 2), r2(tip_y), r2(-tip_d / 2)],
+            size=[r2(tip_w), r2(tip_h), r2(tip_d)],
+            pivot=[0, r2(tip_y), 0], rotation=sh["tip_rot"]))
+        if sh["sat"] is not None:
+            sat = sh["sat"]
+            sx = sat["side"] * (W / 2 + 1.0)
+            sy = y0 + L * sat["yfrac"]
+            cubes.append(dict(
+                id="%s_3" % sh["name"], bone=sh["name"], mat="splinter", phase=phase,
+                origin=[r2(sx - 0.42), r2(sy), -0.42], size=[0.85, 2.4, 0.85],
+                pivot=[r2(sx), r2(sy + 1.2), 0], rotation=sat["rot"]))
+    return cubes
+
+
+ALL_CUBES = build_cubes()
 
 
 def unit(v):
@@ -110,7 +168,8 @@ def pack_uvs():
         dims = face_dims(c["size"])
         for f in FACES:
             w, h = dims[f]
-            rects.append((c["id"], f, int(math.ceil(w)), int(math.ceil(h))))
+            rects.append((c["id"], f, int(math.ceil(w * UV_SCALE)),
+                          int(math.ceil(h * UV_SCALE))))
     rects.sort(key=lambda r: -r[3])
     placed = {}
     x = y = shelf_h = 0
@@ -127,9 +186,10 @@ def pack_uvs():
 
 # ---------------------------------------------------------------- painting
 
-def facet_t(nx, ny):
+def facet_t(c, nx, ny):
     """Position across the facet highlight stripe, 1 at the stripe core."""
-    d = abs((nx * 0.7 + ny * 0.7) - 0.62)
+    ctr = 0.45 + 0.3 * c.get("phase", 0.0)
+    d = abs((nx * 0.7 + ny * 0.7) - ctr)
     return max(0.0, 1.0 - d * 4.0)
 
 
@@ -137,9 +197,17 @@ def paint_base(c, face, nx, ny, gu, gv):
     n = hash01(gu, gv, 11)
     edge = min(nx, 1 - nx, ny, 1 - ny)
     col = lerp_c(ICE_MID, ICE_PALE, 0.35 + 0.45 * ny + (n - 0.5) * 0.14)
-    if c["mat"] == "chip":
-        col = lerp_c(col, ICE_WHITE, 0.35)
-    col = lerp_c(col, ICE_WHITE, facet_t(nx, ny) * 0.85)
+    col = lerp_c(col, ICE_WHITE, MAT_TINT[c["mat"]])
+    step = FACE_STEP[face]
+    if step < 1.0:
+        col = lerp_c(col, ICE_DEEP, (1.0 - step) * 0.95)
+    elif step > 1.0:
+        col = lerp_c(col, ICE_WHITE, (step - 1.0) * 2.5)
+    if face in ("north", "east", "up"):
+        col = lerp_c(col, ICE_WHITE, facet_t(c, nx, ny) * 0.8)
+    frac = abs((nx - ny) - (c.get("phase", 0.0) - 0.5) * 0.6)
+    if frac < 0.035 and face in ("north", "south", "east", "west"):
+        col = lerp_c(col, ICE_DEEP, 0.3)
     if edge < 0.14:
         col = lerp_c(col, ICE_DEEP, 0.65)
     return col
@@ -149,11 +217,15 @@ def paint_glow(c, face, nx, ny, gu, gv):
     edge = min(nx, 1 - nx, ny, 1 - ny)
     if edge < 0.14:
         return GLOW_EDGE
-    t = facet_t(nx, ny)
-    col = lerp_c(GLOW_DIM, GLOW_CORE, t)
-    if 0.4 < nx < 0.6 and 0.4 < ny < 0.6:
-        col = lerp_c(col, GLOW_CORE, 0.6)
-    return col
+    # cores only: a narrow bright line down the middle of the side faces
+    if face in ("north", "south", "east", "west"):
+        core = max(0.0, 1.0 - abs(nx - 0.5) * 6.0)
+        col = lerp_c(GLOW_DIM, GLOW_CORE, core)
+        col = lerp_c(col, GLOW_CORE, facet_t(c, nx, ny) * 0.55)
+        return col
+    # end faces: a small core dot at the center, dark elsewhere
+    d = math.sqrt((nx - 0.5) ** 2 + (ny - 0.5) ** 2)
+    return lerp_c(GLOW_CORE, GLOW_EDGE, max(0.0, min(1.0, d * 2.6)))
 
 
 def paint_textures():
@@ -183,12 +255,14 @@ def build_geo():
         for c in ALL_CUBES:
             if c["bone"] != sh["name"]:
                 continue
-            cubes.append({
-                "origin": c["origin"], "size": c["size"],
-                "uv": {f: {"uv": [c["uv"][f][0], c["uv"][f][1]],
-                           "uv_size": [c["uv"][f][2], c["uv"][f][3]]}
-                       for f in FACES},
-            })
+            cube = {"origin": c["origin"], "size": c["size"]}
+            if "pivot" in c:
+                cube["pivot"] = c["pivot"]
+                cube["rotation"] = c["rotation"]
+            cube["uv"] = {f: {"uv": [c["uv"][f][0], c["uv"][f][1]],
+                              "uv_size": [c["uv"][f][2], c["uv"][f][3]]}
+                          for f in FACES}
+            cubes.append(cube)
         bone["cubes"] = cubes
         bones.append(bone)
     return {
@@ -215,6 +289,11 @@ def drift(sh, i, amt):
             r2(sh["rot"][2] + sgn * amt * 0.8)]
 
 
+def tremor(sh, dist):
+    """Small position tremble along the shard scatter direction."""
+    return scatter_vec(sh, dist)
+
+
 def build_anim():
     hang_bones = {
         "root": {"position": {
@@ -225,12 +304,30 @@ def build_anim():
     shatter_bones = {}
     for i, sh in enumerate(SHARDS):
         base = [r2(v) for v in sh["rot"]]
-        hang_bones[sh["name"]] = {"rotation": {
-            "0.0": base, "0.6": drift(sh, i, 1.0), "1.2": base}}
+        # hang: per shard tremble with phase offsets in time and amount
+        ph = (i % 3) * 0.04
+        amt = 0.8 + 0.18 * i
+        t1 = r2(0.3 + ph)
+        t2 = r2(0.9 - ph)
+        hang_bones[sh["name"]] = {
+            "rotation": {
+                "0.0": base,
+                ("%.2f" % t1): drift(sh, i, amt),
+                "0.6": drift(sh, i, -amt * 0.4),
+                ("%.2f" % t2): drift(sh, i, amt * 0.7),
+                "1.2": base},
+            "position": {
+                "0.0": [0, 0, 0],
+                ("%.2f" % r2(0.45 + ph)): tremor(sh, 0.16 if i % 2 == 0 else -0.13),
+                "1.2": [0, 0, 0]},
+        }
         spread = scatter_vec(sh, 0.7)
+        spread_mid = scatter_vec(sh, 0.42)
         fall_bones[sh["name"]] = {
-            "position": {"0.0": [0, 0, 0], "0.25": spread, "0.5": [0, 0, 0]},
-            "rotation": {"0.0": base, "0.25": drift(sh, i, 0.7), "0.5": base},
+            "position": {"0.0": [0, 0, 0], "0.17": spread_mid,
+                         "0.25": spread, "0.38": spread_mid, "0.5": [0, 0, 0]},
+            "rotation": {"0.0": base, "0.17": drift(sh, i, 0.45),
+                         "0.25": drift(sh, i, 0.7), "0.5": base},
         }
         out = scatter_vec(sh, sh["scatter"])
         out[1] = r2(out[1] - 3.0)
