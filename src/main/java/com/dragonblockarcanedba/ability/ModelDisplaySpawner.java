@@ -94,10 +94,7 @@ public final class ModelDisplaySpawner {
     }
 
     private static AbilityDef.ModelSpec withHold(AbilityDef.ModelSpec s, String hold) {
-        return new AbilityDef.ModelSpec(s.model(), s.count(), s.formation(), s.behavior(), s.trigger(),
-                s.radius(), s.height(), s.scale(), s.lifetimeTicks(), s.descendTicks(), s.fallSpeed(),
-                s.spin(), s.hangTicks(), s.speed(), s.forward(), s.up(), s.animSpawn(), hold,
-                s.animEnd(), s.minPower(), s.animAlt());
+        return s.withHold(hold);
     }
 
     private static void spawnFinaleSet(ServerLevel level, AbilityDef def, AbilityDef.ModelSpec spec,
@@ -124,11 +121,7 @@ public final class ModelDisplaySpawner {
                 case "fall" -> 200;
                 default -> def.phases().active();
             };
-            spec = new AbilityDef.ModelSpec(spec.model(), spec.count(), spec.formation(),
-                    spec.behavior(), spec.trigger(), spec.radius(), spec.height(), spec.scale(),
-                    derived, spec.descendTicks(), spec.fallSpeed(), spec.spin(), spec.hangTicks(),
-                    spec.speed(), spec.forward(), spec.up(),
-                    spec.animSpawn(), spec.animHold(), spec.animEnd(), spec.minPower(), spec.animAlt());
+            spec = spec.withLifetime(derived);
         }
         RandomSource random = RandomSource.create(seed * 31L + 17L);
         int count = spec.count();

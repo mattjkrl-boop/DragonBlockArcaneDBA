@@ -72,6 +72,7 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
     private double up;
     private double trailSpacing = 2.0;
     private int index;
+    private int spawnTicks = 6;
     private int setCount = 1;
     private double orbitRadius;
     /** cast-trigger sets: the def whose cast keeps this piece alive. */
@@ -127,6 +128,7 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
         this.trailSpacing = Math.max(0.5, spec.radius());
         this.setCount = Math.max(1, spec.count());
         this.orbitRadius = spec.radius();
+        this.spawnTicks = Math.max(1, spec.spawnTicks());
         this.castDef = null;
         this.boltVelocity = boltVelocity == null ? Vec3.ZERO : boltVelocity;
         this.setPos(startPos.x, startPos.y, startPos.z);
@@ -304,7 +306,7 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
             return;
         }
         setPhase(this.lifeTicks > 0 && age > this.lifeTicks - 6 ? PHASE_END
-                : age < 6 ? PHASE_SPAWN : PHASE_HOLD);
+                : age < this.spawnTicks ? PHASE_SPAWN : PHASE_HOLD);
         if (!(this.level() instanceof ServerLevel serverLevel) || this.ownerUuid == null) {
             return;
         }
@@ -347,7 +349,7 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
      * example a swarm shard), facing its motion. Discards with it.
      */
     private void tickRide(int age) {
-        setPhase(age < 6 ? PHASE_SPAWN : PHASE_HOLD);
+        setPhase(age < this.spawnTicks ? PHASE_SPAWN : PHASE_HOLD);
         if (!(this.level() instanceof ServerLevel serverLevel) || this.ownerUuid == null) {
             this.discard();
             return;

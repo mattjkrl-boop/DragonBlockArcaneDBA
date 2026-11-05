@@ -450,10 +450,21 @@ def titan_aegis():
     m.box("axe", (-11, 22, 5.8), (1.0, 12, 1.4), "body")
     for i, (w, y, d) in enumerate(((13, 17, 7), (11, 11, 6), (8, 5.5, 5), (5, 1, 3.5))):
         m.box("mist", (0, y, -i * 0.8), (w, 5.5, d), "mist", rot=(0, i * 20, 0))
-    m.clip("rise", 0.3, "hold_on_last_frame", {
-        "root": {"position": lambda t: [0, -18 * (1 - ease_out(t / 0.3)), 0],
-                 "scale": lambda t: [max(0.02, 0.6 + 0.4 * overshoot(t / 0.3))] * 3},
-        "arm_l": {"rotation": lambda t: [30 * (1 - ease_out(t / 0.3)), 0, 0]},
+    # rise: 1.2 s (24 ticks, ox_brace sets spawnTicks 24). The mist
+    # pools first, the body climbs out of it, the head lifts, then the
+    # shield arm swings up into the brace and the frame settles.
+    R = 1.2
+    ph = lambda t, a, b: min(1.0, max(0.0, (t - a) / (b - a)))
+    m.clip("rise", R, "hold_on_last_frame", {
+        "root": {"position": lambda t: [0, -26 * (1 - ease_out(ph(t, 0.1, 0.75))), 0],
+                 "scale": lambda t: [max(0.02, 0.55 + 0.45 * overshoot(ph(t, 0.1, 1.0)))] * 3},
+        "mist": {"scale": lambda t: [max(0.02, 0.3 + 0.7 * ease_out(ph(t, 0.0, 0.35)) + 0.15 * (1 - ph(t, 0.35, 1.2)))] * 3,
+                 "rotation": lambda t: [0, 160 * t / R, 0]},
+        "head": {"rotation": lambda t: [28 * (1 - ease_out(ph(t, 0.45, 0.85))), 0, 0]},
+        "arm_l": {"rotation": lambda t: [55 * (1 - ease_out(ph(t, 0.6, 1.05))), 0, 10 * (1 - ph(t, 0.6, 1.05))]},
+        "fore_l": {"rotation": lambda t: [35 * (1 - ease_out(ph(t, 0.7, 1.1))), 0, 0]},
+        "arm_r": {"rotation": lambda t: [-25 * (1 - ease_out(ph(t, 0.5, 0.95))), 0, 0]},
+        "torso": {"rotation": lambda t: [14 * (1 - ease_out(ph(t, 0.3, 0.9))), 0, 0]},
     })
     m.clip("stance", 2.0, True, {
         "torso": {"scale": lambda t: [1 + 0.02 * wave(t, 1.0), 1 + 0.03 * wave(t, 1.0), 1]},
