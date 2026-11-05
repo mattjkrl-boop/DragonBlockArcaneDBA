@@ -101,62 +101,6 @@ public abstract class DelayedDamageMixin {
                 dba$lastPlayerUuid = p.getUUID();
             }
 
-            // Smoothly drain the attacker while the weapon effect is active on target ("whatever")
-            if (dba$lastPlayerUuid != null && self.level() instanceof ServerLevel serverLevel) {
-                net.minecraft.world.entity.player.Player attacker = serverLevel.getPlayerByUUID(dba$lastPlayerUuid);
-                if (attacker != null && !attacker.isRemoved() && attacker.isAlive()) {
-                    if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.SPIRIT_IMPALE_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, 55.0, "target_spirit_impale")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.SPIRIT_IMPALE_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.TEMPORAL_STASIS_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, 100.0, "target_temporal_stasis")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.TEMPORAL_STASIS_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.JUDGEMENT_LOCK_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, 75.0, "target_judgement_lock")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.JUDGEMENT_LOCK_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.DEVILS_HANDS_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, 20.0, "target_devils_hands")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.DEVILS_HANDS_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.SORROW_RIFT_HOLDER)) {
-                        double drain = 25.0;
-                        if (attacker instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc) {
-                            int sickleLvl = acc.dba$getTechniqueLevel("sickle_of_sorrow");
-                            drain = com.dragonblockarcanedba.attribute.PlayerStats.getSickleBaseActionDrain(sickleLvl);
-                        }
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, drain, "target_sorrow_rift")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.SORROW_RIFT_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.POLE_STUN_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainStaminaPerTickOnce(attacker, 20.0, "target_pole_stun")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.POLE_STUN_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.FISSURE_STUN_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainStaminaPerTickOnce(attacker, 125.0, "target_fissure_stun")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.FISSURE_STUN_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.VALOR_STUN_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, 90.0, "target_valor_stun")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.VALOR_STUN_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.SILENT_MARK_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, 30.0, "target_silent_mark")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.SILENT_MARK_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.EARTH_SHATTER_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainBothPerTickOnce(attacker, 75.0, 50.0, "target_earth_shatter")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.EARTH_SHATTER_HOLDER);
-                        }
-                    } else if (self.hasEffect(com.dragonblockarcanedba.effect.DbaEffects.PETRIFICATION_CURSE_HOLDER)) {
-                        if (!com.dragonblockarcanedba.util.WeaponDrainHelper.drainKiPerTickOnce(attacker, 35.0, "target_petrification_curse")) {
-                            self.removeEffect(com.dragonblockarcanedba.effect.DbaEffects.PETRIFICATION_CURSE_HOLDER);
-                        }
-                    }
-                }
-            }
         }
 
         if (dba$damageDelayTicks > 0) {

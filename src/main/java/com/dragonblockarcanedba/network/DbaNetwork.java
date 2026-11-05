@@ -63,7 +63,6 @@ public class DbaNetwork {
         PayloadTypeRegistry.serverboundPlay().register(C2SSetGravityPayload.TYPE, C2SSetGravityPayload.CODEC);
 
         // Weapon Left Click (C2S)
-        PayloadTypeRegistry.serverboundPlay().register(C2SWeaponLeftClickPayload.TYPE, C2SWeaponLeftClickPayload.CODEC);
 
         // Movement verbs (C2S, Phase 5 movement layer)
         PayloadTypeRegistry.serverboundPlay().register(C2SMovementPayload.ID, C2SMovementPayload.CODEC);
@@ -437,118 +436,7 @@ public class DbaNetwork {
             });
         });
 
-        // Handle Weapon Left Clicks on Air / Charge / Stream
-        ServerPlayNetworking.registerGlobalReceiver(C2SWeaponLeftClickPayload.TYPE, (payload, context) -> {
-            ServerPlayer player = context.player();
-            context.server().execute(() -> {
-                PlayerStatsAccessor accessor = (PlayerStatsAccessor) player;
-                if (accessor.dba$isSickleActive()) {
-                    com.dragonblockarcanedba.item.SickleOfSorrowItem.performTechniqueAirSwing(player);
-                    return;
-                }
-                net.minecraft.world.item.ItemStack stack = player.getMainHandItem();
-                if (stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem) {
-                    if (player.getCooldowns().isOnCooldown(stack)) return;
-                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
-                        com.dragonblockarcanedba.item.ZSwordItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
-                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
-                        com.dragonblockarcanedba.item.ZSwordItem.onLeftClickRelease(player, stack, payload.chargeTicks());
-                    } else {
-                        com.dragonblockarcanedba.item.ZSwordItem.onLeftClickRelease(player, stack, 10);
-                    }
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem) {
-                    com.dragonblockarcanedba.item.CurseBladeItem.streamCurseChain(player, stack);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem) {
-                    if (player.getCooldowns().isOnCooldown(stack)) return;
-                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
-                        com.dragonblockarcanedba.item.HollowsEdgeItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
-                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
-                        com.dragonblockarcanedba.item.HollowsEdgeItem.onLeftClickRelease(player, stack, payload.chargeTicks());
-                    } else {
-                        com.dragonblockarcanedba.item.HollowsEdgeItem.onLeftClickDash(player, stack, payload.extraFlag());
-                    }
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem) {
-                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
-                        com.dragonblockarcanedba.item.AzureDragonSwordItem.stopDragonRush(player);
-                    } else {
-                        if (player.getCooldowns().isOnCooldown(stack)) return;
-                        com.dragonblockarcanedba.item.AzureDragonSwordItem.onDragonRushTick(player, stack, payload.extraFlag());
-                    }
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem) {
-                    com.dragonblockarcanedba.item.DimensionalSwordItem.fireSlash(player, stack);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem) {
-                    com.dragonblockarcanedba.item.PowerPoleItem.performWindSpin(player, stack);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) {
-                    com.dragonblockarcanedba.item.DevilTridentItem.performLeftClickTargeting(player, stack, null);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem) {
-                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
-                        com.dragonblockarcanedba.item.SaberItem.onBlitzRelease(player, stack, payload.chargeTicks());
-                    } else {
-                        com.dragonblockarcanedba.item.SaberItem.onBlitzTick(player, stack, payload.chargeTicks());
-                    }
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) {
-                    if (player.getCooldowns().isOnCooldown(stack)) return;
-                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
-                        com.dragonblockarcanedba.item.OxKingsAxeItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
-                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
-                        com.dragonblockarcanedba.item.OxKingsAxeItem.onLeftClickRelease(player, stack, payload.chargeTicks());
-                    } else {
-                        com.dragonblockarcanedba.item.OxKingsAxeItem.onLeftClickRelease(player, stack, 10);
-                    }
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem) {
-                    if (player.getCooldowns().isOnCooldown(stack)) return;
-                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
-                        com.dragonblockarcanedba.item.GrandSwordItem.onLeftClickSpinTick(player, stack, payload.chargeTicks());
-                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
-                        com.dragonblockarcanedba.item.GrandSwordItem.onLeftClickSpinRelease(player, stack, payload.chargeTicks());
-                    } else {
-                        com.dragonblockarcanedba.item.GrandSwordItem.onLeftClickSpinRelease(player, stack, 10);
-                    }
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem) {
-                    if (player.getCooldowns().isOnCooldown(stack)) return;
-                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
-                        com.dragonblockarcanedba.item.DaburaSwordItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
-                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
-                        com.dragonblockarcanedba.item.DaburaSwordItem.onLeftClickRelease(player, stack, payload.chargeTicks());
-                    }
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem) {
-                    if (player.getCooldowns().isOnCooldown(stack)) return;
-                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
-                        com.dragonblockarcanedba.item.EvilSpearItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
-                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
-                        com.dragonblockarcanedba.item.EvilSpearItem.onLeftClickRelease(player, stack, payload.chargeTicks());
-                    }
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem) {
-                    if (player.getCooldowns().isOnCooldown(stack)) return;
-                    if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_CHARGE_TICK) {
-                        com.dragonblockarcanedba.item.KatanaItem.onLeftClickChargeTick(player, stack, payload.chargeTicks());
-                    } else if (payload.actionType() == C2SWeaponLeftClickPayload.ACTION_RELEASE) {
-                        com.dragonblockarcanedba.item.KatanaItem.onLeftClickRelease(player, stack, payload.chargeTicks());
-                    }
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem) {
-                    if (player.getCooldowns().isOnCooldown(stack)) return;
-                    com.dragonblockarcanedba.item.BlasterGunItem.onLeftClickBarrageTick(player, stack, payload.chargeTicks());
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem) {
-                    if (player.getCooldowns().isOnCooldown(stack)) return;
-                    com.dragonblockarcanedba.item.BraveSwordItem.onLeftClickAssaultTick(player, stack, payload.chargeTicks());
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem) {
-                    com.dragonblockarcanedba.item.SickleOfSorrowItem.performSorrowSlash(player, stack);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem) {
-                    com.dragonblockarcanedba.item.SpiritSwordItem.performSpiritSwing(player, stack);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem) {
-                    com.dragonblockarcanedba.item.BanshoFanItem.performGaleSwing(player, stack);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem) {
-                    com.dragonblockarcanedba.item.WhisStaffItem.performTemporalStrike(player, stack);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.WarMaceItem) {
-                    com.dragonblockarcanedba.item.WarMaceItem.performSmash(player, stack);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.SpikeFlailItem) {
-                    com.dragonblockarcanedba.item.SpikeFlailItem.performSwing(player, stack);
-                } else if (stack.getItem() instanceof com.dragonblockarcanedba.item.LavaSwordItem) {
-                    com.dragonblockarcanedba.item.LavaSwordItem.performCleave(player, stack);
-                }
 
-            });
-        });
     }
 
     public static void sendStatsSync(ServerPlayer player, CompoundTag nbtData) {

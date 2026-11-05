@@ -39,16 +39,6 @@ public final class SkillDefinitions {
             0,
             "core");
 
-    private static final Technique SICKLE = new Technique(
-            "sickle_of_sorrow",
-            "Sickle of Sorrow",
-            5,
-            25,
-            "Summons ethereal dimensional scythe to rend reality.",
-            List.of(),
-            32,
-            0,
-            "core");
 
     private static final Map<String, List<Technique>> TREES = new LinkedHashMap<>();
     private static final Map<String, Bonus> BONUSES = new LinkedHashMap<>();
@@ -153,7 +143,6 @@ public final class SkillDefinitions {
 
     private static void shared(List<Technique> tree) {
         tree.add(KI_SENSE);
-        tree.add(SICKLE);
     }
 
     private static void add(List<Technique> tree, String group, String id, String name,

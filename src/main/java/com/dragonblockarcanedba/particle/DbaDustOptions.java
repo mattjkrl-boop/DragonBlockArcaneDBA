@@ -8,9 +8,9 @@ import net.minecraft.core.particles.ParticleType;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
-/** Theme-colored dust options: an RGB color (low 24 bits) plus a scale, with the
- *  same semantics LayeredParticles.dust had on DustParticleOptions, but on the mod's
- *  own THEME_DUST type with the mod's own texture and soft additive rendering. */
+/** Theme-colored dust options: an RGB color (low 24 bits) plus a scale, on the
+ *  mod's own THEME_DUST type with the mod's own texture and soft additive
+ *  rendering. Shared by Ki techniques and the Ki Barrier. */
 public record DbaDustOptions(int color, float scale) implements ParticleOptions {
 
     public static final MapCodec<DbaDustOptions> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(

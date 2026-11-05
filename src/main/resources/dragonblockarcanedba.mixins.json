@@ -7,7 +7,6 @@
         "PlayerEntityMixin",
         "LivingEntityMixin",
         "FoodDataMixin",
-        "WindChargeMixin",
         "EntityTeleportMixin",
         "DelayedDamageMixin",
         "EntityMixin",
@@ -20,8 +19,7 @@
         "CloudTextureMixin",
         "CloudTextureMixin263",
         "CloudRendererAccessor",
-        "ClientLevelWeatherMixin",
-        "client.SaberClientMixin"
+        "ClientLevelWeatherMixin"
     ],
     "injectors": {
         "defaultRequire": 1

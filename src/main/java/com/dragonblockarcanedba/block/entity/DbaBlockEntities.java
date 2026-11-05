@@ -15,12 +15,6 @@ public class DbaBlockEntities {
             new BlockEntityType<>(GravityTrainingBlockEntity::new, java.util.Set.of(DbaBlocks.GRAVITY_TRAINING_BLOCK))
         );
 
-    public static final BlockEntityType<VolcanoBlockEntity> VOLCANO_BLOCK_ENTITY =
-        Registry.register(
-            BuiltInRegistries.BLOCK_ENTITY_TYPE,
-            DragonBlockArcaneDBA.id("volcano_block_entity"),
-            new BlockEntityType<>(VolcanoBlockEntity::new, java.util.Set.of(DbaBlocks.MINI_VOLCANO))
-        );
 
     public static void register() {
         DragonBlockArcaneDBA.LOGGER.info("Registering Block Entities for " + DragonBlockArcaneDBA.MOD_ID);

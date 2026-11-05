@@ -10,9 +10,8 @@ import net.minecraft.resources.Identifier;
 
 /** Custom particles for the whole mod. Rendering lives in the client DbaParticleProviders.
  *  Bespoke pass: weapon effects use ONLY these types, never vanilla ParticleTypes.
- *  Simple types are styled per type by DbaGlowParticle.Style; THEME_DUST carries a
- *  per-particle color and scale (the bespoke stand-in for DustParticleOptions) and
- *  BLOCK_CHUNKS carries a BlockState (the stand-in for ParticleTypes.BLOCK). */
+ *  Simple types are styled per type by DbaGlowParticle.Style; BLOCK_CHUNKS
+ *  carries a BlockState (the stand-in for ParticleTypes.BLOCK). */
 public final class DbaParticles {
     private DbaParticles() {}
 
@@ -66,7 +65,7 @@ public final class DbaParticles {
     public static final ParticleType<DbaMaterialOptions> GLASS_DUST = FabricParticleTypes.complex(
             DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
 
-    /** Colored soft dust, tinted per particle. Replaces DustParticleOptions in weapon scope. */
+    /** Colored soft dust, tinted per particle. Shared by Ki techniques and the Ki Barrier. */
     public static final ParticleType<DbaDustOptions> THEME_DUST = FabricParticleTypes.complex(
             DbaDustOptions.CODEC, DbaDustOptions.STREAM_CODEC);
 

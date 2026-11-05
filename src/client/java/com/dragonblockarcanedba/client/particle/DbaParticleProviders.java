@@ -42,6 +42,7 @@ public final class DbaParticleProviders {
         // Theme dust: tinted per particle by its options.
         ParticleProviderRegistry.getInstance().register(DbaParticles.THEME_DUST, sprites ->
             (options, level, x, y, z, dx, dy, dz, random) -> new DbaDustParticle(level, x, y, z, dx, dy, dz, sprites, options));
+        // Theme dust: tinted per particle by its options.
         // Block chunks: terrain chunks textured from the carried BlockState, drawn by the
         // mod's own registered type (the particle class itself is the engine's chunk particle).
         ParticleProviderRegistry.getInstance().register(DbaParticles.BLOCK_CHUNKS,

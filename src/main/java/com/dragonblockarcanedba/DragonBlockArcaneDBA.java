@@ -113,139 +113,20 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             com.dragonblockarcanedba.command.DbaCommand.register(dispatcher);
         });
 
-        // Block Mining for rapid-fire / charging weapons (Dimensional Sword, Power Pole, Z Sword, Curse Blade, Hollow's Edge, Azure Dragon Sword)
-        net.fabricmc.fabric.api.event.player.AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
-            if (!player.isSpectator()) {
-                if (player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc && acc.dba$isSickleActive()) {
-                    return net.minecraft.world.InteractionResult.FAIL;
-                }
-                net.minecraft.world.item.ItemStack stack = player.getItemInHand(hand);
-                if (stack.getItem() instanceof com.dragonblockarcanedba.item.DimensionalSwordItem || 
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.PowerPoleItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.ZSwordItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.CurseBladeItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.HollowsEdgeItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.SaberItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.OxKingsAxeItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.GrandSwordItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.DaburaSwordItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.EvilSpearItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.KatanaItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.BlasterGunItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.BraveSwordItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.SpiritSwordItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.WhisStaffItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.WarMaceItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.SpikeFlailItem ||
-                    stack.getItem() instanceof com.dragonblockarcanedba.item.LavaSwordItem) {
-                    return net.minecraft.world.InteractionResult.FAIL;
-                }
-
-            }
-            return net.minecraft.world.InteractionResult.PASS;
-        });
-
-        // Register Attack Hook for Stamina Drain and Sickle Technique Melee
+        // Register Attack Hook for melee stamina drain (all melee, no weapon exceptions)
         net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
-            if (player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc && acc.dba$isSickleActive()) {
-                if (!world.isClientSide() && entity instanceof net.minecraft.world.entity.LivingEntity target && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
-                    com.dragonblockarcanedba.item.SickleOfSorrowItem.executeTechniqueMelee(serverPlayer, target);
-                }
-                return net.minecraft.world.InteractionResult.FAIL;
-            }
-
-            net.minecraft.world.item.Item heldItem = player.getItemInHand(hand).getItem();
-            if (heldItem instanceof com.dragonblockarcanedba.item.SaberItem ||
-                heldItem instanceof com.dragonblockarcanedba.item.GrandSwordItem ||
-                heldItem instanceof com.dragonblockarcanedba.item.OxKingsAxeItem) {
-                return net.minecraft.world.InteractionResult.FAIL;
-            }
-
             if (!world.isClientSide()) {
-                boolean isDbaWeapon = heldItem instanceof com.dragonblockarcanedba.item.SpiritSwordItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.SickleOfSorrowItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.HollowsEdgeItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.DimensionalSwordItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.PowerPoleItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.DevilTridentItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.CurseBladeItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.SaberItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.OxKingsAxeItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.GrandSwordItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.DaburaSwordItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.ZSwordItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.EvilSpearItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.BraveSwordItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.KatanaItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.BlasterGunItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.BanshoFanItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.WhisStaffItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.WarMaceItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.SpikeFlailItem ||
-                                      heldItem instanceof com.dragonblockarcanedba.item.LavaSwordItem;
-
-                if (!isDbaWeapon) {
-                    com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
-                    double stamina = accessor.dba$getCurrentStamina();
-                    if (stamina < 8.0) {
-                        // Apply stamina exhaustion weakness & fatigue via custom Earth Shatter effect
-                        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.EARTH_SHATTER_HOLDER, 40, 0, false, false));
-                    } else {
-                        double strength = com.dragonblockarcanedba.attribute.PlayerStats.getEffectiveStat(player, "strength");
-                        double drain = 8.0 + (strength * 0.25); // Scales with strength
-                        accessor.dba$addStamina(-drain);
-                    }
-                    accessor.dba$syncStats();
+                com.dragonblockarcanedba.attribute.PlayerStatsAccessor accessor = (com.dragonblockarcanedba.attribute.PlayerStatsAccessor) player;
+                double stamina = accessor.dba$getCurrentStamina();
+                if (stamina < 8.0) {
+                    // Apply stamina exhaustion weakness & fatigue via custom Earth Shatter effect
+                    player.addEffect(new net.minecraft.world.effect.MobEffectInstance(com.dragonblockarcanedba.effect.DbaEffects.EARTH_SHATTER_HOLDER, 40, 0, false, false));
+                } else {
+                    double strength = com.dragonblockarcanedba.attribute.PlayerStats.getEffectiveStat(player, "strength");
+                    double drain = 8.0 + (strength * 0.25); // Scales with strength
+                    accessor.dba$addStamina(-drain);
                 }
-
-                // Devil Trident Target logic
-                net.minecraft.world.item.ItemStack stack = player.getItemInHand(hand);
-                if (stack.getItem() instanceof com.dragonblockarcanedba.item.DevilTridentItem) {
-                    net.minecraft.nbt.CompoundTag tag = stack.getOrDefault(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
-                    if (tag.getBoolean("isDeployed").orElse(false)) {
-                        tag.putString("swarmTarget", entity.getUUID().toString());
-                        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
-                    }
-                }
-
-                // Azure Dragon Sword Target lock-on logic (Tweak B)
-                if (stack.getItem() instanceof com.dragonblockarcanedba.item.AzureDragonSwordItem && entity instanceof net.minecraft.world.entity.LivingEntity lockTarget) {
-                    com.dragonblockarcanedba.item.AzureDragonSwordItem.LOCKED_TARGET_MAP.put(player.getUUID(), entity.getUUID());
-                    // Lock-on used to be invisible: no sound, no message, no way to know a lock existed.
-                    if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
-                        serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal("§b✦ Tempest lock: " + lockTarget.getName().getString() + " ✦"), true);
-                        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                            com.dragonblockarcanedba.sound.DbaSounds.CHARGE_RISE, net.minecraft.sounds.SoundSource.PLAYERS, 0.7f, 1.6f);
-                    }
-                }
-            }
-            return net.minecraft.world.InteractionResult.PASS;
-        });
-
-        // Disable off-hand and normal item use while Sickle is active, and route right-click to Dimensional Rift
-        net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register((player, world, hand) -> {
-            if (player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc && acc.dba$isSickleActive()) {
-                if (hand == net.minecraft.world.InteractionHand.OFF_HAND) {
-                    return net.minecraft.world.InteractionResult.FAIL;
-                }
-                com.dragonblockarcanedba.item.SickleOfSorrowItem.performTechniqueDimensionalRift(player);
-                return net.minecraft.world.InteractionResult.FAIL;
-            }
-            return net.minecraft.world.InteractionResult.PASS;
-        });
-
-        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
-            if (player instanceof com.dragonblockarcanedba.attribute.PlayerStatsAccessor acc && acc.dba$isSickleActive()) {
-                if (hand == net.minecraft.world.InteractionHand.OFF_HAND) {
-                    return net.minecraft.world.InteractionResult.FAIL;
-                }
-                com.dragonblockarcanedba.item.SickleOfSorrowItem.performTechniqueDimensionalRift(player);
-                return net.minecraft.world.InteractionResult.FAIL;
+                accessor.dba$syncStats();
             }
             return net.minecraft.world.InteractionResult.PASS;
         });
@@ -262,18 +143,6 @@ public class DragonBlockArcaneDBA implements ModInitializer {
                 }
             }
 
-            // Devil Trident Shard Swarm AI
-            for (net.minecraft.server.level.ServerLevel world : server.getAllLevels()) {
-                for (net.minecraft.server.level.ServerPlayer player : world.players()) {
-                    com.dragonblockarcanedba.item.DevilTridentItem.manageShardSwarm(player, world);
-                }
-            }
-
-            // Saber Server Tick (Blitz sequences, Flash Step recharge, Escalating Speed expire)
-            com.dragonblockarcanedba.item.SaberItem.tickServer(server);
-
-            // Evil Spear Server Tick (staggered Hell Hunt chains, lunge landings)
-            com.dragonblockarcanedba.item.EvilSpearItem.tickServer(server);
         });
 
         // Register Death Hook (Otherworld mechanics)
@@ -363,20 +232,6 @@ public class DragonBlockArcaneDBA implements ModInitializer {
         // Clean up static maps and memory on player disconnect
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             java.util.UUID playerUuid = handler.getPlayer().getUUID();
-            com.dragonblockarcanedba.item.AzureDragonSwordItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.SaberItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.HollowsEdgeItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.GrandSwordItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.BraveSwordItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.DaburaSwordItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.BlasterGunItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.EvilSpearItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.KatanaItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.OxKingsAxeItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.ZSwordItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.WarMaceItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.SpikeFlailItem.onPlayerDisconnect(playerUuid);
-            com.dragonblockarcanedba.item.LavaSwordItem.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.ki.KiTechniqueHandler.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.ki.KiBarrier.onPlayerDisconnect(playerUuid);
             com.dragonblockarcanedba.util.DbaPhysicsAttributes.onPlayerDisconnect(playerUuid);

@@ -42,9 +42,6 @@ public class DbaEffects {
     public static final ResourceKey<MobEffect> MARKED_BY_EVIL_KEY = ResourceKey.create(
         Registries.MOB_EFFECT, DragonBlockArcaneDBA.id("marked_by_evil")
     );
-    public static final ResourceKey<MobEffect> EVIL_DREAD_KEY = ResourceKey.create(
-        Registries.MOB_EFFECT, DragonBlockArcaneDBA.id("evil_dread")
-    );
     public static final ResourceKey<MobEffect> SILENT_MARK_KEY = ResourceKey.create(
         Registries.MOB_EFFECT, DragonBlockArcaneDBA.id("silent_mark")
     );
@@ -110,7 +107,6 @@ public class DbaEffects {
     public static final MobEffect VALOR = new ValorEffect();
     public static final MobEffect CINEMATIC_TRACKING = new CinematicTrackingEffect();
     public static final MobEffect MARKED_BY_EVIL = new MarkedByEvilEffect();
-    public static final MobEffect EVIL_DREAD = new EvilDreadEffect();
     public static final MobEffect SILENT_MARK = new SilentMarkEffect();
 
     public static final MobEffect CELESTIAL_GRACE = new CelestialGraceEffect();
@@ -141,7 +137,6 @@ public class DbaEffects {
     public static Holder<MobEffect> VALOR_HOLDER;
     public static Holder<MobEffect> CINEMATIC_TRACKING_HOLDER;
     public static Holder<MobEffect> MARKED_BY_EVIL_HOLDER;
-    public static Holder<MobEffect> EVIL_DREAD_HOLDER;
     public static Holder<MobEffect> SILENT_MARK_HOLDER;
 
     public static Holder<MobEffect> CELESTIAL_GRACE_HOLDER;
@@ -173,7 +168,6 @@ public class DbaEffects {
         VALOR_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, VALOR_KEY, VALOR);
         CINEMATIC_TRACKING_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, CINEMATIC_TRACKING_KEY, CINEMATIC_TRACKING);
         MARKED_BY_EVIL_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, MARKED_BY_EVIL_KEY, MARKED_BY_EVIL);
-        EVIL_DREAD_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, EVIL_DREAD_KEY, EVIL_DREAD);
         SILENT_MARK_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, SILENT_MARK_KEY, SILENT_MARK);
 
         CELESTIAL_GRACE_HOLDER = Registry.registerForHolder(BuiltInRegistries.MOB_EFFECT, CELESTIAL_GRACE_KEY, CELESTIAL_GRACE);

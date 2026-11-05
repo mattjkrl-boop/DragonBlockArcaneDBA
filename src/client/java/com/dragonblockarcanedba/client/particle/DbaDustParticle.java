@@ -5,8 +5,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.SingleQuadParticle;
 import net.minecraft.client.particle.SpriteSet;
 
-/** Theme dust particle: a soft additive mote tinted per particle by DbaDustOptions.
- *  The bespoke replacement for vanilla redstone-style dust in weapon effects. */
+/** Theme dust particle: a soft additive mote tinted per particle by DbaDustOptions. */
 public class DbaDustParticle extends SingleQuadParticle {
     private final SpriteSet sprites;
     private final float baseSize;

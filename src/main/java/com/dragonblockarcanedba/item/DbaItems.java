@@ -237,9 +237,6 @@ public class DbaItems {
     public static final ResourceKey<Item> BLASTER_GUN_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("blaster_gun")
     );
-    public static final ResourceKey<Item> BLASTER_AMMO_KEY = ResourceKey.create(
-        Registries.ITEM, DragonBlockArcaneDBA.id("blaster_ammo")
-    );
     public static final ResourceKey<Item> BATTLE_ARMOR_CHESTPLATE_KEY = ResourceKey.create(
         Registries.ITEM, DragonBlockArcaneDBA.id("battle_armor_chestplate")
     );
@@ -494,9 +491,6 @@ public class DbaItems {
     public static final Item BLASTER_GUN = new BlasterGunItem(
         new Item.Properties().setId(BLASTER_GUN_KEY).stacksTo(1)
     );
-    public static final Item BLASTER_AMMO = new BlasterAmmoItem(
-        new Item.Properties().setId(BLASTER_AMMO_KEY)
-    );
     public static final Item BATTLE_ARMOR_CHESTPLATE = new DbaArmorItem(
         new Item.Properties().humanoidArmor(DbaArmorMaterials.BATTLE_ARMOR_MATERIAL, net.minecraft.world.item.equipment.ArmorType.CHESTPLATE).setId(BATTLE_ARMOR_CHESTPLATE_KEY).stacksTo(1),
         "battle_armor"
@@ -554,7 +548,6 @@ public class DbaItems {
             output.accept(BRAVE_SWORD);
             output.accept(KATANA);
             output.accept(BLASTER_GUN);
-            output.accept(BLASTER_AMMO);
             output.accept(BANSHO_FAN);
             output.accept(WHIS_STAFF);
 
@@ -731,7 +724,6 @@ public class DbaItems {
         Registry.register(BuiltInRegistries.ITEM, BRAVE_SWORD_KEY, BRAVE_SWORD);
         Registry.register(BuiltInRegistries.ITEM, KATANA_KEY, KATANA);
         Registry.register(BuiltInRegistries.ITEM, BLASTER_GUN_KEY, BLASTER_GUN);
-        Registry.register(BuiltInRegistries.ITEM, BLASTER_AMMO_KEY, BLASTER_AMMO);
         Registry.register(BuiltInRegistries.ITEM, BATTLE_ARMOR_CHESTPLATE_KEY, BATTLE_ARMOR_CHESTPLATE);
         Registry.register(BuiltInRegistries.ITEM, BATTLE_ARMOR_LEGGINGS_KEY, BATTLE_ARMOR_LEGGINGS);
         Registry.register(BuiltInRegistries.ITEM, BATTLE_ARMOR_BOOTS_KEY, BATTLE_ARMOR_BOOTS);

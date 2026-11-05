@@ -2,13 +2,11 @@ package com.dragonblockarcanedba.mixin;
 
 import com.dragonblockarcanedba.attribute.PlayerStats;
 import com.dragonblockarcanedba.attribute.PlayerStatsAccessor;
-import com.dragonblockarcanedba.effect.DbaEffects;
 import com.dragonblockarcanedba.ki.KiTechnique;
 import com.dragonblockarcanedba.ki.KiTechniqueType;
 import com.dragonblockarcanedba.network.DbaNetwork;
 import com.dragonblockarcanedba.registry.DbaRegistries;
 import com.dragonblockarcanedba.registry.Form;
-import com.dragonblockarcanedba.util.WeaponDrainHelper;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -344,43 +342,6 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             dba$addKi(kiChange);
         }
 
-        // Continuous drain while weapon effects are active on the player ("me")
-        if (player.hasEffect(DbaEffects.CELESTIAL_GRACE_HOLDER)) {
-            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 100.0, "whis_celestial_grace")) {
-                player.removeEffect(DbaEffects.CELESTIAL_GRACE_HOLDER);
-            }
-        }
-        if (player.hasEffect(DbaEffects.DEMON_SURGE_HOLDER)) {
-            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 45.0, "evil_spear_demon_surge")) {
-                player.removeEffect(DbaEffects.DEMON_SURGE_HOLDER);
-            }
-        }
-        if (player.hasEffect(DbaEffects.OX_BRACE_HOLDER)) {
-            if (!WeaponDrainHelper.drainStaminaPerTickOnce(player, 125.0, "ox_axe_brace")) {
-                player.removeEffect(DbaEffects.OX_BRACE_HOLDER);
-            }
-        }
-        if (player.hasEffect(DbaEffects.BLADE_GUARD_HOLDER)) {
-            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 30.0, "katana_blade_guard")) {
-                player.removeEffect(DbaEffects.BLADE_GUARD_HOLDER);
-            }
-        }
-        if (player.hasEffect(DbaEffects.HEROIC_FOCUS_HOLDER)) {
-            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 15.0, "brave_sword_heroic_focus")) {
-                player.removeEffect(DbaEffects.HEROIC_FOCUS_HOLDER);
-            }
-        }
-        if (player.hasEffect(DbaEffects.HOLLOWED_HOLDER)) {
-            if (!WeaponDrainHelper.drainKiPerTickOnce(player, 30.0, "hollow_edge_hollowed")) {
-                player.removeEffect(DbaEffects.HOLLOWED_HOLDER);
-            }
-        }
-        if (player.hasEffect(DbaEffects.ANCIENT_WEIGHT_HOLDER)) {
-            if (!WeaponDrainHelper.drainBothPerTickOnce(player, 75.0, 50.0, "z_sword_ancient_weight")) {
-                player.removeEffect(DbaEffects.ANCIENT_WEIGHT_HOLDER);
-            }
-        }
-
         // Revert transformation or cancel active weapons/senses if Ki drops to 0
         if (dbaCurrentKi <= 0.0) {
             if (dbaActiveFormId != null) {
@@ -390,11 +351,6 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
             if (dba$isTechniqueActive("ki_sense")) {
                 dba$setTechniqueActive("ki_sense", false);
                 dba$syncStats();
-            }
-            if (dba$isTechniqueActive("sickle_of_sorrow")) {
-                dba$setTechniqueActive("sickle_of_sorrow", false);
-                dba$syncStats();
-                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("§cKi depleted! Sickle of Sorrow dissipated."));
             }
         }
 

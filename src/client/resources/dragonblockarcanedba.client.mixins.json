@@ -8,7 +8,6 @@
 		"LivingEntityRendererMixin",
 		"LivingEntityRenderStateMixin",
 		"LivingEntityRendererInvoker",
-		"MeltingOverlayMixin",
 		"AvatarRenderStateMixin",
 		"AbstractContainerScreenMixin",
 		"ItemModelResolverMixin",
