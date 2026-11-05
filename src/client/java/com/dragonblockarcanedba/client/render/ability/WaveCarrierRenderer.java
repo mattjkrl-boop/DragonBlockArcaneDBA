@@ -5,7 +5,9 @@ import com.dragonblockarcanedba.ability.AbilityFxDefaults;
 import com.dragonblockarcanedba.client.fx.AbilityFxExpander;
 import com.dragonblockarcanedba.client.fx.RecipeEmitter;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.kit.CrackDecal;
 import com.dragonblockarcanedba.client.render.kit.CrescentBand;
+import com.dragonblockarcanedba.client.render.kit.TornWall;
 import com.dragonblockarcanedba.entity.WaveCarrierEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -16,6 +18,7 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -94,6 +97,7 @@ public class WaveCarrierRenderer extends EntityRenderer<WaveCarrierEntity, WaveC
             float env = FxEnvelope.envelope(state.ageInTicks, def.phases().active()) * distScale;
             if (env > 0.01f) {
                 drawBand(state, def, poseStack, collector, env, distScale);
+                drawGround(state, def, poseStack, collector, env, dist);
                 tickEmission(state, def, dist, distScale);
             }
         }
@@ -127,6 +131,75 @@ public class WaveCarrierRenderer extends EntityRenderer<WaveCarrierEntity, WaveC
                         rimB[0], rimB[1], rimB[2], env * 0.45f);
             });
         }
+    }
+
+    /**
+     * The Phase 6 geometry.ground draws at the wave anchor: a
+     * TornWall laid across the wave's path and a CrackDecal scar at
+     * its base. Waves draw no spikes. Ground geometry is hero
+     * geometry: skipped whole past the caps cull distance, never
+     * thinned. The wall lasts while the wave lives; it is a drawn
+     * wall, not a lingering physical one.
+     */
+    private void drawGround(State state, AbilityDef def, PoseStack poseStack,
+                            SubmitNodeCollector collector, float env, float dist) {
+        AbilityDef.GroundGeometry ground = def.geometry().ground();
+        if (ground.wallSlabs() <= 0 && ground.crackCount() <= 0) {
+            return;
+        }
+        if (dist > def.caps().cullDistance()) {
+            return;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level == null) {
+            return;
+        }
+        AbilityDef.WaveParams wave = def.wave();
+        AbilityDef.VisualSpec vis = def.visual();
+        double scale = vis.scale() * (0.55 + 0.45 * state.power);
+        final double radius = wave.radius() * scale;
+        // Local frame, matching drawBand and CrescentBand: travel
+        // is fwd = (-sin yaw, cos yaw), the band centered on it.
+        // TornWall lays its wall along the perpendicular of the
+        // forward it is given, so passing travel forward stands
+        // the wall across the wave's path, bowed toward travel.
+        double yawRad = Math.toRadians(state.yRot);
+        final double fwdX = -Math.sin(yawRad);
+        final double fwdZ = Math.cos(yawRad);
+        final long seed = state.seed;
+        final int light = state.lightCoords;
+        final double wx = state.wx, wy = state.wy, wz = state.wz;
+        final int rockRoot = darken(vis.rim(), 0.45f);
+        final int rockTip = darken(vis.mid(), 0.70f);
+
+        if (ground.wallSlabs() > 0) {
+            TornWall.GroundSampler sampler = (lx, lz) -> level.getHeight(
+                    Heightmap.Types.MOTION_BLOCKING,
+                    (int) Math.floor(wx + lx), (int) Math.floor(wz + lz)) - wy;
+            final double chord = 2.0 * radius * Math.sin(Math.toRadians(wave.arcDegrees()) * 0.5);
+            final double h = ground.wallHeight() * env;
+            ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) -> {
+                TornWall.draw(pose, buffer, seed, fwdX, fwdZ, chord, ground.wallArc(), h,
+                        ground.wallSlabs(), sampler, rockRoot, rockTip, 1.0f);
+            });
+        }
+        if (ground.crackCount() > 0) {
+            final double cr = ground.crackRadius() > 0 ? ground.crackRadius() : radius;
+            final float crackAlpha = env * 0.7f;
+            ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+                CrackDecal.draw(pose, buffer, seed, cr, ground.crackCount(), 0.06,
+                        vis.core(), vis.rim(), crackAlpha);
+            });
+        }
+    }
+
+    /** Scales an ARGB color's RGB channels by the factor, alpha forced opaque. */
+    private static int darken(int argb, float factor) {
+        int r = Math.min(255, Math.round(((argb >> 16) & 0xFF) * factor));
+        int g = Math.min(255, Math.round(((argb >> 8) & 0xFF) * factor));
+        int b = Math.min(255, Math.round((argb & 0xFF) * factor));
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
     private void tickEmission(State state, AbilityDef def, float dist, float distScale) {

@@ -222,5 +222,7 @@
   "death.attack.dragonblockarcanedba.valor": "%1$s fell to a valorous strike",
   "death.attack.dragonblockarcanedba.valor.player": "%1$s fell to %2$s's valorous strike",
   "death.attack.dragonblockarcanedba.crush": "%1$s was pulverized",
-  "death.attack.dragonblockarcanedba.crush.player": "%1$s was pulverized by %2$s"
+  "death.attack.dragonblockarcanedba.crush.player": "%1$s was pulverized by %2$s",
+  "dba.tooltip.left_click": "Left Click",
+  "dba.tooltip.right_click": "Right Click"
 }

@@ -8,9 +8,16 @@ import com.dragonblockarcanedba.network.AbilitySyncPayload;
 import com.dragonblockarcanedba.network.CastSyncPayload;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Client entry point for the ability rebuild: receives the server's
@@ -36,6 +43,44 @@ public final class ClientAbility {
         com.dragonblockarcanedba.client.fx.DomainFog.init();
         WeaponInputHandler.register();
         ChargeRingRenderer.register();
+        registerTooltips();
+    }
+
+    /**
+     * Data-driven weapon tooltips (Phase 6): right under the item
+     * name, one gray line per bound slot, left then right, naming
+     * the ability the synced registry binds to that slot. The slot
+     * label is a lang string; the ability name comes from the def
+     * itself, so a datapack rename renames the tooltip. Unbound
+     * items and an unsynced registry add nothing.
+     */
+    private static void registerTooltips() {
+        ItemTooltipCallback.EVENT.register((stack, context, tooltipType, lines) -> {
+            if (lines.size() < 1 || stack.isEmpty()) {
+                return;
+            }
+            Identifier itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+            List<Component> abilityLines = new ArrayList<>();
+            AbilityDef left = AbilityRegistry.forItem(itemId, AbilityDef.Slot.LEFT);
+            if (left != null) {
+                abilityLines.add(Component.empty()
+                        .append(Component.translatable("dba.tooltip.left_click"))
+                        .append(Component.literal(": "))
+                        .append(Component.literal(left.name()))
+                        .withStyle(ChatFormatting.GRAY));
+            }
+            AbilityDef right = AbilityRegistry.forItem(itemId, AbilityDef.Slot.RIGHT);
+            if (right != null) {
+                abilityLines.add(Component.empty()
+                        .append(Component.translatable("dba.tooltip.right_click"))
+                        .append(Component.literal(": "))
+                        .append(Component.literal(right.name()))
+                        .withStyle(ChatFormatting.GRAY));
+            }
+            if (!abilityLines.isEmpty()) {
+                lines.addAll(1, abilityLines);
+            }
+        });
     }
 
     private static void applySync(AbilitySyncPayload payload) {

@@ -5,7 +5,11 @@ import com.dragonblockarcanedba.ability.AbilityFxDefaults;
 import com.dragonblockarcanedba.client.fx.AbilityFxExpander;
 import com.dragonblockarcanedba.client.fx.RecipeEmitter;
 import com.dragonblockarcanedba.client.render.ki.ComplexGeometry;
+import com.dragonblockarcanedba.client.render.kit.ChainRun;
+import com.dragonblockarcanedba.client.render.kit.CrackDecal;
 import com.dragonblockarcanedba.client.render.kit.DomeShell;
+import com.dragonblockarcanedba.client.render.kit.SpikeCluster;
+import com.dragonblockarcanedba.client.render.kit.TornWall;
 import com.dragonblockarcanedba.entity.CloudCarrierEntity;
 import com.dragonblockarcanedba.util.FxEnvelope;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -16,9 +20,13 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -107,6 +115,7 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
             float env = FxEnvelope.envelope(state.ageInTicks, def.phases().active()) * distScale;
             if (env > 0.01f) {
                 drawDomain(state, def, poseStack, collector, env, distScale);
+                drawGroundAndChains(state, def, poseStack, collector, env, dist);
                 tickEmission(state, def, dist, distScale);
             }
         }
@@ -219,6 +228,120 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
                         coreR, coreG, coreB, flashEnv * 0.7f);
             });
         }
+    }
+
+    /**
+     * The Phase 6 geometry.ground draws at the cloud anchor, plus
+     * the chains module's ChainRun links. Ground geometry is hero
+     * geometry: it is not thinned by distance, only skipped whole
+     * past the caps cull distance. The envelope is the same
+     * lifecycle value the domain alpha uses, passed in as env.
+     */
+    private void drawGroundAndChains(State state, AbilityDef def, PoseStack poseStack,
+                                     SubmitNodeCollector collector, float env, float dist) {
+        AbilityDef.GroundGeometry ground = def.geometry().ground();
+        AbilityDef.CloudParams cloud = def.cloud();
+        boolean hasGround = ground.wallSlabs() > 0 || ground.crackCount() > 0 || ground.spikes() > 0;
+        boolean hasChains = cloud.chains() != null;
+        if (!hasGround && !hasChains) {
+            return;
+        }
+        if (dist > def.caps().cullDistance()) {
+            return;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc != null ? mc.level : null;
+        if (level == null) {
+            return;
+        }
+        AbilityDef.VisualSpec vis = def.visual();
+        final double radius = CloudCarrierEntity.radiusAt(def, state.ageInTicks) * vis.scale();
+        final int light = state.lightCoords;
+        final long seed = state.seed;
+        final double wx = state.wx, wy = state.wy, wz = state.wz;
+        // Physical rock reading of the weapon palette: the rim
+        // darkened hard for the root, the mid less so for the tips.
+        final int rockRoot = darken(vis.rim(), 0.45f);
+        final int rockTip = darken(vis.mid(), 0.70f);
+
+        if (hasGround) {
+            // TornWall samples the ground in this renderer's local
+            // frame: world column from the carrier position plus
+            // the local offset, height from the client heightmap
+            // relative to the carrier's own y.
+            TornWall.GroundSampler sampler = (lx, lz) -> level.getHeight(
+                    Heightmap.Types.MOTION_BLOCKING,
+                    (int) Math.floor(wx + lx), (int) Math.floor(wz + lz)) - wy;
+            if (ground.wallSlabs() > 0) {
+                double angle = (seed & 1023) / 1023.0 * Math.PI * 2.0;
+                final double fwdX = Math.sin(angle), fwdZ = Math.cos(angle);
+                final double len = 2.0 * radius;
+                final double h = ground.wallHeight() * Math.max(env, 0.15f);
+                ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) -> {
+                    TornWall.draw(pose, buffer, seed, fwdX, fwdZ, len, ground.wallArc(), h,
+                            ground.wallSlabs(), sampler, rockRoot, rockTip, 1.0f);
+                });
+            }
+            if (ground.crackCount() > 0) {
+                final double cr = ground.crackRadius() > 0 ? ground.crackRadius() : radius;
+                ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+                    CrackDecal.draw(pose, buffer, seed, cr, ground.crackCount(), 0.06,
+                            vis.core(), vis.rim(), env);
+                });
+            }
+            if (ground.spikes() > 0) {
+                final double sr = ground.spikeRadius() > 0 ? ground.spikeRadius() : radius * 0.9;
+                final double sh = ground.spikeHeight() * (0.35 + 0.65 * env);
+                ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) -> {
+                    SpikeCluster.draw(pose, buffer, seed, ground.spikes(), sr, sh, 0,
+                            rockRoot, rockTip, 1.0f);
+                });
+            }
+        }
+
+        if (hasChains) {
+            // Presentation approximation: the server latches its own
+            // chain set; the client re-derives the nearest living
+            // entities inside the current radius each frame and
+            // draws to those. The two sets agree in the common case
+            // (nearest first, same radius) but are not synced.
+            AABB box = new AABB(wx - radius, wy - 4, wz - radius,
+                    wx + radius, wy + cloud.height() + 4, wz + radius);
+            List<LivingEntity> found = new ArrayList<>(
+                    level.getEntitiesOfClass(LivingEntity.class, box, e -> e.isAlive()));
+            found.sort(Comparator.comparingDouble(e -> e.distanceToSqr(wx, wy, wz)));
+            List<Vec3> targets = new ArrayList<>();
+            Vec3 center = new Vec3(wx, wy, wz);
+            for (LivingEntity e : found) {
+                if (targets.size() >= cloud.chains().maxLinks()) {
+                    break;
+                }
+                Vec3 ec = e.position().add(0, e.getBbHeight() * 0.5, 0);
+                if (ec.distanceTo(center) > radius + e.getBbWidth()) {
+                    continue;
+                }
+                targets.add(new Vec3(e.getX() - wx,
+                        e.getY() - wy + e.getBbHeight() * 0.6, e.getZ() - wz));
+            }
+            if (!targets.isEmpty()) {
+                final Vec3 from = new Vec3(0, cloud.height() * 0.55, 0);
+                final float chainAlpha = 0.9f * env;
+                ComplexGeometry.submitEnergy(collector, poseStack, (pose, buffer) -> {
+                    for (int i = 0; i < targets.size(); i++) {
+                        ChainRun.draw(pose, buffer, seed ^ (i * 0x9E37L), from, targets.get(i),
+                                0.8, 0.55, vis.mid(), vis.core(), chainAlpha);
+                    }
+                });
+            }
+        }
+    }
+
+    /** Scales an ARGB color's RGB channels by the factor, alpha forced opaque. */
+    private static int darken(int argb, float factor) {
+        int r = Math.min(255, Math.round(((argb >> 16) & 0xFF) * factor));
+        int g = Math.min(255, Math.round(((argb >> 8) & 0xFF) * factor));
+        int b = Math.min(255, Math.round((argb & 0xFF) * factor));
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
     private void tickEmission(State state, AbilityDef def, float dist, float distScale) {
