@@ -145,7 +145,7 @@ public class WaveCarrierEntity extends CarrierEntity {
 
     /** Phase 6 wave modules that run even on ticks without a hit: deflect and terrain trail. */
     /** The reach cone: within reach of the spawn point and half the arc of the aim. */
-    private boolean insideCone(LivingEntity target, AbilityDef.WaveParams wave, double dx, double dz) {
+    private boolean insideCone(net.minecraft.world.entity.Entity target, AbilityDef.WaveParams wave, double dx, double dz) {
         double ox = target.getX() - this.origin.x;
         double oz = target.getZ() - this.origin.z;
         double d = Math.sqrt(ox * ox + oz * oz);
@@ -164,8 +164,19 @@ public class WaveCarrierEntity extends CarrierEntity {
         AbilityDef.WaveDeflectSpec deflect = wave.deflect();
         if (deflect != null) {
             Player owner = ownerPlayer();
-            for (Projectile projectile : serverLevel.getEntitiesOfClass(Projectile.class, box,
-                    pr -> !pr.isRemoved() && pr.getOwner() != owner)) {
+            // With a reach cone the whole cone bats projectiles back for the carrier's life
+            // (Wind Spin design: 25 block reach, 35 degrees); otherwise only the band does.
+            boolean cone = wave.reach() > 0 && this.origin != null;
+            double yawRad = Math.toRadians(this.getYRot());
+            double cdx = -Math.sin(yawRad);
+            double cdz = Math.cos(yawRad);
+            AABB scan = cone
+                    ? new AABB(this.origin, this.origin).inflate(wave.reach(), 0, wave.reach())
+                            .expandTowards(0, wave.height() + 1.0, 0).move(0, -0.5, 0)
+                    : box;
+            for (Projectile projectile : serverLevel.getEntitiesOfClass(Projectile.class, scan,
+                    pr -> !pr.isRemoved() && pr.getOwner() != owner
+                            && (!cone || insideCone(pr, wave, cdx, cdz)))) {
                 if (this.deflected.contains(projectile.getId())) {
                     continue;
                 }
