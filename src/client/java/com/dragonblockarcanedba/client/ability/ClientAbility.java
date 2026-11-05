@@ -33,6 +33,7 @@ public final class ClientAbility {
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> CastAnimations.clear());
         ClientAbilityFx.init();
+        com.dragonblockarcanedba.client.fx.DomainFog.init();
         WeaponInputHandler.register();
         ChargeRingRenderer.register();
     }

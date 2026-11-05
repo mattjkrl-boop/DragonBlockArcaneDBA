@@ -16,6 +16,7 @@
 		"PauseScreenMixin",
 		"TitleScreenMixin",
 		"CameraShakeMixin",
+		"FogRendererMixin",
 		"GameRendererPostMixin",
 		"GameRendererPostMixin263"
 	],
