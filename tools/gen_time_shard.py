@@ -282,11 +282,14 @@ def build_geo():
 
 
 def drift(sh, i, amt):
-    """Rest rotation plus a small per shard drift, for hang and fall clips."""
+    """A small per shard drift, for hang and fall clips.
+
+    GeckoLib adds clip rotation on top of the bone's rest rotation
+    from the geo, so clip values are offsets from rest, never the
+    rest rotation itself (that would turn each shard twice).
+    """
     sgn = 1 if i % 2 == 0 else -1
-    return [r2(sh["rot"][0] + sgn * amt),
-            r2(sh["rot"][1] - sgn * amt * 0.6),
-            r2(sh["rot"][2] + sgn * amt * 0.8)]
+    return [r2(sgn * amt), r2(-sgn * amt * 0.6), r2(sgn * amt * 0.8)]
 
 
 def tremor(sh, dist):
@@ -303,7 +306,7 @@ def build_anim():
     fall_bones = {}
     shatter_bones = {}
     for i, sh in enumerate(SHARDS):
-        base = [r2(v) for v in sh["rot"]]
+        base = [0, 0, 0]  # offsets from the rest rotation
         # hang: per shard tremble with phase offsets in time and amount
         ph = (i % 3) * 0.04
         amt = 0.8 + 0.18 * i
@@ -332,9 +335,7 @@ def build_anim():
         out = scatter_vec(sh, sh["scatter"])
         out[1] = r2(out[1] - 3.0)
         half = [r2(v * 0.45) for v in out]
-        snap = [r2(sh["rot"][0] + 14 + i * 5),
-                r2(sh["rot"][1] - 18 + i * 7),
-                r2(sh["rot"][2] + 22 - i * 6)]
+        snap = [r2(14 + i * 5), r2(-18 + i * 7), r2(22 - i * 6)]
         mid = [r2((base[k] + snap[k]) / 2.0) for k in range(3)]
         shatter_bones[sh["name"]] = {
             "position": {"0.0": [0, 0, 0], "0.2": half, "0.4": out},

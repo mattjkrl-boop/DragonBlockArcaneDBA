@@ -93,6 +93,9 @@ def collect_faces(geo, anim, t):
         levels = []
         for n in seq:
             rot, pos, scale = bone_pose(anim, n, t)
+            # GeckoLib adds the clip rotation on top of the bone's rest
+            # rotation from the geo, so the preview must too.
+            rot = np.asarray(rot, dtype=float) + np.array(bones[n].get("rotation", [0, 0, 0]), dtype=float)
             levels.append((render3d.rot_matrix(*rot),
                            np.array(bones[n].get("pivot", [0, 0, 0]), dtype=float),
                            pos, scale))
