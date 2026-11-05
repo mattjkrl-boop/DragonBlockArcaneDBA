@@ -58,7 +58,7 @@ Spirit Swing and Time Shatter melee move to PARTIAL-STRONG (proposed). Counts ar
 - Curse Chain: chains latch and orbit every target, up to 10. Now matches, with a bind on every target.
 - Brave cross slash, Hollow fragment ring, Azure Dragon Rush dragon aura (azure_dragon escort) and Dabura sky blades (sky_blade finale) all match the existing sets.
 - Grand Cyclone blade shards match (cyclone_shard). The Grand Crescent Wave now carries grand_crescent (40 cubes) riding the wave at scale 2 (3c134b6).
-- Katana Heaven Splitter vertical slice wall: heaven_slice_wall (36 cubes) on the katana_heaven_wall cloud, planted with the new models.anchor carrier so it faces the wave yaw and runs back along the dash path (6597555). Drawn only, no collision.
+- Katana Heaven Splitter vertical slice wall: heaven_slice_wall (36 cubes) on the katana_heaven_wall cloud, planted with the new models.anchor carrier so it faces the wave yaw and runs back along the dash path (6597555). Collide box added in the model physics pass below (blocks entities and projectiles).
 - Z Shockwave golden vortex: z_golden_vortex (70 cubes) as a cast orbit at radius 0 for the charge, ending on release (59e5ff2).
 
 ## Still open
@@ -68,3 +68,76 @@ Spirit Swing and Time Shatter melee move to PARTIAL-STRONG (proposed). Counts ar
 
 ## Hit-stop
 Kept deferred. The prompt allows only a pose-clock-only freeze behind an opt-in field, off by default; with it off nothing would change on Carter's test, so it was not built this pass.
+
+## Model physics pass (Nov 5, 2026)
+
+Carter: every weapon should be able to affect things past visual if it makes sense. Audited all 55 ability files and every lingering ModelDisplayEntity piece against mods/DBA-ATTACK-DESIGNS.md. Only pieces whose design clearly calls for a physical presence got opt-in fields. Hit-stop stays deferred.
+
+### Before (visual only, all 31 unique model refs)
+
+| Model | Ability | Linger / role | Physics then |
+|---|---|---|---|
+| heaven_slice_wall | katana_heaven_wall | 100 tick vertical slice wall | none (drawn only) |
+| z_golden_vortex | z_shockwave | cast orbit through charge | none |
+| cyclone_debris | bansho_cyclone | 64 orbiting debris pieces | none (carrier vortex only) |
+| celestial_sword | spirit_impale | 6 swords descend and hold 50 ticks | none (cloud burst only) |
+| titan_aegis | ox_brace | stance shield behind caster | none (cloud repulsion already) |
+| sky_blade | dabura_eclipse | finale fall | none (cloud executes) |
+| void_fragment | hollows_void_rift | ring at rift mouth | none (cloud suction) |
+| void_rift_portal | flash_step, warp_rift | brief portal mark | none |
+| time_shard | whis_time_shatter | frozen hang then drop | none (effect owns freeze) |
+| katana_afterimage, saber_afterimage | flashdraw, hollow rush, blitz | hop dressing | none |
+| cyclone_shard | grand_cyclone | spin orbit dressing | none (aura deflect owns) |
+| grand_crescent | grand_cyclone | rides the wave | none (wave damages) |
+| azure_dragon | azure_dragon_rush | escort aura | none |
+| devil_shard | devil_deploy | rides swarm shards | none (swarm damages) |
+| evil_spike | evil_impale | full-charge body burst | none |
+| spectral_spear | evil_impale | throw body | none (projectile damages) |
+| blaster_bolt, blaster_casing, prong_bolt | blaster, devil | shot / eject | none (projectile / dressing) |
+| flail_chain_ball | flail | swing / spin body | none (carrier hits) |
+| lava_fountain, rising_eruption | lava, mace | ground dressing | none |
+| spirit_swing_crescent, dimensional_crescent, sorrow_slash_arc, temporal_strike_arc, brave_cross_slash, saber_line_slash | various | travel / finisher arcs | none (carrier or melee hits) |
+| curse_chain_bind, hell_chain_bind | curse, hell hunt | latch orbit | none (cloud latch owns) |
+
+### Foundation (generic, opt-in, default off)
+
+Shared AbilityDef.ModelSpec fields, never per-weapon classes:
+- models.collide: oriented local box (width, height, depth, offsetX/Y/Z; offsetY defaults to height/2). entities and projectiles flags (both default true). Blocks living entities by shallowest-axis push (MovementPhysics for players) and discards foreign projectiles. Caster and caster-owned projectiles are immune.
+- models.zone: cylinder (radius, height) with damageInterval / damageScale (0 = no damage), pull (same scale as cloud.pull * 0.045), slow (0 to 1 keep factor on horizontal vel), knockback (outward). Uses AbilityDamage.applyHitScaled and the piece's bound cast power. Caster immune. Orbit-on-carrier pieces bind a separate casterUuid so the cloud owner is not treated as the caster for immunity.
+
+ModelDisplaySpawner now threads power and casterUuid through cast, fire, step, latch, and ride spawn paths. AbilityService lineUp markHurt went through DbaCompat.markHurt so the 26.3 client compile stays clean (LivingEntity.hurtMarked removed there).
+
+### After: effects that gained physics
+
+| Effect | Ability | Field | What it does now |
+|---|---|---|---|
+| heaven_slice_wall | Heaven Splitter wall | collide width 1.7 height 6 depth 7.5 offsetY 3 offsetZ -3.6 | Blocks entity movement and foreign projectiles for the 100 tick life. Matches the design "towering vertical slice wall of torn reality". |
+| z_golden_vortex | Z Shockwave charge | zone radius 6 height 2.5 pull 1.4 | Pulls living entities toward the vortex while the cast orbit lasts (ends with the charge). Matches the design "golden vortex charge". |
+| cyclone_debris | Great Cyclone | zone radius 1.2 height 1.5 knockback 0.22 on every orbit tier | Each debris chunk knocks entities it brushes. The cloud already runs the vortex; the 64-piece debris field now hits on contact per the design. |
+| celestial_sword | Spirit Impale | zone radius 1 height 4 damageInterval 10 damageScale 0.25 | Planted swords deal light spirit damage every 10 ticks while they hold. Matches six celestial swords as a lingering hazard, not only the cloud burst. |
+
+### Judged visual only (no physics added)
+
+Left alone because the design either already covers the gameplay on the carrier / aura / melee, or the piece is pure dressing:
+- Afterimages (katana, saber): hop dressing. Design never gives them collision.
+- Travel arcs and finisher silhouettes (spirit_swing_crescent, dimensional_crescent, sorrow_slash_arc, temporal_strike_arc, brave_cross_slash, saber_line_slash, grand_crescent): the carrier or melee already deals the hit.
+- Bolts and casings (blaster_bolt, blaster_casing, prong_bolt): projectile carrier owns damage; casing is eject dressing.
+- titan_aegis: Ox Brace already has the 12 block repulsion field on the cloud; the model is the stance look.
+- sky_blade: Eclipse finale fall dressing; the cloud owns the execute.
+- void_fragment / void_rift_portal: Void Rift cloud owns suction and implosion; portals are marks.
+- time_shard: Time Shatter effect owns the freeze and drop.
+- cyclone_shard: Grand Cyclone aura already pulls, deflects, and damages.
+- azure_dragon: escort aura dressing for the rush.
+- devil_shard / evil_spike / spectral_spear: swarm and throw carriers already damage; spikes are a full-charge body burst look.
+- flail_chain_ball, lava_fountain, rising_eruption: carriers own the hits.
+- curse_chain_bind / hell_chain_bind: cloud latch owns the bind.
+
+### Build
+
+- 26.2: ./gradlew checkAbilities compileJava compileClientJava BUILD SUCCESSFUL; checkAbilities 55 OK.
+- 26.3 side-tree (minecraft 26.3, loader 0.20.1, FAPI 0.165.0+26.3, GeckoLib 5.5.7): same tasks BUILD SUCCESSFUL after excluding the two plugin-gated 26.2-only mixins (CloudTextureMixin, GameRendererPostMixin) from that compile, matching audits/MC-263-COMPAT-AUDIT.md. Compile only, not a launch.
+- In-game behavior unverified until Carter's PC test.
+
+### Hit-stop
+
+Still deferred. Not touched this pass.
