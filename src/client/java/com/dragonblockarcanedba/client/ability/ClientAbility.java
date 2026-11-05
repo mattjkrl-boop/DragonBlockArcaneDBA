@@ -32,6 +32,7 @@ public final class ClientAbility {
             context.client().execute(() -> CastAnimations.onCastSync(payload));
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> CastAnimations.clear());
+        ClientAbilityFx.init();
         WeaponInputHandler.register();
         ChargeRingRenderer.register();
     }
