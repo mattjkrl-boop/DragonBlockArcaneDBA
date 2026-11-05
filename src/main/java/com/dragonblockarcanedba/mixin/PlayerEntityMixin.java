@@ -276,7 +276,7 @@ public abstract class PlayerEntityMixin implements PlayerStatsAccessor {
 
         // Auto-cancel active emote upon movement, crouching, or attacking
         if (!dbaActiveEmote.isEmpty()) {
-            if (player.getDeltaMovement().horizontalDistanceSqr() > 0.002 || player.swinging || player.isCrouching()) {
+            if (player.getDeltaMovement().horizontalDistanceSqr() > 0.002 || com.dragonblockarcanedba.util.DbaCompat.isSwinging(player) || player.isCrouching()) {
                 dbaActiveEmote = "";
                 dba$syncStats();
             }

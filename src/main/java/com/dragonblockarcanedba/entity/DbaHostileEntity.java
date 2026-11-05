@@ -76,7 +76,8 @@ public abstract class DbaHostileEntity extends Monster implements GeoEntity {
     }
 
     private PlayState animate(AnimationTest<DbaHostileEntity> test) {
-        if (this.swinging || this.attackAnim > 0.0f) {
+        if (com.dragonblockarcanedba.util.DbaCompat.isSwinging(this)
+                || com.dragonblockarcanedba.util.DbaCompat.attackAnim(this, 1.0f) > 0.0f) {
             return test.setAndContinue(ATTACK);
         }
         if (this.getDeltaMovement().horizontalDistanceSqr() > 2.5E-3) {

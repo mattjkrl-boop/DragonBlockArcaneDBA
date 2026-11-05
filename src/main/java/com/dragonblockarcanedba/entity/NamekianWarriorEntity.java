@@ -30,7 +30,7 @@ public class NamekianWarriorEntity extends DbaHostileEntity {
             if (away.lengthSqr() > 1.0E-4) {
                 Vec3 push = away.normalize().scale(0.55).add(0.0, 0.28, 0.0);
                 living.setDeltaMovement(living.getDeltaMovement().add(push));
-                living.hurtMarked = true;
+                com.dragonblockarcanedba.util.DbaCompat.markHurt(living);
             }
         }
         return hit;

@@ -49,7 +49,7 @@ public class FriezaSoldierEntity extends DbaHostileEntity {
             return;
         }
         this.shotCooldown = 40;
-        this.swing(InteractionHand.MAIN_HAND);
+        com.dragonblockarcanedba.util.DbaCompat.swing(this, InteractionHand.MAIN_HAND);
         target.hurtServer(server, DbaDamage.ki(this, this), 5.0f);
         server.playSound(null, this.getX(), this.getY(), this.getZ(), DbaSounds.FIRE_SHOT, SoundSource.HOSTILE, 0.7f, 1.5f);
         server.sendParticles(DbaMaterialOptions.of(DbaMaterialOptions.PLASMA, 0xFFD98A, 0.95f, target.getId() * 31 + 17),
