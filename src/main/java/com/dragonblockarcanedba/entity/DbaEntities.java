@@ -85,6 +85,39 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ki_explosion")))
     );
 
+    // Generic ability carriers (rebuild Phase 1): one entity type per
+    // carrier, parameterized entirely by ability data. No per-weapon
+    // entity types will ever be added again.
+    public static final EntityType<WaveCarrierEntity> ABILITY_WAVE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ability_wave"),
+            EntityType.Builder.<WaveCarrierEntity>of(WaveCarrierEntity::new, MobCategory.MISC)
+                    .sized(2.0f, 3.0f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ability_wave")))
+    );
+
+    public static final EntityType<CloudCarrierEntity> ABILITY_CLOUD = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ability_cloud"),
+            EntityType.Builder.<CloudCarrierEntity>of(CloudCarrierEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f)
+                    .clientTrackingRange(16)
+                    .updateInterval(5)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ability_cloud")))
+    );
+
+    public static final EntityType<ProjectileCarrierEntity> ABILITY_PROJECTILE = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("ability_projectile"),
+            EntityType.Builder.<ProjectileCarrierEntity>of(ProjectileCarrierEntity::new, MobCategory.MISC)
+                    .sized(0.5f, 0.5f)
+                    .clientTrackingRange(8)
+                    .updateInterval(5)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ability_projectile")))
+    );
+
     public static final EntityType<ShenronEntity> SHENRON = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("shenron"),
