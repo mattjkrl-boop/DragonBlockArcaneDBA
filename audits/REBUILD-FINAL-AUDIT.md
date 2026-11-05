@@ -125,7 +125,7 @@ signature visual is approximated by recipes or palette.
 | # | Weapon | Attack | Carrier and modules | Rating | Gap |
 |---|--------|--------|--------------------|--------|-----|
 | 1 | Katana | Flashdraw | none; move chain 5, melee | PARTIAL-STRONG | afterimages are fx, no model |
-| 2 | Katana | Heaven Splitter | wave slow; ground wall and cracks | STRONG | wall lives only while the wave lives (40 ticks) |
+| 2 | Katana | Heaven Splitter | wave slow; ground wall and cracks | STRONG | wall now lingers 100 ticks where the wave dies (carrierEnd summon, katana_heaven_wall); unverified in game |
 | 3 | Z Sword | Z Shockwave | wave; raised charge ring (proof) | STRONG | none open |
 | 4 | Z Sword | Katchin Weight | cloud anchor target; pull, finale slam, crater, cracks | PARTIAL-STRONG | the concept's sword rain is picture dressing, not the design |
 | 5 | Saber | Blitz Flurry | move chain into wave | PARTIAL | the picture's line-up finisher reads thin |
@@ -217,9 +217,14 @@ missing behavior.
   launch was a bare server setDeltaMovement that never synced
   to the client; it now goes through MovementPhysics. Unverified
   in game.
-- Heaven Splitter's torn wall and the Ox fissure dressing are
-  carrier-anchored draws: the wall lives exactly as long as
-  its wave (40 ticks). No lingering physical wall ships.
+- Heaven Splitter (follow-up): new summon trigger carrierEnd;
+  when the wave expires naturally it leaves katana_heaven_wall,
+  an unbound zero-damage cloud carrying the same ground wall
+  and cracks, facing the wave's yaw, for 100 ticks (tuning, no
+  design number), sinking with the cloud envelope and shedding
+  chips at its end. Still a drawn wall: no collision. Cloud
+  walls now face the carrier yaw instead of a seeded angle
+  (only this def uses a cloud wall). Ox dressing unchanged.
 - Wind Spin reach is wave travel plus radius (about 21 blocks
   of travel plus the 25 radius), the plan's named
   approximation of the design's reach line.

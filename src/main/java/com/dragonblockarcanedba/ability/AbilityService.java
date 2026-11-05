@@ -786,6 +786,7 @@ public final class AbilityService {
             }
             case CLOUD -> {
                 CloudCarrierEntity cloud = new CloudCarrierEntity(DbaEntities.ABILITY_CLOUD, level);
+                cloud.setYRot(yaw);
                 Vec3 anchor;
                 UUID targetUuid = null;
                 if (pos != null) {

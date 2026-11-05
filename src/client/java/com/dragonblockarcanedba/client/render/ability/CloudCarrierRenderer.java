@@ -55,6 +55,7 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
         public int seed = 0;
         public float power = 1f;
         public double wx = 0, wy = 0, wz = 0;
+        public float yaw = 0;
         public int strikeAge = -1;
         public int strikeSeed = 0;
         public double sx = 0, sy = 0, sz = 0;
@@ -94,6 +95,7 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
         state.seed = entity.getSeed();
         state.power = entity.getPower();
         state.wx = entity.getX();
+        state.yaw = entity.getYRot();
         state.wy = entity.getY();
         state.wz = entity.getZ();
         state.strikeAge = entity.strikeAge();
@@ -273,8 +275,10 @@ public class CloudCarrierRenderer extends EntityRenderer<CloudCarrierEntity, Clo
                     Heightmap.Types.MOTION_BLOCKING,
                     (int) Math.floor(wx + lx), (int) Math.floor(wz + lz)) - wy;
             if (ground.wallSlabs() > 0) {
-                double angle = (seed & 1023) / 1023.0 * Math.PI * 2.0;
-                final double fwdX = Math.sin(angle), fwdZ = Math.cos(angle);
+                // Faces the spawning yaw (wave convention: fwd = (-sin, cos)),
+                // so a wall left by a wave stands across that wave's path.
+                double yawRad = Math.toRadians(state.yaw);
+                final double fwdX = -Math.sin(yawRad), fwdZ = Math.cos(yawRad);
                 final double len = 2.0 * radius;
                 final double h = ground.wallHeight() * Math.max(env, 0.15f);
                 ComplexGeometry.submitSolidLit(collector, poseStack, light, (pose, buffer) -> {

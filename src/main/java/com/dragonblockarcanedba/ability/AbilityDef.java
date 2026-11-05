@@ -762,7 +762,7 @@ public record AbilityDef(
 
     private static final Set<String> SUMMON_FIELDS = Set.of("ability", "at", "when", "once");
     private static final Set<String> SUMMON_AT = Set.of("caster", "look", "hit");
-    private static final Set<String> SUMMON_WHEN = Set.of("fire", "fullPower", "critical", "meleeHit", "carrierHit");
+    private static final Set<String> SUMMON_WHEN = Set.of("fire", "fullPower", "critical", "meleeHit", "carrierHit", "carrierEnd");
 
     private static List<SummonSpec> parseSummons(JsonObject json) {
         if (!json.has("summons")) {
@@ -790,7 +790,7 @@ public record AbilityDef(
             String when = optString(sm, "when", "fire");
             if (!SUMMON_WHEN.contains(when)) {
                 throw new IllegalArgumentException(at + ".when must be fire, fullPower, critical, "
-                        + "meleeHit, or carrierHit, got \"" + when + "\"");
+                        + "meleeHit, carrierHit, or carrierEnd, got \"" + when + "\"");
             }
             out.add(new SummonSpec(ability, atPos, when,
                     namedBool(sm, at + ".once", "once", true)));

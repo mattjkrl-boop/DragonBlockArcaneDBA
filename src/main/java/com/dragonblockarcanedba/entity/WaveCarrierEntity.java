@@ -155,4 +155,26 @@ public class WaveCarrierEntity extends CarrierEntity {
             }
         }
     }
+
+    /**
+     * carrierEnd summons: spawned where the wave dies, facing the
+     * wave's travel yaw (Heaven Splitter's lingering torn wall).
+     */
+    @Override
+    protected void onExpire() {
+        AbilityDef def = def();
+        if (def == null || !(ownerPlayer() instanceof ServerPlayer serverOwner)) {
+            return;
+        }
+        for (AbilityDef.SummonSpec summon : def.summons()) {
+            if (!"carrierEnd".equals(summon.when())) {
+                continue;
+            }
+            net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.tryParse(summon.ability());
+            AbilityDef summoned = id == null ? null : com.dragonblockarcanedba.ability.AbilityRegistry.get(id);
+            if (summoned != null) {
+                AbilityService.spawnCarrier(serverOwner, summoned, getPower(), this.position(), this.getYRot());
+            }
+        }
+    }
 }
