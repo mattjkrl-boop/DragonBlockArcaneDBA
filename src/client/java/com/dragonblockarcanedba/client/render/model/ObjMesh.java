@@ -275,7 +275,7 @@ public class ObjMesh {
         for (Map.Entry<String, List<int[][]>> entry : groupFaces.entrySet()) {
             String gname = entry.getKey();
             LimbGroup group = mesh.limbs.computeIfAbsent(gname, LimbGroup::new);
-            float[] pivot = pivots.getOrDefault(gname, gname.startsWith("hair") ? pivots.get("head") : pivots.get("body"));
+            float[] pivot = pivots.getOrDefault(gname, (gname.startsWith("hair") || gname.startsWith("head_")) ? pivots.get("head") : pivots.get("body"));
             float px = pivot[0];
             float py = pivot[1];
             float pz = pivot[2];

@@ -15,7 +15,10 @@ SKIN_V = 238
 GEM = (146, 102, 224); GEM_L = (182, 144, 248); GEM_D = (110, 72, 178)
 HORN = (24, 24, 31); RED = (216, 32, 46)
 
-m = RaceModel('arcosian', None)
+m = RaceModel('arcosian', None, extra_groups={
+    'head_horns': 'head_horns',
+    'head_horns__arcosian_form_2': 'head_horns__arcosian_form_2',
+    'head_horns__arcosian_form_3': 'head_horns__arcosian_form_3'})
 
 def seg_chain(name, bone, mat, pts, w0, w1, export=True):
     """Tapered cubes along a y/z polyline, Saiyan-script convention."""
@@ -57,8 +60,23 @@ m.cube('head', 'head', 'head', [-4, 24, -4], [4, 32, 4])
 m.mirror('ear', ('head', 'head'), 'skin', [4.0, 27.4, -0.5], [4.55, 28.9, 0.85])
 m.cube('dome', 'head', 'gem', [-3.3, 31.6, -3.5], [3.3, 33.3, 3.5])
 m.cube('domepoint', 'head', 'gem', [-0.95, 29.6, -4.34], [0.95, 31.9, -3.9])
-m.spike('horn1', [3.9, 30.8, -0.2], 7.0, 2.5, (38, 0, -34), True, bone='head', mat='horn')
-m.spike('horn2', [6.9, 35.2, 3.6], 5.5, 1.6, (100, 0, -20), True, bone='head', mat='horn')
+# Horns live in their own head group so forms can swap them (Custom3DModelLayer
+# draws head_<part>__<formpath> in place of head_<part> while that form is active)
+m.spike('horn1', [3.9, 30.8, -0.2], 7.0, 2.5, (38, 0, -34), True, bone='head_horns', mat='horn')
+m.spike('horn2', [6.9, 35.2, 3.6], 5.5, 1.6, (100, 0, -20), True, bone='head_horns', mat='horn')
+
+# Second form: thick bull horns out of the temples, curving outward then up,
+# with a heavier purple dome rim
+m.spike('f2horn1', [3.4, 29.6, 0.2], 6.4, 2.9, (6, 0, -62), True, bone='head_horns__arcosian_form_2', mat='horn')
+m.spike('f2horn2', [8.6, 32.6, 0.4], 7.5, 2.4, (8, 0, -12), True, bone='head_horns__arcosian_form_2', mat='horn')
+m.cube('f2rim', 'head_horns__arcosian_form_2', 'gem', [-4.15, 30.9, -4.15], [4.15, 32.0, 4.15])
+
+# Third form: elongated cranium sweeping up and back in stepped pale plates
+# with purple bands, small horn nubs at the temples
+for k, (y0, z0, w) in enumerate(((29.8, 0.6, 7.8), (31.4, 2.2, 7.0), (32.8, 3.8, 6.0), (34.0, 5.4, 4.8), (35.0, 6.9, 3.4))):
+    m.cube('f3crest%d' % k, 'head_horns__arcosian_form_3', 'skin' if k % 2 == 0 else 'gem',
+           [-w / 2, y0, z0 - 3.0], [w / 2, y0 + 3.0, z0 + 2.6], [0, y0, z0], (-30, 0, 0))
+m.spike('f3nub', [3.9, 29.8, -0.4], 2.4, 1.6, (20, 0, -50), True, bone='head_horns__arcosian_form_3', mat='horn')
 
 # Tail preview (Blockbench/renders only; runtime tail is TrailingTailLayer)
 seg_chain('tailprev', 'tail', 'tailp',

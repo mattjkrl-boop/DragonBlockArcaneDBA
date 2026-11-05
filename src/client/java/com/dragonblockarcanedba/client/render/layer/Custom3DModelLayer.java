@@ -115,6 +115,19 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
             stack.last().normal().set(pose.normal());
 
             renderLimb(mesh.getLimb("head"), headPose, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            // Extra head groups ("head_<part>") follow the head. A form variant "head_<part>__<formpath>"
+            // replaces "head_<part>" while that form is active (Arcosian horns per form).
+            String headFormPath = finalFormForHair != null ? finalFormForHair.getPath() : null;
+            for (String gname : mesh.getLimbNames()) {
+                if (!gname.startsWith("head_")) continue;
+                int split = gname.indexOf("__");
+                if (split >= 0) {
+                    if (headFormPath == null || !gname.substring(split + 2).equals(headFormPath)) continue;
+                } else if (headFormPath != null && mesh.getLimb(gname + "__" + headFormPath) != null) {
+                    continue;
+                }
+                renderLimb(mesh.getLimb(gname), headPose, stack, buffer, packedLight, 1.0f, 1.0f, 1.0f, 1.0f);
+            }
             // Per-form modelled hair: SSJ3 swaps in the long mane group when the model has one
             ObjMesh.LimbGroup hairLimb = mesh.getLimb("hair");
             if (finalFormForHair != null && finalFormForHair.getPath().contains("super_saiyan_3") && mesh.getLimb("hair_ssj3") != null) {

@@ -71,12 +71,19 @@ def collect_faces(race, form):
         for ch in node.get('children', []):
             walk(ch, name, h)
     for n in bb['outliner']: walk(n, None, False)
+    all_bones = {b for b, _ in bone_of.values() if b}
     # form visibility overrides (these win over the bbmodel visibility flags)
     def bone_hidden(bone):
         if bone in ('hair', 'hair_ssj2', 'hair_ssj3'):
             if form == 'ssj2': return bone != 'hair_ssj2'
             if form == 'ssj3': return bone != 'hair_ssj3'
             return bone != 'hair'
+        # form variant groups "<group>__<formpath>" (any race): shown only in that
+        # form, replacing <group>, matching Custom3DModelLayer
+        if bone and '__' in bone:
+            return bone.split('__', 1)[1] != form
+        if bone and (bone + '__' + form) in all_bones:
+            return True
         return bone in hidden_bones
     faces = []
     TW, TH = bb['resolution']['width'], bb['resolution']['height']

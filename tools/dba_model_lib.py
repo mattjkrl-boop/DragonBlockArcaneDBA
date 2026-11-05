@@ -234,7 +234,11 @@ class RaceModel:
                 if b in ('hair_ssj2', 'hair_ssj3'): node['visibility'] = False
                 head_kids.append(node)
         top = [b for b in ('right_arm', 'left_arm', 'right_leg', 'left_leg', 'tail') if b in bones_present]
-        extra = [bone(b) for b in bones_present if b not in
+        def extra_bone(b):
+            node = bone(b)
+            if '__' in b: node['visibility'] = False   # form variant groups start hidden
+            return node
+        extra = [extra_bone(b) for b in bones_present if b not in
                  ('body', 'head', 'right_arm', 'left_arm', 'right_leg', 'left_leg', 'tail') and not b.startswith('hair')]
         outliner = [bone('body', [bone('head', head_kids)] + [bone(b) for b in top] + extra)]
         bb = {'meta': {'format_version': '4.10', 'model_format': 'bedrock', 'box_uv': False}, 'name': self.race,
