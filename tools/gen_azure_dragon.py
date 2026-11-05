@@ -49,6 +49,10 @@ HORN_COL = (186, 228, 255)    # pale ice horns
 HORN_BAND = (140, 195, 240)
 FIN_COL = (146, 221, 255)     # pale cyan fin membrane
 FIN_RIB = (62, 140, 205)
+RIDGE_COL = (13, 64, 122)     # dorsal ridge plate base
+RIDGE_DARK = (6, 32, 64)      # ridge plate outline / shadow
+PLATE_SEAM = (110, 165, 205)  # belly plate seam lines
+EYE_SURROUND = (20, 66, 118)  # dark patch painted around the eyes
 WHITE = (246, 251, 255)       # teeth, brow, claws
 WHITE_SHADE = (196, 218, 238)
 EYE_COL = (168, 240, 255)
@@ -72,7 +76,8 @@ def vec(vals):
 # A cube is a dict: mat (paint material), origin, size, optional pivot and
 # rotation (Bedrock per-cube rotation, degrees), optional glow tag used only
 # by the glowmask painter, optional name for reporting.
-# Materials: scale (body), headscale, horn, fin, white, whisker, eye.
+# Materials: scale (body), headscale, horn, fin, white, whisker, eye,
+# ridge (dorsal and cheek plates), bellyplate, membrane (fin panels).
 # Glow tags: eye, fin, horn_tip, whisker_tip, dorsal (body top stripe).
 # ---------------------------------------------------------------------------
 
@@ -102,6 +107,14 @@ bone("head", "root", [0, 8, 15], [
     cube("white", [0.5, 12.0, 21], [5, 2, 5], name="brow_r"),
     cube("eye", [-5.2, 9.5, 24.6], [2, 2, 1.6], glow="eye", name="eye_l"),
     cube("eye", [3.2, 9.5, 24.6], [2, 2, 1.6], glow="eye", name="eye_r"),
+    # Angled brow ridges hood the eyes so the gaze reads at distance.
+    cube("horn", [-5.3, 11.3, 23.0], [4.6, 1.2, 3.4],
+         pivot=[-3.0, 11.9, 24.7], rotation=[-8, 0, 6], name="brow_ridge_l"),
+    cube("horn", [0.7, 11.3, 23.0], [4.6, 1.2, 3.4],
+         pivot=[3.0, 11.9, 24.7], rotation=[-8, 0, -6], name="brow_ridge_r"),
+    # Armored cheek plates flare off the skull sides.
+    cube("ridge", [-6.2, 5.8, 18.5], [1.3, 4.2, 6.5], name="cheek_l"),
+    cube("ridge", [4.9, 5.8, 18.5], [1.3, 4.2, 6.5], name="cheek_r"),
     cube("white", [-4.2, 2.6, 23.5], [1.6, 2.2, 1.6], name="skull_fang_l"),
     cube("white", [2.6, 2.6, 23.5], [1.6, 2.2, 1.6], name="skull_fang_r"),
 ])
@@ -110,8 +123,11 @@ bone("head", "root", [0, 8, 15], [
 bone("snout", "head", [0, 8, 26], [
     cube("headscale", [-4, 5.5, 26], [8, 5, 8], name="muzzle"),
     cube("headscale", [-3, 9.5, 28], [6, 2, 6], name="muzzle_top"),
-    cube("headscale", [-3, 10.8, 32.2], [2, 1.4, 2], name="nostril_l"),
-    cube("headscale", [1, 10.8, 32.2], [2, 1.4, 2], name="nostril_r"),
+    cube("headscale", [-3.2, 10.9, 31.8], [2.4, 1.6, 2.4], name="nostril_l"),
+    cube("headscale", [0.8, 10.9, 31.8], [2.4, 1.6, 2.4], name="nostril_r"),
+    # Dorsal ridge plate runs down the center of the muzzle.
+    cube("ridge", [-1, 11.4, 27.8], [2, 1.1, 5.6],
+         pivot=[0, 11.5, 30.6], rotation=[-4, 0, 0], name="snout_ridge"),
 ])
 
 # Jaw: lower jaw, slightly narrower than the skull, upward fangs at the front.
@@ -119,6 +135,11 @@ bone("jaw", "head", [0, 6, 26], [
     cube("headscale", [-3.5, 4.0, 25], [7, 2, 9], name="jaw_box"),
     cube("white", [-3.4, 6.0, 31.8], [1.5, 2.6, 1.5], name="jaw_fang_l"),
     cube("white", [1.9, 6.0, 31.8], [1.5, 2.6, 1.5], name="jaw_fang_r"),
+    # Row of smaller teeth along each side of the jaw, behind the fangs.
+    cube("white", [-3.3, 5.9, 27.2], [1.1, 1.4, 1.1], name="jaw_tooth_l0"),
+    cube("white", [-3.3, 5.9, 29.6], [1.1, 1.4, 1.1], name="jaw_tooth_l1"),
+    cube("white", [2.2, 5.9, 27.2], [1.1, 1.4, 1.1], name="jaw_tooth_r0"),
+    cube("white", [2.2, 5.9, 29.6], [1.1, 1.4, 1.1], name="jaw_tooth_r1"),
 ])
 
 # Horns: 3 stacked shrinking segments per side, stepped back, up and out,
@@ -161,11 +182,24 @@ def whisker_cubes(side):
         cube("whisker", a_org, [1, 1, 7], pivot=[s * 4.2, 6.1, 31.5],
              rotation=[12, s * -16, 0], name="whisker_a"),
         cube("whisker", b_org, [1, 1, 6.4], pivot=[s * 6.4, 4.1, 36.9],
-             rotation=[18, s * -24, 0], glow="whisker_tip", name="whisker_b"),
+             rotation=[18, s * -24, 0], name="whisker_b"),
     ]
 
 bone("whisker_l", "head", [-4, 6.5, 31], whisker_cubes(-1))
 bone("whisker_r", "head", [4, 6.5, 31], whisker_cubes(1))
+
+# Whisker tips: a third, thinner segment per side on its own bone so it can
+# trail the mid segment with extra lag. Only this true tip glows.
+def whisker_tip_cubes(side):
+    s = side
+    return [
+        cube("whisker", [s * 8.6 - 0.4, 2.2, 40.0], [0.8, 0.8, 5.2],
+             pivot=[s * 8.6, 2.6, 40.4], rotation=[26, s * -34, 0],
+             glow="whisker_tip", name="whisker_c"),
+    ]
+
+bone("whisker_l_tip", "whisker_l", [-8.6, 2.6, 40.4], whisker_tip_cubes(-1))
+bone("whisker_r_tip", "whisker_r", [8.6, 2.6, 40.4], whisker_tip_cubes(1))
 
 # Mane: fin plates behind the skull, thin in X, tall in Y.
 bone("mane", "head", [0, 10, 14], [
@@ -184,12 +218,23 @@ for i in range(8):
     w, h = SEG_SIZE[i]
     pz = SEG_PIVOT_Z[i]
     parent = "root" if i == 0 else "seg%d" % (i - 1)
+    # Every segment is plated: a dorsal ridge plate carries the glowing
+    # dorsal stripe on its top face, and a pale belly plate hangs below
+    # the body cube so the underside reads as segmented armor.
+    rw = 3.0 if w >= 9 else (2.6 if w >= 7 else 2.2)
+    bw = w - 3.6
     bone("seg%d" % i, parent, [0, 8, pz], [
         cube("scale", [-w / 2.0, 8 - h / 2.0, pz - 10], [w, h, 10],
              glow="dorsal", name="body%d" % i),
+        cube("ridge", [-rw / 2.0, 8 + h / 2.0 - 0.25, pz - 9.3],
+             [rw, 1.25, 8.6], glow="dorsal", name="ridge%d" % i),
+        cube("bellyplate", [-bw / 2.0, 8 - h / 2.0 - 0.65, pz - 9.1],
+             [bw, 1.05, 8.2], name="belly%d" % i),
     ])
 
-# Dorsal fins on seg1, seg3, seg5.
+# Dorsal fins on seg1, seg3, seg5. Each fin keeps its central rib plate
+# and gains a pair of thin membrane panels on their own bones, splayed
+# outward from the rib so the fin reads as a sail, not a plain block.
 for seg_i, fh, fl in ((1, 7, 6), (3, 6, 5), (5, 5, 5)):
     w, h = SEG_SIZE[seg_i]
     pz = SEG_PIVOT_Z[seg_i]
@@ -198,6 +243,17 @@ for seg_i, fh, fl in ((1, 7, 6), (3, 6, 5), (5, 5, 5)):
         cube("fin", [-0.75, top - 0.4, pz - 5 - fl / 2.0], [1.5, fh, fl],
              glow="fin", name="fin%d_plate" % seg_i),
     ])
+    for side_name, x_org, x_piv, rz in (
+            ("l", -1.55, -0.75, 16), ("r", 0.85, 0.75, -16)):
+        bone("fin%d_mem_%s" % (seg_i, side_name), "fin%d" % seg_i,
+             [x_piv, top, pz - 5], [
+                 cube("membrane",
+                      [x_org, top - 0.2, pz - 5 - fl * 0.42],
+                      [0.7, fh * 0.9, fl * 0.84],
+                      pivot=[x_piv, top, pz - 5], rotation=[0, 0, rz],
+                      glow="fin",
+                      name="fin%d_mem_%s" % (seg_i, side_name)),
+             ])
 
 # Arms: children of seg1. One bone per arm holding upper arm, forearm and a
 # 3-toe fanned claw, kept small so the silhouette stays dragon, not humanoid.
@@ -238,6 +294,14 @@ bone("tail_fin", "seg7", [0, 8, -64], [
          rotation=[0, 26, 0], glow="fin", name="tail_left"),
     cube("fin", [0.6, 5.4, -71], [3, 5.2, 7], pivot=[1.0, 7.5, -66],
          rotation=[0, -26, 0], glow="fin", name="tail_right"),
+])
+
+# Third tail membrane: a wide horizontal panel on its own bone crossing
+# the vertical fan, so the tail reads fanned from the front as well.
+bone("tail_membrane", "tail_fin", [0, 8, -64], [
+    cube("membrane", [-4.6, 7.65, -71.5], [9.2, 0.7, 6.5],
+         pivot=[0, 8, -66], rotation=[0, 0, 0],
+         glow="fin", name="tail_membrane"),
 ])
 
 TOTAL_CUBES = sum(len(b["cubes"]) for b in BONES)
@@ -313,27 +377,40 @@ def lerp_col(a, b, t):
 def paint_scales(draw, fw, fh, base, belly_blend=0.0):
     """Deep azure base with a scalloped scale pattern and rim highlights.
 
-    belly_blend lightens the lower rows toward the belly color so the pale
-    underside wraps a little way up the sides of the body.
+    Each scale cell is filled with one of three deterministic tints and
+    outlined in dark blue, so individual scales read instead of a flat
+    wash. belly_blend lightens the lower rows toward the belly color so
+    the pale underside wraps a little way up the sides of the body.
     """
-    for yy in range(fh):
+    def blended(col, yy):
         t = yy / max(1, fh - 1)
-        col = base
         if belly_blend > 0 and t > 0.55:
-            col = lerp_col(base, BELLY, belly_blend * (t - 0.55) / 0.45)
-        draw.line([(0, yy), (fw, yy)], fill=shade(col, 1.0))
-    # scallops: rows of overlapping arcs, alternating offset
+            col = lerp_col(col, BELLY, belly_blend * (t - 0.55) / 0.45)
+        # vertical light gradient: lit at the top, shaded at the bottom
+        grad = 1.08 - 0.18 * max(0.0, min(1.0, yy / max(1, fh)))
+        return shade(col, grad)
+
+    for yy in range(fh):
+        draw.line([(0, yy), (fw, yy)], fill=blended(base, yy))
+    # scallops: rows of overlapping filled arcs, alternating offset
     sw, sh = 4, 3
+    tints = (0.9, 1.0, 1.08)
     row = 0
-    yy = 0
+    yy = -sh
     while yy < fh + sh:
         off = (sw // 2) if row % 2 else 0
         for xx in range(-sw, fw + sw, sw):
-            box = [xx + off, yy, xx + off + sw, yy + sh * 2]
-            draw.arc(box, start=0, end=180, fill=DEEP_DARK, width=1)
-            draw.point((xx + off + sw // 2, yy + sh), fill=RIM)
+            cx0 = xx + off
+            tint = tints[(row * 5 + cx0 // sw) % 3]
+            cell = blended(shade(base, tint), yy + sh)
+            box = [cx0, yy, cx0 + sw, yy + sh * 2]
+            draw.chord(box, start=0, end=180, fill=cell,
+                       outline=DEEP_DARK)
+            draw.point((cx0 + sw // 2, yy + sh), fill=RIM)
         yy += sh
         row += 1
+    # dark segment border along the bottom edge of the face
+    draw.line([(0, fh - 1), (fw, fh - 1)], fill=DEEP_DARK)
 
 
 def paint_belly(draw, fw, fh):
@@ -341,13 +418,59 @@ def paint_belly(draw, fw, fh):
     draw.rectangle([0, 0, fw, fh], fill=BELLY)
     for yy in range(2, fh, 3):
         draw.line([(0, yy), (fw, yy)], fill=BELLY_LINE)
-    for xx in range(fw):
-        edge = 0.85 + 0.15 * abs(xx - fw / 2.0) / max(1.0, fw / 2.0)
-        for yy in range(fh):
-            if (xx, yy) == (0, 0):
-                continue
-    draw.line([(0, 0), (0, fh)], fill=BELLY_LINE)
-    draw.line([(fw - 1, 0), (fw - 1, fh)], fill=BELLY_LINE)
+    for xx in (fw // 3, 2 * fw // 3):
+        if 0 < xx < fw:
+            draw.line([(xx, 0), (xx, fh)], fill=BELLY_LINE)
+    draw.line([(0, 0), (0, fh)], fill=PLATE_SEAM)
+    draw.line([(fw - 1, 0), (fw - 1, fh)], fill=PLATE_SEAM)
+    draw.line([(0, fh - 1), (fw, fh - 1)], fill=PLATE_SEAM)
+
+
+def paint_ridge(draw, fw, fh):
+    """Dark armored dorsal plate with a bright central spine."""
+    draw.rectangle([0, 0, fw, fh], fill=RIDGE_COL)
+    sw, sh = 4, 3
+    row = 0
+    yy = -sh
+    while yy < fh + sh:
+        off = (sw // 2) if row % 2 else 0
+        for xx in range(-sw, fw + sw, sw):
+            box = [xx + off, yy, xx + off + sw, yy + sh * 2]
+            draw.arc(box, start=0, end=180, fill=RIDGE_DARK, width=1)
+        yy += sh
+        row += 1
+    cx = fw // 2
+    draw.line([(cx - 1, 0), (cx - 1, fh)], fill=shade(RIM, 0.72))
+    draw.line([(cx, 0), (cx, fh)], fill=RIM)
+    draw.line([(cx + 1, 0), (cx + 1, fh)], fill=shade(RIM, 0.72))
+    draw.rectangle([0, 0, fw - 1, fh - 1], outline=RIDGE_DARK)
+
+
+def paint_belly_plate(draw, fw, fh):
+    """Pale belly armor plate with banded shading and seam lines."""
+    for yy in range(fh):
+        band = 0.94 if (yy // 3) % 2 else 1.0
+        draw.line([(0, yy), (fw, yy)], fill=shade(BELLY, band))
+    for yy in range(2, fh, 3):
+        draw.line([(0, yy), (fw, yy)], fill=PLATE_SEAM)
+    cx = fw // 2
+    draw.line([(cx, 0), (cx, fh)], fill=PLATE_SEAM)
+    draw.rectangle([0, 0, fw - 1, fh - 1], outline=PLATE_SEAM)
+
+
+def paint_membrane(draw, fw, fh):
+    """Fin membrane: vertical gradient, thick ribs, dark border."""
+    for yy in range(fh):
+        t = yy / max(1, fh - 1)
+        draw.line([(0, yy), (fw, yy)], fill=lerp_col(RIM, FIN_COL, t))
+    cx = fw / 2.0
+    ribs = max(3, fw // 3)
+    for k in range(ribs + 1):
+        tx = (fw - 1) * k / float(ribs)
+        draw.line([(cx, fh - 1), (tx, 0)], fill=FIN_RIB)
+        draw.line([(cx + 1, fh - 1), (tx + 1, 0)], fill=shade(FIN_RIB, 0.85))
+    draw.line([(int(cx), 0), (int(cx), fh)], fill=CORE)
+    draw.rectangle([0, 0, fw - 1, fh - 1], outline=FIN_RIB)
 
 
 def paint_fin(draw, fw, fh):
@@ -393,6 +516,9 @@ PAINTERS = {
     "white": paint_white,
     "eye": paint_eye,
     "whisker": paint_whisker,
+    "ridge": paint_ridge,
+    "bellyplate": paint_belly_plate,
+    "membrane": paint_membrane,
 }
 
 
@@ -421,6 +547,33 @@ def paint_face(c, face, fw, fh):
         for yy in range(tile.height):
             for xx in range(tile.width):
                 px[xx, yy] = shade(px[xx, yy], k)
+    # Head detail painting: dark eye surrounds on the skull so the eyes
+    # sit in sockets, and a mouth line with nostril dots on the muzzle.
+    fw, fh = tile.width, tile.height
+    over = ImageDraw.Draw(tile)
+    if c["name"] == "skull" and face in ("north", "south"):
+        for ex in (0.08, 0.68):
+            over.rectangle([int(fw * ex), int(fh * 0.16),
+                            int(fw * (ex + 0.24)), int(fh * 0.52)],
+                           fill=EYE_SURROUND, outline=DEEP_DARK)
+        over.line([(0, int(fh * 0.13)), (fw, int(fh * 0.13))],
+                  fill=DEEP_DARK)
+        over.line([(0, int(fh * 0.86)), (fw, int(fh * 0.86))],
+                  fill=DEEP_DARK)
+    elif c["name"] == "skull" and face in ("west", "east"):
+        # Side faces run in opposite U directions: on the west face the
+        # front of the skull is at low U, on the east face at high U.
+        eu = (0.02, 0.22) if face == "west" else (0.78, 0.97)
+        over.rectangle([int(fw * eu[0]), int(fh * 0.16),
+                        int(fw * eu[1]), int(fh * 0.52)],
+                       fill=EYE_SURROUND, outline=DEEP_DARK)
+    elif c["name"] == "muzzle" and face in ("north", "south"):
+        over.line([(0, int(fh * 0.72)), (fw, int(fh * 0.72))],
+                  fill=DEEP_DARK)
+        for nx in (0.28, 0.62):
+            over.rectangle([int(fw * nx), int(fh * 0.18),
+                            int(fw * nx) + 1, int(fh * 0.18) + 1],
+                           fill=DEEP_DARK)
     return tile
 
 
@@ -456,10 +609,15 @@ def glow_face(c, face, fw, fh):
     elif tag == "fin":
         # membrane center glows, ribs and edges stay dark
         if face in ("west", "east", "north", "south"):
-            x0 = max(0, fw // 2 - 1)
-            draw.rectangle([x0, 1, min(fw - 1, fw // 2 + 1), fh - 2],
-                           fill=GLOW_DIM)
-            draw.line([(fw // 2, 1), (fw // 2, fh - 2)], fill=GLOW)
+            if fh >= 3:
+                x0 = max(0, fw // 2 - 1)
+                draw.rectangle([x0, 1, min(fw - 1, fw // 2 + 1), fh - 2],
+                               fill=GLOW_DIM)
+                draw.line([(fw // 2, 1), (fw // 2, fh - 2)], fill=GLOW)
+            elif fh >= 1:
+                # very thin panel face (horizontal tail membrane edge):
+                # a single dim center row is all that fits
+                draw.line([(0, 0), (fw - 1, 0)], fill=GLOW_DIM)
     elif tag == "horn_tip":
         draw.rectangle([0, 0, fw, fh], fill=GLOW_DIM)
     elif tag == "whisker_tip":
@@ -523,8 +681,11 @@ def build_geo():
 # wave value for a bone at time t: amp * sin(2*pi*t/length - phase_index*step)
 # where step comes from a fixed time lag per segment, so the wave visibly
 # travels from head to tail. Keyframes are plain arrays (the Shenron file in
-# this mod uses the same shape), sampled 9 times per loop so linear
+# this mod uses the same shape), sampled 13 times per loop so linear
 # interpolation still reads smooth, with the last key equal to the first.
+# Secondary motion rides on top of the wave: the jaw opens and closes once
+# slowly per loop, the fin membranes flutter phase-offset behind their
+# fin bones, and the whisker tips and tail membrane trail with extra lag.
 # ---------------------------------------------------------------------------
 
 def sample_wave(length, keys, fn):
@@ -536,7 +697,7 @@ def sample_wave(length, keys, fn):
 
 
 def build_clip(length, lag, seg_amp_lo, seg_amp_hi, head_amp, tail_amp,
-               jaw_amp, fin_amp, keys=9):
+               jaw_amp, fin_amp, keys=13):
     step = 2.0 * math.pi * lag / length  # phase offset per chain index
 
     def phase(t, idx):
@@ -552,16 +713,22 @@ def build_clip(length, lag, seg_amp_lo, seg_amp_hi, head_amp, tail_amp,
         lambda t: (1.5 * math.sin(phase(t, 0) + math.pi / 2.0),
                    -head_amp * math.sin(phase(t, -1)),
                    0))}
-    # jaw opens and closes 0 to jaw_amp degrees (twice per loop reads alive)
+    # jaw opens and closes slowly, once per loop, 0 to jaw_amp degrees
     bones["jaw"] = {"rotation": sample_wave(
         length, keys,
-        lambda t: (jaw_amp * (0.5 - 0.5 * math.cos(2 * phase(t, 1))), 0, 0))}
+        lambda t: (jaw_amp * (0.5 - 0.5 * math.cos(phase(t, 1))), 0, 0))}
     # whiskers trail the head motion
     for nm, sgn in (("whisker_l", 1), ("whisker_r", 1)):
         bones[nm] = {"rotation": sample_wave(
             length, keys,
             lambda t, s=sgn: (5 * math.sin(phase(t, 2) - 0.6),
                               3 * math.sin(phase(t, 2)), 0))}
+    # whisker tips trail the mid segments with a longer lag and more sway
+    for nm in ("whisker_l_tip", "whisker_r_tip"):
+        bones[nm] = {"rotation": sample_wave(
+            length, keys,
+            lambda t: (7 * math.sin(phase(t, 2) - 1.3),
+                       5 * math.sin(phase(t, 2) - 0.7), 0))}
     # mane ripples gently
     bones["mane"] = {"rotation": sample_wave(
         length, keys, lambda t: (0, 0, 3 * math.sin(phase(t, 1))))}
@@ -579,6 +746,16 @@ def build_clip(length, lag, seg_amp_lo, seg_amp_hi, head_amp, tail_amp,
         bones[nm] = {"rotation": sample_wave(
             length, keys,
             lambda t, i=idx: (0, 0, fin_amp * math.sin(phase(t, i) - 0.5)))}
+    # fin membranes flutter as secondary motion, phase-offset behind
+    # their fin bone and splayed mirrored per side
+    for nm, idx, sgn in (("fin1_mem_l", 1, 1), ("fin1_mem_r", 1, -1),
+                         ("fin3_mem_l", 3, 1), ("fin3_mem_r", 3, -1),
+                         ("fin5_mem_l", 5, 1), ("fin5_mem_r", 5, -1)):
+        bones[nm] = {"rotation": sample_wave(
+            length, keys,
+            lambda t, i=idx, s=sgn: (
+                3.0 * math.sin(phase(t, i) - 1.1), 0,
+                s * fin_amp * 1.5 * math.sin(phase(t, i) - 0.9)))}
     # arms sway against the wave so the claws trail
     bones["arm_l"] = {"rotation": sample_wave(
         length, keys, lambda t: (0, 0, 3 * math.sin(phase(t, 1) - 0.8)))}
@@ -589,14 +766,19 @@ def build_clip(length, lag, seg_amp_lo, seg_amp_hi, head_amp, tail_amp,
         length, keys,
         lambda t: (1.5 * math.sin(phase(t, 8) + math.pi / 2.0),
                    tail_amp * math.sin(phase(t, 8)), 0))}
+    # tail membrane trails the fin swing with its own smaller lagged sway
+    bones["tail_membrane"] = {"rotation": sample_wave(
+        length, keys,
+        lambda t: (2.0 * math.sin(phase(t, 8) + math.pi / 2.0 - 0.6),
+                   tail_amp * 0.45 * math.sin(phase(t, 8) - 0.6), 0))}
     return {"loop": True, "animation_length": length, "bones": bones}
 
 
 def build_animations():
     swim = build_clip(length=1.6, lag=0.2, seg_amp_lo=4.0, seg_amp_hi=10.0,
-                      head_amp=3.0, tail_amp=12.0, jaw_amp=4.0, fin_amp=4.0)
+                      head_amp=3.0, tail_amp=12.0, jaw_amp=6.0, fin_amp=4.0)
     idle = build_clip(length=3.2, lag=0.4, seg_amp_lo=2.0, seg_amp_hi=5.0,
-                      head_amp=1.5, tail_amp=6.0, jaw_amp=2.0, fin_amp=2.0)
+                      head_amp=1.5, tail_amp=6.0, jaw_amp=3.0, fin_amp=2.0)
     return {"format_version": "1.10.0",
             "animations": {"swim": swim, "idle": idle}}
 
