@@ -47,16 +47,32 @@ public final class ModelDisplaySpawner {
         if (!(caster.level() instanceof ServerLevel level)) {
             return;
         }
-        for (AbilityDef.ModelSpec spec : def.models()) {
-            // ride sets are spawned by their host (swarm shards)
-            if (!"fire".equals(spec.trigger()) || "ride".equals(spec.behavior())
-                    || power + 1.0e-3f < spec.minPower()) {
+        boolean alt = nextAlt(caster.getUUID(), def.id().toString());
+        for (AbilityDef.ModelSpec specIn : def.models()) {
+            if (!"fire".equals(specIn.trigger()) || power + 1.0e-3f < specIn.minPower()) {
+                continue;
+            }
+            AbilityDef.ModelSpec spec = alt && specIn.animAlt() != null ? withHold(specIn, specIn.animAlt()) : specIn;
+            if ("ride".equals(spec.behavior())) {
+                // swarm shards host their own riders; any other carrier
+                // (a projectile, a wave) carries this piece itself
+                if (carrier != null && !(carrier instanceof com.dragonblockarcanedba.entity.SwarmHostEntity)) {
+                    spawnRider(level, spec, carrier);
+                }
+                continue;
+            }
+            if ("orbit".equals(spec.behavior()) && carrier != null) {
+                // orbit the carrier (a rift, a cyclone, a latched chain
+                // cloud) and end with it
+                spawnSetRaw(level, def, spec, carrier.position(), spec.radius(), carrier.getUUID(),
+                        caster, seed, Float.NaN);
                 continue;
             }
             // burst sets dress the caster's own body; the rest the carrier
             Vec3 anchor = carrier != null && !"burst".equals(spec.behavior())
                     ? carrier.position() : caster.position();
-            spawnSet(level, caster, def, spec, anchor, spec.radius(), seed);
+            float yaw = "burst".equals(spec.behavior()) ? caster.getYRot() : Float.NaN;
+            spawnSetRaw(level, def, spec, anchor, spec.radius(), caster.getUUID(), caster, seed, yaw);
         }
     }
 
@@ -68,6 +84,20 @@ public final class ModelDisplaySpawner {
                 spawnFinaleSet(level, def, spec, center, areaRadius, ownerUuid, seed);
             }
         }
+    }
+
+    private static final java.util.Map<String, Boolean> ALT = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Flips and returns the per caster, per def alternation bit. */
+    private static boolean nextAlt(UUID caster, String defId) {
+        return ALT.merge(caster + "|" + defId, Boolean.TRUE, (a, b) -> !a) == Boolean.FALSE;
+    }
+
+    private static AbilityDef.ModelSpec withHold(AbilityDef.ModelSpec s, String hold) {
+        return new AbilityDef.ModelSpec(s.model(), s.count(), s.formation(), s.behavior(), s.trigger(),
+                s.radius(), s.height(), s.scale(), s.lifetimeTicks(), s.descendTicks(), s.fallSpeed(),
+                s.spin(), s.hangTicks(), s.speed(), s.forward(), s.up(), s.animSpawn(), hold,
+                s.animEnd(), s.minPower(), s.animAlt());
     }
 
     private static void spawnFinaleSet(ServerLevel level, AbilityDef def, AbilityDef.ModelSpec spec,
@@ -98,7 +128,7 @@ public final class ModelDisplaySpawner {
                     spec.behavior(), spec.trigger(), spec.radius(), spec.height(), spec.scale(),
                     derived, spec.descendTicks(), spec.fallSpeed(), spec.spin(), spec.hangTicks(),
                     spec.speed(), spec.forward(), spec.up(),
-                    spec.animSpawn(), spec.animHold(), spec.animEnd(), spec.minPower());
+                    spec.animSpawn(), spec.animHold(), spec.animEnd(), spec.minPower(), spec.animAlt());
         }
         RandomSource random = RandomSource.create(seed * 31L + 17L);
         int count = spec.count();
@@ -148,9 +178,13 @@ public final class ModelDisplaySpawner {
                         double angle = baseAngle + (Math.PI * 2.0 * i) / count;
                         x += Math.cos(angle) * radius;
                         z += Math.sin(angle) * radius;
-                        yaw = (float) Math.toDegrees(Math.atan2(x - anchor.x, z - anchor.z));
+                        yaw = ModelDisplayEntity.yawFacing(x - anchor.x, z - anchor.z);
                     } else if (!Float.isNaN(fixedYaw)) {
-                        yaw = fixedYaw;
+                        yaw = ModelDisplayEntity.yawFacingLook(fixedYaw);
+                        // point bursts sit models.forward blocks along the facing
+                        double fy = Math.toRadians(fixedYaw);
+                        x += -Math.sin(fy) * spec.forward();
+                        z += Math.cos(fy) * spec.forward();
                     }
                     // stagger ring pieces up and down the body
                     double lift = count > 1 ? ((i % 3) - 1) * 0.35 : 0.0;
@@ -164,7 +198,7 @@ public final class ModelDisplaySpawner {
                         double angle = baseAngle + (Math.PI * 2.0 * i) / count;
                         x += Math.cos(angle) * radius;
                         z += Math.sin(angle) * radius;
-                        yaw = (float) (Math.atan2(x - anchor.x, z - anchor.z) * (180.0 / Math.PI));
+                        yaw = ModelDisplayEntity.yawFacing(x - anchor.x, z - anchor.z);
                     } else if (radius > 0) {
                         double angle = random.nextDouble() * Math.PI * 2.0;
                         double r = radius * Math.sqrt(random.nextDouble());
@@ -189,8 +223,8 @@ public final class ModelDisplaySpawner {
     public static void spawnRider(ServerLevel level, AbilityDef.ModelSpec spec, Entity host) {
         ModelDisplayEntity display = new ModelDisplayEntity(DbaEntities.MODEL_DISPLAY, level);
         display.init(spec, host.getUUID(), 0, host.getY(), host.position(), Vec3.ZERO);
-        display.setYRot(host.getYRot());
-        display.yRotO = host.getYRot();
+        display.setYRot(ModelDisplayEntity.yawFacingLook(host.getYRot()));
+        display.yRotO = display.getYRot();
         level.addFreshEntity(display);
     }
 

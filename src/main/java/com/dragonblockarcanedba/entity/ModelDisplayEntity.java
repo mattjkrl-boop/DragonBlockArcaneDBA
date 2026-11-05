@@ -153,9 +153,24 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
         }
     }
 
+    /**
+     * The entity yaw that turns a piece's model +Z (the direction every
+     * fx piece is built facing) toward world (dx, dz). GeckoLib renders
+     * a non-living entity under Y rotation (180 - yaw), which maps model
+     * +Z to (sin yaw, -cos yaw).
+     */
+    public static float yawFacing(double dx, double dz) {
+        return (float) Math.toDegrees(Math.atan2(dx, -dz));
+    }
+
+    /** yawFacing for a Minecraft look yaw (a player's or entity's getYRot()). */
+    public static float yawFacingLook(float lookYaw) {
+        return lookYaw + 180.0f;
+    }
+
     private void faceVelocity(Vec3 vel) {
         double horiz = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
-        this.setYRot((float) (Math.atan2(vel.x, vel.z) * (180.0 / Math.PI)));
+        this.setYRot(yawFacing(vel.x, vel.z));
         this.setXRot((float) (-Math.atan2(vel.y, horiz) * (180.0 / Math.PI)));
         this.yRotO = this.getYRot();
         this.xRotO = this.getXRot();
@@ -313,8 +328,18 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
         double r = this.orbitRadius;
         this.setPos(owner.getX() + Math.cos(rad) * r, owner.getY() + this.up,
                 owner.getZ() + Math.sin(rad) * r);
-        // Face along the path: velocity direction of the circle is (-sin, cos).
-        faceVelocity(new Vec3(-Math.sin(rad), 0, Math.cos(rad)));
+        if (r < 1.0e-3 && this.spinDeg == 0) {
+            // a centred piece with no spin stands with its owner (a stance
+            // titan, a latched bind), facing where the owner faces
+            this.setYRot(yawFacingLook(owner.getYRot()));
+            this.yRotO = this.getYRot();
+        } else if (r < 1.0e-3) {
+            // a centred spinning piece: +Z sweeps round (a whirled flail)
+            faceVelocity(new Vec3(Math.cos(rad), 0, Math.sin(rad)));
+        } else {
+            // Face along the path: velocity direction of the circle is (-sin, cos).
+            faceVelocity(new Vec3(-Math.sin(rad), 0, Math.cos(rad)));
+        }
     }
 
     /**
@@ -362,7 +387,7 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
                 .add(back.scale(this.index * this.trailSpacing))
                 .add(0, this.up + owner.getBbHeight() * 0.4, 0);
         this.setPos(at.x, at.y, at.z);
-        this.setYRot(owner.getYRot());
+        this.setYRot(yawFacingLook(owner.getYRot()));
         this.setXRot(owner.getXRot());
         this.yRotO = this.getYRot();
         this.xRotO = this.getXRot();

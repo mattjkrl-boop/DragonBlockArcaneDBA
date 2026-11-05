@@ -300,7 +300,7 @@ public record AbilityDef(
                             int lifetimeTicks, int descendTicks, double fallSpeed,
                             double spin, int hangTicks, double speed, double forward,
                             double up, String animSpawn, String animHold, String animEnd,
-                            float minPower) {}
+                            float minPower, String animAlt) {}
 
     /** The first ride set (swarm shard bodies), or null when none rides. */
     public ModelSpec rideModel() {
@@ -947,7 +947,7 @@ public record AbilityDef(
     private static final Set<String> MODELS_FIELDS = Set.of(
             "model", "count", "formation", "behavior", "trigger", "radius", "height",
             "scale", "lifetimeTicks", "descendTicks", "fallSpeed", "spin", "hangTicks",
-            "speed", "forward", "up", "animSpawn", "animHold", "animEnd", "minPower");
+            "speed", "forward", "up", "animSpawn", "animHold", "animEnd", "minPower", "animAlt");
     private static final Set<String> MODELS_BEHAVIORS = Set.of(
             "descend", "fall", "escort", "bolt", "hang", "orbit", "ride", "burst");
     private static final Set<String> MODELS_FORMATIONS = Set.of(
@@ -1006,7 +1006,11 @@ public record AbilityDef(
         String animSpawn = optString(m, "animSpawn", null);
         String animHold = optString(m, "animHold", null);
         String animEnd = optString(m, "animEnd", null);
-        for (String[] pair : new String[][]{{"animSpawn", animSpawn}, {"animHold", animHold}, {"animEnd", animEnd}}) {
+        // animAlt: every other fire of the def by one caster holds this
+        // clip instead of animHold (alternating tilts, left and right swings)
+        String animAlt = optString(m, "animAlt", null);
+        for (String[] pair : new String[][]{{"animSpawn", animSpawn}, {"animHold", animHold},
+                {"animEnd", animEnd}, {"animAlt", animAlt}}) {
             if (pair[1] != null && !isClipName(pair[1])) {
                 throw new IllegalArgumentException("models." + pair[0]
                         + " must be a Bedrock clip name (dotted lowercase tokens), got \"" + pair[1] + "\"");
@@ -1027,7 +1031,7 @@ public record AbilityDef(
                 optDouble(m, "models.forward", "forward", 0, -32, 32),
                 optDouble(m, "models.up", "up", 0, -32, 32),
                 animSpawn, animHold, animEnd,
-                (float) optDouble(m, "models.minPower", "minPower", 0, 0, 1));
+                (float) optDouble(m, "models.minPower", "minPower", 0, 0, 1), animAlt);
     }
 
     private static final Set<String> BEAM_FIELDS = Set.of(

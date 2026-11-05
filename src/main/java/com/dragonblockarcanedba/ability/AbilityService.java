@@ -749,8 +749,13 @@ public final class AbilityService {
                     }
                 }
                 // Step and warp echo a cloud carrier at the departure point.
+                // The fire models dressed the destination; the departure
+                // gets the def's step sets (origin rifts) instead.
                 if (departure != null && def.carrier() == AbilityDef.Carrier.CLOUD) {
-                    spawnCarrier(player, def, power, departure, player.getYRot());
+                    spawnCarrierInternal(player, def, power, departure, player.getYRot());
+                }
+                if (departure != null && !def.models().isEmpty()) {
+                    ModelDisplaySpawner.spawnForStep(player, def, departure, player.getYRot(), seed ^ 0x5EED);
                 }
             }
         }
