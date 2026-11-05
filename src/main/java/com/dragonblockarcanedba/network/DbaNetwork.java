@@ -62,7 +62,9 @@ public class DbaNetwork {
         // Gravity Block (C2S)
         PayloadTypeRegistry.serverboundPlay().register(C2SSetGravityPayload.TYPE, C2SSetGravityPayload.CODEC);
 
-        // Weapon Left Click (C2S)
+        // Weapon clicks for data-driven abilities (C2S) and ability definition sync (S2C)
+        PayloadTypeRegistry.serverboundPlay().register(C2SWeaponClickPayload.TYPE, C2SWeaponClickPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(AbilitySyncPayload.TYPE, AbilitySyncPayload.CODEC);
 
         // Movement verbs (C2S, Phase 5 movement layer)
         PayloadTypeRegistry.serverboundPlay().register(C2SMovementPayload.ID, C2SMovementPayload.CODEC);
@@ -426,6 +428,13 @@ public class DbaNetwork {
                     }
                 }
             });
+        });
+
+        // Handle weapon clicks for data-driven abilities
+        ServerPlayNetworking.registerGlobalReceiver(C2SWeaponClickPayload.TYPE, (payload, context) -> {
+            ServerPlayer clickPlayer = context.player();
+            context.server().execute(() -> com.dragonblockarcanedba.ability.AbilityService.onClick(
+                    clickPlayer, payload.button(), payload.action(), payload.heldTicks()));
         });
 
         ServerPlayNetworking.registerGlobalReceiver(C2SSetGravityPayload.TYPE, (payload, context) -> {

@@ -104,6 +104,11 @@ public class DragonBlockArcaneDBA implements ModInitializer {
             Identifier.fromNamespaceAndPath("dragonblockarcanedba", "forms"),
             new FormLoader()
         );
+        ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(
+            Identifier.fromNamespaceAndPath("dragonblockarcanedba", "abilities"),
+            new com.dragonblockarcanedba.ability.AbilityLoader()
+        );
+        com.dragonblockarcanedba.ability.AbilityService.register();
 
         // Register creative tab modification using new Fabric 26.2 API
         // Moved items to custom tab in DbaItems.java
