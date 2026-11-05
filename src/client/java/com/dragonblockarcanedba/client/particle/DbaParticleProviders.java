@@ -39,6 +39,10 @@ public final class DbaParticleProviders {
         regMaterial(DbaParticles.SOUL, DbaMaterialOptions.SOUL);
         regMaterial(DbaParticles.DARKNESS, DbaMaterialOptions.DARKNESS);
         regMaterial(DbaParticles.GLASS_DUST, DbaMaterialOptions.GLASS_DUST);
+        // Rebuild Phase 3: the universal ability particle, one provider
+        // for every ability effect; all variation rides in the options.
+        ParticleProviderRegistry.getInstance().register(DbaParticles.ABILITY_FX, sprites ->
+            (options, level, x, y, z, dx, dy, dz, random) -> new AbilityFxParticle(level, x, y, z, dx, dy, dz, sprites, options));
         // Theme dust: tinted per particle by its options.
         ParticleProviderRegistry.getInstance().register(DbaParticles.THEME_DUST, sprites ->
             (options, level, x, y, z, dx, dy, dz, random) -> new DbaDustParticle(level, x, y, z, dx, dy, dz, sprites, options));

@@ -65,6 +65,14 @@ public final class DbaParticles {
     public static final ParticleType<DbaMaterialOptions> GLASS_DUST = FabricParticleTypes.complex(
             DbaMaterialOptions.CODEC, DbaMaterialOptions.STREAM_CODEC);
 
+    // Rebuild Phase 3: the ONE universal ability particle. Every ability
+    // effect particle is an instance of this type, parameterized at spawn
+    // by AbilityFxOptions (texture entry, tint, size curve, lifetime,
+    // gravity, drag). Ability data names entries through AbilityFxEntries;
+    // the type's flipbook list holds every entry's sprites in table order.
+    public static final ParticleType<AbilityFxOptions> ABILITY_FX = FabricParticleTypes.complex(
+            AbilityFxOptions.CODEC, AbilityFxOptions.STREAM_CODEC);
+
     /** Colored soft dust, tinted per particle. Shared by Ki techniques and the Ki Barrier. */
     public static final ParticleType<DbaDustOptions> THEME_DUST = FabricParticleTypes.complex(
             DbaDustOptions.CODEC, DbaDustOptions.STREAM_CODEC);
@@ -102,6 +110,7 @@ public final class DbaParticles {
         reg("soul", SOUL);
         reg("darkness", DARKNESS);
         reg("glass_dust", GLASS_DUST);
+        reg("ability_fx", ABILITY_FX);
         reg("theme_dust", THEME_DUST);
         reg("block_chunks", BLOCK_CHUNKS);
     }
