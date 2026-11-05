@@ -426,3 +426,77 @@ packets into the full effect locally.
   the Phase 4 pass over carrier presentation. Non-ability users
   of the material system (auras, weather, StaggerFx, the wish
   ritual) are untouched by design.
+
+## Phase 4: the primitive geometry kit (landed)
+
+- The kit lives in client/render/kit/ and is the only shape
+  language the ability renderers speak from this phase on. Every
+  builder is seeded and deterministic (SeedHash noise and hashes,
+  never shared random state), documents its vertex budget in its
+  javadoc, takes its colors as the definition's core/mid/rim, and
+  returns the vertex count it emitted. The emission hand-off is
+  KitEmit, a thin wrapper over KiRenderHelper.vertex, so the
+  world-lit path (submitSolidLit) applies to kit pieces exactly
+  as to the older ComplexGeometry builders: physical variants are
+  world-lit, always; energy variants go through submitEnergy.
+- The builders: CrescentBand (the wave band: the Phase 1
+  three-strip profile in tables, plus seeded turbulence that
+  breathes each column's radius and tears the top edge; at
+  turbulence 0 the emitted vertices are the Phase 1 band's,
+  position for position and color for color). VortexBand (a
+  raised ring of torn energy slabs with real gaps, per-slab tilt,
+  jitter, and facet shade; rotation is a caller parameter).
+  DomeShell (hemisphere layers only, the buried lower half of the
+  old spheres is no longer emitted; scrolling alpha bands when
+  swirlSpeed is nonzero, rim brightening toward the equator when
+  rimGlow is nonzero, up to 3 nested layers; at the defaults the
+  layers sit at the old spheres' radii and alphas). TornWall
+  (clustered world-lit rock slabs with a grouped ridge profile
+  and per-slab ground sampling through a caller sampler).
+  ChainRun (instanced flat-ring links along a sagging catenary,
+  alternating roll per link). CrackDecal (emissive ground crack
+  fan with an explicit crack count, the answer to the old
+  crackFan branch gap). BeamDrawer (an entity-less beam: seeded
+  wiggle chain, crossed-ribbon core and halo shells, end taper).
+  PlateCasing (four flat sabot plates in two length classes, the
+  answer to the flat plate builder gap).
+- Schema: the definition gains an optional "geometry" block with
+  four surfaces (wave: turbulence, baseRing; cloud: shellLayers
+  1 to 3, swirlSpeed, shellAlpha, rimGlow, strikeHueSplit;
+  charge: raisedRing, ringHeight, ringWidth; projectile:
+  casingForm shard or plate), parsed into AbilityDef.GeometrySpec
+  and validated like every other block: unknown blocks, unknown
+  fields, wrong types, and out-of-range values are rejected
+  naming the exact field (geometry.wave.turbulence style).
+  GeometrySpec.DEFAULT reproduces the Phase 1 to 3 rendering, so
+  an ability without the block renders exactly as before.
+- Integration is behind the existing renderers, presentation
+  only: WaveCarrierRenderer draws its band through CrescentBand
+  and gates its base ring on wave.baseRing; CloudCarrierRenderer
+  draws its domain through DomeShell and splits its synced strike
+  bolt hue by strike seed when cloud.strikeHueSplit is set (the
+  bolt's glow takes the rim hue on odd strike seeds, so every
+  observer sees the same strike in the same hue); the
+  ChargeRingRenderer adds the raised VortexBand when
+  charge.raisedRing is set, lifting and brightening with the
+  charge fraction, seeded by the caster's UUID so every observer
+  tears the same ring; ProjectileCarrierRenderer swaps its casing
+  body to PlateCasing when projectile.casingForm is plate (the
+  inset hot core is unchanged). TornWall, ChainRun, CrackDecal,
+  and BeamDrawer have no consumers yet by design: Phase 6 authors
+  the wall, chain, crack, and beam attacks on them, and the
+  Phase 4 harness proves their budgets and determinism now.
+- The projectile burst() question left open by Phase 3 is closed
+  by the code, not by preference: burst() is and always was a
+  damage-only method (AoE application on hit) at every rebuild
+  head; no server-sent material particle flash exists anywhere in
+  the projectile hit path. The visual impact flash already rides
+  the Phase 3 recipe route (the carrier_hit seeded packet, fired
+  on the same tick), so there was nothing to fold into the kit.
+  burst() stays a damage method; the recipe system owns the
+  projectile's impact presentation.
+- Proof upgrades, data only: Z Shockwave authors wave turbulence
+  0.45 and a raised charge ring (height 1.15, width 0.26); Cursed
+  Tempest authors a 2-layer shell with swirl 1.2, rim glow 0.7,
+  and strike hue split. Picture verdicts live in the phase
+  report.
