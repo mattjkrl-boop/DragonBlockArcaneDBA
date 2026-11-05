@@ -60,7 +60,8 @@ public record AbilityDef(
         VolleySpec volley,
         TerrainSpec terrain,
         BeamParams beam,
-        SwarmParams swarm
+        SwarmParams swarm,
+        ModelSpec models
 ) {
     /** The recipes keyed to one event, in data order. Empty when the ability has none. */
     public List<FxRecipe> fxFor(FxEvent event) {
@@ -274,6 +275,25 @@ public record AbilityDef(
                               int recallCooldownTicks, int starveCooldownTicks, int lockoutTicks) {}
 
     /**
+     * The models block (Models Pass): a modeled presentation set
+     * rendered by the one generic ModelDisplayEntity, never by
+     * per-weapon code. The model names a GeckoLib asset set under
+     * geckolib/models/entity/ (plus its texture, glowmask, and
+     * animation file of the same name). Behaviors are presentation
+     * only: descend plants pieces from the air onto the ground,
+     * fall rains them, hang freezes them mid-air before they drop,
+     * bolt flies them along the cast direction, and escort carries
+     * them with the caster. Trigger "finale" fires the set from a
+     * cloud carrier's finale instead of at cast fire. Damage,
+     * timing, and costs never read this block.
+     */
+    public record ModelSpec(String model, int count, String formation, String behavior,
+                            String trigger, double radius, double height, float scale,
+                            int lifetimeTicks, int descendTicks, double fallSpeed,
+                            double spin, int hangTicks, double speed, double forward,
+                            double up, String animSpawn, String animHold, String animEnd) {}
+
+    /**
      * The Phase 4 geometry block: per-surface options for the
      * primitive kit behind the carrier renderers. Every default
      * reproduces the Phase 1 to 3 rendering exactly (smooth band,
@@ -416,7 +436,7 @@ public record AbilityDef(
             "visual", "caps", "wave", "cloud", "projectile", "fx", "geometry", "feedback",
             "bind", "sneakVariant", "airVariant", "rooted", "charges", "chargeRegenTicks",
             "move", "melee", "onHit", "swing", "summons", "aura", "sustain", "autoFire",
-            "combo", "criticalWindow", "volley", "terrain", "beam", "swarm");
+            "combo", "criticalWindow", "volley", "terrain", "beam", "swarm", "models");
 
     private static final Set<String> STATS = Set.of(
             "strength", "dexterity", "spirit", "willpower", "defense", "none");
@@ -585,13 +605,15 @@ public record AbilityDef(
         CriticalSpec criticalWindow = parseCritical(json);
         VolleySpec volley = parseVolley(json);
         TerrainSpec terrain = parseTerrain(json);
+        ModelSpec models = parseModels(json);
 
         return new AbilityDef(id, weapon, slot, name, carrier, phases, animation,
                 chargeRelease, minPower, kiCost, kiCostPercent, cooldownTicks,
                 damage, sounds, visual, caps, wave, cloud, projectile, List.copyOf(fx),
                 geometry, feedback, bind, sneakVariant, airVariant, rooted, charges,
                 chargeRegenTicks, move, melee, onHit, swing, List.copyOf(summons), aura,
-                sustain, autoFire, combo, criticalWindow, volley, terrain, beam, swarm);
+                sustain, autoFire, combo, criticalWindow, volley, terrain, beam, swarm,
+                models);
     }
 
 
@@ -896,6 +918,73 @@ public record AbilityDef(
                 optDouble(t, "terrain.craterDepth", "craterDepth", 0, 0, 2),
                 optIdString(t, "terrain.place", "place"),
                 optIdString(t, "terrain.crust", "crust"));
+    }
+
+    private static final Set<String> MODELS_FIELDS = Set.of(
+            "model", "count", "formation", "behavior", "trigger", "radius", "height",
+            "scale", "lifetimeTicks", "descendTicks", "fallSpeed", "spin", "hangTicks",
+            "speed", "forward", "up", "animSpawn", "animHold", "animEnd");
+    private static final Set<String> MODELS_BEHAVIORS = Set.of(
+            "descend", "fall", "escort", "bolt", "hang");
+    private static final Set<String> MODELS_FORMATIONS = Set.of(
+            "ring", "rain", "escort", "point");
+    private static final Set<String> MODELS_TRIGGERS = Set.of("fire", "finale");
+
+    private static ModelSpec parseModels(JsonObject json) {
+        if (!json.has("models")) {
+            return null;
+        }
+        JsonObject m = reqObject(json, "models");
+        rejectUnknown(m, MODELS_FIELDS, "models");
+        String model = reqString(m, "model");
+        if (!isClipName(model) || model.contains(".")) {
+            throw new IllegalArgumentException(
+                    "models.model must be a lowercase asset name (letters, digits, underscores), got \"" + model + "\"");
+        }
+        String behavior = optString(m, "behavior", "descend");
+        if (!MODELS_BEHAVIORS.contains(behavior)) {
+            throw new IllegalArgumentException("models.behavior must be descend, fall, escort, "
+                    + "bolt, or hang, got \"" + behavior + "\"");
+        }
+        String formation = optString(m, "formation", switch (behavior) {
+            case "fall" -> "rain";
+            case "escort" -> "escort";
+            case "descend" -> "ring";
+            default -> "point";
+        });
+        if (!MODELS_FORMATIONS.contains(formation)) {
+            throw new IllegalArgumentException("models.formation must be ring, rain, escort, "
+                    + "or point, got \"" + formation + "\"");
+        }
+        String trigger = optString(m, "trigger", "fire");
+        if (!MODELS_TRIGGERS.contains(trigger)) {
+            throw new IllegalArgumentException(
+                    "models.trigger must be fire or finale, got \"" + trigger + "\"");
+        }
+        String animSpawn = optString(m, "animSpawn", null);
+        String animHold = optString(m, "animHold", null);
+        String animEnd = optString(m, "animEnd", null);
+        for (String[] pair : new String[][]{{"animSpawn", animSpawn}, {"animHold", animHold}, {"animEnd", animEnd}}) {
+            if (pair[1] != null && !isClipName(pair[1])) {
+                throw new IllegalArgumentException("models." + pair[0]
+                        + " must be a Bedrock clip name (dotted lowercase tokens), got \"" + pair[1] + "\"");
+            }
+        }
+        return new ModelSpec(model,
+                (int) optDouble(m, "models.count", "count", 1, 1, 64),
+                formation, behavior, trigger,
+                optDouble(m, "models.radius", "radius", 0, 0, 64),
+                optDouble(m, "models.height", "height", 8, 0, 64),
+                (float) optDouble(m, "models.scale", "scale", 1.0, 0.1, 10),
+                (int) optDouble(m, "models.lifetimeTicks", "lifetimeTicks", 0, 0, 72000),
+                (int) optDouble(m, "models.descendTicks", "descendTicks", 10, 1, 7200),
+                optDouble(m, "models.fallSpeed", "fallSpeed", 1.2, 0.05, 8),
+                optDouble(m, "models.spin", "spin", 0, 0, 720),
+                (int) optDouble(m, "models.hangTicks", "hangTicks", 0, 0, 7200),
+                optDouble(m, "models.speed", "speed", 0, 0, 16),
+                optDouble(m, "models.forward", "forward", 0, -32, 32),
+                optDouble(m, "models.up", "up", 0, -32, 32),
+                animSpawn, animHold, animEnd);
     }
 
     private static final Set<String> BEAM_FIELDS = Set.of(

@@ -96,6 +96,11 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
             com.dragonblockarcanedba.entity.DbaEntities.ABILITY_SWARM_SHARD,
             com.dragonblockarcanedba.client.render.ability.SwarmShardRenderer::new
         );
+        // The one generic modeled presentation entity (Models Pass)
+        net.minecraft.client.renderer.entity.EntityRenderers.register(
+            com.dragonblockarcanedba.entity.DbaEntities.MODEL_DISPLAY,
+            com.dragonblockarcanedba.client.render.geo.ModelDisplayRenderer::new
+        );
         com.dragonblockarcanedba.client.ability.ClientAbility.init();
         net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
             com.dragonblockarcanedba.entity.DbaEntities.SHENRON,

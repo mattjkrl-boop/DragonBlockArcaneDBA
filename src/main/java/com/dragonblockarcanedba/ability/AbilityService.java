@@ -748,6 +748,19 @@ public final class AbilityService {
      * channels, volleys, and summons all go through it.
      */
     public static Entity spawnCarrier(ServerPlayer player, AbilityDef def, float power, Vec3 pos, float yaw) {
+        Entity carrier = spawnCarrierInternal(player, def, power, pos, yaw);
+        // Models Pass: a def's "models" block dresses its carrier
+        // spawn with the generic modeled presentation set. This is
+        // the one carrier spawn path, so casts, summons, moves,
+        // and channels all dress identically.
+        if (def.models() != null && "fire".equals(def.models().trigger())) {
+            ModelDisplaySpawner.spawnForFire(player, def, carrier,
+                    ((ServerLevel) player.level()).getRandom().nextInt());
+        }
+        return carrier;
+    }
+
+    private static Entity spawnCarrierInternal(ServerPlayer player, AbilityDef def, float power, Vec3 pos, float yaw) {
         ServerLevel level = (ServerLevel) player.level();
         int seed = level.getRandom().nextInt();
         UUID uuid = player.getUUID();

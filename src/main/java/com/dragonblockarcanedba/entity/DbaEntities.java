@@ -148,6 +148,19 @@ public class DbaEntities {
                     .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("ability_swarm_shard")))
     );
 
+    // The one generic modeled presentation entity (Models Pass): an
+    // ability def's "models" block names the GeckoLib asset set and
+    // behavior; no per-model entity types will ever be added.
+    public static final EntityType<ModelDisplayEntity> MODEL_DISPLAY = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            DragonBlockArcaneDBA.id("model_display"),
+            EntityType.Builder.<ModelDisplayEntity>of(ModelDisplayEntity::new, MobCategory.MISC)
+                    .sized(0.5f, 0.5f)
+                    .clientTrackingRange(16)
+                    .updateInterval(1)
+                    .build(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENTITY_TYPE, DragonBlockArcaneDBA.id("model_display")))
+    );
+
     public static final EntityType<ShenronEntity> SHENRON = Registry.register(
             BuiltInRegistries.ENTITY_TYPE,
             DragonBlockArcaneDBA.id("shenron"),
