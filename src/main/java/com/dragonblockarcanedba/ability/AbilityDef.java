@@ -38,7 +38,8 @@ public record AbilityDef(
         WaveParams wave,
         CloudParams cloud,
         ProjectileParams projectile,
-        List<FxRecipe> fx
+        List<FxRecipe> fx,
+        GeometrySpec geometry
 ) {
     /** The recipes keyed to one event, in data order. Empty when the ability has none. */
     public List<FxRecipe> fxFor(FxEvent event) {
@@ -118,6 +119,36 @@ public record AbilityDef(
 
     public record ProjectileParams(double speed, double gravityScale, double aoeRadius,
                                    String casing, double lengthScale) {}
+
+    /**
+     * The Phase 4 geometry block: per-surface options for the
+     * primitive kit behind the carrier renderers. Every default
+     * reproduces the Phase 1 to 3 rendering exactly (smooth band,
+     * two flat shells, ground-only charge ring, shard casing), so
+     * an ability without the block renders as it always has; an
+     * ability opts into torn bands, raised rings, swirling
+     * shells, split strike hues, and plate casings purely in
+     * data. Sub-blocks are keyed by the surface they dress, not
+     * by the carrier, because the charge ring belongs to no
+     * carrier.
+     */
+    public record WaveGeometry(float turbulence, boolean baseRing) {}
+
+    public record CloudGeometry(int shellLayers, float swirlSpeed, float shellAlpha,
+                                float rimGlow, boolean strikeHueSplit) {}
+
+    public record ChargeGeometry(boolean raisedRing, float ringHeight, float ringWidth) {}
+
+    public record ProjectileGeometry(String casingForm) {}
+
+    public record GeometrySpec(WaveGeometry wave, CloudGeometry cloud,
+                               ChargeGeometry charge, ProjectileGeometry projectile) {
+        public static final GeometrySpec DEFAULT = new GeometrySpec(
+                new WaveGeometry(0f, true),
+                new CloudGeometry(2, 0f, 1f, 0f, false),
+                new ChargeGeometry(false, 1.1f, 0.22f),
+                new ProjectileGeometry("shard"));
+    }
 
     /**
      * The moments an fx recipe can key to (Phase 3). cast_start and
@@ -216,7 +247,7 @@ public record AbilityDef(
     private static final Set<String> TOP_LEVEL = Set.of(
             "weapon", "slot", "name", "carrier", "phases", "animation", "chargeRelease",
             "minPower", "kiCost", "kiCostPercent", "cooldownTicks", "damage", "sounds",
-            "visual", "caps", "wave", "cloud", "projectile", "fx");
+            "visual", "caps", "wave", "cloud", "projectile", "fx", "geometry");
 
     private static final Set<String> STATS = Set.of(
             "strength", "dexterity", "spirit", "willpower", "defense", "none");
@@ -339,10 +370,115 @@ public record AbilityDef(
         }
 
         List<FxRecipe> fx = parseFx(json);
+        GeometrySpec geometry = parseGeometry(json);
 
         return new AbilityDef(id, weapon, slot, name, carrier, phases, animation,
                 chargeRelease, minPower, kiCost, kiCostPercent, cooldownTicks,
-                damage, sounds, visual, caps, wave, cloud, projectile, List.copyOf(fx));
+                damage, sounds, visual, caps, wave, cloud, projectile, List.copyOf(fx),
+                geometry);
+    }
+
+    private static final Set<String> GEO_BLOCKS = Set.of("wave", "cloud", "charge", "projectile");
+    private static final Set<String> GEO_WAVE_FIELDS = Set.of("turbulence", "baseRing");
+    private static final Set<String> GEO_CLOUD_FIELDS = Set.of(
+            "shellLayers", "swirlSpeed", "shellAlpha", "rimGlow", "strikeHueSplit");
+    private static final Set<String> GEO_CHARGE_FIELDS = Set.of("raisedRing", "ringHeight", "ringWidth");
+    private static final Set<String> GEO_PROJECTILE_FIELDS = Set.of("casingForm");
+
+    /**
+     * Parses the optional geometry block (Phase 4): the primitive
+     * kit options per surface. Validated like every other block:
+     * unknown blocks, unknown fields, wrong types, and
+     * out-of-range values are rejected naming the exact field
+     * (geometry.wave.turbulence and so on). An absent block, or
+     * an absent sub-block, yields GeometrySpec.DEFAULT for that
+     * surface, which is the Phase 1 to 3 rendering.
+     */
+    private static GeometrySpec parseGeometry(JsonObject json) {
+        if (!json.has("geometry")) {
+            return GeometrySpec.DEFAULT;
+        }
+        JsonObject g = reqObject(json, "geometry");
+        for (String key : g.keySet()) {
+            if (!GEO_BLOCKS.contains(key)) {
+                throw new IllegalArgumentException("unknown geometry block \"" + key + "\"");
+            }
+        }
+        GeometrySpec d = GeometrySpec.DEFAULT;
+
+        WaveGeometry wave = d.wave();
+        if (g.has("wave")) {
+            JsonObject w = reqObject(g, "wave");
+            for (String key : w.keySet()) {
+                if (!GEO_WAVE_FIELDS.contains(key)) {
+                    throw new IllegalArgumentException("unknown field \"geometry.wave." + key + "\"");
+                }
+            }
+            wave = new WaveGeometry(
+                    (float) optDouble(w, "geometry.wave.turbulence", "turbulence", 0.0, 0.0, 1.0),
+                    geoBool(w, "geometry.wave.baseRing", "baseRing", true));
+        }
+
+        CloudGeometry cloud = d.cloud();
+        if (g.has("cloud")) {
+            JsonObject c = reqObject(g, "cloud");
+            for (String key : c.keySet()) {
+                if (!GEO_CLOUD_FIELDS.contains(key)) {
+                    throw new IllegalArgumentException("unknown field \"geometry.cloud." + key + "\"");
+                }
+            }
+            cloud = new CloudGeometry(
+                    (int) optDouble(c, "geometry.cloud.shellLayers", "shellLayers", 2, 1, 3),
+                    (float) optDouble(c, "geometry.cloud.swirlSpeed", "swirlSpeed", 0.0, 0.0, 4.0),
+                    (float) optDouble(c, "geometry.cloud.shellAlpha", "shellAlpha", 1.0, 0.0, 2.0),
+                    (float) optDouble(c, "geometry.cloud.rimGlow", "rimGlow", 0.0, 0.0, 2.0),
+                    geoBool(c, "geometry.cloud.strikeHueSplit", "strikeHueSplit", false));
+        }
+
+        ChargeGeometry charge = d.charge();
+        if (g.has("charge")) {
+            JsonObject c = reqObject(g, "charge");
+            for (String key : c.keySet()) {
+                if (!GEO_CHARGE_FIELDS.contains(key)) {
+                    throw new IllegalArgumentException("unknown field \"geometry.charge." + key + "\"");
+                }
+            }
+            charge = new ChargeGeometry(
+                    geoBool(c, "geometry.charge.raisedRing", "raisedRing", false),
+                    (float) optDouble(c, "geometry.charge.ringHeight", "ringHeight", 1.1, 0.2, 4.0),
+                    (float) optDouble(c, "geometry.charge.ringWidth", "ringWidth", 0.22, 0.05, 1.0));
+        }
+
+        ProjectileGeometry projectile = d.projectile();
+        if (g.has("projectile")) {
+            JsonObject p = reqObject(g, "projectile");
+            for (String key : p.keySet()) {
+                if (!GEO_PROJECTILE_FIELDS.contains(key)) {
+                    throw new IllegalArgumentException(
+                            "unknown field \"geometry.projectile." + key + "\"");
+                }
+            }
+            String casingForm = optString(p, "casingForm", "shard");
+            if (!casingForm.equals("shard") && !casingForm.equals("plate")) {
+                throw new IllegalArgumentException("geometry.projectile.casingForm must be shard "
+                        + "or plate, got \"" + casingForm + "\"");
+            }
+            projectile = new ProjectileGeometry(casingForm);
+        }
+
+        return new GeometrySpec(wave, cloud, charge, projectile);
+    }
+
+    /** A boolean geometry field, with errors naming the full geometry path. */
+    private static boolean geoBool(JsonObject json, String displayName, String field, boolean fallback) {
+        JsonElement el = json.get(field);
+        if (el == null) {
+            return fallback;
+        }
+        if (!el.isJsonPrimitive() || !el.getAsJsonPrimitive().isBoolean()) {
+            throw new IllegalArgumentException("field \"" + displayName + "\" must be a boolean");
+        }
+        return el.getAsBoolean();
     }
 
     private static final Set<String> FX_FIELDS = Set.of(
