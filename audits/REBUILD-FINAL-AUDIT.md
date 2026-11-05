@@ -122,19 +122,19 @@ means the hero element lands with one named approximation.
 PARTIAL means the mechanic is fully real but the picture's
 signature visual is approximated by recipes or palette.
 
-Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and build only; Carter's PC test confirms or reverts them. Count now 11 STRONG, 33 PARTIAL-STRONG, 0 PARTIAL (follow-up pass, see DESIGN-AUDIT-NOV5.md).
+Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and build only; Carter's PC test confirms or reverts them. Count now 12 STRONG, 32 PARTIAL-STRONG, 0 PARTIAL (follow-up pass, see DESIGN-AUDIT-NOV5.md).
 
 | # | Weapon | Attack | Carrier and modules | Rating | Gap |
 |---|--------|--------|--------------------|--------|-----|
 | 1 | Katana | Flashdraw | none; move chain 5, melee | PARTIAL-STRONG | afterimages are fx, no model |
-| 2 | Katana | Heaven Splitter | wave slow; ground wall and cracks | STRONG | wall now lingers 100 ticks where the wave dies (carrierEnd summon, katana_heaven_wall); unverified in game |
-| 3 | Z Sword | Z Shockwave | wave; raised charge ring (proof) | STRONG | none open |
+| 2 | Katana | Heaven Splitter | wave slow; ground wall and cracks | STRONG | wall now lingers 100 ticks where the wave dies (carrierEnd summon, katana_heaven_wall); heaven_slice_wall model via models.anchor carrier (Nov 5); unverified in game |
+| 3 | Z Sword | Z Shockwave | wave; raised charge ring (proof) | STRONG | z_golden_vortex cast model during the charge (Nov 5) |
 | 4 | Z Sword | Katchin Weight | cloud anchor target; pull, finale slam, crater, cracks | PARTIAL-STRONG | the concept's sword rain is picture dressing, not the design |
 | 5 | Saber | Blitz Flurry | move chain into wave | PARTIAL-STRONG | saber_line_slash 7 block cut on finish, cyan saber_afterimage per hop (Nov 5); finisher lines the chained targets up along the aim (move.lineUp, Nov 5) |
 | 6 | Saber | Flash Step | move step, charges 3; echoed cloud | PARTIAL-STRONG | tall diamond void_rift_portal at departure and arrival (Nov 5) |
 | 7 | Brave Sword | Assault | melee; combo 10 into ring wave | PARTIAL-STRONG | brave_cross_slash gold and cyan X model on the tenth hit (Nov 5) |
 | 8 | Brave Sword | Heroic Dash | move dash (power-scaled 8 to 24); ring wave on arrival | PARTIAL-STRONG | trail is the ring's shed recipes, no dash-trail carrier |
-| 9 | Grand Sword | Grand Cyclone | aura spin (pull, deflect claim, chip damage); wave on release | STRONG | spin shards are recipes, not projectile entities (plan limit) |
+| 9 | Grand Sword | Grand Cyclone | aura spin (pull, deflect claim, chip damage); wave on release | STRONG | spin shards are recipes, not projectile entities (plan limit); grand_crescent model rides the release wave (Nov 5) |
 | 10 | Grand Sword | Valor Field | cloud follow caster; stasis freeze | PARTIAL-STRONG | hex-cell dome pattern has no kit equivalent |
 | 11 | Azure Dragon Sword | Dragon Rush | move rush; ring wave on landing | PARTIAL-STRONG | no dragon-head form in the kit; trail and ring carry it |
 | 12 | Azure Dragon Sword | Call of the Tempest | cloud; strikes, vortex | STRONG | debris is recipe particles, not flying blocks |
@@ -156,7 +156,7 @@ Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and 
 | 28 | Sickle of Sorrow | Dimensional Rift | cloud; vortex, inside damage, finale implosion | PARTIAL-STRONG | crystal shards are recipes, no crystal geometry |
 | 29 | Ox King's Ax | Ox King's Strike | rooted chargeRelease 200; ring wave radius 24; fullPower summon | STRONG | none material |
 | 30 | Ox King's Ax | Ox Brace / King's Slam | aura repulsion stance; critical window 280 to 300 at 1.5 power plus crag summon; ring wave on release | PARTIAL-STRONG | titan_aegis spectral ox titan, about 6 blocks tall behind the caster for the stance (Nov 5) |
-| 31 | Power Pole | Wind Spin | wave radius 25; deflect 2.2 no claim, knockback | STRONG | true 25 block reach in a 35 degree cone via wave.reach (Nov 5); look unchanged |
+| 31 | Power Pole | Wind Spin | wave radius 25; deflect 2.2 no claim, knockback | STRONG | true 25 block reach in a 35 degree cone via wave.reach (Nov 5); deflect covers the whole cone (Nov 5); look unchanged |
 | 32 | Power Pole | Extension | beam solid form; onHit pole_stun | PARTIAL-STRONG | one-application jab reads via the lit cylinder and tip disc |
 | 33 | Whis Staff | Time Shatter (melee) | melee 350 plus 2.0 Dexterity (design); meleeHit summon | PARTIAL-STRONG | temporal_strike_arc clock-hand sweep on the swing (Nov 5) |
 | 34 | Whis Staff | Temporal Rift | cloud; freeze 60, rewind 100, damage 0 | PARTIAL-STRONG | drawn glass ring has no kit equivalent; freeze and rewind are real |
@@ -169,7 +169,7 @@ Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and 
 | 41 | Spike Flail | Wide Swing | melee arc 150; rooted 6-tick startup | PARTIAL-STRONG | flail_chain_ball real chain and spiked ball swung through the arc (Nov 5) |
 | 42 | Spike Flail | Spin Disc | chargeRelease 32; ring wave radius 9 | PARTIAL-STRONG | flail_chain_ball spins round the caster while held (Nov 5); disc-edge ground spikes belong to the swing scene |
 | 43 | War Mace | Crater Smash | ring wave; selfLaunch, terrain crater; air variant falling smash | STRONG | picture crater is wider; scale is design-bound |
-| 44 | War Mace | Rising Blow | melee plus move launch | PARTIAL-STRONG | rising_eruption stone slab fan, shock ring and uplift streak (Nov 5); launch still vertical only |
+| 44 | War Mace | Rising Blow | melee plus move launch | STRONG (Nov 5) | rising_eruption stone slab fan, shock ring and uplift streak (Nov 5); design says launches upward, so the vertical launch is correct |
 
 Unbound defs (10, all bind false, summoned or variant-only):
 spirit_impale (PARTIAL: the six celestial swords have no kit

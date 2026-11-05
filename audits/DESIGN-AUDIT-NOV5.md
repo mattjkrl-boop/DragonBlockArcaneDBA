@@ -17,7 +17,7 @@ Foundation (aff69c4): orbit on a carrier, ride on any carrier, point burst honou
 
 | Attack | Commit | What changed | Rating now |
 |---|---|---|---|
-| Wind Spin | 13f7f0b | new wave.reach: hits gated to 25 blocks and the 35 degree cone from the spawn point, band radius 8 | STRONG |
+| Wind Spin | 13f7f0b, 3e4947b | new wave.reach: hits gated to 25 blocks and the 35 degree cone from the spawn point, band radius 8; deflect now scans the whole 25 block cone for the active window (design: bats projectiles back at 2.2) | STRONG |
 | Tempest Barrage | cbf12ef | dust grey bolts, Bansho emerald rim, dust particles | STRONG |
 | Blitz Flurry | 3e3737f | saber_line_slash (27 cubes) 7 block cut on finish, saber_afterimage (34) per hop | PARTIAL-STRONG |
 | Flash Step | 07ac031 | void_rift_portal (25) at departure and arrival | PARTIAL-STRONG |
@@ -32,7 +32,7 @@ Foundation (aff69c4): orbit on a carrier, ride on any carrier, point burst honou
 | Blaster | 9afd0dd | blaster_bolt (13) per shot, blaster_casing (10, lit brass) ejected | PARTIAL-STRONG |
 | Lava Cleave | a654a6a | lava_fountain (23): one large behind, ring of four | PARTIAL-STRONG |
 | Spike Flail | c5f2ca4 | flail_chain_ball (37) spun on Spin Disc, swung on Wide Swing | PARTIAL-STRONG |
-| Rising Blow | 8bb5594 | rising_eruption (27) slab fan, shock ring, uplift streak | PARTIAL-STRONG |
+| Rising Blow | 8bb5594 | rising_eruption (27) slab fan, shock ring, uplift streak; design says "launches the player upward", so the vertical launch is correct | STRONG (proposed) |
 | Gale Force / Great Cyclone | 1688d61 | cyclone_debris (16, 4 real pieces each) in 4 orbit tiers of 4: 64 pieces | PARTIAL-STRONG |
 
 Ratings are proposed from data, previews and build only. None are STRONG on look until the PC test.
@@ -51,20 +51,19 @@ One commit per item, all pushed to main. Build passes, and the new checkAbilitie
 | Time Shatter melee | 954d883 | temporal_strike_arc clock-hand sweep (26 cubes) on Temporal Strike. |
 | JSON load test | d380863 | The checkAbilities Gradle task (run by build) parses every file with AbilityDef.parse and checks its model geo, clip names and summon targets. A broken clip name was tested and failed the build. |
 
-Spirit Swing and Time Shatter melee move to PARTIAL-STRONG (proposed). Counts are now 11 STRONG, 33 PARTIAL-STRONG and 0 PARTIAL. All of this is unverified until the PC test.
+Spirit Swing and Time Shatter melee move to PARTIAL-STRONG (proposed). Counts are now 12 STRONG, 32 PARTIAL-STRONG and 0 PARTIAL (Rising Blow moved up after the design check). All of this is unverified until the PC test.
 
 ### Reference card recheck (all 9 cards viewed)
 - Saber: the finisher lines targets up. Done (lineUp). Flash Step rifts at both ends match.
 - Curse Chain: chains latch and orbit every target, up to 10. Now matches, with a bind on every target.
 - Brave cross slash, Hollow fragment ring, Azure Dragon Rush dragon aura (azure_dragon escort) and Dabura sky blades (sky_blade finale) all match the existing sets.
-- Grand Cyclone blade shards match (cyclone_shard). The Grand Crescent Wave has no dedicated crescent model and rides the wave visuals.
-- Katana Heaven Splitter vertical slice wall: there is no wall model, only the wave and cloud visuals. Open.
-- Z Shockwave golden vortex: there is no vortex model, only wave visuals. Open.
+- Grand Cyclone blade shards match (cyclone_shard). The Grand Crescent Wave now carries grand_crescent (40 cubes) riding the wave at scale 2 (3c134b6).
+- Katana Heaven Splitter vertical slice wall: heaven_slice_wall (36 cubes) on the katana_heaven_wall cloud, planted with the new models.anchor carrier so it faces the wave yaw and runs back along the dash path (6597555). Drawn only, no collision.
+- Z Shockwave golden vortex: z_golden_vortex (70 cubes) as a cast orbit at radius 0 for the charge, ending on release (59e5ff2).
 
 ## Still open
-- Heaven Splitter slice wall model, Z Shockwave golden vortex model and Grand Crescent Wave crescent model.
-- Rising Blow launch is vertical only.
-- Wind Spin's drawn band is radius 8, and deflect works only inside the band.
+- Nothing from the earlier list. Wind Spin's drawn band is still radius 8 (the look), while hits and deflect cover the full 25 block cone.
+- Every look in this file is unverified until Carter's PC test.
 - Line-up uses the caster's Y and falls back to the target's Y. Targets in blocked spots are skipped.
 
 ## Hit-stop
