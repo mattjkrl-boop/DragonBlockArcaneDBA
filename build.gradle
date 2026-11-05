@@ -113,3 +113,25 @@ afterEvaluate {
 	}
 }
 
+
+// Build-time ability JSON load test: parses every ability file with AbilityDef.parse and
+// checks the models, clips and summons it names exist. Runs with build (not part of test).
+sourceSets {
+	abilitycheck {
+		compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+		runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+	}
+}
+
+tasks.register('checkAbilities', JavaExec) {
+	group = 'verification'
+	description = 'Parses every ability JSON and checks its model, clip and summon references.'
+	dependsOn tasks.named('abilitycheckClasses')
+	classpath = sourceSets.abilitycheck.runtimeClasspath
+	mainClass = 'com.dragonblockarcanedba.check.AbilityJsonCheck'
+	args file('src/main/resources').absolutePath
+	inputs.dir('src/main/resources/data')
+	inputs.dir('src/main/resources/assets/dragonblockarcanedba/geckolib')
+	outputs.upToDateWhen { false }
+}
+tasks.named('build') { dependsOn tasks.named('checkAbilities') }
