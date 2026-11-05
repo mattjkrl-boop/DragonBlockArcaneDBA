@@ -1,9 +1,13 @@
 package com.dragonblockarcanedba.ability;
 
+import com.dragonblockarcanedba.particle.AbilityFxEntries;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.resources.Identifier;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -33,8 +37,28 @@ public record AbilityDef(
         Caps caps,
         WaveParams wave,
         CloudParams cloud,
-        ProjectileParams projectile
+        ProjectileParams projectile,
+        List<FxRecipe> fx
 ) {
+    /** The recipes keyed to one event, in data order. Empty when the ability has none. */
+    public List<FxRecipe> fxFor(FxEvent event) {
+        List<FxRecipe> out = new ArrayList<>();
+        for (FxRecipe recipe : fx) {
+            if (recipe.event() == event) {
+                out.add(recipe);
+            }
+        }
+        return out;
+    }
+
+    public boolean hasFx(FxEvent event) {
+        for (FxRecipe recipe : fx) {
+            if (recipe.event() == event) {
+                return true;
+            }
+        }
+        return false;
+    }
     public enum Slot {
         LEFT, RIGHT;
 
@@ -95,10 +119,104 @@ public record AbilityDef(
     public record ProjectileParams(double speed, double gravityScale, double aoeRadius,
                                    String casing, double lengthScale) {}
 
+    /**
+     * The moments an fx recipe can key to (Phase 3). cast_start and
+     * fire are cast moments (fire is the strike tick of Phase 2: the
+     * tick the carrier spawns); carrier_hit and carrier_end are
+     * carrier moments; those four are bursts and travel by packet
+     * (network/AbilityFxPayload). carrier_tick and charge_tick are
+     * continuous: they never travel, each client expands them
+     * locally from the carrier's synced state or the cast store.
+     * "strike" is accepted as a data alias for fire.
+     */
+    public enum FxEvent {
+        CAST_START, FIRE, CARRIER_TICK, CARRIER_HIT, CARRIER_END, CHARGE_TICK;
+
+        public boolean isBurst() {
+            return this == CAST_START || this == FIRE || this == CARRIER_HIT || this == CARRIER_END;
+        }
+
+        public static FxEvent parse(String s) {
+            return switch (s) {
+                case "cast_start" -> CAST_START;
+                case "fire", "strike" -> FIRE;
+                case "carrier_tick" -> CARRIER_TICK;
+                case "carrier_hit" -> CARRIER_HIT;
+                case "carrier_end" -> CARRIER_END;
+                case "charge_tick" -> CHARGE_TICK;
+                default -> throw new IllegalArgumentException("event must be one of cast_start, fire, "
+                        + "carrier_tick, carrier_hit, carrier_end, charge_tick, got \"" + s + "\"");
+            };
+        }
+
+        public String dataName() {
+            return switch (this) {
+                case CAST_START -> "cast_start";
+                case FIRE -> "fire";
+                case CARRIER_TICK -> "carrier_tick";
+                case CARRIER_HIT -> "carrier_hit";
+                case CARRIER_END -> "carrier_end";
+                case CHARGE_TICK -> "charge_tick";
+            };
+        }
+    }
+
+    /** Emission shapes a recipe samples its spawn points from. */
+    public enum FxShape {
+        POINT, RING, DISC, CONE, SPHERE_SHELL, BAND;
+
+        public static FxShape parse(String s) {
+            return switch (s) {
+                case "point" -> POINT;
+                case "ring" -> RING;
+                case "disc" -> DISC;
+                case "cone" -> CONE;
+                case "sphere_shell" -> SPHERE_SHELL;
+                case "band" -> BAND;
+                default -> throw new IllegalArgumentException("shape must be one of point, ring, disc, "
+                        + "cone, sphere_shell, band, got \"" + s + "\"");
+            };
+        }
+    }
+
+    /**
+     * One emission recipe (Phase 3). Burst events use count;
+     * continuous events use rate (particles per second). colorRef
+     * names a visual color ("core", "mid", "rim"); colorLiteral,
+     * when non-null, overrides it with a parsed ARGB value; alpha
+     * multiplies the color's alpha. radius of -1 means the shape
+     * takes the carrier's own radius (the cloud's live radius, the
+     * wave's band radius, the event's natural radius) as resolved
+     * by the expander. cap, when non-null, bounds this recipe (per
+     * burst, or per second while continuous); capGroup, when
+     * non-null, makes every recipe in the group share one
+     * per-second budget on top of the ability-wide caps budget.
+     * gravity and drag are handed to the particle in the material
+     * profiles' units (see AbilityFxOptions).
+     */
+    public record FxRecipe(FxEvent event, int entry, String colorRef, Integer colorLiteral,
+                           FxShape shape, int count, double rate, double radius,
+                           double speed, double spread, double angle,
+                           double sizeMin, double sizeMax, double sizeEndScale,
+                           int lifetimeMin, int lifetimeMax,
+                           double gravity, double drag, double alpha,
+                           Integer cap, String capGroup) {
+        /** The tint this recipe emits: the literal if set, else the named visual color, with alpha applied. */
+        public int resolveColor(VisualSpec vis) {
+            int base = colorLiteral != null ? colorLiteral : switch (colorRef) {
+                case "core" -> vis.core();
+                case "rim" -> vis.rim();
+                default -> vis.mid();
+            };
+            int a = Math.round((float) (((base >>> 24) & 0xFF) * alpha));
+            return (a << 24) | (base & 0xFFFFFF);
+        }
+    }
+
     private static final Set<String> TOP_LEVEL = Set.of(
             "weapon", "slot", "name", "carrier", "phases", "animation", "chargeRelease",
             "minPower", "kiCost", "kiCostPercent", "cooldownTicks", "damage", "sounds",
-            "visual", "caps", "wave", "cloud", "projectile");
+            "visual", "caps", "wave", "cloud", "projectile", "fx");
 
     private static final Set<String> STATS = Set.of(
             "strength", "dexterity", "spirit", "willpower", "defense", "none");
@@ -220,9 +338,178 @@ public record AbilityDef(
             }
         }
 
+        List<FxRecipe> fx = parseFx(json);
+
         return new AbilityDef(id, weapon, slot, name, carrier, phases, animation,
                 chargeRelease, minPower, kiCost, kiCostPercent, cooldownTicks,
-                damage, sounds, visual, caps, wave, cloud, projectile);
+                damage, sounds, visual, caps, wave, cloud, projectile, List.copyOf(fx));
+    }
+
+    private static final Set<String> FX_FIELDS = Set.of(
+            "event", "entry", "color", "shape", "count", "rate", "radius",
+            "speed", "spread", "angle", "size", "sizeEndScale", "lifetime",
+            "gravity", "drag", "alpha", "cap", "capGroup");
+
+    /**
+     * Parses the optional fx block: a list of emission recipes
+     * (Phase 3). Every field is validated like the rest of the
+     * schema; errors name the recipe index and the exact field
+     * (fx[2].entry and so on), and unknown events, entries, shapes,
+     * and fields are rejected by name. Burst events require a
+     * count and forbid a rate; continuous events the reverse, so a
+     * recipe that could never emit anything fails loudly here
+     * instead of silently doing nothing in game.
+     */
+    private static List<FxRecipe> parseFx(JsonObject json) {
+        List<FxRecipe> out = new ArrayList<>();
+        if (!json.has("fx")) {
+            return out;
+        }
+        JsonElement el = json.get("fx");
+        if (el == null || !el.isJsonArray()) {
+            throw new IllegalArgumentException("field \"fx\" must be an array of recipe objects");
+        }
+        JsonArray array = el.getAsJsonArray();
+        for (int i = 0; i < array.size(); i++) {
+            String at = "fx[" + i + "]";
+            JsonElement item = array.get(i);
+            if (item == null || !item.isJsonObject()) {
+                throw new IllegalArgumentException(at + " must be an object");
+            }
+            JsonObject r = item.getAsJsonObject();
+            for (String key : r.keySet()) {
+                if (!FX_FIELDS.contains(key)) {
+                    throw new IllegalArgumentException("unknown field \"" + at + "." + key + "\"");
+                }
+            }
+            FxEvent event;
+            try {
+                event = FxEvent.parse(reqString(r, "event"));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(at + ".event: " + e.getMessage());
+            }
+            int entry;
+            try {
+                entry = AbilityFxEntries.byName(reqString(r, "entry"));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(at + ".entry: " + e.getMessage());
+            }
+            FxShape shape;
+            try {
+                shape = FxShape.parse(reqString(r, "shape"));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(at + ".shape: " + e.getMessage());
+            }
+
+            String colorRef = "mid";
+            Integer colorLiteral = null;
+            if (r.has("color")) {
+                String color = reqString(r, "color");
+                if (color.startsWith("#")) {
+                    try {
+                        colorLiteral = parseColor(color);
+                    } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException(at + ".color: " + e.getMessage());
+                    }
+                } else if (color.equals("core") || color.equals("mid") || color.equals("rim")) {
+                    colorRef = color;
+                } else {
+                    throw new IllegalArgumentException(at + ".color must be core, mid, rim, or a "
+                            + "#RRGGBB color, got \"" + color + "\"");
+                }
+            }
+
+            int count = (int) optDouble(r, at + ".count", "count", 0, 0, 4096);
+            double rate = optDouble(r, at + ".rate", "rate", 0, 0, 100000);
+            if (event.isBurst()) {
+                if (count < 1) {
+                    throw new IllegalArgumentException(at + ".count must be >= 1 for burst event "
+                            + event.dataName());
+                }
+                if (rate > 0) {
+                    throw new IllegalArgumentException(at + ".rate only applies to continuous "
+                            + "events (carrier_tick, charge_tick), not " + event.dataName());
+                }
+            } else {
+                if (rate <= 0) {
+                    throw new IllegalArgumentException(at + ".rate must be > 0 for continuous event "
+                            + event.dataName());
+                }
+                if (count > 0) {
+                    throw new IllegalArgumentException(at + ".count only applies to burst events, not "
+                            + event.dataName());
+                }
+            }
+
+            double radius = optDouble(r, at + ".radius", "radius", -1, -1, 512);
+            if (radius == 0 || (radius > -1 && radius < 0)) {
+                throw new IllegalArgumentException(at + ".radius must be > 0, or -1 for the carrier default");
+            }
+            double[] size = optRange(r, at + ".size", "size", 0.2, 0.3, 0.01, 64);
+            double[] lifetime = optRange(r, at + ".lifetime", "lifetime", 10, 20, 1, 72000);
+            Integer cap = null;
+            if (r.has("cap")) {
+                int capValue = (int) optDouble(r, at + ".cap", "cap", 0, Integer.MIN_VALUE, Integer.MAX_VALUE);
+                if (capValue < 1) {
+                    throw new IllegalArgumentException(at + ".cap must be >= 1, got " + capValue);
+                }
+                cap = capValue;
+            }
+            String capGroup = optString(r, "capGroup", null);
+            if (capGroup != null && capGroup.isEmpty()) {
+                throw new IllegalArgumentException(at + ".capGroup must be a non-empty name");
+            }
+
+            out.add(new FxRecipe(event, entry, colorRef, colorLiteral, shape, count, rate, radius,
+                    optDouble(r, at + ".speed", "speed", 0.1, -10, 10),
+                    optDouble(r, at + ".spread", "spread", 0.02, 0, 10),
+                    optDouble(r, at + ".angle", "angle", 35, 1, 179),
+                    size[0], size[1],
+                    optDouble(r, at + ".sizeEndScale", "sizeEndScale", 1.0, 0.0, 10),
+                    (int) lifetime[0], (int) lifetime[1],
+                    optDouble(r, at + ".gravity", "gravity", 0.0, -1, 1),
+                    optDouble(r, at + ".drag", "drag", 0.98, 0.0, 1.0),
+                    optDouble(r, at + ".alpha", "alpha", 1.0, 0.0, 1.0),
+                    cap, capGroup));
+        }
+        return out;
+    }
+
+    /**
+     * A [min, max] range field: either a bare number (both ends) or
+     * a two-element array. Each end must sit inside [min, max] and
+     * the ends must be ordered; errors name the field.
+     */
+    private static double[] optRange(JsonObject json, String displayName, String field,
+                                     double defMin, double defMax, double min, double max) {
+        JsonElement el = json.get(field);
+        if (el == null) {
+            return new double[]{defMin, defMax};
+        }
+        double lo;
+        double hi;
+        if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isNumber()) {
+            lo = hi = el.getAsDouble();
+        } else if (el.isJsonArray() && el.getAsJsonArray().size() == 2
+                && el.getAsJsonArray().get(0).isJsonPrimitive()
+                && el.getAsJsonArray().get(0).getAsJsonPrimitive().isNumber()
+                && el.getAsJsonArray().get(1).isJsonPrimitive()
+                && el.getAsJsonArray().get(1).getAsJsonPrimitive().isNumber()) {
+            lo = el.getAsJsonArray().get(0).getAsDouble();
+            hi = el.getAsJsonArray().get(1).getAsDouble();
+        } else {
+            throw new IllegalArgumentException("field \"" + displayName
+                    + "\" must be a number or a [min, max] pair");
+        }
+        if (Double.isNaN(lo) || Double.isNaN(hi) || lo < min || hi > max) {
+            throw new IllegalArgumentException("field \"" + displayName + "\" must be between "
+                    + min + " and " + max + ", got [" + lo + ", " + hi + "]");
+        }
+        if (lo > hi) {
+            throw new IllegalArgumentException("field \"" + displayName
+                    + "\" must have min <= max, got [" + lo + ", " + hi + "]");
+        }
+        return new double[]{lo, hi};
     }
 
     private static final Set<String> ANIMATION_FIELDS = Set.of(
