@@ -224,7 +224,7 @@ public record AbilityDef(
 
     /** Caster movement module (Phase 6). mode is one of dash, chain, step, warp, launch, slam, rush. */
     public record MoveSpec(String mode, double distance, double maxDistance, int targets,
-                           double range, int stepTicks, boolean damageOnPass) {}
+                           double range, int stepTicks, boolean damageOnPass, double forward) {}
 
     /** Instant cone hit module (Phase 6), resolved at the fire tick. */
     public record MeleeSpec(double range, double arcDegrees) {}
@@ -681,7 +681,7 @@ public record AbilityDef(
     }
 
     private static final Set<String> MOVE_FIELDS = Set.of(
-            "mode", "distance", "maxDistance", "targets", "range", "stepTicks", "damageOnPass");
+            "mode", "distance", "maxDistance", "targets", "range", "stepTicks", "damageOnPass", "forward");
     private static final Set<String> MOVE_MODES = Set.of(
             "dash", "chain", "step", "warp", "launch", "slam", "rush");
 
@@ -702,7 +702,9 @@ public record AbilityDef(
                 (int) optDouble(m, "move.targets", "targets", 5, 1, 16),
                 optDouble(m, "move.range", "range", 24, 4, 64),
                 (int) optDouble(m, "move.stepTicks", "stepTicks", 2, 1, 20),
-                namedBool(m, "move.damageOnPass", "damageOnPass", false));
+                namedBool(m, "move.damageOnPass", "damageOnPass", false),
+                // launch only: horizontal push along the caster's aim, in blocks per tick
+                optDouble(m, "move.forward", "forward", 0, 0, 3));
     }
 
     private static final Set<String> MELEE_FIELDS = Set.of("range", "arcDegrees");

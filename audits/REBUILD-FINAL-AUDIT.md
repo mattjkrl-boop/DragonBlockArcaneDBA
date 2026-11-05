@@ -167,7 +167,7 @@ signature visual is approximated by recipes or palette.
 | 41 | Spike Flail | Wide Swing | melee arc 150; rooted 6-tick startup | PARTIAL | the chain itself is sound and charge geometry, not drawn links |
 | 42 | Spike Flail | Spin Disc | chargeRelease 32; ring wave radius 9 | PARTIAL-STRONG | ground spikes in the picture's disc edge belong to the swing scene |
 | 43 | War Mace | Crater Smash | ring wave; selfLaunch, terrain crater; air variant falling smash | STRONG | picture crater is wider; scale is design-bound |
-| 44 | War Mace | Rising Blow | melee plus move launch | PARTIAL | forward aim push has no field; launch is vertical only |
+| 44 | War Mace | Rising Blow | melee plus move launch | PARTIAL | forward push now data (move.forward 0.6, tuning value, not a design number); launch velocity now synced to client |
 
 Unbound defs (10, all bind false, summoned or variant-only):
 spirit_impale (PARTIAL: the six celestial swords have no kit
@@ -206,10 +206,13 @@ missing behavior.
   bolts therefore carry a small 1.1 splash the plan's "aoe 0"
   line did not intend; the design number won. Named here as a
   deliberate deviation.
-- Rising Blow's launch: the move block's launch is vertical
-  only, and its distance field is a velocity scale (distance
-  18 yields the design's 1.6 upward velocity). The design's
-  forward aim push is not expressible in the move block.
+- Rising Blow's launch: distance 18 yields the design's 1.6
+  upward velocity. Follow-up: move.forward (blocks per tick
+  along the horizontal aim) now carries the forward push, set
+  to 0.6 as tuning (the design record gave no number). The
+  launch was a bare server setDeltaMovement that never synced
+  to the client; it now goes through MovementPhysics. Unverified
+  in game.
 - Heaven Splitter's torn wall and the Ox fissure dressing are
   carrier-anchored draws: the wall lives exactly as long as
   its wave (40 ticks). No lingering physical wall ships.

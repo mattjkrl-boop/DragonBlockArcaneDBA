@@ -671,8 +671,16 @@ public final class AbilityService {
                             seed ^ 0x57E9, power, 1);
                 }
                 case "launch" -> {
+                    // Vertical launch plus an optional push along the horizontal aim.
+                    // Synced through MovementPhysics: a bare setDeltaMovement on a
+                    // server player never reaches the client.
                     Vec3 vel = player.getDeltaMovement();
-                    player.setDeltaMovement(vel.x, def.move().distance() * 0.09, vel.z);
+                    double fwd = def.move().forward();
+                    Vec3 look = player.getLookAngle();
+                    Vec3 flat = new Vec3(look.x, 0, look.z);
+                    Vec3 push = fwd > 0 && flat.lengthSqr() > 1.0E-6 ? flat.normalize().scale(fwd) : Vec3.ZERO;
+                    com.dragonblockarcanedba.movement.MovementPhysics.setVelocity(player,
+                            new Vec3(vel.x + push.x, def.move().distance() * 0.09, vel.z + push.z));
                 }
                 case "dash", "chain", "slam", "rush" -> {
                     startMove(player, rt, def, power, seed);
