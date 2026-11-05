@@ -22,6 +22,8 @@ import net.minecraft.client.renderer.entity.state.EntityRenderState;
 public class ModelDisplayRenderer extends GeoEntityRenderer<ModelDisplayEntity, EntityRenderState> {
     public static final DataTicket<Float> DISPLAY_SCALE =
             DataTicket.create("dba_model_display_scale", Float.class);
+    public static final DataTicket<Float> DISPLAY_PITCH =
+            DataTicket.create("dba_model_display_pitch", Float.class);
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public ModelDisplayRenderer(EntityRendererProvider.Context context) {
@@ -34,6 +36,26 @@ public class ModelDisplayRenderer extends GeoEntityRenderer<ModelDisplayEntity, 
                                             EntityRenderState renderState, float partialTick) {
         super.fireCompileRenderStateEvent(animatable, renderData, renderState, partialTick);
         ((GeoRenderState) renderState).addGeckolibData(DISPLAY_SCALE, animatable.getDisplayScale());
+        ((GeoRenderState) renderState).addGeckolibData(DISPLAY_PITCH,
+                net.minecraft.util.Mth.lerp(partialTick, animatable.xRotO, animatable.getXRot()));
+    }
+
+    /**
+     * GeckoLib applies only yaw to a non-living entity. Pieces are built
+     * facing model +Z, so after the yaw a turn about local X by the
+     * entity pitch (positive looks down, as in vanilla) tips the nose
+     * along the aim: bolts and riders follow their flight line, escorts
+     * the owner's look. Pieces that never set a pitch stay level.
+     */
+    @Override
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    protected void applyRotations(RenderPassInfo info, com.mojang.blaze3d.vertex.PoseStack poseStack,
+                                  float nativeScale) {
+        super.applyRotations(info, poseStack, nativeScale);
+        float pitch = (Float) info.getOrDefaultGeckolibData(DISPLAY_PITCH, 0.0f);
+        if (pitch != 0.0f) {
+            poseStack.mulPose(new org.joml.Matrix4f().rotation(com.mojang.math.Axis.XP.rotationDegrees(pitch)));
+        }
     }
 
     @Override
