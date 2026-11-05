@@ -158,7 +158,7 @@ Nov 5 update: ratings marked (Nov 5) are proposed from data, model previews and 
 | 30 | Ox King's Ax | Ox Brace / King's Slam | aura repulsion stance; critical window 280 to 300 at 1.5 power plus crag summon; ring wave on release | PARTIAL-STRONG | titan_aegis spectral ox titan, about 6 blocks tall behind the caster for the stance (Nov 5) |
 | 31 | Power Pole | Wind Spin | wave radius 25; deflect 2.2 no claim, knockback | STRONG | true 25 block reach in a 35 degree cone via wave.reach (Nov 5); look unchanged |
 | 32 | Power Pole | Extension | beam solid form; onHit pole_stun | PARTIAL-STRONG | one-application jab reads via the lit cylinder and tip disc |
-| 33 | Whis Staff | Time Shatter (melee) | melee 350 plus 2.0 Dexterity (design); meleeHit summon | PARTIAL | the burst below carries the picture |
+| 33 | Whis Staff | Time Shatter (melee) | melee 350 plus 2.0 Dexterity (design); meleeHit summon | PARTIAL-STRONG | temporal_strike_arc clock-hand sweep on the swing (Nov 5) |
 | 34 | Whis Staff | Temporal Rift | cloud; freeze 60, rewind 100, damage 0 | PARTIAL-STRONG | drawn glass ring has no kit equivalent; freeze and rewind are real |
 | 35 | Bansho Fan | Gale Force | wave; knockback, carrierHit cyclone summon | PARTIAL-STRONG | dust trails ride the cyclone palette; Great Cyclone now carries 64 real debris pieces (cyclone_debris, Nov 5) |
 | 36 | Bansho Fan | Tempest Barrage | projectile volley 5; fire shockwave summon | STRONG | dust grey bolts with the Bansho emerald rim (Nov 5) |
