@@ -3,9 +3,12 @@ package com.dragonblockarcanedba.client.ability;
 import com.dragonblockarcanedba.DragonBlockArcaneDBA;
 import com.dragonblockarcanedba.ability.AbilityDef;
 import com.dragonblockarcanedba.ability.AbilityRegistry;
+import com.dragonblockarcanedba.client.render.ability.ChargeRingRenderer;
 import com.dragonblockarcanedba.network.AbilitySyncPayload;
+import com.dragonblockarcanedba.network.CastSyncPayload;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.resources.Identifier;
 
@@ -25,7 +28,12 @@ public final class ClientAbility {
         ClientPlayNetworking.registerGlobalReceiver(AbilitySyncPayload.TYPE, (payload, context) -> {
             context.client().execute(() -> applySync(payload));
         });
+        ClientPlayNetworking.registerGlobalReceiver(CastSyncPayload.TYPE, (payload, context) -> {
+            context.client().execute(() -> CastAnimations.onCastSync(payload));
+        });
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> CastAnimations.clear());
         WeaponInputHandler.register();
+        ChargeRingRenderer.register();
     }
 
     private static void applySync(AbilitySyncPayload payload) {

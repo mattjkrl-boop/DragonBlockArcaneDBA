@@ -101,6 +101,16 @@ public final class BedrockAnimationApplier {
             return true;
         }
 
+        // Ability casts (Phase 2 animation layer). A cast pose overrides
+        // emotes, swings, item use, locomotion and idle, and never
+        // overrides death, sleep, the rush, or a form transformation:
+        // every one of those returned above. The pose timeline is
+        // driven by CastAnimations from the server's cast signals, so
+        // the caster and every observer play the same frames.
+        if (applyActiveCast(model, state, dbaState)) {
+            return true;
+        }
+
         // ==================== 3. EMOTES & DBZ STANCES ====================
         if (activeEmote != null && !activeEmote.isEmpty()) {
             BedrockAnimationRegistry.BedrockAnimation emoteAnim = getAnim(race, activeEmote);
@@ -291,6 +301,34 @@ public final class BedrockAnimationApplier {
         }
 
         return false;
+    }
+
+    /**
+     * Samples the ability cast pose for this player, if a cast owns
+     * them this frame. CastAnimations works on the level game time
+     * (the server's clock, mirrored by the client level); the frame's
+     * partial tick is the fractional part of the render state's age,
+     * which extractRenderState built as tickCount plus partial.
+     */
+    private static boolean applyActiveCast(
+            HumanoidModel<?> model,
+            AvatarRenderState state,
+            DbaPlayerState dbaState
+    ) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc == null || mc.level == null) {
+            return false;
+        }
+        float ageTicks = dbaState.dba$getTailAgeInTicks();
+        float partial = ageTicks - (float) Math.floor(ageTicks);
+        com.dragonblockarcanedba.client.ability.CastAnimations.PoseSample sample =
+                com.dragonblockarcanedba.client.ability.CastAnimations.sample(
+                        state.id, mc.level.getGameTime(), partial);
+        if (sample == null) {
+            return false;
+        }
+        applyTrackedBones(model, sample.clip(), sample.timeSeconds(), 1.0f);
+        return true;
     }
 
     /** Held azure rush. The pose stack already leans the body; these bones trail. */

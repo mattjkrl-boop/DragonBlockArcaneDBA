@@ -138,6 +138,8 @@ public final class BedrockAnimationRegistry {
                     "dragonblockarcanedba", "animations/races/" + race + ".animation.json"));
         }
         loadAnimationFile(Identifier.fromNamespaceAndPath("dragonblockarcanedba", "animations/forms.animation.json"));
+        // The generic ability cast set for the Phase 2 animation layer.
+        loadAnimationFile(Identifier.fromNamespaceAndPath("dragonblockarcanedba", "animations/abilities.animation.json"));
     }
 
     public static BedrockAnimation getAnimation(String name) {
