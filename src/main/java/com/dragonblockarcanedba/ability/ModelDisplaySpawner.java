@@ -26,47 +26,64 @@ public final class ModelDisplaySpawner {
 
     /** Cast trigger: spawned when a charge or startup begins; orbit pieces end with the cast. */
     public static void spawnForCast(ServerPlayer caster, AbilityDef def, int seed) {
-        AbilityDef.ModelSpec spec = def.models();
-        if (spec == null || !"cast".equals(spec.trigger())) {
-            return;
+        for (AbilityDef.ModelSpec spec : def.models()) {
+            if ("cast".equals(spec.trigger()) && caster.level() instanceof ServerLevel level) {
+                spawnSet(level, caster, def, spec, caster.position(), spec.radius(), seed);
+            }
         }
-        if (caster.level() instanceof ServerLevel level) {
-            spawnSet(level, caster, def, spec, caster.position(), spec.radius(), seed);
+    }
+
+    /** Step trigger: one set at the spot a chain move hop leaves, facing the caster's yaw. */
+    public static void spawnForStep(ServerPlayer caster, AbilityDef def, Vec3 from, float yaw, int seed) {
+        for (AbilityDef.ModelSpec spec : def.models()) {
+            if ("step".equals(spec.trigger()) && caster.level() instanceof ServerLevel level) {
+                spawnSetRaw(level, def, spec, from, spec.radius(), caster.getUUID(), caster, seed, yaw);
+            }
         }
     }
 
     /** Fire trigger: anchor is the spawned carrier when there is one, else the caster. */
-    public static void spawnForFire(ServerPlayer caster, AbilityDef def, Entity carrier, int seed) {
-        AbilityDef.ModelSpec spec = def.models();
-        if (spec == null || !"fire".equals(spec.trigger()) || "ride".equals(spec.behavior())) {
-            return; // ride sets are spawned by their host (swarm shards)
-        }
+    public static void spawnForFire(ServerPlayer caster, AbilityDef def, Entity carrier, float power, int seed) {
         if (!(caster.level() instanceof ServerLevel level)) {
             return;
         }
-        Vec3 anchor = carrier != null ? carrier.position() : caster.position();
-        spawnSet(level, caster, def, spec, anchor, spec.radius(), seed);
+        for (AbilityDef.ModelSpec spec : def.models()) {
+            // ride sets are spawned by their host (swarm shards)
+            if (!"fire".equals(spec.trigger()) || "ride".equals(spec.behavior())
+                    || power + 1.0e-3f < spec.minPower()) {
+                continue;
+            }
+            // burst sets dress the caster's own body; the rest the carrier
+            Vec3 anchor = carrier != null && !"burst".equals(spec.behavior())
+                    ? carrier.position() : caster.position();
+            spawnSet(level, caster, def, spec, anchor, spec.radius(), seed);
+        }
     }
 
     /** Finale trigger: rains or plants the set across the finale area. */
     public static void spawnForFinale(ServerLevel level, AbilityDef def, Vec3 center,
                                       double areaRadius, UUID ownerUuid, int seed) {
-        AbilityDef.ModelSpec spec = def.models();
-        if (spec == null || !"finale".equals(spec.trigger())) {
-            return;
+        for (AbilityDef.ModelSpec spec : def.models()) {
+            if ("finale".equals(spec.trigger())) {
+                spawnFinaleSet(level, def, spec, center, areaRadius, ownerUuid, seed);
+            }
         }
+    }
+
+    private static void spawnFinaleSet(ServerLevel level, AbilityDef def, AbilityDef.ModelSpec spec,
+                                       Vec3 center, double areaRadius, UUID ownerUuid, int seed) {
         double radius = spec.radius() > 0 ? spec.radius() : areaRadius;
-        spawnSetRaw(level, def, spec, center, radius, ownerUuid, null, seed);
+        spawnSetRaw(level, def, spec, center, radius, ownerUuid, null, seed, Float.NaN);
     }
 
     private static void spawnSet(ServerLevel level, ServerPlayer caster, AbilityDef def,
                                  AbilityDef.ModelSpec spec, Vec3 anchor, double radius, int seed) {
-        spawnSetRaw(level, def, spec, anchor, radius, caster.getUUID(), caster, seed);
+        spawnSetRaw(level, def, spec, anchor, radius, caster.getUUID(), caster, seed, Float.NaN);
     }
 
     private static void spawnSetRaw(ServerLevel level, AbilityDef def, AbilityDef.ModelSpec specIn,
                                     Vec3 anchor, double radius, UUID ownerUuid,
-                                    ServerPlayer caster, int seed) {
+                                    ServerPlayer caster, int seed, float fixedYaw) {
         AbilityDef.ModelSpec spec = specIn;
         if (spec.lifetimeTicks() <= 0) {
             // Derive the lifetime the data left open: the carrier's
@@ -81,7 +98,7 @@ public final class ModelDisplaySpawner {
                     spec.behavior(), spec.trigger(), spec.radius(), spec.height(), spec.scale(),
                     derived, spec.descendTicks(), spec.fallSpeed(), spec.spin(), spec.hangTicks(),
                     spec.speed(), spec.forward(), spec.up(),
-                    spec.animSpawn(), spec.animHold(), spec.animEnd());
+                    spec.animSpawn(), spec.animHold(), spec.animEnd(), spec.minPower());
         }
         RandomSource random = RandomSource.create(seed * 31L + 17L);
         int count = spec.count();
@@ -123,6 +140,22 @@ public final class ModelDisplaySpawner {
                     targetY = groundY(level, x, z);
                     start = new Vec3(x, anchor.y + spec.height(), z);
                     yaw = (float) (random.nextDouble() * 360.0);
+                }
+                case "burst" -> {
+                    double x = anchor.x;
+                    double z = anchor.z;
+                    if ("ring".equals(spec.formation()) && count > 1) {
+                        double angle = baseAngle + (Math.PI * 2.0 * i) / count;
+                        x += Math.cos(angle) * radius;
+                        z += Math.sin(angle) * radius;
+                        yaw = (float) Math.toDegrees(Math.atan2(x - anchor.x, z - anchor.z));
+                    } else if (!Float.isNaN(fixedYaw)) {
+                        yaw = fixedYaw;
+                    }
+                    // stagger ring pieces up and down the body
+                    double lift = count > 1 ? ((i % 3) - 1) * 0.35 : 0.0;
+                    targetY = anchor.y + spec.up() + lift;
+                    start = new Vec3(x, targetY, z);
                 }
                 default -> { // descend
                     double x = anchor.x;

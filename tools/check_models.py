@@ -77,6 +77,14 @@ def check_model(name):
     return set(clips)
 
 
+def model_sets(data):
+    """The models block may be one object or an array of sets."""
+    spec = data.get("models")
+    if spec is None:
+        return []
+    return spec if isinstance(spec, list) else [spec]
+
+
 def main():
     # Scope: the model sets named by ability "models" blocks (the
     # pass's own sets). Pre-existing creature models predate the
@@ -84,8 +92,7 @@ def main():
     referenced = set()
     for ability_path in sorted(ABILITY_DIR.glob("*.json")):
         data = json.loads(ability_path.read_text())
-        spec = data.get("models")
-        if spec is not None:
+        for spec in model_sets(data):
             referenced.add(spec["model"])
     model_clips = {}
     for name in sorted(referenced):
@@ -95,19 +102,20 @@ def main():
     bound = 0
     for ability_path in sorted(ABILITY_DIR.glob("*.json")):
         data = json.loads(ability_path.read_text())
-        spec = data.get("models")
-        if spec is None:
+        sets = model_sets(data)
+        if not sets:
             continue
         bound += 1
-        model = spec["model"]
-        if model not in model_clips:
-            failures.append(f"{ability_path.name}: models.model '{model}' has no asset set")
-            continue
-        for field in ("animSpawn", "animHold", "animEnd"):
-            clip = spec.get(field)
-            if clip and clip not in model_clips[model]:
-                failures.append(f"{ability_path.name}: {field} clip '{clip}' "
-                                f"missing from {model}.animation.json")
+        for spec in sets:
+            model = spec["model"]
+            if model not in model_clips:
+                failures.append(f"{ability_path.name}: models.model '{model}' has no asset set")
+                continue
+            for field in ("animSpawn", "animHold", "animEnd"):
+                clip = spec.get(field)
+                if clip and clip not in model_clips[model]:
+                    failures.append(f"{ability_path.name}: {field} clip '{clip}' "
+                                    f"missing from {model}.animation.json")
     print(f"ability defs with models blocks: {bound}")
     if failures:
         print("FAILURES:")

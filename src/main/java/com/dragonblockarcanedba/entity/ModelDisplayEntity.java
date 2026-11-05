@@ -176,6 +176,7 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
             case "escort" -> tickEscort(age);
             case "orbit" -> tickOrbit(age);
             case "ride" -> tickRide(age);
+            case "burst" -> tickBurst(age);
             default -> {
                 if (this.lifeTicks > 0 && age > this.lifeTicks) {
                     this.discard();
@@ -190,6 +191,20 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
             double t = (age + 1) / (double) this.descendTicks;
             double eased = 1.0 - (1.0 - t) * (1.0 - t);
             this.setPos(this.getX(), this.startY + (this.targetY - this.startY) * eased, this.getZ());
+        } else if (this.lifeTicks > 0 && age > this.lifeTicks - 6) {
+            setPhase(PHASE_END);
+        } else {
+            setPhase(PHASE_HOLD);
+        }
+        if (this.lifeTicks > 0 && age > this.lifeTicks) {
+            this.discard();
+        }
+    }
+
+    /** burst: fixed in the air where spawned; spawn clip, hold, end clip, gone. */
+    private void tickBurst(int age) {
+        if (age < this.descendTicks) {
+            setPhase(PHASE_SPAWN);
         } else if (this.lifeTicks > 0 && age > this.lifeTicks - 6) {
             setPhase(PHASE_END);
         } else {

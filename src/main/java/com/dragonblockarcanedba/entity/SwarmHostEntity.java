@@ -80,8 +80,8 @@ public class SwarmHostEntity extends CarrierEntity {
             shard.init(this, def, getSeed() + i);
             level.addFreshEntity(shard);
             this.shards.add(shard);
-            if (def.models() != null && "ride".equals(def.models().behavior())) {
-                com.dragonblockarcanedba.ability.ModelDisplaySpawner.spawnRider(level, def.models(), shard);
+            if (def.rideModel() != null) {
+                com.dragonblockarcanedba.ability.ModelDisplaySpawner.spawnRider(level, def.rideModel(), shard);
             }
         }
     }

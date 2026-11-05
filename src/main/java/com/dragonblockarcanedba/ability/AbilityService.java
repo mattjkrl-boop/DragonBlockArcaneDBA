@@ -785,8 +785,8 @@ public final class AbilityService {
         // spawn with the generic modeled presentation set. This is
         // the one carrier spawn path, so casts, summons, moves,
         // and channels all dress identically.
-        if (def.models() != null && "fire".equals(def.models().trigger())) {
-            ModelDisplaySpawner.spawnForFire(player, def, carrier,
+        if (!def.models().isEmpty()) {
+            ModelDisplaySpawner.spawnForFire(player, def, carrier, power,
                     ((ServerLevel) player.level()).getRandom().nextInt());
         }
         return carrier;
@@ -1105,6 +1105,9 @@ public final class AbilityService {
                     return;
                 }
                 Vec3 prev = player.position();
+                // step sets (Flashdraw afterimages) stay where the hop leaves
+                ModelDisplaySpawner.spawnForStep(player, def, prev, player.getYRot(),
+                        move.seed ^ (move.hopsDone * 977));
                 Vec3 targetPos = best.position();
                 Vec3 away = new Vec3(prev.x - targetPos.x, 0, prev.z - targetPos.z);
                 if (away.lengthSqr() < 1.0e-4) {

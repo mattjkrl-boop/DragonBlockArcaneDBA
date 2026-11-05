@@ -61,7 +61,7 @@ public record AbilityDef(
         TerrainSpec terrain,
         BeamParams beam,
         SwarmParams swarm,
-        ModelSpec models,
+        java.util.List<ModelSpec> models,
         int kiDrainTicks
 ) {
     /** The recipes keyed to one event, in data order. Empty when the ability has none. */
@@ -284,7 +284,14 @@ public record AbilityDef(
      * only: descend plants pieces from the air onto the ground,
      * fall rains them, hang freezes them mid-air before they drop,
      * bolt flies them along the cast direction, and escort carries
-     * them with the caster. Trigger "finale" fires the set from a
+     * them with the caster, orbit circles the caster, ride glues a
+     * piece to a host entity, and burst plants pieces at a fixed
+     * point in the air (a ring around the anchor faces outward) for
+     * their lifetime. The block may be one object or an array of up
+     * to four sets. Trigger "step" spawns at each chain move hop
+     * from the spot the caster leaves; minPower gates a fire set on
+     * the release power (1.0 means full charge only).
+     * Trigger "finale" fires the set from a
      * cloud carrier's finale instead of at cast fire. Damage,
      * timing, and costs never read this block.
      */
@@ -292,7 +299,18 @@ public record AbilityDef(
                             String trigger, double radius, double height, float scale,
                             int lifetimeTicks, int descendTicks, double fallSpeed,
                             double spin, int hangTicks, double speed, double forward,
-                            double up, String animSpawn, String animHold, String animEnd) {}
+                            double up, String animSpawn, String animHold, String animEnd,
+                            float minPower) {}
+
+    /** The first ride set (swarm shard bodies), or null when none rides. */
+    public ModelSpec rideModel() {
+        for (ModelSpec spec : models) {
+            if ("ride".equals(spec.behavior())) {
+                return spec;
+            }
+        }
+        return null;
+    }
 
     /**
      * The Phase 4 geometry block: per-surface options for the
@@ -609,7 +627,7 @@ public record AbilityDef(
         CriticalSpec criticalWindow = parseCritical(json);
         VolleySpec volley = parseVolley(json);
         TerrainSpec terrain = parseTerrain(json);
-        ModelSpec models = parseModels(json);
+        java.util.List<ModelSpec> models = parseModels(json);
 
         return new AbilityDef(id, weapon, slot, name, carrier, phases, animation,
                 chargeRelease, minPower, kiCost, kiCostPercent, cooldownTicks,
@@ -929,18 +947,36 @@ public record AbilityDef(
     private static final Set<String> MODELS_FIELDS = Set.of(
             "model", "count", "formation", "behavior", "trigger", "radius", "height",
             "scale", "lifetimeTicks", "descendTicks", "fallSpeed", "spin", "hangTicks",
-            "speed", "forward", "up", "animSpawn", "animHold", "animEnd");
+            "speed", "forward", "up", "animSpawn", "animHold", "animEnd", "minPower");
     private static final Set<String> MODELS_BEHAVIORS = Set.of(
-            "descend", "fall", "escort", "bolt", "hang", "orbit", "ride");
+            "descend", "fall", "escort", "bolt", "hang", "orbit", "ride", "burst");
     private static final Set<String> MODELS_FORMATIONS = Set.of(
             "ring", "rain", "escort", "point");
-    private static final Set<String> MODELS_TRIGGERS = Set.of("fire", "finale", "cast");
+    private static final Set<String> MODELS_TRIGGERS = Set.of("fire", "finale", "cast", "step");
 
-    private static ModelSpec parseModels(JsonObject json) {
+    private static java.util.List<ModelSpec> parseModels(JsonObject json) {
         if (!json.has("models")) {
-            return null;
+            return java.util.List.of();
         }
-        JsonObject m = reqObject(json, "models");
+        com.google.gson.JsonElement el = json.get("models");
+        java.util.List<ModelSpec> out = new java.util.ArrayList<>();
+        if (el.isJsonArray()) {
+            if (el.getAsJsonArray().size() < 1 || el.getAsJsonArray().size() > 4) {
+                throw new IllegalArgumentException("models array must hold 1 to 4 sets");
+            }
+            for (com.google.gson.JsonElement e : el.getAsJsonArray()) {
+                if (!e.isJsonObject()) {
+                    throw new IllegalArgumentException("models array entries must be objects");
+                }
+                out.add(parseModelSet(e.getAsJsonObject()));
+            }
+        } else {
+            out.add(parseModelSet(reqObject(json, "models")));
+        }
+        return java.util.List.copyOf(out);
+    }
+
+    private static ModelSpec parseModelSet(JsonObject m) {
         rejectUnknown(m, MODELS_FIELDS, "models");
         String model = reqString(m, "model");
         if (!isClipName(model) || model.contains(".")) {
@@ -950,12 +986,12 @@ public record AbilityDef(
         String behavior = optString(m, "behavior", "descend");
         if (!MODELS_BEHAVIORS.contains(behavior)) {
             throw new IllegalArgumentException("models.behavior must be descend, fall, escort, "
-                    + "bolt, hang, orbit, or ride, got \"" + behavior + "\"");
+                    + "bolt, hang, orbit, ride, or burst, got \"" + behavior + "\"");
         }
         String formation = optString(m, "formation", switch (behavior) {
             case "fall" -> "rain";
             case "escort" -> "escort";
-            case "descend", "orbit" -> "ring";
+            case "descend", "orbit", "burst" -> "ring";
             default -> "point";
         });
         if (!MODELS_FORMATIONS.contains(formation)) {
@@ -965,7 +1001,7 @@ public record AbilityDef(
         String trigger = optString(m, "trigger", "fire");
         if (!MODELS_TRIGGERS.contains(trigger)) {
             throw new IllegalArgumentException(
-                    "models.trigger must be fire, finale, or cast, got \"" + trigger + "\"");
+                    "models.trigger must be fire, finale, cast, or step, got \"" + trigger + "\"");
         }
         String animSpawn = optString(m, "animSpawn", null);
         String animHold = optString(m, "animHold", null);
@@ -990,7 +1026,8 @@ public record AbilityDef(
                 optDouble(m, "models.speed", "speed", 0, 0, 16),
                 optDouble(m, "models.forward", "forward", 0, -32, 32),
                 optDouble(m, "models.up", "up", 0, -32, 32),
-                animSpawn, animHold, animEnd);
+                animSpawn, animHold, animEnd,
+                (float) optDouble(m, "models.minPower", "minPower", 0, 0, 1));
     }
 
     private static final Set<String> BEAM_FIELDS = Set.of(

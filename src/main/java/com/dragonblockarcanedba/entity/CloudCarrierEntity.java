@@ -457,7 +457,7 @@ public class CloudCarrierEntity extends CarrierEntity {
         // Models Pass: a "finale" trigger models set dresses the
         // finale moment (the Eclipse sky blades rain here, timed
         // with the finale damage above; presentation only).
-        if (def.models() != null && "finale".equals(def.models().trigger())) {
+        if (!def.models().isEmpty()) {
             double areaRadius = def.cloud().finale() != null
                     ? radius * def.cloud().finale().radiusScale() : radius;
             com.dragonblockarcanedba.ability.ModelDisplaySpawner.spawnForFinale(
