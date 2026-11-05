@@ -278,6 +278,7 @@ public final class AbilityService {
         }
         CASTS.put(uuid, new Cast(def.id(), now, def.chargeRelease()));
         broadcastCast(player, def, CastSyncPayload.ACTION_START, now);
+        ModelDisplaySpawner.spawnForCast(player, def, player.level().getRandom().nextInt());
         AbilityFxService.send(player, def, AbilityDef.FxEvent.CAST_START,
                 player.position().add(0, 1.0, 0), player.getLookAngle(),
                 player.level().getRandom().nextInt(), 1.0f, 1);
@@ -1283,5 +1284,11 @@ public final class AbilityService {
                 it.remove();
             }
         }
+    }
+
+    /** True while the player holds an uncommitted cast (charge or startup) of this def. */
+    public static boolean isCasting(UUID playerId, Identifier defId) {
+        Cast cast = CASTS.get(playerId);
+        return cast != null && cast.abilityId().equals(defId);
     }
 }

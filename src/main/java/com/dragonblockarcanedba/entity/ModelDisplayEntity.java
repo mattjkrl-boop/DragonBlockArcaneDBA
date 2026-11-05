@@ -72,6 +72,11 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
     private double up;
     private double trailSpacing = 2.0;
     private int index;
+    private int setCount = 1;
+    private double orbitRadius;
+    /** cast-trigger sets: the def whose cast keeps this piece alive. */
+    private net.minecraft.resources.Identifier castDef;
+    private int castEndAge = -1;
     private double fallVelocity;
     private int groundedAge = -1;
     private Vec3 boltVelocity = Vec3.ZERO;
@@ -120,6 +125,9 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
         this.forward = spec.forward();
         this.up = spec.up();
         this.trailSpacing = Math.max(0.5, spec.radius());
+        this.setCount = Math.max(1, spec.count());
+        this.orbitRadius = spec.radius();
+        this.castDef = null;
         this.boltVelocity = boltVelocity == null ? Vec3.ZERO : boltVelocity;
         this.setPos(startPos.x, startPos.y, startPos.z);
         if (this.boltVelocity.lengthSqr() > 1.0e-6) {
@@ -166,6 +174,8 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
             case "hang" -> tickHang(age);
             case "bolt" -> tickBolt(age);
             case "escort" -> tickEscort(age);
+            case "orbit" -> tickOrbit(age);
+            case "ride" -> tickRide(age);
             default -> {
                 if (this.lifeTicks > 0 && age > this.lifeTicks) {
                     this.discard();
@@ -249,6 +259,68 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
                 && !serverLevel.getBlockState(this.blockPosition()).isAir()
                 && age > 2) {
             this.discard();
+        }
+    }
+
+    /**
+     * orbit: a ring of pieces circling the owner at models.radius,
+     * models.up above its feet, advancing models.spin degrees per
+     * tick, each piece facing along its path. Ends with the owner or
+     * at the lifetime (last 6 ticks play the end clip).
+     */
+    private void tickOrbit(int age) {
+        if (this.lifeTicks > 0 && age > this.lifeTicks) {
+            this.discard();
+            return;
+        }
+        setPhase(this.lifeTicks > 0 && age > this.lifeTicks - 6 ? PHASE_END
+                : age < 6 ? PHASE_SPAWN : PHASE_HOLD);
+        if (!(this.level() instanceof ServerLevel serverLevel) || this.ownerUuid == null) {
+            return;
+        }
+        Entity owner = serverLevel.getEntity(this.ownerUuid);
+        if (owner == null || !owner.isAlive()) {
+            this.discard();
+            return;
+        }
+        if (this.castDef != null && this.castEndAge < 0
+                && !com.dragonblockarcanedba.ability.AbilityService.isCasting(this.ownerUuid, this.castDef)) {
+            this.castEndAge = age;
+        }
+        if (this.castEndAge >= 0) {
+            setPhase(PHASE_END);
+            if (age > this.castEndAge + 6) {
+                this.discard();
+                return;
+            }
+        }
+        double rad = Math.toRadians(this.index * 360.0 / this.setCount + age * this.spinDeg);
+        double r = this.orbitRadius;
+        this.setPos(owner.getX() + Math.cos(rad) * r, owner.getY() + this.up,
+                owner.getZ() + Math.sin(rad) * r);
+        // Face along the path: velocity direction of the circle is (-sin, cos).
+        faceVelocity(new Vec3(-Math.sin(rad), 0, Math.cos(rad)));
+    }
+
+    /**
+     * ride: glued to one host entity (the owner UUID names it, for
+     * example a swarm shard), facing its motion. Discards with it.
+     */
+    private void tickRide(int age) {
+        setPhase(age < 6 ? PHASE_SPAWN : PHASE_HOLD);
+        if (!(this.level() instanceof ServerLevel serverLevel) || this.ownerUuid == null) {
+            this.discard();
+            return;
+        }
+        Entity host = serverLevel.getEntity(this.ownerUuid);
+        if (host == null || host.isRemoved()) {
+            this.discard();
+            return;
+        }
+        Vec3 motion = host.position().subtract(this.position());
+        this.setPos(host.getX(), host.getY(), host.getZ());
+        if (motion.lengthSqr() > 1.0e-5) {
+            faceVelocity(motion);
         }
     }
 
@@ -339,5 +411,10 @@ public class ModelDisplayEntity extends Entity implements GeoEntity {
     @Override
     public AnimatableInstanceCache getAnimatableInstanceCache() {
         return this.geoCache;
+    }
+
+    /** Binds this piece to a cast: it plays its end clip and leaves when the cast ends. */
+    public void bindToCast(net.minecraft.resources.Identifier defId) {
+        this.castDef = defId;
     }
 }

@@ -24,11 +24,22 @@ import java.util.UUID;
 public final class ModelDisplaySpawner {
     private ModelDisplaySpawner() {}
 
+    /** Cast trigger: spawned when a charge or startup begins; orbit pieces end with the cast. */
+    public static void spawnForCast(ServerPlayer caster, AbilityDef def, int seed) {
+        AbilityDef.ModelSpec spec = def.models();
+        if (spec == null || !"cast".equals(spec.trigger())) {
+            return;
+        }
+        if (caster.level() instanceof ServerLevel level) {
+            spawnSet(level, caster, def, spec, caster.position(), spec.radius(), seed);
+        }
+    }
+
     /** Fire trigger: anchor is the spawned carrier when there is one, else the caster. */
     public static void spawnForFire(ServerPlayer caster, AbilityDef def, Entity carrier, int seed) {
         AbilityDef.ModelSpec spec = def.models();
-        if (spec == null || !"fire".equals(spec.trigger())) {
-            return;
+        if (spec == null || !"fire".equals(spec.trigger()) || "ride".equals(spec.behavior())) {
+            return; // ride sets are spawned by their host (swarm shards)
         }
         if (!(caster.level() instanceof ServerLevel level)) {
             return;
@@ -82,7 +93,7 @@ public final class ModelDisplaySpawner {
             double targetY;
             float yaw = (float) (baseAngle * (180.0 / Math.PI));
             switch (spec.behavior()) {
-                case "escort" -> {
+                case "escort", "orbit", "ride" -> {
                     start = caster != null ? caster.position() : anchor;
                     targetY = start.y;
                 }
@@ -132,10 +143,22 @@ public final class ModelDisplaySpawner {
                 }
             }
             display.init(spec, ownerUuid, i, targetY, start, boltVelocity);
+            if ("cast".equals(spec.trigger())) {
+                display.bindToCast(def.id());
+            }
             display.setYRot(yaw);
             display.yRotO = yaw;
             level.addFreshEntity(display);
         }
+    }
+
+    /** ride sets: one piece glued to the given host entity (swarm shards). */
+    public static void spawnRider(ServerLevel level, AbilityDef.ModelSpec spec, Entity host) {
+        ModelDisplayEntity display = new ModelDisplayEntity(DbaEntities.MODEL_DISPLAY, level);
+        display.init(spec, host.getUUID(), 0, host.getY(), host.position(), Vec3.ZERO);
+        display.setYRot(host.getYRot());
+        display.yRotO = host.getYRot();
+        level.addFreshEntity(display);
     }
 
     private static double groundY(ServerLevel level, double x, double z) {

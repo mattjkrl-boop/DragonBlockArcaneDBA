@@ -927,10 +927,10 @@ public record AbilityDef(
             "scale", "lifetimeTicks", "descendTicks", "fallSpeed", "spin", "hangTicks",
             "speed", "forward", "up", "animSpawn", "animHold", "animEnd");
     private static final Set<String> MODELS_BEHAVIORS = Set.of(
-            "descend", "fall", "escort", "bolt", "hang");
+            "descend", "fall", "escort", "bolt", "hang", "orbit", "ride");
     private static final Set<String> MODELS_FORMATIONS = Set.of(
             "ring", "rain", "escort", "point");
-    private static final Set<String> MODELS_TRIGGERS = Set.of("fire", "finale");
+    private static final Set<String> MODELS_TRIGGERS = Set.of("fire", "finale", "cast");
 
     private static ModelSpec parseModels(JsonObject json) {
         if (!json.has("models")) {
@@ -946,12 +946,12 @@ public record AbilityDef(
         String behavior = optString(m, "behavior", "descend");
         if (!MODELS_BEHAVIORS.contains(behavior)) {
             throw new IllegalArgumentException("models.behavior must be descend, fall, escort, "
-                    + "bolt, or hang, got \"" + behavior + "\"");
+                    + "bolt, hang, orbit, or ride, got \"" + behavior + "\"");
         }
         String formation = optString(m, "formation", switch (behavior) {
             case "fall" -> "rain";
             case "escort" -> "escort";
-            case "descend" -> "ring";
+            case "descend", "orbit" -> "ring";
             default -> "point";
         });
         if (!MODELS_FORMATIONS.contains(formation)) {
@@ -961,7 +961,7 @@ public record AbilityDef(
         String trigger = optString(m, "trigger", "fire");
         if (!MODELS_TRIGGERS.contains(trigger)) {
             throw new IllegalArgumentException(
-                    "models.trigger must be fire or finale, got \"" + trigger + "\"");
+                    "models.trigger must be fire, finale, or cast, got \"" + trigger + "\"");
         }
         String animSpawn = optString(m, "animSpawn", null);
         String animHold = optString(m, "animHold", null);

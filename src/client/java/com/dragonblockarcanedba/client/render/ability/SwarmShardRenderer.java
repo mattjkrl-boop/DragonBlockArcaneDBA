@@ -70,7 +70,9 @@ public class SwarmShardRenderer extends EntityRenderer<SwarmShardEntity, SwarmSh
         if (def != null) {
             float dist = (float) Math.sqrt(state.distanceToCameraSq);
             float distScale = FxEnvelope.distScale(dist);
-            if (distScale > 0.01f && dist <= def.caps().cullDistance()) {
+            // A ride model set replaces the procedural shard body.
+            boolean modeled = def.models() != null && "ride".equals(def.models().behavior());
+            if (!modeled && distScale > 0.01f && dist <= def.caps().cullDistance()) {
                 drawShard(state, def, poseStack, collector, distScale);
             }
         }
