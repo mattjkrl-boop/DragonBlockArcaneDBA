@@ -67,6 +67,8 @@ public class DbaNetwork {
         PayloadTypeRegistry.clientboundPlay().register(AbilitySyncPayload.TYPE, AbilitySyncPayload.CODEC);
         // Cast lifecycle for the Phase 2 animation layer (S2C)
         PayloadTypeRegistry.clientboundPlay().register(CastSyncPayload.TYPE, CastSyncPayload.CODEC);
+        // Seeded effect packets for the Phase 3 recipe protocol (S2C)
+        PayloadTypeRegistry.clientboundPlay().register(AbilityFxPayload.TYPE, AbilityFxPayload.CODEC);
 
         // Movement verbs (C2S, Phase 5 movement layer)
         PayloadTypeRegistry.serverboundPlay().register(C2SMovementPayload.ID, C2SMovementPayload.CODEC);

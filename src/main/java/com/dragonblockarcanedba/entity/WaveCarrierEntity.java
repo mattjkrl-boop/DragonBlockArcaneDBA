@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.ability.AbilityDamage;
 import com.dragonblockarcanedba.ability.AbilityDef;
+import com.dragonblockarcanedba.ability.AbilityFxService;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -60,6 +61,7 @@ public class WaveCarrierEntity extends CarrierEntity {
                     center.x - wave.radius(), center.y - 0.5, center.z - wave.radius(),
                     center.x + wave.radius(), center.y + wave.height() + 1.0, center.z + wave.radius());
             Player owner = ownerPlayer();
+            int hitsThisTick = 0;
             for (LivingEntity target : serverLevel.getEntitiesOfClass(LivingEntity.class, box,
                     e -> e.isAlive() && e != owner)) {
                 if (this.hit.contains(target.getUUID())) {
@@ -72,7 +74,15 @@ public class WaveCarrierEntity extends CarrierEntity {
                     this.hit.add(target.getUUID());
                     AbilityDamage.apply(serverLevel, def, this, owner, target,
                             getPower(), dist / wave.radius());
+                    hitsThisTick++;
                 }
+            }
+            // One packet per tick with hits, aggregated by repeat
+            // (capped so a huge sweep stays one small packet).
+            if (hitsThisTick > 0) {
+                AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
+                        center, new Vec3(dx, 0, dz),
+                        getSeed() ^ this.tickCount, getPower(), Math.min(hitsThisTick, 8));
             }
         }
     }

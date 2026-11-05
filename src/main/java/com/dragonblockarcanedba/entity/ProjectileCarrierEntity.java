@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.ability.AbilityDamage;
 import com.dragonblockarcanedba.ability.AbilityDef;
+import com.dragonblockarcanedba.ability.AbilityFxService;
 import com.dragonblockarcanedba.ability.AbilityRegistry;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -95,6 +96,11 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
         if (!this.level().isClientSide()) {
             AbilityDef def = def();
             if (def == null || this.tickCount > def.phases().active()) {
+                if (def != null && this.tickCount > def.phases().active()) {
+                    AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_END,
+                            this.position(), this.getDeltaMovement(),
+                            getSeed(), getPower(), 1);
+                }
                 this.discard();
             }
         }
@@ -111,6 +117,9 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
                     AbilityDamage.apply(serverLevel, def, this, owner, target, getPower(), 0.0);
                 }
                 burst(serverLevel, def, owner, this.position());
+                AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
+                        this.position(), this.getDeltaMovement(),
+                        getSeed() ^ 0x4917, getPower(), 1);
             }
             this.discard();
         }
@@ -124,6 +133,9 @@ public class ProjectileCarrierEntity extends ThrowableProjectile {
             if (def != null && def.projectile() != null) {
                 LivingEntity owner = getOwner() instanceof LivingEntity living ? living : null;
                 burst(serverLevel, def, owner, this.position());
+                AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
+                        this.position(), this.getDeltaMovement(),
+                        getSeed() ^ 0x4917, getPower(), 1);
             }
             this.discard();
         }

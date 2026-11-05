@@ -2,6 +2,7 @@ package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.ability.AbilityDamage;
 import com.dragonblockarcanedba.ability.AbilityDef;
+import com.dragonblockarcanedba.ability.AbilityFxService;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -118,6 +119,12 @@ public class CloudCarrierEntity extends CarrierEntity {
             AbilityDamage.applyArea(serverLevel, def, this, owner, center,
                     cloud.strikeRadius(), getPower(), owner);
             playHitSound(serverLevel, def, this.pendingPoint);
+            // The strike burst rides the seeded protocol with the
+            // strike's own synced seed, so the particle burst and
+            // the renderer's bolt agree on the same strike.
+            AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_HIT,
+                    this.pendingPoint.add(0, 0.5, 0), Vec3.ZERO,
+                    strikeSeed(), getPower(), 1);
             this.entityData.set(STRIKE_AGE, -1);
             this.pendingStrikeAge = -1;
             this.pendingPoint = null;

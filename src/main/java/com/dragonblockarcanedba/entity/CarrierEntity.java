@@ -1,6 +1,7 @@
 package com.dragonblockarcanedba.entity;
 
 import com.dragonblockarcanedba.ability.AbilityDef;
+import com.dragonblockarcanedba.ability.AbilityFxService;
 import com.dragonblockarcanedba.ability.AbilityRegistry;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -107,6 +108,16 @@ public abstract class CarrierEntity extends Entity {
         if (!this.level().isClientSide()) {
             AbilityDef def = def();
             if (def == null || this.tickCount > def.phases().active()) {
+                // Natural expiry (a vanished definition has no
+                // recipes to send): announce the end on the same
+                // tick the carrier dies, presentation only.
+                if (def != null && this.tickCount > def.phases().active()) {
+                    double yawRad = Math.toRadians(this.getYRot());
+                    AbilityFxService.send(this, def, AbilityDef.FxEvent.CARRIER_END,
+                            this.position(),
+                            new net.minecraft.world.phys.Vec3(-Math.sin(yawRad), 0, Math.cos(yawRad)),
+                            getSeed(), getPower(), 1);
+                }
                 this.discard();
             }
         }

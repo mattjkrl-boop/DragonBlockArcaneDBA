@@ -106,11 +106,17 @@ public final class AbilityService {
         }
 
         if (def.phases().startup() <= 0) {
+            AbilityFxService.send(player, def, AbilityDef.FxEvent.CAST_START,
+                    player.position().add(0, 1.0, 0), player.getLookAngle(),
+                    player.level().getRandom().nextInt(), 1.0f, 1);
             fire(player, def, 1.0f);
             return;
         }
         CASTS.put(uuid, new Cast(def.id(), now, def.chargeRelease()));
         broadcastCast(player, def, CastSyncPayload.ACTION_START, now);
+        AbilityFxService.send(player, def, AbilityDef.FxEvent.CAST_START,
+                player.position().add(0, 1.0, 0), player.getLookAngle(),
+                player.level().getRandom().nextInt(), 1.0f, 1);
         playSoundId(player, def.sounds() != null ? def.sounds().charge() : null, 0.8f, 1.0f);
     }
 
@@ -161,31 +167,15 @@ public final class AbilityService {
         long now = player.level().getGameTime();
         long elapsed = now - cast.startTick();
 
-        // Charge dressing: sparse material motes in the ability's mid
-        // color gathering at the caster. Since Phase 2 the animation
-        // layer owns the charge pose and the ground ring; these motes
-        // remain as the decay layer around both.
-        if (player.level() instanceof ServerLevel serverLevel && elapsed % 2 == 0) {
-            float frac = def.phases().startup() <= 0 ? 1f
-                    : Math.min(1f, (float) elapsed / def.phases().startup());
-            int count = 1 + Math.round(2 * frac);
-            serverLevel.sendParticles(
-                    materialOptions(def, serverLevel),
-                    player.getX(), player.getY() + 1.0, player.getZ(),
-                    count, 0.45, 0.7, 0.45, 0.02);
-        }
+        // Charge dressing is client-local since Phase 3: every
+        // client expands the definition's charge_tick recipes from
+        // the cast store (client/ability/ClientAbilityFx), so the
+        // server sends no charge particles at all.
 
         if (!cast.chargeRelease() && elapsed >= def.phases().startup()) {
             CASTS.remove(uuid);
             fire(player, def, 1.0f);
         }
-    }
-
-    private static com.dragonblockarcanedba.particle.DbaMaterialOptions materialOptions(
-            AbilityDef def, ServerLevel level) {
-        return new com.dragonblockarcanedba.particle.DbaMaterialOptions(
-                def.visual().particleMaterial(), def.visual().mid(),
-                1.6f * def.visual().scale(), level.getRandom().nextInt(), 0.6f, 0.2f);
     }
 
     private static void fire(ServerPlayer player, AbilityDef def, float power) {
@@ -237,6 +227,8 @@ public final class AbilityService {
         }
         playSoundId(player, def.sounds() != null ? def.sounds().fire() : null, 1.0f, 1.0f);
         broadcastCast(player, def, CastSyncPayload.ACTION_FIRE, now);
+        AbilityFxService.send(player, def, AbilityDef.FxEvent.FIRE,
+                player.position().add(0, 1.0, 0), player.getLookAngle(), seed, power, 1);
     }
 
     /**
