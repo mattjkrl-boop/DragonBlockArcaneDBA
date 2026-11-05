@@ -39,3 +39,21 @@ The fix strategy keeps ONE jar that compiles against the 26.2 floor and runs on 
 
 ## Verification after the fix pass
 Full javac sweeps re-run on both classpaths after all fixes: zero error kinds unique to the 26.2 floor (no regressions), and exactly one error kind unique to 26.3: CloudTextureMixin's calls to the removed CloudRenderer.render(int, ...), which is expected and safe because DbaMixinPlugin never applies that mixin on 26.3 and up, so the class is never loaded there. All other 26.3-only errors from the original sweep are gone. The item 15 cloud port was verified the same way after it landed (391 sources): the only errors touching CloudTextureMixin263 and DbaCloudLayers263 are the shared missing-mixin-annotation artifacts that appear identically on both classpaths. This is an audit result, not a Gradle build; the build remains waived per BUILD-VERIFY.md.
+
+## Nov 5, 2026 recheck (Grok), real 26.3 jars
+
+Compiled the full tree against minecraft 26.3, fabric-api 0.165.2+26.3,
+GeckoLib 5.5.7 (the 26.3 build), with only the two plugin-gated 26.2-only
+mixins (CloudTextureMixin, GameRendererPostMixin) left out of that compile.
+Breaks found in code added after the first compat pass, all fixed so the
+one 26.2-compiled jar links on both:
+- swinging / attackAnim / swing(hand) / hurtMarked in DbaHostileEntity,
+  PatrolRobotEntity, FriezaSoldierEntity, NamekianWarriorEntity,
+  PlayerEntityMixin: routed through DbaCompat.
+- Keybinds: InputConstants.Type.KEYSYM is gone in 26.3 and key codes
+  changed (KEY_V 86 to 25). Now the three-argument KeyMapping constructor
+  plus DbaKeyCompat.key, which reads the code at runtime.
+- Custom3DModelLayer mulPose(Quaternionf): 26.3 dropped the quaternion
+  overload; now mulPose(Matrix4f().rotation(q)) like the rest of the tree.
+Result: BUILD SUCCESSFUL on 26.2 (shipped) and on 26.3 (check). This is a
+compile and link check, not a launch: the 26.3 client has not been run.

@@ -242,7 +242,7 @@ public class Custom3DModelLayer extends RenderLayer<AvatarRenderState, EntityMod
         void apply(PoseStack stack) {
             stack.translate(this.x / 16.0f, this.y / 16.0f, this.z / 16.0f);
             if (this.xRot != 0.0f || this.yRot != 0.0f || this.zRot != 0.0f) {
-                stack.mulPose(new org.joml.Quaternionf().rotationZYX(this.zRot, this.yRot, this.xRot));
+                stack.mulPose(new org.joml.Matrix4f().rotation(new org.joml.Quaternionf().rotationZYX(this.zRot, this.yRot, this.xRot)));
             }
         }
     }

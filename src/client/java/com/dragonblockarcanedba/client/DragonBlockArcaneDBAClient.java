@@ -11,7 +11,6 @@ import net.minecraft.client.KeyMapping;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
-import org.lwjgl.glfw.GLFW;
 
 public class DragonBlockArcaneDBAClient implements ClientModInitializer {
     public static KeyMapping openMenuKey;
@@ -126,32 +125,27 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         // Register keybinding to open character stats GUI
         openMenuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.dragonblockarcanedba.open_menu",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_V,
+            com.dragonblockarcanedba.client.compat.DbaKeyCompat.key("KEY_V"),
             KeyMapping.Category.MISC
         ));
         openEmoteMenuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.dragonblockarcanedba.open_emote_menu",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_H,
+            com.dragonblockarcanedba.client.compat.DbaKeyCompat.key("KEY_H"),
             KeyMapping.Category.MISC
         ));
         techSlot1Key = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.dragonblockarcanedba.tech_slot_1",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_F7,
+            com.dragonblockarcanedba.client.compat.DbaKeyCompat.key("KEY_F7"),
             KeyMapping.Category.MISC
         ));
         techSlot2Key = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.dragonblockarcanedba.tech_slot_2",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_F8,
+            com.dragonblockarcanedba.client.compat.DbaKeyCompat.key("KEY_F8"),
             KeyMapping.Category.MISC
         ));
         techSlot3Key = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.dragonblockarcanedba.tech_slot_3",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_F9,
+            com.dragonblockarcanedba.client.compat.DbaKeyCompat.key("KEY_F9"),
             KeyMapping.Category.MISC
         ));
 
@@ -174,8 +168,7 @@ public class DragonBlockArcaneDBAClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.DbaPostFx::tick);
         com.dragonblockarcanedba.client.fx.MovementInput.dashKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
             "key.dragonblockarcanedba.dash",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_G,
+            com.dragonblockarcanedba.client.compat.DbaKeyCompat.key("KEY_G"),
             KeyMapping.Category.MISC
         ));
         ClientTickEvents.END_CLIENT_TICK.register(com.dragonblockarcanedba.client.fx.MovementInput::tick);
